@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  /* Numbers and identifiers in monospace per spec §Design principles */
+  .num,
+  .mono {
+    font-family: theme("fontFamily.mono");
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center gap-2 rounded border border-border bg-bg-elevated px-3 py-1.5 text-sm text-fg transition-colors hover:border-accent hover:bg-bg-hover;
+  }
+  .input {
+    @apply w-full rounded border border-border bg-bg-elevated px-3 py-1.5 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none;
+  }
+  .card {
+    @apply rounded-lg border border-border bg-bg-elevated;
+  }
+  .kbd {
+    @apply mono rounded border border-border bg-bg px-1.5 py-0.5 text-xs;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Drag-and-drop reordering
+ *
+ * The ONLY drag source per card is the grip icon (.cairn-drag-grip) inside
+ * CardHeader. Every other descendant of .cairn-draggable-card is forced
+ * non-draggable via the wildcard rule below so that native browser drags
+ * (images, SVGs, text selection) cannot accidentally trigger the reorder
+ * system.
+ * --------------------------------------------------------------------------- */
+
+/* Force all descendants non-draggable. The grip overrides this for itself. */
+.cairn-draggable-card *:not(.cairn-drag-grip) {
+  -webkit-user-drag: none;
+}
+
+/* Reveal the grip on hover (desktop-only). */
+@media (hover: hover) {
+  .cairn-draggable-card .cairn-drag-grip {
+    cursor: grab;
+  }
+  .cairn-draggable-card:hover .cairn-drag-grip {
+    opacity: 1;
+  }
+  .cairn-draggable-card:active .cairn-drag-grip {
+    cursor: grabbing;
+  }
+}
