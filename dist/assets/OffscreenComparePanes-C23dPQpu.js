@@ -1,4 +1,4 @@
-import{j as qt,U as cc,r as Te,aw as qa,ck as uc}from"./parse-overlay-Dax7NZ2Y.js";import{bs as hc}from"./index-DcYMgu8d.js";const fc="pointer-events-none absolute left-1 top-1 z-10 mono rounded bg-bg/80 px-1 py-0.5 text-[10px] text-fg-subtle backdrop-blur-sm";function l_({text:i}){return qt.jsx("div",{className:fc,children:i})}/**
+import{j as qt,U as cc,r as Te,aw as qa,ck as uc}from"./parse-overlay-Dax7NZ2Y.js";import{bs as hc}from"./index-C-3lJHz4.js";const fc="pointer-events-none absolute left-1 top-1 z-10 mono rounded bg-bg/80 px-1 py-0.5 text-[10px] text-fg-subtle backdrop-blur-sm";function l_({text:i}){return qt.jsx("div",{className:fc,children:i})}/**
  * @license
  * Copyright 2010-2026 Three.js Authors
  * SPDX-License-Identifier: MIT
