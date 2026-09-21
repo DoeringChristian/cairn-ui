@@ -1,7 +1,7 @@
 # cairn-ui
 
-The browser viewer for [cairn-track](https://github.com/anthropics/cairn), shipped
-as prebuilt assets.
+The browser viewer for [cairn](https://github.com/doeringchristian/cairn): the
+React application, its prebuilt bundle, and the Python surface that drives it.
 
 ```
 pip install 'cairn-track[ui]'
@@ -14,10 +14,13 @@ without it; only `cairn ui` and `cairn server --ui` need it.
 
 ## What is in here
 
-- `cairn_ui/_dist/` — the built bundle (three HTML entries plus hashed assets),
+- `src/`, `scripts/`, and the bundler config — the React/TypeScript application.
+- `cairn_ui/_dist/` — its built bundle (three HTML entries plus hashed assets),
   **committed** so installing never needs Node.
-- `src/`, `scripts/`, and the bundler config — the TypeScript sources it is built
-  from.
+- `cairn_ui/cards/` — the Python surface that builds card specs for that bundle
+  to render, reached as `cairn.ui` once installed.
+- `vendor/cairn-plot` — the renderer, as a submodule. The build compiles its
+  TypeScript in, so clone with `--recurse-submodules`.
 
 `cairn_ui/__init__.py` exposes exactly one function, `dist_path()`. Everything
 about *serving* the bundle — routes, shells, the CPU-renderer override — lives in
@@ -27,13 +30,15 @@ from the server.
 ## Building
 
 ```
+git submodule update --init
 npm ci
 npm run build          # -> cairn_ui/_dist
 ```
 
-The build resolves cairn-plot's TypeScript from `vendor/cairn-plot`, so the git
-submodule must be checked out. Commit the rebuilt `_dist` with your source change:
-it is a released wheel's payload, and CI fails if it is stale.
+Commit the rebuilt `_dist` with your source change: it is a released wheel's
+payload, and a stale bundle would ship silently. The build is byte-reproducible,
+so `git diff --exit-code -- cairn_ui/_dist` after a build is a valid staleness
+gate.
 
 ## Developing against a different bundle
 

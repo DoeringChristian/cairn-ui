@@ -10,13 +10,13 @@ import react from "@vitejs/plugin-react";
 // exactly one copy of each — no duplicate-react "invalid hook call" hazard.
 // (`.pathname` keeps the config free of any node: builtin import.)
 const cairnPlotSrc = decodeURIComponent(
-  new URL("../../vendor/cairn-plot/ui/src/", import.meta.url).pathname,
+  new URL("./vendor/cairn-plot/ui/src/", import.meta.url).pathname,
 );
 const cairnPlotPublic = `${cairnPlotSrc}public/index.ts`;
 const cairnPlotStyles = `${cairnPlotSrc}public/styles.css`;
 const cairnPlotFigure = `${cairnPlotSrc}public/figure.ts`;
 const cairnPlotScalar = `${cairnPlotSrc}public/scalar.ts`;
-const repoRoot = decodeURIComponent(new URL("../../", import.meta.url).pathname);
+const repoRoot = decodeURIComponent(new URL("./", import.meta.url).pathname);
 
 export default defineConfig({
   plugins: [react()],

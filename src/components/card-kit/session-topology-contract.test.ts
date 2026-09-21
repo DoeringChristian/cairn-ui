@@ -5,7 +5,7 @@ import { buildPlotSpec, paneIds, type BuildPlotSpecInput } from "./build-plot-sp
 import type { SequencePoint } from "../../api/types";
 // The `@cairn-plot` tsconfig alias is a bundler/TS concern; the node test runner
 // resolves the vendored source directly.
-import { compileSessionTopology } from "../../../../../vendor/cairn-plot/ui/src/state/session/session-topology.ts";
+import { compileSessionTopology } from "../../../vendor/cairn-plot/ui/src/state/session/session-topology.ts";
 
 /**
  * The card must never author cairn-plot session ids.

@@ -16,7 +16,7 @@ import { dirname, resolve } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const uiRoot = resolve(here, "..");
-const repoRoot = resolve(uiRoot, "../..");
+const repoRoot = uiRoot;
 
 const OUT = resolve(repoRoot, "docs/schemas/cairn-card-spec.schema.json");
 

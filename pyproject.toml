@@ -27,15 +27,19 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/anthropics/cairn"
+Repository = "https://github.com/doeringchristian/cairn-ui"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# cairn-plot is vendored as a submodule (same pinned commit the UI builds
+# against); cairn-track resolves from the index. For local co-development point
+# uv at a sibling checkout instead:
+#   [tool.uv.sources]
+#   cairn-track = { path = "../cairn", editable = true }
 [tool.uv.sources]
-cairn-track = { path = "../..", editable = true }
-cairn-plot = { path = "../../vendor/cairn-plot", editable = true }
+cairn-plot = { path = "vendor/cairn-plot", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["cairn_ui"]
