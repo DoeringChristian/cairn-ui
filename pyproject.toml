@@ -33,13 +33,16 @@ Repository = "https://github.com/DoeringChristian/cairn-ui"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# cairn-plot is vendored as a submodule (same pinned commit the UI builds
-# against); cairn-track resolves from the index. For local co-development point
-# uv at a sibling checkout instead:
+# Deliberately NO [tool.uv.sources]. cairn-plot is vendored as a submodule for
+# the TypeScript build (vite compiles its source in), but declaring a path
+# source here would follow this package into every consumer — and the cairn
+# monorepo supplies its own cairn-plot, so two path sources for one package is
+# a hard resolution conflict.
+#
+# For Python work in this repo before cairn-plot is published, add locally:
 #   [tool.uv.sources]
+#   cairn-plot = { path = "vendor/cairn-plot", editable = true }
 #   cairn-track = { path = "../cairn", editable = true }
-[tool.uv.sources]
-cairn-plot = { path = "vendor/cairn-plot", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["cairn_ui"]
