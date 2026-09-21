@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/doeringchristian/cairn-ui"
+Repository = "https://github.com/DoeringChristian/cairn-ui"
 
 [build-system]
 requires = ["hatchling"]

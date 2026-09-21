@@ -1,6 +1,6 @@
 # cairn-ui
 
-The browser viewer for [cairn](https://github.com/doeringchristian/cairn): the
+The browser viewer for [cairn](https://github.com/DoeringChristian/cairn): the
 React application, its prebuilt bundle, and the Python surface that drives it.
 
 ```
