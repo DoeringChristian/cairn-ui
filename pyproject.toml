@@ -22,8 +22,14 @@ classifiers = [
 # a card. cairn-track[ui] depending back on this package is the ordinary plugin
 # shape — that extra points here, this points at base cairn-track.
 dependencies = [
+    # No URL for cairn-track: this package is pulled by `cairn-track[ui]`, so
+    # the install that asks for it already supplies it. Pinning it here would
+    # make the cycle two pinned URLs deep and buy nothing.
     "cairn-track",
-    "cairn-plot>=0.1,<0.2",
+    # cairn-plot is not on any index yet, so a bare version range cannot
+    # resolve — pip would 404. Pinned to the commit vendor/cairn-plot records.
+    # Swap back to "cairn-plot>=0.1,<0.2" the day it is published.
+    "cairn-plot @ git+https://github.com/doeringchristian/cairn-plot@fadd844f890c674966d9f0af8d4e46bf96e42725",
 ]
 
 [project.urls]
@@ -32,6 +38,12 @@ Repository = "https://github.com/DoeringChristian/cairn-ui"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# Required for the `cairn-plot @ git+...` pin above. Hatchling refuses direct
+# references by default because PyPI rejects any distribution carrying one;
+# that is the correct guard, and this package is installed from git, not PyPI.
+[tool.hatch.metadata]
+allow-direct-references = true
 
 # Deliberately NO [tool.uv.sources]. cairn-plot is vendored as a submodule for
 # the TypeScript build (vite compiles its source in), but declaring a path
