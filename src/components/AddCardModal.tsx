@@ -44,9 +44,10 @@ const TYPE_LABELS: Record<string, string> = {
   scatter: "Scatter Plot",
   bar: "Bar Chart",
   tile: "Scalar Tiles",
+  importance: "Parameter Importance",
 };
 
-const TYPE_ORDER = ["scalar", "image", "figure", "audio", "video", "histogram", "tensor", "text", "table", "html", "markdown", "pointcloud", "mesh", "boxes3d", "volume", "artifact", "parallel", "scatter", "bar", "tile"];
+const TYPE_ORDER = ["scalar", "image", "figure", "audio", "video", "histogram", "tensor", "text", "table", "html", "markdown", "pointcloud", "mesh", "boxes3d", "volume", "artifact", "parallel", "scatter", "bar", "tile", "importance"];
 
 /** Map a picked grouping entry (a lib/reports/metric-index.ts entry) to a typed selection. */
 function toSelection(m: MetricIndexEntry): AddCardSelection {
@@ -130,6 +131,7 @@ export default function AddCardModal({
       { type: "scatter", name: "Scatter Plot" },
       { type: "bar", name: "Bar Chart" },
       { type: "tile", name: "Scalar Tile" },
+      { type: "importance", name: "Parameter Importance" },
     ];
     for (const { type, name } of multiRunDefaults) {
       if (!byType.has(type)) {

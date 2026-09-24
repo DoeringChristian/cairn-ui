@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteScroll } from "../lib/use-infinite-scroll";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useBulkRunMutation, useInfiniteRuns, useSetTags } from "../api/hooks";
@@ -31,6 +31,17 @@ import CopyId from "../components/CopyId";
 import TagInput from "../components/TagInput";
 import { useWindowScrollRestore } from "../lib/use-scroll-restore";
 import { useProjectTags } from "../lib/use-project-tags";
+import {
+  EMPTY_RUNS_FILTER,
+  filterFieldsOf,
+  groupRuns,
+  loadRunsFilter,
+  matchesFilters,
+  saveRunsFilter,
+  type RunGroup,
+  type RunsFilterState,
+} from "../lib/run-filter.ts";
+import RunFilterBar from "../components/RunFilterBar";
 
 type SortColumn =
   | "name"
@@ -93,14 +104,31 @@ function compareRuns(
   }
 }
 
+/** The project's persisted filter chips + group-by, reloaded when the project changes. */
+function useRunsFilterState(projectId: string | undefined) {
+  const load = (pid: string | undefined) => (pid ? loadRunsFilter(localStorage, pid) : EMPTY_RUNS_FILTER);
+  const [entry, setEntry] = useState(() => ({ projectId, state: load(projectId) }));
+  let current = entry;
+  if (entry.projectId !== projectId) {
+    current = { projectId, state: load(projectId) };
+    setEntry(current);
+  }
+  const update = useCallback((next: RunsFilterState) => {
+    if (projectId) saveRunsFilter(localStorage, projectId, next);
+    setEntry({ projectId, state: next });
+  }, [projectId]);
+  return [current.state, update] as const;
+}
+
 export default function RunsTablePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const q = useInfiniteRuns({ project: projectId });
+  const q = useInfiniteRuns({ project: projectId, include: ["params"] });
   const { bulkDelete, bulkArchive } = useBulkRunMutation();
 
   const [statusFilter, setStatusFilter] = useState<"all" | RunStatus>("all");
   const [search, setSearch] = useState<string>("");
+  const [filterState, setFilterState] = useRunsFilterState(projectId);
   const [sort, setSort] = useState<SortState>({
     column: "created_at",
     direction: "desc",
@@ -162,6 +190,20 @@ export default function RunsTablePage() {
     fetchNextPage: q.fetchNextPage,
   });
   const allTags = useProjectTags(runs);
+
+  // Filters and groups apply to the loaded runs, so while either is active
+  // load every page: a filter over the first 100 runs silently hides matches.
+  const needsAllRuns = filterState.filters.length > 0 || filterState.groupBy != null;
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = q;
+  useEffect(() => {
+    if (needsAllRuns && hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [needsAllRuns, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const filterFields = useMemo(() => filterFieldsOf(runs), [runs]);
+  const paramKeys = useMemo(
+    () => filterFields.filter((f) => f.startsWith("params.")).map((f) => f.slice("params.".length)),
+    [filterFields],
+  );
 
   const onStartAddTag = useCallback((runId: string) => {
     setAddingTagFor(runId);
@@ -252,6 +294,7 @@ export default function RunsTablePage() {
       // Hide archived runs by default; only show when explicitly filtered.
       if (statusFilter === "all" && r.status === "archived") return false;
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (!matchesFilters(r, filterState.filters)) return false;
       if (searchRegex) {
         const tags = (safeJsonParse<string[]>(r.tags) ?? []).join(" ");
         const hay = `${r.display_name ?? ""} ${r.id} ${r.status} ${tags}`;
@@ -259,7 +302,7 @@ export default function RunsTablePage() {
       }
       return true;
     });
-  }, [runs, statusFilter, searchRegex, showLatestOnly, latestIds]);
+  }, [runs, statusFilter, searchRegex, showLatestOnly, latestIds, filterState.filters]);
 
   // Metric columns are the UNION across the loaded runs, not the intersection:
   // a run that crashed before logging `val.acc` should show a blank cell, not
@@ -295,14 +338,46 @@ export default function RunsTablePage() {
     );
   };
 
+  const groups = useMemo<RunGroup[] | null>(
+    () => (filterState.groupBy ? groupRuns(sorted, filterState.groupBy) : null),
+    [sorted, filterState.groupBy],
+  );
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const groupByKey = JSON.stringify(filterState.groupBy);
+  useEffect(() => setCollapsed(new Set()), [groupByKey]);
+  const toggleGroup = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // The rows in on-screen order (expanded groups only, a run listed once),
+  // which is what a shift-click range spans.
+  const displayOrder = useMemo(() => {
+    if (!groups) return sorted;
+    const seen = new Set<string>();
+    const out: Run[] = [];
+    for (const g of groups) {
+      if (collapsed.has(g.id)) continue;
+      for (const r of g.runs) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        out.push(r);
+      }
+    }
+    return out;
+  }, [groups, collapsed, sorted]);
+
   const lastSelectedId = useRef<string | null>(null);
 
-  // Build a stable ID→index lookup, recomputed only when sorted changes.
+  // Build a stable ID→index lookup, recomputed only when the order changes.
   const sortedIdToIdx = useMemo(() => {
     const map = new Map<string, number>();
-    for (let i = 0; i < sorted.length; i++) map.set(sorted[i]!.id, i);
+    for (let i = 0; i < displayOrder.length; i++) map.set(displayOrder[i]!.id, i);
     return map;
-  }, [sorted]);
+  }, [displayOrder]);
 
   const toggleRow = useCallback(
     (id: string, shiftKey: boolean) => {
@@ -314,7 +389,7 @@ export default function RunsTablePage() {
           const hi = Math.max(lastIdx, curIdx);
           setSelected((prev) => {
             const next = new Set(prev);
-            for (let i = lo; i <= hi; i++) next.add(sorted[i]!.id);
+            for (let i = lo; i <= hi; i++) next.add(displayOrder[i]!.id);
             return next;
           });
           lastSelectedId.current = id;
@@ -329,7 +404,7 @@ export default function RunsTablePage() {
       });
       lastSelectedId.current = id;
     },
-    [sorted, sortedIdToIdx],
+    [displayOrder, sortedIdToIdx],
   );
 
   const selectAllVisible = () => {
@@ -449,6 +524,129 @@ export default function RunsTablePage() {
       : []),
   ];
 
+  const renderMobileRun = (r: Run, key: string) => {
+    const isSelected = selected.has(r.id);
+    return (
+      <li
+        key={key}
+        className={`rounded-lg border border-border bg-bg-elevated p-3 ${
+          isSelected ? "border-accent/50 bg-accent/5" : ""
+        } ${latestByName.has(r.id) ? "border-l-2 border-l-accent" : ""}`}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center">
+            <input
+              type="checkbox"
+              aria-label={`select run ${r.display_name ?? r.id}`}
+              checked={isSelected}
+              onChange={(e) => toggleRow(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
+            />
+          </div>
+          <Link
+            to={`/p/${projectId}/r/${r.id}`}
+            className="mono min-h-[44px] min-w-0 flex-1 truncate leading-[44px] text-accent hover:underline"
+          >
+            {r.display_name ?? r.id}
+          </Link>
+          <RunStatusBadge status={r.status} />
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
+          <span>{(() => {
+            try {
+              const d = new Date(r.created_at);
+              return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+            } catch { return formatRelative(r.created_at); }
+          })()}</span>
+          <span className="mono num">
+            dur: {formatDuration(r.created_at, r.ended_at)}
+          </span>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-1">
+          <RunTagCell
+            run={r}
+            variant="mobile"
+            allTags={allTags}
+            addingTagFor={addingTagFor}
+            onStartAdd={onStartAddTag}
+            onCancelAdd={onCancelAddTag}
+            newTagValue={newTagValue}
+            setNewTagValue={setNewTagValue}
+          />
+        </div>
+      </li>
+    );
+  };
+
+  const renderDesktopRun = (r: Run, key: string) => {
+    const isSelected = selected.has(r.id);
+    return (
+      <tr
+        key={key}
+        className={`border-t border-border-subtle hover:bg-bg-elevated ${
+          isSelected ? "bg-accent/5" : ""
+        } ${latestByName.has(r.id) ? "border-l-2 border-l-accent" : ""}`}
+      >
+        <td className="px-3 py-2">
+          <input
+            type="checkbox"
+            aria-label={`select run ${r.display_name ?? r.id}`}
+            checked={isSelected}
+            onChange={(e) => toggleRow(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
+          />
+        </td>
+        <td className="px-3 py-2">
+          <Link
+            to={`/p/${projectId}/r/${r.id}`}
+            className="mono text-accent hover:underline"
+          >
+            {r.display_name ?? r.id}
+          </Link>
+          <CopyId id={r.id} className="ml-2 text-xs" />
+        </td>
+        <td className="px-3 py-2">
+          <RunStatusBadge status={r.status} />
+        </td>
+        <td className="px-3 py-2 text-fg-muted">
+          {(() => {
+            try {
+              const d = new Date(r.created_at);
+              return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+            } catch { return formatRelative(r.created_at); }
+          })()}
+        </td>
+        <td className="mono num px-3 py-2 text-fg-muted">
+          {formatDuration(r.created_at, r.ended_at)}
+        </td>
+        <td className="px-3 py-2">
+          <span className="flex flex-wrap items-center gap-1">
+            <RunTagCell
+              run={r}
+              variant="desktop"
+              allTags={allTags}
+              addingTagFor={addingTagFor}
+              onStartAdd={onStartAddTag}
+              onCancelAdd={onCancelAddTag}
+              newTagValue={newTagValue}
+              setNewTagValue={setNewTagValue}
+            />
+          </span>
+        </td>
+        {valueColumns.map((key) => {
+          const v = r.values?.[key];
+          return (
+            <td key={key} className="mono num px-3 py-2 text-fg-muted">
+              {v == null
+                ? ""
+                : typeof v === "number"
+                  ? formatNum(v)
+                  : String(v)}
+            </td>
+          );
+        })}
+      </tr>
+    );
+  };
+
   if (!projectId) return null;
   if (q.isLoading) return <p className="text-fg-muted">Loading…</p>;
   if (q.isError)
@@ -504,6 +702,12 @@ export default function RunsTablePage() {
             title={searchError ?? "Search by name, id, status, or tags (regex)"}
           />
         </label>
+        <RunFilterBar
+          fields={filterFields}
+          paramKeys={paramKeys}
+          state={filterState}
+          onChange={setFilterState}
+        />
         <label className="flex items-center gap-1.5 text-xs text-fg-muted cursor-pointer select-none">
           <input type="checkbox" checked={showLatestOnly} onChange={(e) => setShowLatestOnly(e.target.checked)} className="accent-accent" />
           Latest only
@@ -661,58 +865,16 @@ export default function RunsTablePage() {
       ) : (
         <>
           <ul className="flex flex-col gap-2 md:hidden">
-            {sorted.map((r) => {
-              const isSelected = selected.has(r.id);
-              return (
-                <li
-                  key={r.id}
-                  className={`rounded-lg border border-border bg-bg-elevated p-3 ${
-                    isSelected ? "border-accent/50 bg-accent/5" : ""
-                  } ${latestByName.has(r.id) ? "border-l-2 border-l-accent" : ""}`}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center">
-                      <input
-                        type="checkbox"
-                        aria-label={`select run ${r.display_name ?? r.id}`}
-                        checked={isSelected}
-                        onChange={(e) => toggleRow(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
-                      />
-                    </div>
-                    <Link
-                      to={`/p/${projectId}/r/${r.id}`}
-                      className="mono min-h-[44px] min-w-0 flex-1 truncate leading-[44px] text-accent hover:underline"
-                    >
-                      {r.display_name ?? r.id}
-                    </Link>
-                    <RunStatusBadge status={r.status} />
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
-                    <span>{(() => {
-                      try {
-                        const d = new Date(r.created_at);
-                        return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
-                      } catch { return formatRelative(r.created_at); }
-                    })()}</span>
-                    <span className="mono num">
-                      dur: {formatDuration(r.created_at, r.ended_at)}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-1">
-                    <RunTagCell
-                      run={r}
-                      variant="mobile"
-                      allTags={allTags}
-                      addingTagFor={addingTagFor}
-                      onStartAdd={onStartAddTag}
-                      onCancelAdd={onCancelAddTag}
-                      newTagValue={newTagValue}
-                      setNewTagValue={setNewTagValue}
-                    />
-                  </div>
-                </li>
-              );
-            })}
+            {groups
+              ? groups.map((g) => (
+                  <Fragment key={g.id}>
+                    <li>
+                      <GroupHeader group={g} collapsed={collapsed.has(g.id)} onToggle={() => toggleGroup(g.id)} />
+                    </li>
+                    {!collapsed.has(g.id) && g.runs.map((r) => renderMobileRun(r, `${g.id}:${r.id}`))}
+                  </Fragment>
+                ))
+              : sorted.map((r) => renderMobileRun(r, r.id))}
           </ul>
           {/* overflow-x-auto, not -hidden: metric columns are unbounded in
               number and must stay reachable. */}
@@ -777,75 +939,18 @@ export default function RunsTablePage() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((r) => {
-                const isSelected = selected.has(r.id);
-                return (
-                  <tr
-                    key={r.id}
-                    className={`border-t border-border-subtle hover:bg-bg-elevated ${
-                      isSelected ? "bg-accent/5" : ""
-                    } ${latestByName.has(r.id) ? "border-l-2 border-l-accent" : ""}`}
-                  >
-                    <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        aria-label={`select run ${r.display_name ?? r.id}`}
-                        checked={isSelected}
-                        onChange={(e) => toggleRow(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <Link
-                        to={`/p/${projectId}/r/${r.id}`}
-                        className="mono text-accent hover:underline"
-                      >
-                        {r.display_name ?? r.id}
-                      </Link>
-                      <CopyId id={r.id} className="ml-2 text-xs" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <RunStatusBadge status={r.status} />
-                    </td>
-                    <td className="px-3 py-2 text-fg-muted">
-                      {(() => {
-                        try {
-                          const d = new Date(r.created_at);
-                          return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
-                        } catch { return formatRelative(r.created_at); }
-                      })()}
-                    </td>
-                    <td className="mono num px-3 py-2 text-fg-muted">
-                      {formatDuration(r.created_at, r.ended_at)}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="flex flex-wrap items-center gap-1">
-                        <RunTagCell
-                          run={r}
-                          variant="desktop"
-                          allTags={allTags}
-                          addingTagFor={addingTagFor}
-                          onStartAdd={onStartAddTag}
-                          onCancelAdd={onCancelAddTag}
-                          newTagValue={newTagValue}
-                          setNewTagValue={setNewTagValue}
-                        />
-                      </span>
-                    </td>
-                    {valueColumns.map((key) => {
-                      const v = r.values?.[key];
-                      return (
-                        <td key={key} className="mono num px-3 py-2 text-fg-muted">
-                          {v == null
-                            ? ""
-                            : typeof v === "number"
-                              ? formatNum(v)
-                              : String(v)}
+              {groups
+                ? groups.map((g) => (
+                    <Fragment key={g.id}>
+                      <tr className="border-t border-border-subtle bg-bg-elevated/60">
+                        <td colSpan={6 + valueColumns.length} className="px-3 py-1.5">
+                          <GroupHeader group={g} collapsed={collapsed.has(g.id)} onToggle={() => toggleGroup(g.id)} />
                         </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
+                      </tr>
+                      {!collapsed.has(g.id) && g.runs.map((r) => renderDesktopRun(r, `${g.id}:${r.id}`))}
+                    </Fragment>
+                  ))
+                : sorted.map((r) => renderDesktopRun(r, r.id))}
             </tbody>
           </table>
           </div>
@@ -952,6 +1057,31 @@ function RunTagCell({
         </button>
       )}
     </>
+  );
+}
+
+function GroupHeader({
+  group,
+  collapsed,
+  onToggle,
+}: {
+  group: RunGroup;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      className="flex w-full items-center gap-2 text-left text-xs text-fg-muted hover:text-fg touch:min-h-[40px]"
+    >
+      <i className={`fa-solid ${collapsed ? "fa-chevron-right" : "fa-chevron-down"} w-3 text-[10px]`} aria-hidden="true" />
+      <span className={`mono font-semibold ${group.label == null ? "italic text-fg-subtle" : "text-fg"}`}>
+        {group.label ?? "(none)"}
+      </span>
+      <span className="rounded bg-bg-hover px-1.5 py-0.5 text-[10px]">{group.runs.length}</span>
+    </button>
   );
 }
 
