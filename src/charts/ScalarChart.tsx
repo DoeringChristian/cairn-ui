@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
@@ -6,6 +6,7 @@ import type { AxisSource } from "../lib/plot-utils/x-axis.ts";
 import { formatNum, type AxisScale, type Series, type SeriesPoint } from "../lib/plot-utils/types.ts";
 import { alignSeries, type DrawnSeries } from "./scalar-data.ts";
 import { readChartTheme, withAlpha } from "./theme.ts";
+import { useInteract } from "../lib/use-interact.ts";
 
 export type LineType = "linear" | "monotone" | "step" | "stepBefore" | "stepAfter";
 
@@ -74,7 +75,9 @@ interface Hover {
 /**
  * Multi-series line chart on uPlot. Self-contained: sizes itself to its box,
  * owns hover/tooltip, and reports drag-zoom through `onViewChange` (the card
- * persists the viewport; double-click resets it).
+ * persists the viewport; double-click resets it). While not interactive (a
+ * touch device with the card's interact toggle off, see lib/use-interact) the
+ * cursor is off, so no listeners are installed and the page scrolls through.
  */
 export default function ScalarChart(props: ScalarChartProps) {
   const {
@@ -86,6 +89,7 @@ export default function ScalarChart(props: ScalarChartProps) {
   const plotRef = useRef<uPlot | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [focused, setFocused] = useState<number | null>(null);
+  const interactive = useInteract();
 
   // Callbacks and bounds read at event time, so they never force a rebuild.
   const live = useRef({ props });
@@ -104,7 +108,7 @@ export default function ScalarChart(props: ScalarChartProps) {
 
   // Anything that changes the uPlot options (not just the data) rebuilds the chart.
   const structureKey = [
-    xAxis, xScale, yScale, lineType,
+    xAxis, xScale, yScale, lineType, interactive,
     lines.map((l) => `${l.key}:${l.raw}:${l.color}`).join(","),
   ].join("|");
 
@@ -142,11 +146,13 @@ export default function ScalarChart(props: ScalarChartProps) {
       height: Math.max(host.clientHeight, 50),
       ms: 1,
       legend: { show: false },
-      cursor: {
-        drag: { x: true, y: false, setScale: false },
-        focus: { prox: 16 },
-        points: { size: 6 },
-      },
+      cursor: interactive
+        ? {
+          drag: { x: true, y: false, setScale: false },
+          focus: { prox: 16 },
+          points: { size: 6 },
+        }
+        : { show: false },
       focus: { alpha: 1 },
       scales: {
         x: {
@@ -207,7 +213,7 @@ export default function ScalarChart(props: ScalarChartProps) {
     plotRef.current = plot;
 
     const onDblClick = () => live.current.props.onViewChange?.(EMPTY_VIEW);
-    plot.over.addEventListener("dblclick", onDblClick);
+    if (interactive) plot.over.addEventListener("dblclick", onDblClick);
 
     const ro = new ResizeObserver(() => {
       plot.setSize({ width: Math.max(host.clientWidth, 50), height: Math.max(host.clientHeight, 50) });
@@ -234,12 +240,17 @@ export default function ScalarChart(props: ScalarChartProps) {
 
   return (
     <div ref={boxRef} className={`flex flex-col min-h-0 ${className ?? ""}`}>
-      <div className="relative flex-1 min-h-0" onMouseLeave={() => setHover(null)}>
+      <div
+        className="relative flex-1 min-h-0"
+        style={{ touchAction: interactive ? undefined : "pan-y" }}
+        onMouseLeave={() => setHover(null)}
+      >
         <div ref={plotHostRef} className="absolute inset-0" />
         {hover && rows.length > 0 && (
           <ChartTooltip
             hover={hover}
             boxWidth={plotHostRef.current?.clientWidth ?? 0}
+            boxHeight={plotHostRef.current?.clientHeight ?? 0}
             header={formatX(aligned.xs[hover.idx]!, xAxis)}
             rows={rows}
             focusedKey={focusedKey}
@@ -279,25 +290,40 @@ function tooltipRows(lines: DrawnSeries[], idx: number): TooltipRow[] {
   return rows;
 }
 
+/**
+ * Beside the cursor, on the side with more room, then clamped (after
+ * measuring, before paint) so it stays inside the plot box.
+ */
 function ChartTooltip({
-  hover, boxWidth, header, rows, focusedKey, tooltip,
+  hover, boxWidth, boxHeight, header, rows, focusedKey, tooltip,
 }: {
   hover: Hover;
   boxWidth: number;
+  boxHeight: number;
   header: string;
   rows: TooltipRow[];
   focusedKey?: string;
   tooltip: { showContext: boolean; showWallTime: boolean };
 }) {
+  const ref = useRef<HTMLDivElement>(null);
   const flip = hover.left > boxWidth / 2;
   const shown = rows.slice(0, MAX_TOOLTIP_ROWS);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const left = flip ? hover.left - 12 - w : hover.left + 12;
+    el.style.left = `${Math.max(0, Math.min(left, boxWidth - w))}px`;
+    el.style.top = `${Math.max(0, Math.min(hover.top - 8, boxHeight - h))}px`;
+  });
+
   return (
     <div
-      className="pointer-events-none absolute z-10 max-w-[22rem] rounded border border-border bg-bg-elevated/95 px-2 py-1 text-[10px] shadow-sm"
-      style={{
-        top: Math.max(hover.top - 8, 0),
-        ...(flip ? { right: boxWidth - hover.left + 12 } : { left: hover.left + 12 }),
-      }}
+      ref={ref}
+      className="pointer-events-none absolute z-10 rounded border border-border bg-bg-elevated/95 px-2 py-1 text-[10px] shadow-sm"
+      style={{ maxWidth: `min(22rem, ${Math.max(boxWidth, 0)}px)` }}
     >
       <div className="mono mb-0.5 text-fg-muted">{header}</div>
       {shown.map((r) => (
