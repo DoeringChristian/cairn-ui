@@ -19,6 +19,8 @@ import ArtifactDetailPage from "./pages/ArtifactDetailPage";
 import LineagePage from "./pages/LineagePage";
 import ReportsListPage from "./pages/ReportsListPage";
 import ReportEditorPage from "./pages/ReportEditorPage";
+import SweepsListPage from "./pages/SweepsListPage";
+import SweepDetailPage from "./pages/SweepDetailPage";
 import LoginPage from "./pages/LoginPage";
 import "./index.css";
 
@@ -52,6 +54,8 @@ const router = createBrowserRouter([
           { path: "lineage", element: <LineagePage /> },
           { path: "reports", element: <ReportsListPage /> },
           { path: "reports/:reportId", element: <ReportEditorPage /> },
+          { path: "sweeps", element: <SweepsListPage /> },
+          { path: "sweeps/:sweepId", element: <SweepDetailPage /> },
           {
             path: "r/:runId",
             element: <RunDetailPage />,

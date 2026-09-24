@@ -6,6 +6,7 @@ import { qk } from "../../api/query-keys";
 import type { SequencePoint } from "../../api/types";
 import { describeEncoding, GALLERY_MIME, isBrowserDisplayable } from "../../lib/artifact-format";
 import { artifactFilename } from "../../lib/download";
+import { pointCaption } from "../../lib/caption";
 import UnsupportedArtifact from "../UnsupportedArtifact";
 import {
   maskClassIds,
@@ -23,6 +24,8 @@ interface ImageItem {
   hash: string;
   mime: string | null | undefined;
   metadata: Record<string, unknown> | null;
+  /** The point's caption, or — in a gallery — the entry's own. */
+  caption: string | null;
 }
 
 function parseMetadata(raw: string | null | undefined): Record<string, unknown> | null {
@@ -42,7 +45,9 @@ function useImageItems(point: SequencePoint | null): { items: ImageItem[]; loadi
     queryFn: async () => {
       const res = await fetch(api.artifactUrl(point!.artifact_hash!));
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      return (await res.json()) as { images: Array<{ hash: string; mime_type: string; metadata: Record<string, unknown> }> };
+      return (await res.json()) as {
+        images: Array<{ hash: string; mime_type: string; metadata: Record<string, unknown>; caption?: string }>;
+      };
     },
     enabled: isGallery && !!point?.artifact_hash,
     staleTime: Infinity,
@@ -50,11 +55,18 @@ function useImageItems(point: SequencePoint | null): { items: ImageItem[]; loadi
   if (!point?.artifact_hash) return { items: [], loading: false };
   if (!isGallery) {
     return {
-      items: [{ hash: point.artifact_hash, mime: point.artifact_mime, metadata: parseMetadata(point.artifact_metadata) }],
+      items: [{
+        hash: point.artifact_hash,
+        mime: point.artifact_mime,
+        metadata: parseMetadata(point.artifact_metadata),
+        caption: pointCaption(point.metadata),
+      }],
       loading: false,
     };
   }
-  const items = (manifest.data?.images ?? []).map((i) => ({ hash: i.hash, mime: i.mime_type, metadata: i.metadata }));
+  const items = (manifest.data?.images ?? []).map((i) => ({
+    hash: i.hash, mime: i.mime_type, metadata: i.metadata, caption: i.caption || null,
+  }));
   return { items, loading: manifest.isLoading };
 }
 
@@ -130,9 +142,12 @@ export default function ImagePointView({
   if (loading) return <div className="h-full motion-safe:animate-pulse bg-bg-hover" />;
 
   const gallery = items.length > 1;
+  // A gallery's own caption heads the grid; each image shows its entry's.
+  const galleryCaption = gallery ? pointCaption(point.metadata) : null;
   const cell = (item: ImageItem, i: number) => {
     const url = api.artifactUrl(item.hash);
-    const label = gallery ? `${metricName} · ${point.step} · #${i}` : `${metricName} · ${point.step}`;
+    const base = gallery ? `${metricName} · ${point.step} · #${i}` : `${metricName} · ${point.step}`;
+    const label = item.caption ? `${base} · ${item.caption}` : base;
     if (!isBrowserDisplayable(item.mime)) {
       return (
         <UnsupportedArtifact
@@ -149,7 +164,7 @@ export default function ImagePointView({
     const refShown = ref && isBrowserDisplayable(ref.mime)
       ? { src: api.artifactUrl(ref.hash), label: `${refLabel ?? "reference"}${refs.items.length > 1 ? ` · #${i}` : ""}` }
       : null;
-    return (
+    const pane = (
       <ImagePane
         key={item.hash + i}
         image={{ src: url, label }}
@@ -162,14 +177,21 @@ export default function ImagePointView({
         overlayView={overlayView}
       />
     );
+    if (!item.caption) return pane;
+    return (
+      <div key={item.hash + i} className="relative h-full w-full">
+        {pane}
+        <Caption text={item.caption} />
+      </div>
+    );
   };
 
   if (!gallery) return cell(items[0]!, 0);
   // Near-square grid of equal cells.
   const cols = Math.ceil(Math.sqrt(items.length));
-  return (
+  const grid = (
     <div
-      className="grid h-full w-full gap-1"
+      className="grid min-h-0 w-full flex-1 gap-1"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: "minmax(0, 1fr)" }}
     >
       {items.map((item, i) => (
@@ -178,5 +200,26 @@ export default function ImagePointView({
         </div>
       ))}
     </div>
+  );
+  return (
+    <div className="flex h-full w-full flex-col">
+      {galleryCaption && (
+        <div className="truncate px-1 pb-1 text-center text-xs text-fg-muted" title={galleryCaption}>
+          {galleryCaption}
+        </div>
+      )}
+      {grid}
+    </div>
+  );
+}
+
+/** A caption over the top of an image, clear of the A/B labels at the bottom. */
+function Caption({ text }: { text: string }) {
+  return (
+    <span
+      className="pointer-events-none absolute left-1/2 top-1 z-10 max-w-[90%] -translate-x-1/2 truncate rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg"
+    >
+      {text}
+    </span>
   );
 }

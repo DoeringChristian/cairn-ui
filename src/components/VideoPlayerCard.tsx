@@ -1,5 +1,6 @@
 import { api } from "../api/client";
 import { safeJsonParse } from "../lib/format";
+import { pointCaption } from "../lib/caption";
 import { artifactFilename } from "../lib/download";
 import UnsupportedArtifact from "./UnsupportedArtifact";
 import SteppedMediaCard, { type MediaView, type SteppedMediaCardProps, type SteppedMediaSettings } from "./media/SteppedMediaCard";
@@ -64,8 +65,12 @@ function VideoClip({ point, hash, name, settings, single, inModal }: MediaView<V
         meta.fps ? `${meta.fps} fps` : undefined,
       ].filter(Boolean)
     : [];
-  const info = facts.length > 0 && (
-    <div className="mono mt-2 text-xs text-fg-subtle">{facts.join(" · ")}</div>
+  const caption = pointCaption(point.metadata);
+  const info = (caption || facts.length > 0) && (
+    <div className="mt-2 text-xs">
+      {caption && <div className="truncate text-fg" title={caption}>{caption}</div>}
+      {facts.length > 0 && <div className="mono text-fg-subtle">{facts.join(" · ")}</div>}
+    </div>
   );
   if (single) {
     return (

@@ -47,6 +47,8 @@ interface Props {
   settingsKey: { runId: string; metricName: string; contextHash: string };
   onRemove?: () => void;
   autoOpenSettings?: boolean;
+  /** Settings a fresh card starts from (e.g. a sweep's params and metric). */
+  defaults?: Partial<ScatterSettings>;
 }
 
 export default function ScatterPlotCard({
@@ -54,10 +56,11 @@ export default function ScatterPlotCard({
   settingsKey,
   onRemove,
   autoOpenSettings,
+  defaults,
 }: Props) {
   const runMetaVersion = useRunMetadataVersion();
 
-  const [settings, updateSettings] = useCardSettings(settingsKey, DEFAULT_SETTINGS);
+  const [settings, updateSettings] = useCardSettings(settingsKey, { ...DEFAULT_SETTINGS, ...defaults });
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
   // Fetch run details (params)

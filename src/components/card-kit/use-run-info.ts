@@ -1,27 +1,43 @@
 import { useMemo } from "react";
 import { useRunsDetails } from "../../api/hooks";
+import type { Run } from "../../api/types";
 
 /**
  * Fetch run details for `runIds` — which also seeds the run-label cache, so
  * cards call this for their labels — and derive `runId → created_at (ms)` for
- * the wall-time x-axis.
+ * the wall-time x-axis, the runs themselves, and each run's params
+ * (JSON-decoded values, keyed by the flattened param key).
  */
 export function useRunInfo(runIds: string[]): {
   runCreatedAtByRunId: Map<string, number>;
+  runById: Map<string, Run>;
+  paramsByRunId: Map<string, Record<string, unknown>>;
 } {
   const queries = useRunsDetails(runIds);
+  // `queries` is a fresh array every render; the fetch timestamps change iff data landed.
+  const dataKey = queries.map((q) => q.dataUpdatedAt).join("|");
 
-  const runCreatedAtByRunId = useMemo(() => {
-    const map = new Map<string, number>();
+  return useMemo(() => {
+    const runCreatedAtByRunId = new Map<string, number>();
+    const runById = new Map<string, Run>();
+    const paramsByRunId = new Map<string, Record<string, unknown>>();
     runIds.forEach((rid, i) => {
-      const raw = queries[i]?.data?.run.created_at;
-      if (!raw) return;
-      const t = new Date(raw).getTime();
-      if (Number.isFinite(t)) map.set(rid, t);
+      const data = queries[i]?.data;
+      if (!data) return;
+      runById.set(rid, data.run);
+      const t = new Date(data.run.created_at).getTime();
+      if (Number.isFinite(t)) runCreatedAtByRunId.set(rid, t);
+      const params: Record<string, unknown> = {};
+      for (const p of data.params) {
+        try {
+          params[p.key] = JSON.parse(p.value);
+        } catch {
+          params[p.key] = p.value;
+        }
+      }
+      paramsByRunId.set(rid, params);
     });
-    return map;
+    return { runCreatedAtByRunId, runById, paramsByRunId };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runIds, queries]);
-
-  return { runCreatedAtByRunId };
+  }, [runIds, dataKey]);
 }

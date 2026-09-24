@@ -37,6 +37,18 @@ const NAV_ITEMS = [
     ),
   },
   {
+    path: "sweeps",
+    end: false,
+    label: "Sweeps",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="9" cy="9" r="6.5" />
+        <circle cx="9" cy="9" r="3" />
+        <line x1="9" y1="9" x2="14" y2="4" />
+      </svg>
+    ),
+  },
+  {
     path: "artifacts",
     end: false,
     label: "Artifacts",

@@ -435,3 +435,37 @@ export function useRunSelectorResolution(
     },
   };
 }
+
+/** A project's sweeps; polls while any is running (agents report trials live). */
+export function useSweeps(projectId: string) {
+  return useQuery({
+    queryKey: qk.sweeps(projectId),
+    queryFn: () => api.sweeps(projectId),
+    enabled: !!projectId,
+    refetchInterval: (q) => (q.state.data?.sweeps.some((s) => s.status === "running") ? 5_000 : false),
+  });
+}
+
+/** One sweep with its trials; polls while it runs or has trials in flight. */
+export function useSweep(sweepId: string) {
+  return useQuery({
+    queryKey: qk.sweep(sweepId),
+    queryFn: () => api.sweep(sweepId),
+    enabled: !!sweepId,
+    refetchInterval: (q) => {
+      const s = q.state.data;
+      return s && (s.status === "running" || s.trials.some((t) => t.status === "running")) ? 5_000 : false;
+    },
+  });
+}
+
+export function useSweepAction(sweepId: string, projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (action: import("./types").SweepAction) => api.sweepAction(sweepId, action),
+    onSuccess: (data) => {
+      qc.setQueryData(qk.sweep(sweepId), data);
+      qc.invalidateQueries({ queryKey: qk.sweeps(projectId) });
+    },
+  });
+}
