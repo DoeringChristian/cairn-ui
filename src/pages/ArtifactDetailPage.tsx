@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useArtifactFamily } from "../api/hooks";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { formatBytes, formatRelative } from "../lib/format";
+import { MANIFEST_MIME } from "../lib/artifact-manifest";
+import type { ArtifactVersionInfo } from "../api/types";
+import ManifestTree from "../components/ManifestTree";
 
 function typeBadgeColor(type: string): string {
   switch (type) {
@@ -17,6 +20,33 @@ function typeBadgeColor(type: string): string {
     default:
       return "bg-fg-subtle/10 text-fg-muted border-border";
   }
+}
+
+const isManifest = (v: ArtifactVersionInfo) => v.mime_type === MANIFEST_MIME;
+
+/** "3 files" from a manifest version's metadata, when it says. */
+function fileCount(v: ArtifactVersionInfo): string {
+  try {
+    const n = (JSON.parse(v.metadata ?? "{}") as { n_files?: number }).n_files;
+    return typeof n === "number" ? `${n} file${n === 1 ? "" : "s"}` : "files";
+  } catch {
+    return "files";
+  }
+}
+
+/** Expands a multi-file version into its file tree. */
+function FilesToggle({ v, open, onToggle }: { v: ArtifactVersionInfo; open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+    >
+      <i className={`fa-solid ${open ? "fa-chevron-down" : "fa-chevron-right"} text-[10px]`} aria-hidden="true" />
+      {fileCount(v)}
+    </button>
+  );
 }
 
 export default function ArtifactDetailPage() {
@@ -43,6 +73,15 @@ export default function ArtifactDetailPage() {
       setEditingName(false);
     },
   });
+
+  const [openVersions, setOpenVersions] = useState<Set<string>>(new Set());
+  const toggleVersion = (id: string) =>
+    setOpenVersions((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const [aliasInput, setAliasInput] = useState("");
   const [aliasVersionInput, setAliasVersionInput] = useState("");
@@ -199,13 +238,13 @@ export default function ArtifactDetailPage() {
                 <li key={v.id} className="rounded-lg border border-border bg-bg-elevated p-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="mono font-semibold">v{v.version}</span>
-                    <a
+                    {isManifest(v) ? <FilesToggle v={v} open={openVersions.has(v.id)} onToggle={() => toggleVersion(v.id)} /> : <a
                       href={api.artifactUrl(v.hash)}
                       className="btn px-2 py-0.5 text-xs inline-flex items-center gap-1"
                       download
                     >
                       <i className="fa-solid fa-arrow-down" aria-hidden="true" /> Download
-                    </a>
+                    </a>}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
                     <span className="mono" title={v.hash}>{v.hash.slice(0, 12)}</span>
@@ -217,6 +256,9 @@ export default function ArtifactDetailPage() {
                       </Link>
                     )}
                   </div>
+                  {isManifest(v) && openVersions.has(v.id) && (
+                    <div className="mt-2 border-t border-border-subtle pt-2"><ManifestTree hash={v.hash} /></div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -236,10 +278,8 @@ export default function ArtifactDetailPage() {
                 </thead>
                 <tbody>
                   {family.versions.map((v) => (
-                    <tr
-                      key={v.id}
-                      className="border-t border-border-subtle hover:bg-bg-elevated"
-                    >
+                    <Fragment key={v.id}>
+                    <tr className="border-t border-border-subtle hover:bg-bg-elevated">
                       <td className="mono num px-3 py-2">v{v.version}</td>
                       <td className="mono px-3 py-2 text-fg-muted" title={v.hash}>
                         {v.hash.slice(0, 12)}
@@ -263,15 +303,25 @@ export default function ArtifactDetailPage() {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <a
-                          href={api.artifactUrl(v.hash)}
-                          className="btn px-2 py-0.5 text-xs inline-flex items-center gap-1"
-                          download
-                        >
-                          <i className="fa-solid fa-arrow-down" aria-hidden="true" /> Download
-                        </a>
+                        {isManifest(v) ? (
+                          <FilesToggle v={v} open={openVersions.has(v.id)} onToggle={() => toggleVersion(v.id)} />
+                        ) : (
+                          <a
+                            href={api.artifactUrl(v.hash)}
+                            className="btn px-2 py-0.5 text-xs inline-flex items-center gap-1"
+                            download
+                          >
+                            <i className="fa-solid fa-arrow-down" aria-hidden="true" /> Download
+                          </a>
+                        )}
                       </td>
                     </tr>
+                    {isManifest(v) && openVersions.has(v.id) && (
+                      <tr className="border-t border-border-subtle">
+                        <td colSpan={6} className="px-3 py-2"><ManifestTree hash={v.hash} /></td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

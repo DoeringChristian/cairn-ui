@@ -255,6 +255,8 @@ export interface ArtifactVersionInfo {
   metadata: string | null;
   created_at: string;
   created_by_run: string | null;
+  /** The blob's mime type; a multi-file version's is `MANIFEST_MIME` (lib/artifact-manifest). */
+  mime_type?: string | null;
 }
 
 export interface ArtifactFamilyDetail extends ArtifactFamily {

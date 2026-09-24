@@ -31,7 +31,7 @@ import {
   type CellComparison,
   type DiffTable,
 } from "../lib/table-diff";
-import DataTable, { type TableData } from "./table/DataTable";
+import DataTable, { cellText, type TableData } from "./table/DataTable";
 
 // The grid is intentionally hand-rolled — no grid dependency.
 
@@ -122,12 +122,10 @@ function useTableBlobs(hashes: Array<string | null | undefined>) {
   });
 }
 
-/** CSV-friendly cell (string | number) for downloadCsv. */
+/** CSV-friendly cell (string | number) for downloadCsv; a media cell is its hash. */
 function csvCell(v: unknown): string | number {
-  if (v === null || v === undefined) return "";
   if (typeof v === "number") return v;
-  if (typeof v === "boolean") return v ? "true" : "false";
-  return String(v);
+  return cellText(v);
 }
 
 // ---------------------------------------------------------------------------

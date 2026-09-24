@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { diffCellClassName, type CellComparison } from "../../lib/table-diff";
 import { formatNum } from "../../lib/plot-utils/types";
+import { mediaOf } from "../../lib/table-media";
+import MediaCellView from "./MediaCellView";
 
-export type ColumnType = "number" | "string" | "bool" | "other";
+export type ColumnType = "number" | "string" | "bool" | "media" | "other";
 
 export interface TableColumn {
   name: string;
@@ -27,10 +29,12 @@ interface Props {
 
 type Sort = { column: string; direction: "asc" | "desc" } | null;
 
-/** Raw text of a cell: what filtering, width hints and the tooltip see. */
-function cellText(v: unknown): string {
+/** Raw text of a cell: what filtering, width hints and the tooltip see. A media cell is its hash. */
+export function cellText(v: unknown): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "boolean") return v ? "true" : "false";
+  const media = mediaOf(v);
+  if (media) return media.hash;
   return String(v);
 }
 
@@ -93,6 +97,8 @@ export default function DataTable({ table, rowsPerPage, hiddenColumns, diffStatu
     const sample = Math.min(rows.length, 500);
     const hints = visibleCols.map((c) => {
       let w = columns[c]!.name.length + 2; // room for the sort arrow
+      // A media column is thumbnails, not text: a fixed width, never its hashes.
+      if (columns[c]!.type === "media") return Math.max(12, Math.min(40, w));
       for (let r = 0; r < sample; r++) w = Math.max(w, cellDisplay(rows[r]![c]).length);
       return Math.min(40, Math.max(6, w));
     });
@@ -171,13 +177,14 @@ export default function DataTable({ table, rowsPerPage, hiddenColumns, diffStatu
                   {visibleCols.map((c) => {
                     const status = diffStatuses?.[ri]?.[c];
                     const align = columns[c]!.type === "number" ? "mono text-right" : "";
+                    const media = mediaOf(row[c]);
                     return (
                       <td
                         key={c}
                         title={cellText(row[c])}
                         className={`truncate border-b border-border px-2 py-1 text-fg ${align} ${status ? diffCellClassName(status, invertDiff) : ""}`}
                       >
-                        {cellDisplay(row[c])}
+                        {media ? <MediaCellView media={media} /> : cellDisplay(row[c])}
                       </td>
                     );
                   })}

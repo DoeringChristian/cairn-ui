@@ -41,6 +41,7 @@ export const CARD_TYPES = [
   "mesh",
   "boxes3d",
   "volume",
+  "preset",
   // Workspace-level "multi-run" cards.
   "parallel",
   "scatter",
