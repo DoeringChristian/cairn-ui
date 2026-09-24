@@ -58,7 +58,7 @@ export default function Sidebar({
             <button
               type="button"
               onClick={bulkDelete}
-              className="inline-flex h-6 items-center justify-center rounded border border-status-failed/40 bg-status-failed/10 px-1.5 text-[10px] text-status-failed hover:bg-status-failed/20"
+              className="inline-flex h-6 touch:h-10 items-center justify-center rounded border border-status-failed/40 bg-status-failed/10 px-1.5 text-[10px] text-status-failed hover:bg-status-failed/20"
               title={`Delete ${checked.size} selected`}
             >
               Delete {checked.size}
@@ -67,7 +67,7 @@ export default function Sidebar({
           <button
             type="button"
             onClick={onSmartCreate}
-            className="inline-flex h-6 items-center justify-center rounded border border-border bg-bg px-1.5 text-[10px] text-fg-muted hover:border-accent hover:text-fg"
+            className="inline-flex h-6 touch:h-10 touch:min-w-[40px] items-center justify-center rounded border border-border bg-bg px-1.5 text-[10px] text-fg-muted hover:border-accent hover:text-fg"
             aria-label="Smart comparison"
             title="Create from parameters"
           >
@@ -76,7 +76,7 @@ export default function Sidebar({
           <button
             type="button"
             onClick={onCreate}
-            className="inline-flex h-6 w-6 items-center justify-center rounded border border-border bg-bg text-sm text-fg-muted hover:border-accent hover:text-fg"
+            className="inline-flex h-6 w-6 touch:h-10 touch:w-10 items-center justify-center rounded border border-border bg-bg text-sm text-fg-muted hover:border-accent hover:text-fg"
             aria-label="New comparison"
             title="New empty comparison"
           >
@@ -117,6 +117,10 @@ interface SidebarRowProps {
   onRename: (name: string) => void;
   onDelete: () => void;
 }
+
+// Row actions reveal on hover where hovering exists and stay visible on touch.
+const rowActionClass =
+  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-subtle transition-opacity can-hover:opacity-0 can-hover:group-hover:opacity-100 focus-visible:opacity-100 touch:h-10 touch:w-10";
 
 function SidebarRow({
   comparison,
@@ -196,6 +200,20 @@ function SidebarRow({
           </div>
         </button>
       )}
+      {!editing && (
+        <button
+          type="button"
+          aria-label={`Rename "${comparison.name}"`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditing(true);
+          }}
+          className={`${rowActionClass} hover:text-fg`}
+          title="Rename"
+        >
+          {"\u270E"}
+        </button>
+      )}
       <button
         type="button"
         aria-label={`Delete "${comparison.name}"`}
@@ -203,7 +221,7 @@ function SidebarRow({
           e.stopPropagation();
           onDelete();
         }}
-        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-subtle opacity-0 group-hover:opacity-100 hover:text-status-failed transition-opacity"
+        className={`${rowActionClass} hover:text-status-failed`}
         title="Delete"
       >
         {"\u00D7"}

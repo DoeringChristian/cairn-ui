@@ -49,13 +49,13 @@ export default function TemplateSidebar({ projectId, currentRunIds, allRunIds, r
         {templates.map((t) => (
           <li
             key={t.id}
-            className="flex items-center justify-between rounded px-2 py-1.5 text-xs text-fg-muted hover:bg-bg-hover"
+            className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-xs text-fg-muted hover:bg-bg-hover"
           >
             <div className="min-w-0">
               <div className="truncate">{t.name}</div>
               <div className="text-[10px] text-fg-subtle">{t.cards.length} card(s)</div>
             </div>
-            <div className="ml-2 flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -67,7 +67,7 @@ export default function TemplateSidebar({ projectId, currentRunIds, allRunIds, r
                   }
                 }}
                 disabled={applyingId === t.id}
-                className="text-[10px] text-accent hover:underline disabled:opacity-50"
+                className="text-[10px] text-accent hover:underline disabled:opacity-50 touch:min-h-[40px]"
                 title={
                   currentRunIds.length > 0
                     ? "New comparison from template, using this comparison's runs"
@@ -79,7 +79,7 @@ export default function TemplateSidebar({ projectId, currentRunIds, allRunIds, r
               <button
                 type="button"
                 onClick={() => deleteTemplate(projectId, t.id)}
-                className="text-[10px] text-fg-subtle hover:text-status-failed"
+                className="text-[10px] text-fg-subtle hover:text-status-failed touch:min-h-[40px] touch:min-w-[40px] touch:text-sm"
                 title="Delete template"
               >
                 {"\u00D7"}

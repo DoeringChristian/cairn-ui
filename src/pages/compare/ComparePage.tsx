@@ -245,7 +245,9 @@ export default function ComparePage() {
     return m;
   }, [runs]);
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Only phones toggle the sidebar (it is always shown from md up); there it
+  // starts closed and closes once a comparison is picked or created.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   useElementScrollRestore(sidebarRef, `compare-sidebar:${projectId}`, comparisons.length > 0);
@@ -254,6 +256,7 @@ export default function ComparePage() {
     (comparisonId: string) => {
       refresh();
       selectComparison(comparisonId);
+      setSidebarOpen(false);
     },
     [refresh, selectComparison],
   );
@@ -300,8 +303,14 @@ export default function ComparePage() {
           <Sidebar
             comparisons={comparisons}
             selectedId={selectedId}
-            onSelect={selectComparison}
-            onCreate={handleCreate}
+            onSelect={(id) => {
+              selectComparison(id);
+              setSidebarOpen(false);
+            }}
+            onCreate={() => {
+              handleCreate();
+              setSidebarOpen(false);
+            }}
             onSmartCreate={() => setWizardOpen(true)}
             onRename={handleRename}
             onDelete={handleDelete}
@@ -390,7 +399,7 @@ function EmptyMainPane({
   return (
     <div className="card p-6 text-sm text-fg-muted">
       {hasAny ? (
-        <p>Select a comparison on the left to view its cards.</p>
+        <p>Pick a comparison from the list to view its cards.</p>
       ) : (
         <>
           <p className="mb-2 text-fg">No comparisons yet.</p>

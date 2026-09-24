@@ -171,7 +171,7 @@ export default function ComparisonView({
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex items-baseline justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         {editingName ? (
           <input
             autoFocus
@@ -195,18 +195,18 @@ export default function ComparisonView({
                 setDraft(comparison.name);
               }
             }}
-            className="input text-lg font-semibold"
+            className="input min-w-0 flex-1 text-lg font-semibold"
           />
         ) : (
           <h2
-            className="text-lg font-semibold cursor-text"
+            className="min-w-0 break-words text-lg font-semibold cursor-text"
             title="Click to rename"
             onClick={() => setEditingName(true)}
           >
             {comparison.name}
           </h2>
         )}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {comparison.runSelector && (
             <RunSelectorBadge
               title={describeRunSelector(comparison.runSelector)}
