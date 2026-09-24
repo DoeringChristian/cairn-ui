@@ -86,7 +86,7 @@ export function saveCardSettings<T>(key: CardSettingsKey, value: T): void {
   saveJson(localStorage, cardSettingsStorageKey(key), value);
 }
 
-export function resetCardSettings(key: CardSettingsKey): void {
+function resetCardSettings(key: CardSettingsKey): void {
   try {
     localStorage.removeItem(cardSettingsStorageKey(key));
   } catch {

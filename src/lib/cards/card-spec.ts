@@ -80,11 +80,6 @@ export const CARD_TYPES = [
 
 export type CardType = (typeof CARD_TYPES)[number];
 
-/** Strict membership check against the canonical list — see `isComparisonCard` (lib/comparisons/types.ts) for the deliberately-permissive runtime guard used on parse paths. */
-export function isCardType(x: unknown): x is CardType {
-  return typeof x === "string" && (CARD_TYPES as readonly string[]).includes(x);
-}
-
 /** = `ComparisonSeriesRef` (lib/comparisons/types.ts) — one (run, metric) binding for a card. */
 export type SeriesRef = ComparisonSeriesRef;
 

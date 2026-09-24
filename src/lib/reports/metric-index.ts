@@ -60,10 +60,8 @@ export function metricEntriesByName(index: MetricIndex, name: string): MetricInd
 }
 
 /**
- * Fetch + build a `MetricIndex` for a run set — the same fetch AddCardModal
- * performs, extracted so the ```cairn render component
- * (components/reports/CairnFenceCard.tsx) can resolve a bare `metric:` field
- * without re-implementing the scan.
+ * Fetch + build a `MetricIndex` for a run set, so a ```cairn card with a
+ * bare `metric:` field can have its type inferred.
  */
 export function useMetricIndex(runIds: string[]): { index: MetricIndex; isLoading: boolean } {
   const seqQueries = useQueries({

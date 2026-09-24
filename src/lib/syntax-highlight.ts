@@ -1,6 +1,6 @@
 import type { Highlighter } from "shiki";
 
-export const SHIKI_LANGS = [
+const SHIKI_LANGS = [
   "python",
   "typescript",
   "javascript",

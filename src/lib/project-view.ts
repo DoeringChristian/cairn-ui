@@ -24,7 +24,7 @@ export interface ProjectView {
   hidden: string[];
 }
 
-export const EMPTY_PROJECT_VIEW: ProjectView = { version: 1, hidden: [] };
+const EMPTY_PROJECT_VIEW: ProjectView = { version: 1, hidden: [] };
 
 export function loadProjectView(projectId: string): ProjectView {
   const parsed = loadJson<Partial<ProjectView>>(localStorage, storageKeys.projectView(projectId));
@@ -39,7 +39,7 @@ export function loadProjectView(projectId: string): ProjectView {
 
 const viewChanged = new EventTarget();
 
-export function saveProjectView(projectId: string, view: ProjectView): void {
+function saveProjectView(projectId: string, view: ProjectView): void {
   saveJson(localStorage, storageKeys.projectView(projectId), view);
   viewChanged.dispatchEvent(new CustomEvent("change", { detail: projectId }));
 }

@@ -58,12 +58,8 @@ export function isRunSelector(x: unknown): x is RunSelector {
   return false;
 }
 
-export function isQueryRunSelector(x: RunSelector | undefined | null): x is QueryRunSelector {
-  return !!x && x.kind === "query";
-}
-
 /** Parse a run's `tags` JSON-string column into a string array (empty on any parse failure). */
-export function parseRunTags(tags: string | null): string[] {
+function parseRunTags(tags: string | null): string[] {
   if (!tags) return [];
   try {
     const parsed = JSON.parse(tags);

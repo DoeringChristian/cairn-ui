@@ -1,28 +1,16 @@
 /**
- * The report's single editing/rendering surface (WS-NR1 deliverables 1+3):
- * an "Obsidian-style" segmented inline editor over the report's canonical
- * `blocks[]` cell array — see
- * docs/superpowers/specs/2026-07-05-notebook-reports.md §3.A/§3.B.
+ * The report's single editing/rendering surface: an Obsidian-style segmented
+ * inline editor over the report's `blocks[]` cell array. The rendered view
+ * is the editor — every segment renders live (prose via the shared
+ * `<Markdown>`, cards via `ReportCardsBlock`), and clicking a prose
+ * paragraph swaps just that paragraph into a raw `<textarea>` until blur.
  *
- * REPLACES: `ReportMarkdownBlock`'s textarea-beside-preview split *and*
- * `ReportEditorPage`'s whole-report "Markdown source" toggle (raw
- * `<textarea>` beside a `<ReportSourceMarkdown>` preview) — there is no
- * longer a separate raw/preview pane anywhere in the report editor. The
- * rendered view *is* the editor: every segment renders live by default
- * (prose via the shared `<Markdown>`, cards via the existing
- * `ReportCardsBlock`); clicking a prose *paragraph* swaps just that
- * paragraph into a raw `<textarea>` until blur.
- *
- * Cell model: `blocks[]` (lib/reports/types.ts) already *is* the segment
- * list `splitFences` produces (see markdown-source.ts's module doc — every
+ * Cell model: `blocks[]` (lib/reports/types.ts) is the segment list
+ * `splitFences` produces (see markdown-source.ts's module doc — every
  * `MarkdownBlock` is one prose region between fences, every `CardsBlock` is
- * one ```cairn fence), so this component doesn't re-derive segments from
- * `source` — it renders/edits `blocks[]` directly, and `ReportEditorPage`
- * still serializes it to the canonical `source` on save (unchanged).
- * Ordering IS the markdown-canonical serialization order (block array
- * order = document order). `python` cells are Phase 2 — not implemented
- * here, but `CellKind`/the switch below leave room for a third case
- * without restructuring (see the design doc's phased plan).
+ * one ```cairn fence), so this component renders/edits `blocks[]` directly
+ * and `ReportEditorPage` serializes it to the canonical `source` on save.
+ * Block array order is document order.
  *
  * Prose editing granularity is per-paragraph (`splitProseBlocks`, blank-line
  * boundaries), not per-physical-line — a naive line-granular editor breaks
@@ -30,7 +18,7 @@
  * block via the existing `ReportCardsBlock` structured UI (run picker/"Add
  * card" modal/reorder) rather than a second raw-YAML textarea — reusing the
  * one card-editing surface instead of forking a parallel YAML-hand-editing
- * path (no-duplication guard).
+ * path.
  *
  * `editMode` scope: prose click-to-edit (`MarkdownCellEditor`) is always
  * live, regardless of `editMode` — true to the "each line is rendered
@@ -38,7 +26,7 @@
  * just hide the affordance. `editMode` here only gates *structural* cell
  * editing (the per-cell type label/move/delete chrome and the "+ cell"
  * insert rows below) and is threaded straight through to `ReportCardsBlock`,
- * which still uses it to freeze card settings (`CardMutationContext`) until
+ * which uses it to freeze card settings (`CardMutationContext`) until
  * the user explicitly opts into editing.
  */
 

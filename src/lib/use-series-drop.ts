@@ -38,7 +38,7 @@ interface UseSeriesDropOpts {
   ) => void;
 }
 
-export function useSeriesDrop({ metricsRef, onMetricsChange }: UseSeriesDropOpts) {
+function useSeriesDrop({ metricsRef, onMetricsChange }: UseSeriesDropOpts) {
   const [highlight, setHighlight] = useState(false);
   // Counter-based enter/leave tracking avoids the flicker caused by
   // entering/leaving child elements within the card.

@@ -38,7 +38,7 @@ export function extractViewState(relayoutData: Record<string, unknown>): SharedV
 }
 
 /** Deep merge b into a (returns new object). */
-export function deepMerge(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
+function deepMerge(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
   const result = { ...a };
   for (const [k, v] of Object.entries(b)) {
     if (v && typeof v === "object" && !Array.isArray(v) && a[k] && typeof a[k] === "object" && !Array.isArray(a[k])) {
@@ -88,7 +88,7 @@ export function mergeRelayout(prev: SharedView, incoming: SharedView): SharedVie
 }
 
 /** Value equality of two views; numbers compare within 1e-9 relative. */
-export function sameView(a: SharedView, b: SharedView): boolean {
+function sameView(a: SharedView, b: SharedView): boolean {
   const ka = Object.keys(a);
   if (ka.length !== Object.keys(b).length) return false;
   for (const k of ka) {

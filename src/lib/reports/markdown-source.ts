@@ -1,8 +1,7 @@
 /**
  * The one parse⇄serialize bridge between a report's canonical markdown
  * serialization (prose + fenced ```cairn card specs) and the `blocks[]`
- * cells model (see docs/superpowers/specs/2026-07-04-ai-authored-reports.md
- * §4). `blocks[]` is a lossless *view*: every `MarkdownBlock` is a prose
+ * cells model. `blocks[]` is a lossless *view*: every `MarkdownBlock` is a prose
  * region between fences, every `CardsBlock` is one ```cairn fence, compiled
  * via `compileCairnBlock` (lib/reports/cairn-block.ts).
  *
@@ -21,7 +20,7 @@
  * A malformed ```cairn block never aborts the parse: `parseReportMarkdown`
  * catches `CairnBlockError` per-fence and still emits a `CardsBlock` (empty
  * `cards`), recording the failure in `errors` — the caller (the block
- * editor, the ```cairn render component) shows it as an inline error.
+ * editor) shows it as an inline error.
  *
  * Byte-preservation vs. regeneration: `parseReportMarkdown` returns the
  * exact original fence text (delimiters included) per block id in
@@ -40,32 +39,18 @@
  * cells⇄markdown⇄cells round trip with no visible artifact. Prose blocks
  * have no equivalent hidden channel under the "no raw HTML" sanitization
  * contract (lib/markdown.tsx) — their ids simply regenerate on every parse.
- * This is a deliberate, scoped answer to the design doc's open question #2;
- * it doesn't matter for correctness because settings are keyed by *card*
- * id (see lib/reports/scope.ts), never by block id.
+ * That is harmless because settings are keyed by *card* id (see
+ * lib/reports/scope.ts), never by block id.
  *
- * Adjacent-prose cell boundary (WS-MDDELIM): two consecutive `MarkdownBlock`s
- * have no fence between them to force a split on reparse, so naively joining
- * `blockA.text + "\n" + blockB.text` is indistinguishable, on the next parse,
- * from a single prose block that always contained both — the two cells
- * silently fuse into one (independent move/delete lost, though no text is
- * lost). `CELL_BOUNDARY_MARKER` (see below) is appended, invisibly, to the
- * end of a markdown block's serialized text whenever the *next* block is
- * also markdown, and `parseReportMarkdown` splits a prose segment back into
- * multiple `MarkdownBlock`s wherever that exact marker+blank-line token
- * appears. An HTML-comment marker (the obvious first idea) does NOT work
- * here: this module's own sanitization contract (line 41 above, enforced in
- * lib/markdown.tsx) renders raw HTML as *visible inert text*, not as a
- * stripped comment — a `<!-- ... -->` delimiter would show up literally in
- * the read-only single-flow viewer (`ReportSourceMarkdown.tsx` runs the
- * *entire* serialized document through one `<Markdown>` call). A marker made
- * entirely of zero-width Unicode code points sidesteps that: it's ordinary
- * *text* (not HTML), so the sanitizer never touches it, and it has zero
- * visual width in any renderer, so it's genuinely invisible rather than
- * merely "suppressed." Backward compatible by construction: the marker
- * token is vanishingly unlikely to occur in a pre-existing report, so old
- * documents parse exactly as before (adjacent prose with no marker still
- * merges into one block, unchanged).
+ * Adjacent-prose cell boundary: two consecutive `MarkdownBlock`s have no
+ * fence between them, so plainly joined they would fuse into one cell on the
+ * next parse. `CELL_BOUNDARY_MARKER` (see below) is appended to a markdown
+ * block's serialized text whenever the *next* block is also markdown, and
+ * `parseReportMarkdown` splits prose back into separate blocks at that
+ * marker. It is made of zero-width code points rather than an HTML comment
+ * because the sanitization contract (lib/markdown.tsx) renders raw HTML as
+ * visible inert text; zero-width text renders as nothing. Adjacent prose
+ * without the marker stays one block.
  */
 
 /**
@@ -175,8 +160,7 @@ function splitFences(source: string): Segment[] {
 
 /**
  * Split one `MarkdownBlock`'s prose text into paragraph-granular editing
- * units for `SegmentedMarkdownEditor` (WS-NR1 deliverable 1) — the
- * "Obsidian-style" per-block click-to-edit surface: clicking a *paragraph*
+ * units for `SegmentedMarkdownEditor` — the "Obsidian-style" per-block click-to-edit surface: clicking a *paragraph*
  * swaps just that paragraph into a raw textarea, not the whole prose region
  * (which may itself contain many paragraphs/tables/lists) and not a single
  * physical line (which would break multi-line list items and tables).
@@ -219,15 +203,11 @@ export interface ParsedReportMarkdown {
  * `opts.allProjectRuns`, when given, lets a `runs.selector` block resolve its
  * *live* run set synchronously (via `resolveRunSelectorFromRuns` — the same
  * pure resolution `useRunSelectorResolution` calls) and thread it into
- * `compileCairnBlock` as `resolvedRunIds`, exactly like the ```cairn fence
- * preview (`CairnFenceCard.tsx`) already does at render time. Without it, a
- * selector block compiles with an empty run set (`effectiveRunIds = []`) —
- * the RBUG hydrate gap: a fresh hydrate / cells⇄markdown toggle produced
- * cards with `series: []`, and since a card's metric *name* only lives
- * inside `series[].name`, that identity is permanently lost — no downstream
- * render-time rebind (`rebindCardsToMetricIndex`) can recover a name from an
- * empty series. Passing the already-fetched project run pool here fixes it
- * at the source, still staying a synchronous, pure function (no fetch).
+ * `compileCairnBlock` as `resolvedRunIds`. Without it, a selector block
+ * compiles with an empty run set and its cards get `series: []` — and since
+ * a card's metric *name* only lives inside `series[].name`, no render-time
+ * rebind (`rebindCardsToMetricIndex`) could recover it. The function stays
+ * synchronous and pure: it uses the already-fetched project run pool.
  */
 export function parseReportMarkdown(
   source: string,
@@ -244,9 +224,7 @@ export function parseReportMarkdown(
     if (seg.kind === "prose") {
       // A prose segment may itself contain one or more CELL_BOUNDARY_TOKENs
       // (deliberately adjacent markdown cells) — split it back into the
-      // original per-cell texts. A segment with no marker at all (the
-      // overwhelmingly common case, and every pre-existing report) yields
-      // exactly one piece, i.e. today's behavior, unchanged.
+      // original per-cell texts. A segment with no marker yields one piece.
       for (const text of seg.text.split(CELL_BOUNDARY_TOKEN)) {
         blocks.push({ id: newId(), type: "markdown", text });
       }
