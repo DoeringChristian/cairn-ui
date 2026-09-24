@@ -31,6 +31,8 @@ import ScalarChart from "../charts/ScalarChart";
 import { mapToXAxis, type AxisSource } from "../lib/plot-utils/x-axis";
 import { SERIES_COLORS, type AxisScale, type Series } from "../lib/plot-utils/types";
 import { SMOOTHING_KINDS, formatSmoothing, type SmoothingKind } from "../lib/plot-utils/smooth";
+import { groupSeries, type BandKind } from "../lib/plot-utils/aggregate";
+import type { Run } from "../api/types";
 
 const SCALAR_POLICY = plotCardPolicy("scalar");
 
@@ -51,12 +53,23 @@ interface ScalarSettings extends BaseCardSettings {
   lineType: "linear" | "monotone" | "step" | "stepBefore" | "stepAfter";
   showLegend: boolean;
   tooltip: { showContext: boolean; showWallTime: boolean };
+  /** Collapse runs sharing a group / job type / param value into mean ± band. */
+  groupBy: GroupBy | null;
+  band: BandKind;
+  /** Draw only each group's mean and band, not its runs. */
+  hideMembers: boolean;
   viewport: {
     xMin: number | null;
     xMax: number | null;
     yMin: number | null;
     yMax: number | null;
   };
+}
+
+interface GroupBy {
+  source: "group" | "job_type" | "param";
+  /** The param key (source "param" only). */
+  key: string;
 }
 
 const DEFAULT_SCALAR_SETTINGS = (seed: {
@@ -77,12 +90,28 @@ const DEFAULT_SCALAR_SETTINGS = (seed: {
   lineType: "linear",
   showLegend: true,
   tooltip: { showContext: true, showWallTime: true },
+  groupBy: { source: "group", key: "" },
+  band: "std",
+  hideMembers: false,
   viewport: { xMin: null, xMax: null, yMin: null, yMax: null },
 });
 
 // -----------------------------------------------------------------------------
 // Palette & helpers
 // -----------------------------------------------------------------------------
+
+/** A run's value for the grouping; null leaves the run ungrouped. */
+function groupValue(
+  by: GroupBy,
+  run: Run | undefined,
+  params: Record<string, unknown> | undefined,
+): string | null {
+  if (by.source === "group") return run?.group ?? null;
+  if (by.source === "job_type") return run?.job_type ?? null;
+  const v = params?.[by.key];
+  if (v === undefined || v === null || !by.key) return null;
+  return `${by.key}=${typeof v === "string" ? v : JSON.stringify(v)}`;
+}
 
 function viewportIsAuto(v: ScalarSettings["viewport"]): boolean {
   return (
@@ -149,7 +178,12 @@ export default function ScalarPlotCard({
   // -------------------------------------------------------------------------
   // Run meta
   // -------------------------------------------------------------------------
-  const { runCreatedAtByRunId } = useRunInfo(allRunIds);
+  const { runCreatedAtByRunId, runById, paramsByRunId } = useRunInfo(allRunIds);
+  const paramKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const p of paramsByRunId.values()) for (const k of Object.keys(p)) keys.add(k);
+    return [...keys].sort();
+  }, [paramsByRunId]);
 
   // -------------------------------------------------------------------------
   // Data fetch
@@ -170,7 +204,7 @@ export default function ScalarPlotCard({
   // -------------------------------------------------------------------------
   const runMetaVersion = useRunMetadataVersion();
 
-  const { series, isLoading } = useMemo(() => {
+  const { series, groups, isLoading } = useMemo(() => {
     const anyLoading = queries.some((q) => q.isLoading);
 
     const built: Series[] = effectiveMetrics.map((m, idx) => {
@@ -186,17 +220,40 @@ export default function ScalarPlotCard({
         label: seriesLabel(m.name, m.context_hash, rid, multipleRuns, allRunIds),
         color: SERIES_COLORS[idx % SERIES_COLORS.length]!,
         points: mapped,
+        runId: rid,
       };
     });
 
-    return { series: built, isLoading: anyLoading };
+    // Grouping needs several runs; a run without a value for it stays its own line.
+    const by = settings.groupBy;
+    if (!by || !multipleRuns) return { series: built, groups: 0, isLoading: anyLoading };
+    const metricKeys = new Set(effectiveMetrics.map((m) => `${m.name}\u0000${m.context_hash}`));
+    const grouped = groupSeries(
+      built.map((s, idx) => {
+        const m = effectiveMetrics[idx]!;
+        return {
+          series: s,
+          metricKey: `${m.name}\u0000${m.context_hash}`,
+          metricName: m.context_hash ? `${m.name} · ${m.context_hash.slice(0, 6)}` : m.name,
+          group: groupValue(by, runById.get(s.runId!), paramsByRunId.get(s.runId!)),
+        };
+      }),
+      { band: settings.band, hideMembers: settings.hideMembers, labelMetric: metricKeys.size > 1 },
+    );
+    if (grouped.groups === 0) return { series: built, groups: 0, isLoading: anyLoading };
+    return { series: grouped.series, groups: grouped.groups, isLoading: anyLoading };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     effectiveMetrics,
     settings.xAxis,
+    settings.groupBy,
+    settings.band,
+    settings.hideMembers,
     multipleRuns,
     runId,
     runCreatedAtByRunId,
+    runById,
+    paramsByRunId,
     runMetaVersion,
     queries.map((q) => q.dataUpdatedAt).join("|"),
   ]);
@@ -243,7 +300,7 @@ export default function ScalarPlotCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queries.map((q) => q.dataUpdatedAt).join("|")]);
 
-  const subtitle = `${series.length} series${
+  const subtitle = `${groups > 0 ? `${groups} group${groups === 1 ? "" : "s"}` : `${series.length} series`}${
     totalPoints > 0 ? ` · ${totalPoints} pts` : ""
   }`;
 
@@ -416,6 +473,55 @@ export default function ScalarPlotCard({
         ]}
       />
 
+      {multipleRuns && (
+        <>
+          <SettingsSection title="Grouping" />
+          <Select
+            label="Group runs by"
+            value={settings.groupBy?.source ?? "none"}
+            onChange={(v) =>
+              updateSettings({
+                groupBy: v === "none" ? null : { source: v, key: settings.groupBy?.key || (paramKeys[0] ?? "") },
+              })
+            }
+            options={[
+              { value: "none" as const, label: "None" },
+              { value: "group" as const, label: "Group" },
+              { value: "job_type" as const, label: "Job type" },
+              { value: "param" as const, label: "Param", disabled: paramKeys.length === 0 },
+            ]}
+            description="Runs sharing a value draw as their mean with a band; runs without one stay single lines"
+          />
+          {settings.groupBy?.source === "param" && (
+            <Select
+              label="Param"
+              value={settings.groupBy.key}
+              onChange={(key) => updateSettings({ groupBy: { source: "param", key } })}
+              options={paramKeys.map((k) => ({ value: k, label: k }))}
+            />
+          )}
+          {settings.groupBy && (
+            <>
+              <Select<BandKind>
+                label="Band"
+                value={settings.band}
+                onChange={(band) => updateSettings({ band })}
+                options={[
+                  { value: "std", label: "Mean ± std" },
+                  { value: "sem", label: "Mean ± std. error" },
+                  { value: "minmax", label: "Min – max" },
+                ]}
+              />
+              <Toggle
+                label="Hide member runs"
+                checked={settings.hideMembers}
+                onChange={(v) => updateSettings({ hideMembers: v })}
+              />
+            </>
+          )}
+        </>
+      )}
+
       <SettingsSection title="Smoothing" />
       <Select
         label="Kind"
@@ -534,11 +640,11 @@ export default function ScalarPlotCard({
       defaultHeight={SCALAR_POLICY.defaultHeight}
       onSettings={() => setExpanded(true)}
       onDownload={() => {
-        const headers = ["series", "x", "y", "wall_time"];
+        const headers = ["series", "role", "x", "y", "wall_time"];
         const rows: (string | number)[][] = [];
         for (const s of series) {
           for (const p of s.points) {
-            rows.push([s.label, p.x, p.y, p.wallTime ?? ""]);
+            rows.push([s.label, s.role ?? "line", p.x, p.y, p.wallTime ?? ""]);
           }
         }
         downloadCsv(headers, rows, safeName(settings.title ?? metric.name) + ".csv");

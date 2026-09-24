@@ -13,7 +13,18 @@ export interface Series {
   color: string;
   points: SeriesPoint[];
   rawPoints?: SeriesPoint[] | null;
+  /**
+   * How the series is drawn (default "line"). A group's band edges are
+   * "bandHi"/"bandLo" and share the key of their mean line; "member" is one
+   * run of a group, drawn faded under the mean and left out of legend and
+   * tooltip.
+   */
+  role?: SeriesRole;
+  /** The run the series belongs to (none for a group's mean and band). */
+  runId?: string;
 }
+
+export type SeriesRole = "line" | "member" | "bandHi" | "bandLo";
 
 export type AxisScale = "linear" | "log";
 

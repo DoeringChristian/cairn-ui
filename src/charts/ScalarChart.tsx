@@ -112,7 +112,7 @@ export default function ScalarChart(props: ScalarChartProps) {
   // Anything that changes the uPlot options (not just the data) rebuilds the chart.
   const structureKey = [
     xAxis, xScale, yScale, lineType, interactive,
-    lines.map((l) => `${l.key}:${l.raw}:${l.color}`).join(","),
+    lines.map((l) => `${l.key}:${l.role}:${l.color}`).join(","),
   ].join("|");
 
   useEffect(() => {
@@ -143,6 +143,14 @@ export default function ScalarChart(props: ScalarChartProps) {
       const hi2 = zoom[1] ?? fixed[1] ?? hi;
       return [lo2, hi2];
     };
+
+    // Each group's band fills between its hi and lo edges (1-based: 0 is x).
+    const bands: uPlot.Band[] = [];
+    lines.forEach((l, i) => {
+      if (l.role !== "bandHi") return;
+      const lo = lines.findIndex((o) => o.role === "bandLo" && o.key === l.key);
+      if (lo >= 0) bands.push({ series: [i + 1, lo + 1], fill: withAlpha(l.color, 0.18) });
+    });
 
     const opts: uPlot.Options = {
       width: Math.max(host.clientWidth, 50),
@@ -175,13 +183,16 @@ export default function ScalarChart(props: ScalarChartProps) {
         },
       },
       axes: [axis(), { ...axis(), size: 56 }],
+      bands,
       series: [
         {},
         ...lines.map((l): uPlot.Series => {
+          const edge = l.role === "bandHi" || l.role === "bandLo";
+          const faded = l.role === "raw" || l.role === "member";
           return {
             label: l.label,
-            stroke: withAlpha(l.color, l.raw ? 0.25 : 1),
-            width: l.raw ? 1 : 1.5,
+            stroke: withAlpha(l.color, edge ? 0 : faded ? 0.25 : 1),
+            width: edge ? 0 : faded ? 1 : 1.5,
             spanGaps: true,
             paths: pathsFor(lineType),
             points: { show: false },
@@ -208,7 +219,8 @@ export default function ScalarChart(props: ScalarChartProps) {
             setHover({ idx, left: left + u.over.offsetLeft, top: top + u.over.offsetTop });
           },
         ],
-        setSeries: [(_u, seriesIdx) => setFocused(seriesIdx ?? null)],
+        // A band edge focuses its group's mean line.
+        setSeries: [(_u, seriesIdx) => setFocused(seriesIdx == null ? null : parentLine(lines, seriesIdx))],
       },
     };
 
@@ -280,6 +292,8 @@ export default function ScalarChart(props: ScalarChartProps) {
   }, [data, view.xMin, view.xMax, view.yMin, view.yMax, xRange[0], xRange[1], yRange[0], yRange[1]]);
 
   const rows = hover ? tooltipRows(lines, hover.idx) : [];
+  // One entry per line: members and band edges belong to their group's mean.
+  const legend = series.filter((s) => (s.role ?? "line") === "line");
   const focusedKey = focused != null && focused > 0 ? lines[focused - 1]?.key : undefined;
 
   return (
@@ -302,9 +316,9 @@ export default function ScalarChart(props: ScalarChartProps) {
           />
         )}
       </div>
-      {showLegend && series.length > 1 && (
+      {showLegend && legend.length > 1 && (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 px-1 pt-1 text-[10px] text-fg-muted">
-          {series.map((s) => (
+          {legend.map((s) => (
             <span key={s.key} className="inline-flex items-center gap-1">
               <span className="inline-block h-0.5 w-3 rounded" style={{ background: s.color }} />
               <span className="truncate max-w-[16rem]">{s.label}</span>
@@ -321,14 +335,36 @@ interface TooltipRow {
   label: string;
   color: string;
   point: SeriesPoint;
+  /** A group's band edges at this x, shown after the mean. */
+  band?: [number, number];
+}
+
+/** uPlot series index (1-based) → the index of the line it belongs to. */
+function parentLine(lines: DrawnSeries[], seriesIdx: number): number {
+  const l = lines[seriesIdx - 1];
+  if (!l || (l.role !== "bandHi" && l.role !== "bandLo")) return seriesIdx;
+  const parent = lines.findIndex((o) => o.role === "line" && o.key === l.key);
+  return parent >= 0 ? parent + 1 : seriesIdx;
 }
 
 function tooltipRows(lines: DrawnSeries[], idx: number): TooltipRow[] {
   const rows: TooltipRow[] = [];
+  const edges = new Map<string, { lo?: number; hi?: number }>();
   for (const l of lines) {
-    if (l.raw) continue;
+    if (l.role !== "bandHi" && l.role !== "bandLo") continue;
+    const y = nearestPoint(l.points, idx)?.y;
+    const e = edges.get(l.key) ?? {};
+    if (l.role === "bandHi") e.hi = y;
+    else e.lo = y;
+    edges.set(l.key, e);
+  }
+  for (const l of lines) {
+    if (l.role !== "line") continue;
     const point = nearestPoint(l.points, idx);
-    if (point) rows.push({ key: l.key, label: l.label, color: l.color, point });
+    if (!point) continue;
+    const e = edges.get(l.key);
+    const band = e?.lo != null && e.hi != null ? ([e.lo, e.hi] as [number, number]) : undefined;
+    rows.push({ key: l.key, label: l.label, color: l.color, point, band });
   }
   rows.sort((a, b) => b.point.y - a.point.y);
   return rows;
@@ -375,7 +411,10 @@ function ChartTooltip({
           <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: r.color }} />
           <span className="truncate">{r.label}</span>
           {tooltip.showContext && r.point.context ? <span className="text-fg-subtle">{r.point.context}</span> : null}
-          <span className="mono ml-auto pl-2 text-fg">{formatNum(r.point.y)}</span>
+          <span className="mono ml-auto pl-2 text-fg">
+            {formatNum(r.point.y)}
+            {r.band && <span className="text-fg-subtle">{` [${formatNum(r.band[0])}, ${formatNum(r.band[1])}]`}</span>}
+          </span>
         </div>
       ))}
       {rows.length > shown.length && <div className="text-fg-subtle">+{rows.length - shown.length} more</div>}
