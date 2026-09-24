@@ -106,7 +106,7 @@ export default function SplitPane({
 
   // --- Grid mode: auto-fill wrapping grid ---
   if (useGrid) {
-    // Compute how many columns the grid will use, to set row heights
+    // Compute how many columns the grid will use, to size each row
     const gridCols = containerWidth > 0
       ? Math.max(1, Math.floor(containerWidth / minPaneWidth))
       : Math.min(n, 3);

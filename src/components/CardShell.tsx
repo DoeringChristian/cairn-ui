@@ -125,12 +125,10 @@ export default function CardShell({
         </>
       )}
       <CardResizeHandle
-        height={settings.height}
         onHeightChange={(h) => updateSettings({ height: h })}
         colSpan={settings.colSpan ?? 3}
         onColSpanChange={(s) => updateSettings({ colSpan: s })}
         minHeight={minSize.minHeight}
-        onPerColHeightChange={(p) => updateSettings(p)}
       />
     </div>
   );

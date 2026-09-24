@@ -177,11 +177,7 @@ export function useCardSettings<T extends { version: number }>(
 }
 
 /**
- * Resolve the effective card height for the current colSpan.
- *
- * Cards store per-colSpan heights in a `heights` record keyed by span
- * (e.g. `{ 3: 350, 6: 500 }`). The legacy `height`, `height1`, and
- * `height2` fields are used as fallbacks for backward compatibility.
+ * Resolve the effective card height: the persisted `height`, else `fallback`.
  *
  * @param settings  - card settings object
  * @param fallback  - default height when nothing is set (e.g. 300, 350, undefined)
@@ -193,24 +189,12 @@ export function useCardSettings<T extends { version: number }>(
  *   card-kit/card-min-sizes::cardMinSize; this module stays kind-agnostic.
  */
 export function resolveCardHeight(
-  settings: { height?: number; height1?: number; height2?: number; heights?: Record<number, number>; colSpan?: number; collapsed?: boolean },
+  settings: { height?: number; collapsed?: boolean },
   fallback?: number,
   minHeight?: number,
 ): number | undefined {
   if (settings.collapsed) return undefined;
-  const span = settings.colSpan ?? 3;
-
-  // New path: per-span heights record
-  let resolved: number | undefined;
-  if (settings.heights && settings.heights[span] != null) {
-    resolved = settings.heights[span];
-  } else if (span > 1) {
-    // Legacy fallback: height2 (span > 1) / height1 (span 1)
-    resolved = settings.height2 ?? settings.height ?? fallback;
-  } else {
-    resolved = settings.height1 ?? settings.height ?? fallback;
-  }
-
+  const resolved = settings.height ?? fallback;
   if (resolved == null) return undefined;
   return minHeight != null ? Math.max(resolved, minHeight) : resolved;
 }

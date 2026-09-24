@@ -11,9 +11,7 @@ export interface BaseCardSettings {
   version: 1;
   title?: string;
   collapsed?: boolean;
-  height?: number; // legacy — resolveCardHeight fallback
-  height1?: number; // legacy
-  height2?: number; // legacy
-  heights?: Record<number, number>;
+  /** Persisted card height in px; undefined = the card's default. */
+  height?: number;
   colSpan?: number;
 }
