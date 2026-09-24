@@ -22,6 +22,8 @@ export interface ScalarView {
 export interface ScalarChartProps {
   series: Series[];
   xAxis: AxisSource;
+  /** The x-metric's name for `xAxis: "metric"` (tooltip header). */
+  xLabel?: string;
   xScale: AxisScale;
   yScale: AxisScale;
   /** Fixed axis bounds from settings; null ends stay automatic. */
@@ -50,9 +52,10 @@ function pathsFor(lineType: LineType): uPlot.Series.PathBuilder {
   return linear!();
 }
 
-function formatX(x: number, xAxis: AxisSource): string {
+function formatX(x: number, xAxis: AxisSource, xLabel?: string): string {
   if (xAxis === "wall_time") return new Date(x).toLocaleString();
   if (xAxis === "relative_time") return `${formatNum(x)} s`;
+  if (xAxis === "metric") return xLabel ? `${xLabel} ${formatNum(x)}` : formatNum(x);
   return String(x);
 }
 
@@ -295,7 +298,7 @@ export default function ScalarChart(props: ScalarChartProps) {
             hover={hover}
             boxWidth={plotHostRef.current?.clientWidth ?? 0}
             boxHeight={plotHostRef.current?.clientHeight ?? 0}
-            header={formatX(aligned.xs[hover.idx]!, xAxis)}
+            header={formatX(aligned.xs[hover.idx]!, xAxis, props.xLabel)}
             rows={rows}
             focusedKey={focusedKey}
             tooltip={tooltip}

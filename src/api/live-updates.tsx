@@ -31,6 +31,8 @@ import {
   appendAllDedup,
   getRunCursor,
   groupPointsBySeries,
+  noteRunEpoch,
+  resetRunCursor,
   selectRunsToPoll,
   seriesKeyOfQueryKey,
   setRunCursor,
@@ -105,6 +107,16 @@ async function pollRun(qc: QueryClient, runId: string): Promise<void> {
       const since = getRunCursor(runId);
       if (since === undefined) return;
       const res = await api.updates(runId, since);
+      if (noteRunEpoch(runId, res.data_epoch)) {
+        // The run was rewound: cached points past the rewind are gone on the
+        // server and the cursor may point past reused rowids. Start over.
+        resetRunCursor(runId);
+        applyStatus(qc, runId, res.status);
+        void qc.invalidateQueries({ queryKey: ["sequence", runId] });
+        void qc.invalidateQueries({ queryKey: qk.sequences(runId) });
+        void qc.invalidateQueries({ queryKey: qk.run(runId) });
+        return;
+      }
       applyPoints(qc, runId, res);
       const { cursor, done } = advanceCursor(since, res);
       setRunCursor(runId, cursor);
