@@ -144,7 +144,7 @@ export default function LineagePage() {
   if (!layout || layout.positioned.length === 0) {
     return (
       <div>
-        <h1 className="mono text-xl font-semibold mb-6">
+        <h1 className="mono mb-6 break-all text-xl font-semibold">
           {projectId} / lineage
         </h1>
         <p className="text-fg-muted">
@@ -160,7 +160,7 @@ export default function LineagePage() {
 
   return (
     <div>
-      <h1 className="mono text-xl font-semibold mb-6">
+      <h1 className="mono mb-6 break-all text-xl font-semibold">
         {projectId} / lineage
       </h1>
       <div className="overflow-auto rounded-lg border border-border bg-bg-elevated" style={{ WebkitOverflowScrolling: "touch" }}>

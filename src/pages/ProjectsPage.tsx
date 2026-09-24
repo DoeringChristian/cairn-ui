@@ -34,9 +34,9 @@ export default function ProjectsPage() {
   const projects = q.data?.projects ?? [];
   return (
     <div>
-      <div className="mb-6 flex items-baseline justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <h1 className="text-xl font-semibold">Projects</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm text-fg-muted">
             {projects.length} {projects.length === 1 ? "project" : "projects"}
           </p>
@@ -91,7 +91,7 @@ export default function ProjectsPage() {
                 <div className="flex items-baseline justify-between gap-2">
                   <Link
                     to={`/p/${p.id}`}
-                    className="mono flex min-h-[44px] flex-1 items-center text-accent hover:underline"
+                    className="mono flex min-h-[44px] min-w-0 flex-1 items-center break-all text-accent hover:underline"
                   >
                     {p.id}
                   </Link>

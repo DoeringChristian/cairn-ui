@@ -108,7 +108,7 @@ export default function ArtifactDetailPage() {
           </form>
         ) : (
           <h1
-            className="mono text-xl font-semibold cursor-pointer hover:text-accent"
+            className="mono min-w-0 break-all text-xl font-semibold cursor-pointer hover:text-accent"
             onClick={() => {
               setNameDraft(family.name);
               setEditingName(true);
@@ -145,7 +145,7 @@ export default function ArtifactDetailPage() {
               {a}
               <button
                 type="button"
-                className="ml-0.5 transition-opacity hover:text-status-failed md:opacity-0 md:group-hover:opacity-100"
+                className="ml-0.5 transition-opacity hover:text-status-failed can-hover:opacity-0 can-hover:group-hover:opacity-100"
                 onClick={() => deleteAliasMutation.mutate(a)}
                 aria-label={`delete alias ${a}`}
               >

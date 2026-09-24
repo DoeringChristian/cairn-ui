@@ -52,8 +52,8 @@ export default function ArtifactsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-baseline justify-between gap-4">
-        <h1 className="mono text-xl font-semibold">{projectId} / artifacts</h1>
+      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h1 className="mono min-w-0 break-all text-xl font-semibold">{projectId} / artifacts</h1>
         <p className="text-sm text-fg-muted">
           {families.length} famil{families.length === 1 ? "y" : "ies"}
         </p>
