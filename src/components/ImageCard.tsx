@@ -1,0 +1,266 @@
+import { useCallback, useMemo, useRef, useState } from "react";
+
+import { api } from "../api/client";
+import { useSequencesForRuns } from "../api/hooks";
+import type { SequenceMeta, SequencePoint } from "../api/types";
+import { describeEncoding, isBrowserDisplayable } from "../lib/artifact-format";
+import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
+import type { ComparisonSeriesRef } from "../lib/comparisons";
+import { artifactFilename } from "../lib/download";
+import CardShell from "./CardShell";
+import StepSlider from "./StepSlider";
+import UnsupportedArtifact from "./UnsupportedArtifact";
+import type { BaseCardSettings } from "./card-kit";
+import { ExternalBaselinePicker } from "./card-kit/ExternalBaselinePicker";
+import MultiPaneGrid from "./card-kit/MultiPaneGrid";
+import { plotCardPolicy } from "./card-kit/plot-card-policy";
+import { resolveAtStep } from "./card-kit/resolve-at-step";
+import { seriesLabel } from "./card-kit/series-identity";
+import { useRunInfo } from "./card-kit/use-run-info";
+import { useStepSlider } from "./card-kit/use-step-slider";
+import ImagePane, { type PaneTransform } from "./image/ImagePane";
+import SettingsSection from "./settings/SettingsSection";
+import Slider from "./settings/Slider";
+import Toggle from "./settings/Toggle";
+
+interface Props {
+  runId: string;
+  metric: SequenceMeta;
+  extraSeries?: ComparisonSeriesRef[];
+  settingsKeyOverride?: CardSettingsKey;
+  onRemove?: () => void;
+  autoOpenSettings?: boolean;
+}
+
+interface ImageCardSettings extends BaseCardSettings {
+  showLabels: boolean;
+  /** Index into the union of logged steps. */
+  sliderStep?: number;
+  /** Reference tag; every pane compares against this tag from its own run. */
+  reference?: { name: string; context_hash: string };
+  /** Fixed reference step; absent follows the slider. */
+  referenceStep?: number;
+  /** Divider position (fraction of pane width), shared by all panes. */
+  split: number;
+}
+
+const DEFAULTS: ImageCardSettings = { version: 1, showLabels: true, split: 0.5 };
+const IDENTITY: PaneTransform = { scale: 1, x: 0, y: 0 };
+
+type Series = { runId: string; name: string; context_hash: string };
+
+function parseMetadata(point: SequencePoint | null): Record<string, unknown> | null {
+  if (!point?.artifact_metadata) return null;
+  try {
+    return JSON.parse(point.artifact_metadata) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+export default function ImageCard({ runId, metric, extraSeries = [], settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [settingsOpen, setSettingsOpen] = useState(autoOpenSettings ?? false);
+  const policy = plotCardPolicy("image");
+  const settingsKey = useMemo<CardSettingsKey>(
+    () => settingsKeyOverride ?? { runId, metricName: metric.name, contextHash: metric.context_hash },
+    [settingsKeyOverride, runId, metric.name, metric.context_hash],
+  );
+  const [settings, updateSettings] = useCardSettings<ImageCardSettings>(
+    settingsKey,
+    useMemo(() => ({ ...DEFAULTS, colSpan: policy.colSpan }), [policy.colSpan]),
+  );
+
+  const series = useMemo<Series[]>(() => {
+    const seen = new Set<string>();
+    return [{ runId, name: metric.name, context_hash: metric.context_hash }, ...extraSeries]
+      .map((s) => ({ runId: s.runId, name: s.name, context_hash: s.context_hash }))
+      .filter((s) => {
+        const key = `${s.runId}:${s.name}:${s.context_hash}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [runId, metric.name, metric.context_hash, extraSeries]);
+  const paneKeys = useMemo(() => series.map((s) => `${s.runId}:${s.name}:${s.context_hash}`), [series]);
+  const runIds = useMemo(() => [...new Set(series.map((s) => s.runId))], [series]);
+  useRunInfo(runIds);
+  const labels = useMemo(() => {
+    const multiRun = runIds.length > 1;
+    return new Map(series.map((s, i) => [paneKeys[i]!, seriesLabel(s, runId, multiRun, runIds)]));
+  }, [series, paneKeys, runId, runIds]);
+
+  // Foreground sequences, then (when a reference tag is set) the same tag per run.
+  const reference = settings.reference;
+  const bindings = useMemo(() => [
+    ...series.map((s) => ({ runId: s.runId, name: s.name, contextHash: s.context_hash })),
+    ...(reference ? series.map((s) => ({ runId: s.runId, name: reference.name, contextHash: reference.context_hash })) : []),
+  ], [series, reference]);
+  const queries = useSequencesForRuns(bindings);
+  const dataKey = queries.map((q) => q.dataUpdatedAt).join("|");
+  const { points, refPoints, anyLoading } = useMemo(() => {
+    const withArtifact = (i: number) => (queries[i]?.data?.points ?? []).filter((p) => p.artifact_hash);
+    return {
+      points: series.map((_, i) => withArtifact(i)),
+      refPoints: reference ? series.map((_, i) => withArtifact(series.length + i)) : [],
+      anyLoading: queries.some((q) => q.isLoading),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataKey, series, reference]);
+
+  const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
+    seriesPoints: points,
+    persistedIdx: settings.sliderStep,
+    updateSettings,
+  });
+  const stepPoints = useMemo(() => globalSteps.map((step) => ({ step, wall_time: null })), [globalSteps]);
+
+  // Zoom/pan shared by every pane.
+  const [transform, setTransform] = useState<PaneTransform>(IDENTITY);
+  const viewModified = transform.scale !== 1 || transform.x !== 0 || transform.y !== 0;
+
+  // Divider drags stay local until release; arrow keys persist immediately.
+  const [dragSplit, setDragSplit] = useState<number | null>(null);
+  const split = dragSplit ?? settings.split;
+  const onSplitChange = useCallback((value: number, final: boolean) => {
+    if (final) {
+      setDragSplit(null);
+      updateSettings({ split: value });
+    } else {
+      setDragSplit(value);
+    }
+  }, [updateSettings]);
+
+  const renderPane = (key: string, index: number) => {
+    const point = resolveAtStep(points[index] ?? [], currentStep, { nearest: true });
+    const refPoint = reference
+      ? resolveAtStep(refPoints[index] ?? [], settings.referenceStep ?? currentStep, { nearest: true })
+      : null;
+    if (!point) {
+      return (
+        <div className="flex h-full items-center justify-center text-xs text-fg-subtle">
+          {anyLoading ? "Loading…" : "No image logged"}
+        </div>
+      );
+    }
+    const url = api.artifactUrl(point.artifact_hash!);
+    if (!isBrowserDisplayable(point.artifact_mime)) {
+      const meta = parseMetadata(point);
+      return (
+        <UnsupportedArtifact
+          label={`${describeEncoding(point.artifact_mime, meta)} — not viewable in the browser`}
+          detail={`step ${point.step}`}
+          previewSrc={typeof meta?.preview === "string" ? meta.preview : undefined}
+          downloadUrl={url}
+          filename={artifactFilename(metric.name, point.step, point.artifact_mime)}
+        />
+      );
+    }
+    const refShown = refPoint && isBrowserDisplayable(refPoint.artifact_mime)
+      ? { src: api.artifactUrl(refPoint.artifact_hash!), label: `${reference!.name} · ${refPoint.step}` }
+      : null;
+    return (
+      <ImagePane
+        key={key}
+        image={{ src: url, label: `${metric.name} · ${point.step}` }}
+        reference={refShown}
+        split={split}
+        onSplitChange={onSplitChange}
+        transform={transform}
+        onTransformChange={setTransform}
+      />
+    );
+  };
+
+  const settingsPanel = (
+    <>
+      <SettingsSection title="Compare with" first>
+        <p className="mb-1 text-xs text-fg-muted">
+          Choose a reference image tag. Each pane splits its image against that tag from its own run.
+        </p>
+        {reference && (
+          <div className="mb-2 flex items-center gap-1 rounded border border-accent/40 bg-accent/5 px-2 py-1 text-xs text-fg-muted">
+            <span className="mono min-w-0 flex-1 truncate">{reference.name}</span>
+            <button
+              type="button"
+              onClick={() => updateSettings({ reference: undefined, referenceStep: undefined })}
+              className="shrink-0 text-fg-subtle hover:text-fg"
+              aria-label="Remove reference"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <ExternalBaselinePicker
+          runId={runId}
+          objectType="image"
+          currentMetricName={metric.name}
+          selected={reference?.name}
+          onSelect={(name, context_hash) => updateSettings({ reference: { name, context_hash } })}
+        />
+        {reference && (
+          <>
+            <Toggle
+              label="Pin reference step"
+              checked={settings.referenceStep != null}
+              onChange={(pinned) => updateSettings({ referenceStep: pinned ? currentStep : undefined })}
+              description="Off follows the slider; on keeps the reference fixed."
+            />
+            {settings.referenceStep != null && (
+              <Slider
+                label="Reference step"
+                value={settings.referenceStep}
+                onChange={(v) => updateSettings({ referenceStep: Math.round(v) })}
+                min={globalSteps[0] ?? 0}
+                max={globalSteps[globalSteps.length - 1] ?? 1}
+                step={1}
+                format={(v) => Math.round(v).toString()}
+              />
+            )}
+          </>
+        )}
+      </SettingsSection>
+      <SettingsSection title="Display">
+        <Toggle label="Show pane labels" checked={settings.showLabels} onChange={(showLabels) => updateSettings({ showLabels })} />
+      </SettingsSection>
+    </>
+  );
+
+  const body = (
+    <div className="flex h-full min-h-0 flex-col">
+      <MultiPaneGrid
+        paneKeys={paneKeys}
+        labels={settings.showLabels ? labels : new Map()}
+        inModal={false}
+        onPaneWidthsChange={() => {}}
+        renderPane={renderPane}
+      />
+      {globalSteps.length > 1 && (
+        <StepSlider points={stepPoints} currentIndex={safeIdx} onChange={onSliderChange} immediate className="shrink-0 px-1 pb-1 pt-2" />
+      )}
+    </div>
+  );
+
+  return (
+    <CardShell
+      cardRef={cardRef}
+      settings={settings}
+      updateSettings={updateSettings}
+      title={metric.name}
+      subtitle={globalSteps.length > 0 ? `step ${currentStep}` : undefined}
+      cardKind="image"
+      defaultHeight={policy.defaultHeight}
+      onRemove={onRemove}
+      onSettings={() => setSettingsOpen(true)}
+      onResetView={() => setTransform(IDENTITY)}
+      viewModified={viewModified}
+      settingsPanel={settingsPanel}
+      modalContent={body}
+      modalOpen={settingsOpen}
+      onModalClose={() => setSettingsOpen(false)}
+      scrollIntoViewOnMount={autoOpenSettings}
+    >
+      <div className="mt-2 min-h-0 min-w-0 flex-1 overflow-hidden">{settingsOpen ? null : body}</div>
+    </CardShell>
+  );
+}

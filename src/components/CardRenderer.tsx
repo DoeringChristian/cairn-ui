@@ -12,6 +12,7 @@ import { useSequence } from "../api/hooks";
 import { api } from "../api/client";
 import { downloadArtifact, artifactFilename } from "../lib/download";
 import CairnPlotCard from "./CairnPlotCard";
+import ImageCard from "./ImageCard";
 import AudioPlayerCard from "./AudioPlayerCard";
 import VideoPlayerCard from "./VideoPlayerCard";
 import HistogramCard from "./HistogramCard";
@@ -212,7 +213,7 @@ export default function CardRenderer(props: CardDescriptor) {
         </Suspense>
       );
     case "image":
-      return <CairnPlotCard {...baseProps} extraSeries={extraSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />;
+      return <ImageCard {...baseProps} extraSeries={extraSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />;
     case "figure":
       return (
         <Suspense

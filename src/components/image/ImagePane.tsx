@@ -1,0 +1,229 @@
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  TransformComponent,
+  TransformWrapper,
+  type ReactZoomPanPinchRef,
+} from "react-zoom-pan-pinch";
+
+export interface PaneTransform {
+  scale: number;
+  x: number;
+  y: number;
+}
+
+export interface ImageSource {
+  src: string;
+  label?: string;
+}
+
+interface Props {
+  /** The pane's own image (left of the divider when comparing). */
+  image: ImageSource;
+  /** Reference image; when present the pane shows an A/B divider. */
+  reference?: ImageSource | null;
+  /** Divider position as a fraction of the pane width. */
+  split: number;
+  onSplitChange?: (split: number, final: boolean) => void;
+  /** Shared zoom/pan: applied when it differs from the pane's own. */
+  transform: PaneTransform;
+  onTransformChange: (t: PaneTransform) => void;
+}
+
+const SPLIT_STEP = 0.02;
+const MIN_SCALE = 1;
+const MAX_SCALE = 64;
+/** Zoom factor per wheel pixel: one mouse notch (~100px) ≈ ×1.35, trackpads stay smooth. */
+const WHEEL_ZOOM = 0.003;
+const SPLIT_STEP_LARGE = 0.1;
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+/**
+ * One zoomable image, optionally split against a reference by a vertical
+ * divider. Both images live inside ONE transform, so they zoom and pan
+ * together by construction; the divider is a screen-space overlay, and the
+ * foreground's clip is recomputed in content space on every transform.
+ */
+export default function ImagePane({ image, reference, split, onSplitChange, transform, onTransformChange }: Props) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const fgRef = useRef<HTMLImageElement>(null);
+  const zoomRef = useRef<ReactZoomPanPinchRef | null>(null);
+  const own = useRef<PaneTransform>({ scale: 1, x: 0, y: 0 });
+  const [pixelated, setPixelated] = useState(false);
+
+  // Keep the foreground's clip in content coordinates: X = (dividerX − panX) / scale.
+  const updateClip = useCallback(() => {
+    const fg = fgRef.current;
+    const box = boxRef.current;
+    if (!fg) return;
+    if (!reference || !box) {
+      fg.style.clipPath = "";
+      return;
+    }
+    const { scale, x } = own.current;
+    const contentWidth = box.clientWidth;
+    const dividerX = split * box.clientWidth;
+    const clipLeft = (dividerX - x) / scale;
+    fg.style.clipPath = `inset(0 ${Math.max(0, contentWidth - clipLeft)}px 0 0)`;
+  }, [reference, split]);
+
+  // Nearest-neighbour once a source pixel covers more than ~1.5 screen pixels.
+  const updatePixelated = useCallback(() => {
+    const fg = fgRef.current;
+    const box = boxRef.current;
+    if (!fg || !box || !fg.naturalWidth) return;
+    const fit = Math.min(box.clientWidth / fg.naturalWidth, box.clientHeight / fg.naturalHeight);
+    setPixelated(fit * own.current.scale > 1.5);
+  }, []);
+
+  useLayoutEffect(updateClip, [updateClip]);
+
+  // Apply the shared transform from sibling panes.
+  useEffect(() => {
+    const ref = zoomRef.current;
+    const cur = own.current;
+    if (!ref) return;
+    const same = Math.abs(cur.scale - transform.scale) < 1e-6
+      && Math.abs(cur.x - transform.x) < 0.5
+      && Math.abs(cur.y - transform.y) < 0.5;
+    if (!same) ref.setTransform(transform.x, transform.y, transform.scale, 0);
+  }, [transform]);
+
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const ro = new ResizeObserver(() => {
+      updateClip();
+      updatePixelated();
+    });
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [updateClip, updatePixelated]);
+
+  // Non-passive, so the page doesn't scroll while zooming.
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const onWheel = (e: WheelEvent) => {
+      const ref = zoomRef.current;
+      if (!ref) return;
+      e.preventDefault();
+      const { scale, x, y } = own.current;
+      const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * Math.exp(-e.deltaY * WHEEL_ZOOM)));
+      if (next === scale) return;
+      const rect = box.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      // Keep the content point under the cursor fixed, then stay inside the image bounds.
+      const clampPos = (p: number, size: number) => Math.min(0, Math.max(size - size * next, p));
+      const nx = clampPos(mx - ((mx - x) * next) / scale, rect.width);
+      const ny = clampPos(my - ((my - y) * next) / scale, rect.height);
+      ref.setTransform(nx, ny, next, 0);
+    };
+    box.addEventListener("wheel", onWheel, { passive: false });
+    return () => box.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!reference || !onSplitChange) return;
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const step = e.shiftKey ? SPLIT_STEP_LARGE : SPLIT_STEP;
+    onSplitChange(clamp01(split + (e.key === "ArrowLeft" ? -step : step)), true);
+  };
+
+  const dragDivider = (e: React.PointerEvent) => {
+    const box = boxRef.current;
+    if (!box || !onSplitChange) return;
+    e.preventDefault();
+    e.stopPropagation();
+    box.focus();
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+    const at = (clientX: number) => {
+      const rect = box.getBoundingClientRect();
+      return clamp01((clientX - rect.left) / rect.width);
+    };
+    const move = (ev: PointerEvent) => onSplitChange(at(ev.clientX), false);
+    const up = (ev: PointerEvent) => {
+      target.removeEventListener("pointermove", move);
+      target.removeEventListener("pointerup", up);
+      onSplitChange(at(ev.clientX), true);
+    };
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerup", up);
+  };
+
+  const imgClass = "absolute inset-0 h-full w-full object-contain select-none";
+  const imgStyle = { imageRendering: pixelated ? "pixelated" : "auto" } as const;
+
+  return (
+    <div
+      ref={boxRef}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      // The zoom library cancels mousedown, which would keep focus (and the arrow keys) away.
+      onPointerDownCapture={() => boxRef.current?.focus({ preventScroll: true })}
+      className="cairn-checkerboard relative h-full w-full overflow-hidden outline-none focus-visible:ring-1 focus-visible:ring-accent"
+      title={reference ? "Drag the divider or use ← / → to move it" : undefined}
+    >
+      <TransformWrapper
+        ref={zoomRef}
+        minScale={MIN_SCALE}
+        maxScale={MAX_SCALE}
+        // Wheel zoom is ours (multiplicative, cursor-anchored); the library's is additive.
+        wheel={{ disabled: true }}
+        limitToBounds
+        centerZoomedOut
+        doubleClick={{ mode: "reset", animationTime: 150 }}
+        onTransform={(_ref, state) => {
+          own.current = { scale: state.scale, x: state.positionX, y: state.positionY };
+          updateClip();
+          updatePixelated();
+          onTransformChange(own.current);
+        }}
+      >
+        <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%" }}>
+          <div className="relative h-full w-full">
+            {reference && (
+              <img src={reference.src} alt={reference.label ?? "reference"} draggable={false} className={imgClass} style={imgStyle} />
+            )}
+            <img
+              ref={fgRef}
+              src={image.src}
+              alt={image.label ?? "image"}
+              draggable={false}
+              className={imgClass}
+              style={imgStyle}
+              onLoad={() => {
+                updatePixelated();
+                updateClip();
+              }}
+            />
+          </div>
+        </TransformComponent>
+      </TransformWrapper>
+
+      {reference && (
+        <>
+          <div
+            className="absolute inset-y-0 z-10 w-4 -translate-x-1/2 cursor-ew-resize touch-none"
+            style={{ left: `${split * 100}%` }}
+            onPointerDown={dragDivider}
+          >
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white shadow-[0_0_2px_rgba(0,0,0,0.8)]" />
+            <div className="absolute left-1/2 top-1/2 flex h-6 -translate-x-1/2 -translate-y-1/2 items-center gap-0.5 rounded-full bg-white px-1 text-[9px] text-neutral-700 shadow">
+              <i className="fa-solid fa-caret-left" aria-hidden="true" />
+              <i className="fa-solid fa-caret-right" aria-hidden="true" />
+            </div>
+          </div>
+          <span className="pointer-events-none absolute bottom-1 left-1 z-10 max-w-[45%] truncate rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-muted">
+            {image.label ?? "A"}
+          </span>
+          <span className="pointer-events-none absolute bottom-1 right-1 z-10 max-w-[45%] truncate rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-muted">
+            {reference.label ?? "B"}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}

@@ -17,6 +17,8 @@ const MIME_EXT: Record<string, string> = {
   "text/markdown": ".md",
   "application/python-pickle": ".pkl",
   "application/octet-stream": ".bin",
+  "image/x-exr": ".exr",
+  "application/x-npy": ".npy",
 };
 
 /** Trigger a browser download for the given URL. */
