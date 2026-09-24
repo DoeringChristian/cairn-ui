@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { readChartTheme } from "../../charts/theme";
+import { useInteract } from "../../lib/use-interact";
 import { CameraLink, copyCamera, type LinkedView } from "./camera-link";
 
 interface Props {
@@ -27,11 +28,14 @@ const FIT_DIRECTION = new THREE.Vector3(1, 0.8, 1.2).normalize();
  * One three.js viewport: renderer, perspective camera, orbit controls, headlight.
  * Renders on demand (control changes, resizes, content changes), sizes itself to
  * its box via ResizeObserver, frames the camera on the first non-empty content,
- * and releases the GL context on unmount.
+ * and releases the GL context on unmount. While not interactive (a touch
+ * device with the card's interact toggle off, see lib/use-interact) the orbit
+ * controls are off and the canvas lets vertical drags scroll the page.
  */
 export default function Viewer3D({ objects, link, resetKey = 0, className }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<ViewerState | null>(null);
+  const interactive = useInteract();
 
   useEffect(() => {
     const host = hostRef.current!;
@@ -120,6 +124,14 @@ export default function Viewer3D({ objects, link, resetKey = 0, className }: Pro
       stateRef.current = null;
     };
   }, []);
+
+  // OrbitControls sets `touch-action: none` on connect; override it while off.
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    state.controls.enabled = interactive;
+    state.renderer.domElement.style.touchAction = interactive ? "none" : "pan-y";
+  }, [interactive]);
 
   // Camera link: publish user changes, follow peers.
   useEffect(() => {

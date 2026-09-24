@@ -6,6 +6,9 @@
  * context provided here. This ensures plot zoom, slider drags, image pan,
  * etc. are never intercepted by the browser's HTML5 drag system.
  *
+ * Touch screens have no HTML5 drag, so the context also carries move-up /
+ * move-down callbacks that CardHeader offers in its menu.
+ *
  * The grip's onDragStart sets the drag image to the whole card container
  * (via closest(".cairn-draggable-card")) so the user sees the full card
  * being dragged, not just the tiny grip icon.
@@ -24,6 +27,9 @@ interface DragCtx {
   dragging: boolean;
   handleDragStart: (e: DragEvent<HTMLSpanElement>) => void;
   handleDragEnd: () => void;
+  /** Move one place earlier / later in the grid; absent at the ends or when the grid is not reorderable. */
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
 const DraggableCardCtx = createContext<DragCtx | null>(null);
@@ -41,6 +47,8 @@ interface Props {
   children: ReactNode;
   onDragStart: (cardKey: string, section: string) => void;
   onDragEnd: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
 export default function DraggableCard({
@@ -49,6 +57,8 @@ export default function DraggableCard({
   children,
   onDragStart,
   onDragEnd,
+  onMoveUp,
+  onMoveDown,
 }: Props) {
   const [dragging, setDragging] = useState(false);
 
@@ -74,7 +84,7 @@ export default function DraggableCard({
 
   return (
     <DraggableCardCtx.Provider
-      value={{ cardKey, section, dragging, handleDragStart, handleDragEnd }}
+      value={{ cardKey, section, dragging, handleDragStart, handleDragEnd, onMoveUp, onMoveDown }}
     >
       {/* Completely inert: NO draggable, NO onDragStart on this div. */}
       <div

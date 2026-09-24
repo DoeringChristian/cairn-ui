@@ -1,5 +1,6 @@
-import { useEffect, type ReactNode, type RefObject } from "react";
+import { useEffect, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { resolveCardHeight } from "../lib/card-settings";
+import { InteractContext, useInteractState } from "../lib/use-interact";
 import { cardMinSize } from "./card-kit/card-min-sizes";
 import type { BaseCardSettings } from "./card-kit";
 import CardHeader from "./CardHeader";
@@ -80,50 +81,62 @@ export default function CardShell({
   // the outer box and inner content never disagree.
   const clampedHeight = resolveCardHeight(settings, defaultHeight, minSize.minHeight);
 
+  // Tap-to-interact (touch devices): content that captures gestures registers
+  // through `useInteract`; the detail modal is always interactive.
+  const interact = useInteractState(!!modalOpen);
+
   return (
     <div
       ref={cardRef}
       data-cairn-card
       data-cairn-min-h={minSize.minHeight}
       data-cairn-min-span={minSize.minSpan}
+      // Phones re-clamp a fixed height against the viewport (index.css).
+      data-cairn-fixed-h={clampedHeight != null ? "" : undefined}
       className={`card p-4 flex min-w-0 flex-col${dropHighlight ? " outline outline-2 outline-accent -outline-offset-2" : ""}`}
       style={{
         height: clampedHeight,
+        "--cairn-card-h": clampedHeight != null ? `${clampedHeight}px` : undefined,
         position: "relative",
         gridColumn: `span ${settings.colSpan ?? 3}`,
-      }}
+      } as CSSProperties}
       {...dropProps}
     >
-      <CardHeader
-        title={settings.title ?? title}
-        onTitleChange={(t) => updateSettings({ title: t || undefined })}
-        subtitle={subtitle}
-        collapsed={settings.collapsed}
-        onToggleCollapse={() => updateSettings({ collapsed: !settings.collapsed })}
-        onSettings={onSettings}
-        onResetView={onResetView}
-        viewModified={viewModified}
-        onRemove={onRemove}
-        onDownload={onDownload}
-        onScreenshot={onScreenshot}
-        addToComparisonSlot={addToComparisonSlot}
-        cardActions={headerActions}
-      />
-      {!settings.collapsed && (
-        <>
-          {children}
-          {modalContent !== undefined && (
-            <CardDetailModal
-              open={!!modalOpen}
-              onClose={onModalClose ?? (() => {})}
-              title={settings.title ?? title}
-              settingsContent={settingsPanel}
-            >
-              {modalContent}
-            </CardDetailModal>
-          )}
-        </>
-      )}
+      <InteractContext.Provider value={interact.value}>
+        <CardHeader
+          title={settings.title ?? title}
+          onTitleChange={(t) => updateSettings({ title: t || undefined })}
+          subtitle={subtitle}
+          collapsed={settings.collapsed}
+          onToggleCollapse={() => updateSettings({ collapsed: !settings.collapsed })}
+          onSettings={onSettings}
+          onResetView={onResetView}
+          viewModified={viewModified}
+          onRemove={onRemove}
+          onDownload={onDownload}
+          onScreenshot={onScreenshot}
+          addToComparisonSlot={addToComparisonSlot}
+          cardActions={headerActions}
+          interact={interact.available && !settings.collapsed
+            ? { on: interact.on, onToggle: interact.toggle }
+            : undefined}
+        />
+        {!settings.collapsed && (
+          <>
+            {children}
+            {modalContent !== undefined && (
+              <CardDetailModal
+                open={!!modalOpen}
+                onClose={onModalClose ?? (() => {})}
+                title={settings.title ?? title}
+                settingsContent={settingsPanel}
+              >
+                {modalContent}
+              </CardDetailModal>
+            )}
+          </>
+        )}
+      </InteractContext.Provider>
       <CardResizeHandle
         onHeightChange={(h) => updateSettings({ height: h })}
         colSpan={settings.colSpan ?? 3}

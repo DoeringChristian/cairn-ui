@@ -4,6 +4,7 @@ import {
   TransformWrapper,
   type ReactZoomPanPinchRef,
 } from "react-zoom-pan-pinch";
+import { useInteract } from "../../lib/use-interact";
 
 export interface PaneTransform {
   scale: number;
@@ -40,6 +41,9 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
  * divider. Both images live inside ONE transform, so they zoom and pan
  * together by construction; the divider is a screen-space overlay, and the
  * foreground's clip is recomputed in content space on every transform.
+ * While not interactive (a touch device with the card's interact toggle off,
+ * see lib/use-interact) zoom, pan and the divider ignore input, so a finger
+ * scrolls the page.
  */
 export default function ImagePane({ image, reference, split, onSplitChange, transform, onTransformChange }: Props) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -47,6 +51,9 @@ export default function ImagePane({ image, reference, split, onSplitChange, tran
   const zoomRef = useRef<ReactZoomPanPinchRef | null>(null);
   const own = useRef<PaneTransform>({ scale: 1, x: 0, y: 0 });
   const [pixelated, setPixelated] = useState(false);
+  const interactive = useInteract();
+  const interactiveRef = useRef(interactive);
+  interactiveRef.current = interactive;
 
   // Keep the foreground's clip in content coordinates: X = (dividerX − panX) / scale.
   const updateClip = useCallback(() => {
@@ -103,7 +110,7 @@ export default function ImagePane({ image, reference, split, onSplitChange, tran
     if (!box) return;
     const onWheel = (e: WheelEvent) => {
       const ref = zoomRef.current;
-      if (!ref) return;
+      if (!ref || !interactiveRef.current) return;
       e.preventDefault();
       const { scale, x, y } = own.current;
       const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * Math.exp(-e.deltaY * WHEEL_ZOOM)));
@@ -166,13 +173,16 @@ export default function ImagePane({ image, reference, split, onSplitChange, tran
     >
       <TransformWrapper
         ref={zoomRef}
+        // Input only: `disabled` would also block setTransform (sibling sync, reset view).
+        panning={{ disabled: !interactive }}
+        pinch={{ disabled: !interactive }}
         minScale={MIN_SCALE}
         maxScale={MAX_SCALE}
         // Wheel zoom is ours (multiplicative, cursor-anchored); the library's is additive.
         wheel={{ disabled: true }}
         limitToBounds
         centerZoomedOut
-        doubleClick={{ mode: "reset", animationTime: 150 }}
+        doubleClick={{ disabled: !interactive, mode: "reset", animationTime: 150 }}
         onTransform={(_ref, state) => {
           own.current = { scale: state.scale, x: state.positionX, y: state.positionY };
           updateClip();
@@ -203,10 +213,13 @@ export default function ImagePane({ image, reference, split, onSplitChange, tran
 
       {reference && (
         <>
+          {/* 16px hit strip with a mouse, 32px for a finger. */}
           <div
-            className="absolute inset-y-0 z-10 w-4 -translate-x-1/2 cursor-ew-resize touch-none"
+            className={`absolute inset-y-0 z-10 w-4 touch:w-8 -translate-x-1/2 ${
+              interactive ? "cursor-ew-resize touch-none" : "pointer-events-none"
+            }`}
             style={{ left: `${split * 100}%` }}
-            onPointerDown={dragDivider}
+            onPointerDown={interactive ? dragDivider : undefined}
           >
             <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white shadow-[0_0_2px_rgba(0,0,0,0.8)]" />
             <div className="absolute left-1/2 top-1/2 flex h-6 -translate-x-1/2 -translate-y-1/2 items-center gap-0.5 rounded-full bg-white px-1 text-[9px] text-neutral-700 shadow">

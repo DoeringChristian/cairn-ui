@@ -36,7 +36,7 @@
     @apply inline-flex items-center gap-2 rounded border border-border bg-bg-elevated px-3 py-1.5 text-sm text-fg transition-colors hover:border-accent hover:bg-bg-hover;
   }
   .input {
-    @apply w-full rounded border border-border bg-bg-elevated px-3 py-1.5 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none;
+    @apply w-full rounded border border-border bg-bg-elevated px-3 py-1.5 text-base md:text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none;
   }
   .card {
     @apply rounded-lg border border-border bg-bg-elevated;
@@ -94,10 +94,18 @@
 /* Font Awesome icons inside buttons */
 button i[class*="fa-"] { font-size: 12px; line-height: 1; }
 
-/* Mobile: single column, auto height, no resize */
+/* Mobile: single column, no resize (CardResizeHandle hides below md).
+   Cards sit inside DraggableCard's `display: contents` wrapper and carry an
+   inline `grid-column: span N`, so they are targeted directly. A card's own
+   fixed height (the `--cairn-card-h` CardShell sets) is kept but capped to
+   the viewport, so charts, images and 3D views keep a definite box to fill. */
 @media (max-width: 767px) {
   .grid-cols-1 > * { grid-column: span 1 !important; }
-  .grid-cols-1 .card { height: auto !important; }
+  [data-cairn-grid] [data-cairn-card] { grid-column: 1 / -1 !important; }
+  [data-cairn-grid] [data-cairn-card][data-cairn-fixed-h] {
+    height: min(var(--cairn-card-h), 75vh) !important;
+    height: min(var(--cairn-card-h), 75svh) !important;
+  }
 }
 
 /* Theme tokens. Tailwind's semantic colors (bg/fg/border/accent in

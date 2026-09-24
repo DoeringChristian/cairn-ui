@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import Plotly from "plotly.js-dist-min";
 
 import { readChartTheme, type ChartTheme } from "./theme.ts";
+import { useInteract } from "../lib/use-interact.ts";
 
 export type PlotlyData = Array<Record<string, unknown>>;
 export type PlotlyLayout = Record<string, unknown>;
@@ -58,7 +59,9 @@ function themedLayout(layout: PlotlyLayout, theme: ChartTheme): PlotlyLayout {
 /**
  * A Plotly plot that sizes itself to its box. Self-contained: owns the div,
  * the resize observer and the event wiring; each render calls `Plotly.react`
- * (Plotly diffs internally).
+ * (Plotly diffs internally). While not interactive (a touch device with the
+ * card's interact toggle off, see lib/use-interact) the plot is static: no
+ * drag boxes, hover or scroll zoom, so a finger scrolls the page.
  */
 export default function PlotlyChart({
   data, layout = {}, config, themed = true, onRelayout, onClick, onHover, onUnhover, className,
@@ -66,6 +69,7 @@ export default function PlotlyChart({
   const ref = useRef<PlotlyDiv>(null);
   const handlers = useRef({ onRelayout, onClick, onHover, onUnhover });
   handlers.current = { onRelayout, onClick, onHover, onUnhover };
+  const interactive = useInteract();
 
   useEffect(() => {
     const el = ref.current;
@@ -89,7 +93,10 @@ export default function PlotlyChart({
       // Keep zoom/pan across data updates unless the caller changes this.
       uirevision: layout.uirevision ?? "keep",
     };
-    const finalConfig = { displaylogo: false, responsive: false, displayModeBar: false, ...config };
+    const finalConfig = {
+      displaylogo: false, responsive: false, displayModeBar: false, ...config,
+      ...(interactive ? {} : { staticPlot: true, scrollZoom: false }),
+    };
     Promise.resolve(Plotly.react(el, data, finalLayout, finalConfig))
       .then(() => {
         if (!el.removeAllListeners || !el.on) return;
@@ -102,9 +109,15 @@ export default function PlotlyChart({
         el.on("plotly_unhover", () => handlers.current.onUnhover?.());
       })
       .catch((err: unknown) => console.warn("PlotlyChart: render error (recovered)", err));
-  }, [data, layout, config, themed]);
+  }, [data, layout, config, themed, interactive]);
 
-  return <div ref={ref} className={className ?? "h-full w-full"} />;
+  return (
+    <div
+      ref={ref}
+      className={className ?? "h-full w-full"}
+      style={{ touchAction: interactive ? undefined : "pan-y" }}
+    />
+  );
 }
 
 export { Plotly };
