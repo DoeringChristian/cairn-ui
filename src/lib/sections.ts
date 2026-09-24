@@ -1,5 +1,4 @@
-// Auto-grouping rule from CAIRN_SPEC.md §"Section groups on the canvas":
-// metric names with a "." → prefix is the section; else "Charts". Artifacts
+// Auto-grouping rule: metric names with a "." → prefix is the section; else "Charts". Artifacts
 // go into Media. Fixed section order: Charts, user-prefixed sections
 // alphabetically, Media, system last.
 

@@ -3,13 +3,7 @@
  * by both the report cards-block editor (`ReportCardsBlock`'s "Add card"
  * button, via `AddCardModal`) and the declarative ```cairn dialect
  * interpreter (`lib/reports/cairn-block.ts`), so the two authoring paths
- * never diverge (see docs/superpowers/specs/2026-07-04-ai-authored-reports.md
- * §9.1.1).
- *
- * Moved here from `components/AddCardModal.tsx` (which re-exports the type
- * for existing importers) because this is pure data shaping with no UI
- * dependency — `lib/reports` is the natural home for card-construction logic
- * shared by both a component and a non-UI parser.
+ * never diverge. Pure data shaping, no UI dependency.
  */
 
 import type { ComparisonCard, ComparisonSeriesRef, MultiRunCardType } from "../comparisons/types.ts";

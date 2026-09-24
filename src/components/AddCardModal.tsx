@@ -19,10 +19,8 @@ import { buildMetricIndex, type MetricIndexEntry } from "../lib/reports/metric-i
 import { shortRunLabel } from "../lib/run-label";
 import type { SequenceMeta } from "../api/types";
 
-// Re-exported so existing importers (`import { type AddCardSelection } from
-// "../AddCardModal"`) keep working — the canonical definition now lives in
-// lib/reports/card-from-spec.ts (see cardFromSpec), shared with the
-// ```cairn dialect interpreter.
+// The type of `onAdd`'s argument, defined with `cardFromSpec` in
+// lib/reports/card-from-spec.ts.
 export type { AddCardSelection };
 const TYPE_LABELS: Record<string, string> = {
   scalar: "Scalars",

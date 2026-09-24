@@ -14,9 +14,9 @@
  * poller never creates a cache entry, so it only ever feeds cards that are
  * already showing that series.
  *
- * This replaces per-card `refetchInterval`s that re-downloaded whole
- * (multi-megabyte) sequences: a compare page over one running run used to
- * issue ~177 sequence requests a minute.
+ * Cards never poll their own sequences: re-downloading whole (multi-megabyte)
+ * sequences per card would swamp the server on a compare page over a running
+ * run.
  */
 
 import { useEffect } from "react";

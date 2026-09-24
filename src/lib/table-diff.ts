@@ -27,8 +27,8 @@ export type CellComparison = "higher" | "lower" | "equal" | "missing";
 
 /**
  * Parse a cell value into a finite number, or `null` if it isn't numeric.
- * Booleans are deliberately NOT treated as numeric (per spec: "integer or
- * float data" — `correct: true/false` columns should never get diff colors).
+ * Booleans are deliberately NOT treated as numeric — `correct: true/false`
+ * columns should never get diff colors.
  * Numeric-looking strings (e.g. a param value `"0.001"`) DO count, since
  * ComparisonOverviewTab's params are always strings even when the underlying
  * value is a number.
@@ -105,9 +105,8 @@ export function computeCellStatuses(values: Array<number | null>): CellCompariso
  * (text-fg / text-fg-muted, whatever the caller's non-diffed cells use) —
  * callers should apply their default text-color class unconditionally and
  * layer this class on top, rather than treating the two as mutually
- * exclusive. Opacity is bumped a notch from the original (900/20 with
- * colored text) to 900/30 so the tint stays clearly visible now that text
- * color no longer helps carry the signal.
+ * exclusive. The tint (900/30) alone carries the signal, since the text
+ * color does not change.
  */
 export function diffCellClassName(status: CellComparison, invert = false): string {
   if (status === "equal" || status === "missing") return "";

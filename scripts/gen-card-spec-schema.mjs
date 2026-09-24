@@ -1,4 +1,4 @@
-// WS-SCHEMA: generate docs/schemas/cairn-card-spec.schema.json from the
+// Generate docs/schemas/cairn-card-spec.schema.json from the
 // authoritative TS types in src/lib/cards/card-spec.ts via
 // ts-json-schema-generator. TS is the single source of truth; this schema is
 // a derived artifact (committed so the Python side + CI can read it without a

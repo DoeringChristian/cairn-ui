@@ -11,50 +11,19 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { loadJson, saveJson, storageKeys } from "./storage";
 
 /**
- * WS-NR1 deliverable 2 (bug (c) / B7): whether the card tree currently
- * mounted under this context may mutate its own persisted settings —
- * step/iteration, compare mode, yScale, smoothing, collapse/resize, … all
- * flow through the *one* choke point below (`useCardSettings`'s
- * `updateSettings`/`reset`), so gating it here freezes a card's entire
- * saved config in one place instead of threading a `readOnly`/`editMode`
- * prop through every one of the ~20 individual card components.
- *
- * Default `true` (mutable) — every existing call site (the Metrics & Media
- * tab, ComparePage, …) that never wraps its tree in a
- * `<CardMutationContext.Provider>` keeps behaving exactly as before. Only
- * report surfaces (`ReportCardsBlock`/`CairnFenceCard`) provide `false` for
- * a card rendered in VIEW mode — see their docs for why this is the fix for
- * "interactive controls write localStorage in view mode, and the next
- * `restoreReportCardSettings` silently clobbers the change anyway."
- *
- * Two hooks that maintain settings-shaped local UI state *outside*
- * `useCardSettings` itself also read this directly, so their own local
- * mirror state freezes in lockstep (a no-op `updateSettings` alone isn't
- * enough for them — see each's doc): `card-kit/use-step-slider.ts` and
- * `ArtifactCard.tsx`'s bespoke slider index.
+ * Whether the cards under this context may write their persisted settings.
+ * Every settings write goes through `useCardSettings`, so gating it here
+ * freezes a whole card at once. Defaults to `true`; reports provide `false`
+ * in view mode. `card-kit/use-step-slider.ts` and ArtifactCard's slider also
+ * read it, to freeze their local mirror state in lockstep.
  */
 export const CardMutationContext = createContext<boolean>(true);
 
 /**
- * WS-NR1 (B7 round-trip fix): a report's autosave is keyed off `blocks[]`
- * state changing (`ReportEditorPage`'s debounced-autosave effect deps) —
- * but a settings-only edit (yScale, smoothing, step, mode, …) never touched
- * `blocks` at all, only localStorage, via `useCardSettings.updateSettings`
- * directly. That meant a settings change made in edit mode had *no save
- * path*: it looked like it "persisted" only because localStorage survives a
- * reload in the same browser, but `buildReportPayload`/`serializeCairnSpec`
- * never actually swept it into the report's `source` unless some unrelated
- * blocks-changing edit happened to piggyback a save afterwards. Reproduced
- * during WS-NR1 browser self-verification: changing a card's Y-scale then
- * reloading looked fine, but "View source" showed no `settings:` key at all.
- *
- * Fix: `useCardSettings.updateSettings`/`reset` call this notifier (when
- * provided) right after a mutable write actually lands, so a report surface
- * can "touch" its owning block's identity — reusing `blocks[]`'s existing
- * autosave trigger instead of adding a second save-scheduling mechanism.
- * `ReportCardsBlock` provides it in edit mode only (mirrors
- * `CardMutationContext`); every other consumer (Metrics & Media, ComparePage)
- * leaves it `undefined`, a no-op, unchanged from before.
+ * Called after each settings write that lands. A report autosaves when its
+ * `blocks[]` change, but a settings-only edit lives in localStorage; the
+ * report's cards block provides this in edit mode to touch its block and so
+ * schedule a save. Undefined (a no-op) everywhere else.
  */
 export const CardSettingsChangeContext = createContext<(() => void) | undefined>(undefined);
 

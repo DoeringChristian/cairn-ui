@@ -33,16 +33,16 @@ export default function ReportsListPage() {
   const navigate = useNavigate();
   const [offset, setOffset] = useState(0);
   const [applyBanner, setApplyBanner] = useState<string | null>(null);
-  // B9 fix: surface create/delete failures (previously silent) and track
-  // which row is mid-delete so its button can show pending state.
+  // Surface create/delete failures and track which row is mid-delete so its
+  // button can show pending state.
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const q = useReports(projectId ?? "", { limit: PAGE_SIZE, offset });
   const createMut = useCreateReport(projectId ?? "");
   const deleteMut = useDeleteReport(projectId ?? "");
-  // B10 fix: match RUN_SELECTOR_FETCH_LIMIT — see ReportEditorPage's same fix
-  // for why this must match the pool a `RunSelector` query resolves against.
+  // Same pool size a `RunSelector` query resolves against, so every resolved
+  // run has a label here.
   const runsQ = useRuns({ project: projectId, limit: RUN_SELECTOR_FETCH_LIMIT });
   const allRuns = runsQ.data?.runs ?? [];
 
@@ -71,8 +71,8 @@ export default function ReportsListPage() {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
     setActionError(null);
     setDeletingId(id);
-    // B9 fix (pagination strand): deleting the last remaining report on a
-    // page beyond the first would otherwise leave `offset` pointing past
+    // Deleting the last remaining report on a page beyond the first would
+    // otherwise leave `offset` pointing past
     // the new end of the list — nothing renders, and the Prev/Next controls
     // can vanish too (once total <= PAGE_SIZE), stranding the user with no
     // way back to page 1. Step back a page when this delete empties the
@@ -230,10 +230,8 @@ function ReportRow({
     if (!editing) setDraft(report.name);
   }, [report.name, editing]);
 
-  // B9 fix: don't optimistically exit edit mode before the rename actually
-  // lands — stay in edit mode (with pending/error feedback) until it does,
-  // instead of silently reverting to the pre-edit name on failure with no
-  // indication anything went wrong.
+  // Stay in edit mode (with pending/error feedback) until the rename lands,
+  // so a failure is visible instead of silently reverting the name.
   const commit = () => {
     const trimmed = draft.trim();
     if (!trimmed || trimmed === report.name) {
@@ -288,8 +286,8 @@ function ReportRow({
           </div>
         </Link>
       )}
-      {/* Always visible (not hover-only) — RC follow-up fix: a hover-only
-          affordance is undiscoverable on touch devices. */}
+      {/* Always visible (not hover-only): a hover-only affordance is
+          undiscoverable on touch devices. */}
       <button
         type="button"
         onClick={() => setEditing(true)}

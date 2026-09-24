@@ -167,13 +167,11 @@ function InsertCellRow({ onInsert, className = "" }: { onInsert: (type: CellType
  * (`splitProseBlocks`). Only one paragraph is ever active (raw `<textarea>`)
  * at a time; every other paragraph renders live via `<Markdown>`. Typing
  * only updates a local draft — the parent's `blocks[]` (and thus any
- * autosave timer) isn't touched until blur/commit, exactly mirroring the
- * old block-level "edit, then re-render on blur" behavior, just scoped to
- * one paragraph instead of the whole block.
+ * autosave timer) isn't touched until blur/commit.
  *
  * Deliberately NOT gated on `editMode`: prose is the Obsidian-style
  * "click a paragraph to edit it" surface and stays live in the default
- * view (matching the original per-line-click requirement) — `editMode`
+ * view — `editMode`
  * here only governs the reorder/insert/delete chrome and card-settings
  * mutation (`ReportCardsBlock`'s `CardMutationContext`), never whether a
  * markdown paragraph itself is editable.
