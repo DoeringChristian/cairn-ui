@@ -35,7 +35,6 @@ import {
   isCardsBlock,
   parseReportMarkdown,
   restoreReportCardSettings,
-  serializeReportToMarkdown,
   type ReportBlock,
   type ReportPayload,
 } from "../lib/reports";
@@ -104,14 +103,12 @@ export default function ReportEditorPage() {
     setHydrated(false);
   }, [reportId]);
 
-  // RBUG fold-in: wait for `runsQ` too (not just the report itself) before
-  // hydrating — a selector-bound ```cairn block needs the live project run
-  // pool to resolve its run set *before* `compileCairnBlock` runs (see
-  // parseReportMarkdown's `opts.allProjectRuns` doc); parsing with an empty
-  // pool would compile the card with `series: []`, permanently losing its
-  // metric name (no render-time rebind can recover an identity that was
-  // never there). Both queries fire in parallel, so this rarely adds
-  // user-visible latency.
+  // Wait for `runsQ` too (not just the report itself) before hydrating — a
+  // selector-bound ```cairn block needs the live project run pool to resolve
+  // its run set *before* `compileCairnBlock` runs (see parseReportMarkdown's
+  // `opts.allProjectRuns` doc); parsing with an empty pool would compile the
+  // card with `series: []`, losing its metric name for good. Both queries
+  // fire in parallel, so this rarely adds user-visible latency.
   //
   // But don't wait forever: if `runsQ` errors out (data stays undefined
   // after retries are exhausted), proceed anyway and hydrate with an empty
@@ -122,22 +119,10 @@ export default function ReportEditorPage() {
     if (hydrated || !q.data || (!runsQ.data && !runsQ.isError)) return;
     setName(q.data.name);
     const payload = q.data.payload as unknown as ReportPayload;
-
-    // WS-AR1: `source` (canonical markdown) is authoritative when present;
-    // `blocks` is its parse cache. Older reports (saved before this field
-    // existed) simply have no `source` and load from `blocks` unchanged —
-    // additive, no migration (design doc D6).
-    if (typeof payload.source === "string") {
-      const parsed = parseReportMarkdown(payload.source, undefined, { allProjectRuns });
-      setBlocks(parsed.blocks);
-      rawCairnSourceRef.current = parsed.rawCairnSource;
-      if (reportId) restoreReportCardSettings(reportId, { blocks: parsed.blocks, cardSettings: parsed.settings });
-    } else {
-      const loadedBlocks = payload.blocks ?? [];
-      setBlocks(loadedBlocks);
-      rawCairnSourceRef.current = {};
-      if (reportId) restoreReportCardSettings(reportId, payload);
-    }
+    const parsed = parseReportMarkdown(payload.source, undefined, { allProjectRuns });
+    setBlocks(parsed.blocks);
+    rawCairnSourceRef.current = parsed.rawCairnSource;
+    if (reportId) restoreReportCardSettings(reportId, parsed.blocks, parsed.settings);
     setLastSavedAt(q.data.updated_at);
     justHydratedRef.current = true;
     setHydrated(true);
@@ -155,12 +140,10 @@ export default function ReportEditorPage() {
     if (effectiveName !== name) setName(effectiveName);
     setSaveState("saving");
 
-    const payload = buildReportPayload(reportId, blocks);
-    const source = serializeReportToMarkdown(blocks, payload.cardSettings ?? {}, rawCairnSourceRef.current);
-    const payloadWithSource: ReportPayload = { ...payload, source };
+    const payload = buildReportPayload(reportId, blocks, rawCairnSourceRef.current);
 
     updateMut.mutate(
-      { name: effectiveName, payload: payloadWithSource as unknown as Record<string, unknown> },
+      { name: effectiveName, payload: payload as unknown as Record<string, unknown> },
       {
         onSuccess: (res) => {
           setSaveState("saved");
@@ -293,7 +276,7 @@ export default function ReportEditorPage() {
   // open — cheap relative to a render, and guarantees it's always exactly
   // what a save would persist right now.
   const sourceText = showSource
-    ? serializeReportToMarkdown(blocks, buildReportPayload(reportId, blocks).cardSettings ?? {}, rawCairnSourceRef.current)
+    ? buildReportPayload(reportId, blocks, rawCairnSourceRef.current).source
     : "";
 
   return (

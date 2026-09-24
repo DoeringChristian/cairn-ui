@@ -59,7 +59,7 @@ export default function ReportsListPage() {
     const defaultName = `Untitled report — ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
     setActionError(null);
     createMut.mutate(
-      { name: defaultName, payload: { blocks: [] } },
+      { name: defaultName, payload: { source: "" } },
       {
         onSuccess: (res) => navigate(`/p/${projectId}/reports/${res.id}`),
         onError: () => setActionError(`Failed to create "${defaultName}". Please try again.`),
