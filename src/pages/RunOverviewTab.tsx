@@ -2,26 +2,30 @@ import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
 import { useArtifacts, useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArtifacts } from "../api/hooks";
-import type { Param, Run } from "../api/types";
+import type { MetricDef, Param, Run } from "../api/types";
 import { formatBytes, safeJsonParse } from "../lib/format";
 import { remoteHref } from "../lib/git-remote";
+import { summaryRuleFor } from "../lib/metric-defs";
+import { formatNum } from "../lib/plot-utils/types";
 import { useProjectTags } from "../lib/use-project-tags";
 import TagInput from "../components/TagInput";
 
 interface Ctx {
   run: Run;
   params: Param[];
+  summary: Param[];
+  metricDefs: MetricDef[];
 }
 
 export default function RunOverviewTab() {
-  const { run, params } = useOutletContext<Ctx>();
+  const { run, params, summary, metricDefs } = useOutletContext<Ctx>();
   const env = safeJsonParse<Record<string, unknown>>(run.env_snapshot);
   const tags = safeJsonParse<string[]>(run.tags) ?? [];
   const cliArgs = safeJsonParse<string[]>(run.cli_args) ?? [];
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <Section title="Summary">
+      <Section title="Details">
         <DefinitionList
           rows={[
             ["Project", run.project_id],
@@ -53,6 +57,7 @@ export default function RunOverviewTab() {
           ]}
         />
       </Section>
+      <MetricsSection run={run} summary={summary} metricDefs={metricDefs} />
       <Section title="Tags / Notes" className="lg:col-span-2">
         <TagsEditor run={run} tags={tags} />
         <NotesEditor runId={run.id} notes={run.notes ?? ""} />
@@ -139,6 +144,62 @@ function GitDiffLink({ runId }: { runId: string }) {
     >
       diff ({formatBytes(diff.size_bytes)})
     </a>
+  );
+}
+
+/**
+ * The run's final values, as the runs table shows them: each scalar's last
+ * point, a `define_metric(summary=...)` rule's value, or an explicit
+ * `run.summary(...)` key (which wins). `system.*` sampler metrics fold away.
+ */
+function MetricsSection({ run, summary, metricDefs }: { run: Run; summary: Param[]; metricDefs: MetricDef[] }) {
+  const [showSystem, setShowSystem] = useState(false);
+  const explicit = new Set(summary.map((p) => p.key));
+  const all = Object.entries(run.values ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  const system = all.filter(([k]) => k.startsWith("system."));
+  const rows = showSystem ? all : all.filter(([k]) => !k.startsWith("system."));
+  const source = (key: string) =>
+    explicit.has(key) ? "summary" : (summaryRuleFor(key, metricDefs) ?? "last");
+  return (
+    <Section title={`Metrics (${all.length - system.length})`} className="lg:col-span-2">
+      {all.length === 0 ? (
+        <p className="text-sm text-fg-subtle">No metrics logged.</p>
+      ) : (
+        <>
+          {rows.length > 0 && (
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-fg-muted">
+                <tr>
+                  <th className="pb-1 pr-4">Name</th>
+                  <th className="pb-1 pr-4">Value</th>
+                  <th className="pb-1">From</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(([key, v]) => (
+                  <tr key={key} className="border-t border-border-subtle">
+                    <td className="mono break-all py-1 pr-4">{key}</td>
+                    <td className="mono num py-1 pr-4 text-fg">
+                      {v == null ? "—" : typeof v === "number" ? formatNum(v) : String(v)}
+                    </td>
+                    <td className="mono py-1 text-fg-subtle">{source(key)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {system.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowSystem((s) => !s)}
+              className="mt-2 text-xs text-fg-muted hover:text-fg"
+            >
+              {showSystem ? "Hide" : "Show"} system metrics ({system.length})
+            </button>
+          )}
+        </>
+      )}
+    </Section>
   );
 }
 

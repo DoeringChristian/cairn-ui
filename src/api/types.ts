@@ -142,6 +142,8 @@ export interface MetricDef {
 export interface RunDetailResponse {
   run: Run;
   params: Param[];
+  /** Keys set with `run.summary(...)` (same shape as params). */
+  summary?: Param[];
   metric_defs?: MetricDef[];
 }
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { globToRegExp, stepMetricFor } from "./metric-defs.ts";
+import { globToRegExp, stepMetricFor, summaryRuleFor } from "./metric-defs.ts";
 
 test("globToRegExp follows fnmatch", () => {
   assert.ok(globToRegExp("val/*").test("val/acc"));
@@ -27,4 +27,18 @@ test("stepMetricFor: exact beats glob, the longest glob wins", () => {
   assert.equal(stepMetricFor("val/acc", defs), "epoch");
   assert.equal(stepMetricFor("train/loss", defs), null);
   assert.equal(stepMetricFor("lr", undefined), null);
+});
+
+test("summaryRuleFor: exact beats glob, longest glob wins, step-only defs don't count", () => {
+  const defs = [
+    { name: "val/*", step_metric: null, summary: "min" },
+    { name: "val/acc*", step_metric: null, summary: "max" },
+    { name: "val/acc_top5", step_metric: null, summary: "last" },
+    { name: "train/*", step_metric: "epoch", summary: null },
+  ];
+  assert.equal(summaryRuleFor("val/loss", defs), "min");
+  assert.equal(summaryRuleFor("val/acc", defs), "max");
+  assert.equal(summaryRuleFor("val/acc_top5", defs), "last");
+  assert.equal(summaryRuleFor("train/loss", defs), null);
+  assert.equal(summaryRuleFor("loss", undefined), null);
 });

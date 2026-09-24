@@ -67,7 +67,7 @@ export default function RunDetailPage() {
           </NavLink>
         ))}
       </nav>
-      <Outlet context={{ run, params: q.data.params }} />
+      <Outlet context={{ run, params: q.data.params, summary: q.data.summary ?? [], metricDefs: q.data.metric_defs ?? [] }} />
     </div>
   );
 }

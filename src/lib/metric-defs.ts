@@ -54,3 +54,11 @@ export function stepMetricFor(
 ): string | null {
   return defFor(name, defs ?? [], (d) => !!d.step_metric)?.step_metric ?? null;
 }
+
+/** The summary rule (`"min"`, `"max"`, `"mean"`, `"last"`) `define_metric(summary=...)` assigns to `name`. */
+export function summaryRuleFor(
+  name: string,
+  defs: readonly MetricDef[] | undefined,
+): string | null {
+  return defFor(name, defs ?? [], (d) => !!d.summary)?.summary ?? null;
+}
