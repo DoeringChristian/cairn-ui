@@ -34,8 +34,6 @@ import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import Toggle from "./settings/Toggle";
 import Slider from "./settings/Slider";
-import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
-import RunSelectionPanel from "./RunSelectionPanel";
 import StepSlider from "./StepSlider";
 
 interface Props {
@@ -261,10 +259,7 @@ export default function HtmlCard({ runId, metric, extraSeries, controlledSeries,
 
   const runMetaVersion = useRunMetadataVersion();
 
-  const { selectedIds, selectedArray, toggle, clear } = useRunSelection();
-  const hasSelectionProvider = useRunSelectionHasProvider();
-
-  const { runInfoMap } = useRunInfo(allRunIds);
+  useRunInfo(allRunIds);
 
   const subtitle =
     globalSteps.length > 0
@@ -369,8 +364,6 @@ export default function HtmlCard({ runId, metric, extraSeries, controlledSeries,
         runId={runId}
         allRunIds={allRunIds}
         onMetricsChange={(next) => updateSettings({ metrics: next })}
-        onClick={multipleRuns ? toggle : undefined}
-        selectedIds={selectedIds}
       />
     </>
   );
@@ -378,15 +371,6 @@ export default function HtmlCard({ runId, metric, extraSeries, controlledSeries,
   const renderContent = (inModal: boolean) =>
     isMulti ? renderMultiHtml(inModal) : renderSingleHtml();
 
-  const selectionPanel = !hasSelectionProvider && (
-    <RunSelectionPanel
-      selectedRunIds={selectedArray}
-      allRunIds={allRunIds}
-      onClear={clear}
-      runInfo={runInfoMap}
-      label="HTML selection"
-    />
-  );
 
   return (
     <CardShell cardKind="html"
@@ -402,7 +386,6 @@ export default function HtmlCard({ runId, metric, extraSeries, controlledSeries,
       addToComparisonSlot={<AddToComparisonButton cardType="html" series={compSeries} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
-      selectionPanel={selectionPanel}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

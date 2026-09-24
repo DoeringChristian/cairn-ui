@@ -12,11 +12,9 @@ import { qk } from "../api/query-keys";
 import ParallelChart, { type ParallelColumn, type ParallelRow } from "../charts/ParallelChart";
 import { useCardSettings } from "../lib/card-settings";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
-import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
 import CardShell from "./CardShell";
 import SettingsSection from "./settings/SettingsSection";
-import RunSelectionPanel from "./RunSelectionPanel";
-import { buildRunInfoMap, type BaseCardSettings } from "./card-kit";
+import type { BaseCardSettings } from "./card-kit";
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -216,13 +214,6 @@ export default function ParallelCoordsCard({
     [settings.columns, updateSettings],
   );
 
-  const { selectedArray, clear } = useRunSelection();
-  const hasSelectionProvider = useRunSelectionHasProvider();
-
-  const runInfoMap = useMemo(
-    () => buildRunInfoMap(runIds, runQueries),
-    [runIds, runQueries],
-  );
 
   // ---------------------------------------------------------------------------
   // Settings panel
@@ -321,15 +312,6 @@ export default function ParallelCoordsCard({
 
   const plotProps = { columns: settings.columns, rows: rowData };
 
-  const selectionPanel = !hasSelectionProvider && (
-    <RunSelectionPanel
-      selectedRunIds={selectedArray}
-      allRunIds={runIds}
-      onClear={clear}
-      runInfo={runInfoMap}
-      label="Parallel coords selection"
-    />
-  );
 
   return (
     <CardShell cardKind="parallel"
@@ -349,7 +331,6 @@ export default function ParallelCoordsCard({
         downloadCsv(headers, rows, safeName(settings.title ?? "parallel_coords") + ".csv");
       }}
       onScreenshot={() => { if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? "parallel_coords")); }}
-      selectionPanel={selectionPanel}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

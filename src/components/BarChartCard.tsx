@@ -7,12 +7,10 @@ import BarChart, { type BarDatum, type BarCompareMode } from "../charts/BarChart
 import { seriesColor } from "../lib/plot-utils/types";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
-import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
 import CardShell from "./CardShell";
-import RunSelectionPanel from "./RunSelectionPanel";
 import Toggle from "./settings/Toggle";
 import Select from "./settings/Select";
-import { buildRunInfoMap, type BaseCardSettings } from "./card-kit";
+import type { BaseCardSettings } from "./card-kit";
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -214,13 +212,6 @@ export default function BarChartCard({
     return opts;
   }, [availableParams, availableMetrics]);
 
-  const { selectedIds, selectedArray, toggle, clear } = useRunSelection();
-  const hasSelectionProvider = useRunSelectionHasProvider();
-
-  const runInfoMap = useMemo(
-    () => buildRunInfoMap(runIds, runQueries),
-    [runIds, runQueries],
-  );
 
   // ---------------------------------------------------------------------------
   // Settings panel
@@ -323,26 +314,8 @@ export default function BarChartCard({
     logX: settings.logX,
     compareMode: settings.compareMode ?? "grouped",
     runOrder: runOrderIds,
-    selectedIds,
-    onClick: (id: string) => toggle(id),
-    onBackgroundClick: clear,
   };
 
-  const selectionPanel = !hasSelectionProvider && (
-    <RunSelectionPanel
-      selectedRunIds={selectedArray}
-      allRunIds={runIds}
-      onClear={clear}
-      runInfo={runInfoMap}
-      renderExtra={(rid) => {
-        const bar = bars.find((b) => b.id === rid);
-        return bar ? (
-          <span className="ml-2 text-fg-subtle">{metric?.key}: {bar.value.toPrecision(4)}</span>
-        ) : null;
-      }}
-      label="Bar selection"
-    />
-  );
 
   return (
     <CardShell cardKind="bar"
@@ -360,7 +333,6 @@ export default function BarChartCard({
         downloadCsv(headers, rows, safeName(settings.title ?? "bar_chart") + ".csv");
       }}
       onScreenshot={() => { if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? "bar_chart")); }}
-      selectionPanel={selectionPanel}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

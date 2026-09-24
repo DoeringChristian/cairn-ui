@@ -10,14 +10,12 @@ import type { ComparisonSeriesRef } from "../../lib/comparisons";
 import { useCardDrop } from "../../lib/use-series-drop";
 import { shortRunLabel, useRunMetadataVersion } from "../../lib/run-label";
 import { seriesKey } from "../../lib/series-utils";
-import { useRunSelection, useRunSelectionHasProvider } from "../../lib/use-run-selection";
 import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid, type BaseCardSettings } from "../card-kit";
 import type { SeriesRef } from "../card-kit/use-card-series";
 import { useOverlaySlot } from "../card-kit/use-overlay-slot";
 import { plotCardPolicy } from "../card-kit/plot-card-policy";
 import AddToComparisonButton from "../AddToComparisonButton";
 import CardShell from "../CardShell";
-import RunSelectionPanel from "../RunSelectionPanel";
 import SeriesChipStrip from "../SeriesChipStrip";
 import StepSlider from "../StepSlider";
 import SettingsSection from "../settings/SettingsSection";
@@ -164,9 +162,7 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   const seedMeta = safeJsonParse<M>(seedCurrent?.artifact_metadata);
 
   const runMetaVersion = useRunMetadataVersion();
-  const { selectedIds, selectedArray, toggle, clear } = useRunSelection();
-  const hasSelectionProvider = useRunSelectionHasProvider();
-  const { runInfoMap } = useRunInfo(allRunIds);
+  useRunInfo(allRunIds);
 
   const paneKeys = useMemo(() => effectiveMetrics.map(seriesKey), [effectiveMetrics]);
   const paneLabels = useMemo(() => {
@@ -187,15 +183,6 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
     ? `step ${currentStep} (${safeIdx + 1}/${globalSteps.length})`
     : `${metric.count} pts`;
 
-  const selectionPanel = !hasSelectionProvider && isMulti ? (
-    <RunSelectionPanel
-      selectedRunIds={selectedArray}
-      allRunIds={allRunIds}
-      onClear={clear}
-      runInfo={runInfoMap}
-      label="Run selection"
-    />
-  ) : undefined;
 
   return (
     <CardShell
@@ -218,7 +205,6 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
       addToComparisonSlot={<AddToComparisonButton cardType={spec.kind} series={compSeries} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
-      selectionPanel={selectionPanel}
       settingsPanel={
         <SettingsSection title="3D view" first>
           {spec.viewSettings({ view, setView, meta: seedMeta, properties: propertyNames(seedMeta) })}
@@ -280,8 +266,6 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
               runId={runId}
               allRunIds={allRunIds}
               onMetricsChange={(next) => updateSettings({ metrics: next })}
-              onClick={multipleRuns ? toggle : undefined}
-              selectedIds={selectedIds}
             />
           )}
         </div>

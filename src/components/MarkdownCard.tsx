@@ -25,8 +25,6 @@ import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import Select from "./settings/Select";
-import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
-import RunSelectionPanel from "./RunSelectionPanel";
 import StepSlider from "./StepSlider";
 
 interface Props {
@@ -205,10 +203,7 @@ export default function MarkdownCard({ runId, metric, extraSeries, controlledSer
 
   const runMetaVersion = useRunMetadataVersion();
 
-  const { selectedIds, selectedArray, toggle, clear } = useRunSelection();
-  const hasSelectionProvider = useRunSelectionHasProvider();
-
-  const { runInfoMap } = useRunInfo(allRunIds);
+  useRunInfo(allRunIds);
 
   const subtitle =
     globalSteps.length > 0
@@ -302,8 +297,6 @@ export default function MarkdownCard({ runId, metric, extraSeries, controlledSer
         runId={runId}
         allRunIds={allRunIds}
         onMetricsChange={(next) => updateSettings({ metrics: next })}
-        onClick={multipleRuns ? toggle : undefined}
-        selectedIds={selectedIds}
       />
     </>
   );
@@ -311,15 +304,6 @@ export default function MarkdownCard({ runId, metric, extraSeries, controlledSer
   const renderContent = (inModal: boolean) =>
     isMulti ? renderMultiMarkdown(inModal) : renderSingleMarkdown();
 
-  const selectionPanel = !hasSelectionProvider && (
-    <RunSelectionPanel
-      selectedRunIds={selectedArray}
-      allRunIds={allRunIds}
-      onClear={clear}
-      runInfo={runInfoMap}
-      label="Markdown selection"
-    />
-  );
 
   return (
     <CardShell cardKind="markdown"
@@ -335,7 +319,6 @@ export default function MarkdownCard({ runId, metric, extraSeries, controlledSer
       addToComparisonSlot={<AddToComparisonButton cardType="markdown" series={compSeries} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
-      selectionPanel={selectionPanel}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

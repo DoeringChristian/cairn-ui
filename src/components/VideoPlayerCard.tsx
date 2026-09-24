@@ -15,8 +15,6 @@ import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid,
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
-import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
-import RunSelectionPanel from "./RunSelectionPanel";
 import Toggle from "./settings/Toggle";
 import Select from "./settings/Select";
 import StepSlider from "./StepSlider";
@@ -196,10 +194,7 @@ export default function VideoPlayerCard({ runId, metric, extraSeries, controlled
 
   const runMetaVersion = useRunMetadataVersion();
 
-  const { selectedIds, selectedArray, toggle, clear } = useRunSelection();
-  const hasSelectionProvider = useRunSelectionHasProvider();
-
-  const { runInfoMap } = useRunInfo(allRunIds);
+  useRunInfo(allRunIds);
 
   const subtitle =
     globalSteps.length > 0
@@ -294,18 +289,7 @@ export default function VideoPlayerCard({ runId, metric, extraSeries, controlled
         runId={runId}
         allRunIds={allRunIds}
         onMetricsChange={(next) => updateSettings({ metrics: next })}
-        onClick={multipleRuns ? toggle : undefined}
-        selectedIds={selectedIds}
       />
-      {!hasSelectionProvider && (
-        <RunSelectionPanel
-          selectedRunIds={selectedArray}
-          allRunIds={allRunIds}
-          onClear={clear}
-          runInfo={runInfoMap}
-          label="Video selection"
-        />
-      )}
     </>
   );
 
@@ -361,15 +345,6 @@ export default function VideoPlayerCard({ runId, metric, extraSeries, controlled
       modalContent={
         <div className="flex flex-col h-full">
           {renderContent(true)}
-          {!hasSelectionProvider && (
-            <RunSelectionPanel
-              selectedRunIds={selectedArray}
-              allRunIds={allRunIds}
-              onClear={clear}
-              runInfo={runInfoMap}
-              label="Video selection"
-            />
-          )}
         </div>
       }
     >

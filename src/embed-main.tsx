@@ -214,8 +214,8 @@ ReactDOM.createRoot(document.getElementById("embed-root")!).render(
     <QueryClientProvider client={queryClient}>
       {/*
        * MemoryRouter (not BrowserRouter): cards reuse viewer components that
-       * call react-router hooks deep in the tree (e.g. RunSelectionPanel's
-       * useNavigate), which throw without a Router context. The embed shows
+       * call react-router hooks deep in the tree (e.g. AddToComparisonButton),
+       * which throw without a Router context. The embed shows
        * NO nav/routing — this just satisfies that context in memory so the
        * card renders. In the SPA these hooks get their context from the
        * app's RouterProvider; the embed provides an equivalent here.

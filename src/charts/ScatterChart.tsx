@@ -1,4 +1,4 @@
-import { useMemo, useRef, type MouseEvent } from "react";
+import { useMemo } from "react";
 import { colorscale } from "./colormaps.ts";
 
 import PlotlyChart, { type PlotlyData } from "./PlotlyChart.tsx";
@@ -23,9 +23,6 @@ interface Props {
   yLog?: boolean;
   /** Draw the Pareto front for this direction; omitted = no front. */
   pareto?: ParetoDirection;
-  selectedIds?: Set<string>;
-  onClick?: (id: string) => void;
-  onBackgroundClick?: () => void;
   className?: string;
 }
 
@@ -33,7 +30,7 @@ const NEUTRAL = "#8b949e";
 
 /** One marker per run (scattergl), optionally colored by a value and with its Pareto front. */
 export default function ScatterChart({
-  points, xLabel, yLabel, colorLabel, xLog, yLog, pareto, selectedIds, onClick, onBackgroundClick, className,
+  points, xLabel, yLabel, colorLabel, xLog, yLog, pareto, className,
 }: Props) {
   const data = useMemo<PlotlyData>(() => {
     const theme = readChartTheme(null);
@@ -50,17 +47,12 @@ export default function ScatterChart({
       mode: "markers",
       x: pts.map((p) => p.x),
       y: pts.map((p) => p.y),
-      customdata: pts.map((p) => p.id),
       text: pts.map(hover),
       hovertemplate: "%{text}<extra></extra>",
       showlegend: false,
       marker: {
         size: 9,
         color,
-        line: {
-          width: pts.map((p) => (selectedIds?.has(p.id) ? 2 : 0)),
-          color: theme.fg,
-        },
         ...extra,
       },
     });
@@ -95,7 +87,7 @@ export default function ScatterChart({
       }
     }
     return traces;
-  }, [points, xLabel, yLabel, colorLabel, pareto, selectedIds]);
+  }, [points, xLabel, yLabel, colorLabel, pareto]);
 
   const layout = useMemo(() => ({
     hovermode: "closest",
@@ -103,49 +95,9 @@ export default function ScatterChart({
     yaxis: { title: { text: yLabel ?? "" }, type: yLog ? "log" : "linear" },
   }), [xLabel, yLabel, xLog, yLog]);
 
-  const bg = useBackgroundClick(onBackgroundClick);
-
   return (
-    <div className={className} {...bg.wrapper}>
-      <PlotlyChart
-        data={data}
-        layout={layout}
-        onClick={(e) => {
-          const id = e.points.find((p) => typeof p.customdata === "string")?.customdata as string | undefined;
-          if (id == null) return;
-          bg.pointClicked();
-          onClick?.(id);
-        }}
-      />
+    <div className={className}>
+      <PlotlyChart data={data} layout={layout} />
     </div>
   );
-}
-
-/**
- * Plotly reports clicks only on marks; this turns a press that hit no mark
- * (and was not a drag) into `onBackgroundClick`. Spread `wrapper` on the
- * chart's parent div and call `pointClicked()` from the Plotly click.
- *
- * Listens for the release on `window`: Plotly lays a cover over the page
- * while the button is down, so the DOM `click` never reaches the chart, and
- * its own (synchronous) `plotly_click` runs on `document` before `window`.
- */
-export function useBackgroundClick(onBackgroundClick?: () => void) {
-  const hit = useRef(false);
-  const callback = useRef(onBackgroundClick);
-  callback.current = onBackgroundClick;
-  return {
-    pointClicked: () => { hit.current = true; },
-    wrapper: {
-      onMouseDown: (e: MouseEvent) => {
-        if (e.button !== 0) return;
-        const x = e.clientX;
-        const y = e.clientY;
-        hit.current = false;
-        window.addEventListener("mouseup", (up) => {
-          if (!hit.current && Math.hypot(up.clientX - x, up.clientY - y) <= 4) callback.current?.();
-        }, { once: true });
-      },
-    },
-  };
 }

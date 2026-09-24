@@ -1,9 +1,7 @@
 import { useMemo } from "react";
 
 import PlotlyChart, { type PlotlyData } from "./PlotlyChart.tsx";
-import { readChartTheme } from "./theme.ts";
 import { formatNum } from "../lib/plot-utils/types.ts";
-import { useBackgroundClick } from "./ScatterChart.tsx";
 
 export interface BarDatum {
   id: string;
@@ -26,23 +24,18 @@ interface Props {
   logX?: boolean;
   compareMode: BarCompareMode;
   runOrder: string[];
-  selectedIds?: Set<string>;
-  onClick?: (id: string) => void;
-  onBackgroundClick?: () => void;
   className?: string;
 }
 
 /** Horizontal bars, one per run, for a single metric. */
 export default function BarChart({
-  bars, valueLabel, logX, compareMode, runOrder, selectedIds, onClick, onBackgroundClick, className,
+  bars, valueLabel, logX, compareMode, runOrder, className,
 }: Props) {
   // Summing on a log axis is misleading: stacked falls back to grouped there.
   const mode: BarCompareMode = compareMode === "stacked" && logX ? "grouped" : compareMode;
   const composed = mode !== "grouped" && bars.length > 1;
 
   const data = useMemo<PlotlyData>(() => {
-    const theme = readChartTheme(null);
-    const outline = (b: BarDatum) => (selectedIds?.has(b.id) ? 2 : 0);
     if (!composed) {
       return [{
         type: "bar",
@@ -51,7 +44,7 @@ export default function BarChart({
         y: bars.map((b) => b.id),
         customdata: bars.map((b) => [b.id, b.label]),
         hovertemplate: "<b>%{customdata[1]}</b><br>%{x}<extra></extra>",
-        marker: { color: bars.map((b) => b.color), line: { width: bars.map(outline), color: theme.fg } },
+        marker: { color: bars.map((b) => b.color) },
       }];
     }
     const category = valueLabel ?? "value";
@@ -72,9 +65,9 @@ export default function BarChart({
         : "<b>%{customdata[1]}</b><br>%{x}<extra></extra>",
       opacity: mode === "overlay" ? 0.5 : 1,
       showlegend: false,
-      marker: { color: b.color, line: { width: outline(b), color: theme.fg } },
+      marker: { color: b.color },
     }));
-  }, [bars, composed, mode, runOrder, valueLabel, selectedIds]);
+  }, [bars, composed, mode, runOrder, valueLabel]);
 
   const layout = useMemo(() => {
     const labels = new Map(bars.map((b) => [b.id, b.label]));
@@ -93,20 +86,9 @@ export default function BarChart({
     };
   }, [bars, composed, mode, valueLabel, logX]);
 
-  const bg = useBackgroundClick(onBackgroundClick);
-
   return (
-    <div className={className} {...bg.wrapper}>
-      <PlotlyChart
-        data={data}
-        layout={layout}
-        onClick={(e) => {
-          const cd = e.points[0]?.customdata as [string, string] | undefined;
-          if (!cd) return;
-          bg.pointClicked();
-          onClick?.(cd[0]);
-        }}
-      />
+    <div className={className}>
+      <PlotlyChart data={data} layout={layout} />
     </div>
   );
 }

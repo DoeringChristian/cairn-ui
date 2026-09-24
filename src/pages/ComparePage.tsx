@@ -58,8 +58,6 @@ import { useRuns, useRunSelectorResolution } from "../api/hooks";
 import { api } from "../api/client";
 
 import { disambiguateRunLabels, useRunMetadataVersion } from "../lib/run-label";
-import { RunSelectionContext, useRunSelectionState } from "../lib/use-run-selection";
-import RunSelectionPanel from "../components/RunSelectionPanel";
 import type { Run } from "../api/types";
 import type { SequenceMeta } from "../api/types";
 
@@ -315,8 +313,6 @@ export default function ComparePage() {
     [projectId, refresh],
   );
 
-  const selectionState = useRunSelectionState();
-
   const compRunIds = useMemo(() => {
     if (!selected) return [];
     const ids = new Set<string>();
@@ -351,7 +347,6 @@ export default function ComparePage() {
   if (!projectId) return null;
 
   return (
-    <RunSelectionContext.Provider value={selectionState}>
     <>
       <div>
         <h1 className="mono mb-4 text-xl font-semibold">
@@ -417,20 +412,6 @@ export default function ComparePage() {
                 );
               }}
             />
-            {selectionState.selectedArray.length > 0 && (
-              <div className="mt-4 border-t border-border-subtle pt-3">
-                <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-muted">
-                  Selection
-                </h2>
-                <RunSelectionPanel
-                  selectedRunIds={selectionState.selectedArray}
-                  allRunIds={compRunIds}
-                  onClear={selectionState.clear}
-                  runInfo={runInfoMap}
-                  label="Comparison selection"
-                />
-              </div>
-            )}
           </aside>
           <main>
             {selected ? (
@@ -490,7 +471,6 @@ export default function ComparePage() {
         )}
       </div>
     </>
-    </RunSelectionContext.Provider>
   );
 }
 

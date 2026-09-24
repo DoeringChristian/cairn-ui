@@ -26,12 +26,6 @@ interface Props {
   headerActions?: ReactNode;
   dropHighlight?: boolean;
   dropProps?: Record<string, unknown>;
-  /**
-   * Run-selection panel rendered below the card body — and, when a modal is
-   * configured, again below the modal content. The *same* node is rendered in
-   * both places (cards pass one element; may be a falsy value to render nothing).
-   */
-  selectionPanel?: ReactNode;
   /** Settings form rendered in the detail modal's side panel. */
   settingsPanel?: ReactNode;
   /** Main content of the detail modal (the card at full size). */
@@ -63,7 +57,6 @@ export default function CardShell({
   headerActions,
   dropHighlight,
   dropProps,
-  selectionPanel,
   settingsPanel,
   modalContent,
   modalOpen,
@@ -119,7 +112,6 @@ export default function CardShell({
       {!settings.collapsed && (
         <>
           {children}
-          {selectionPanel}
           {modalContent !== undefined && (
             <CardDetailModal
               open={!!modalOpen}
@@ -128,7 +120,6 @@ export default function CardShell({
               settingsContent={settingsPanel}
             >
               {modalContent}
-              {selectionPanel}
             </CardDetailModal>
           )}
         </>

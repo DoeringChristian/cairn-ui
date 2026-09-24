@@ -10,7 +10,6 @@ import { cardMinSize } from "./card-kit/card-min-sizes";
 import { useCardDrop } from "../lib/use-series-drop";
 import type { ComparisonSeriesRef } from "../lib/comparisons";
 import { useRunMetadataVersion, shortRunLabel } from "../lib/run-label";
-import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
 import { seriesKey, seriesLabel } from "../lib/series-utils";
 import type { SequenceMeta, SequenceResponse } from "../api/types";
 import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid, type BaseCardSettings } from "./card-kit";
@@ -26,7 +25,6 @@ import PlotlyChart from "../charts/PlotlyChart";
 import { readChartTheme, type ChartTheme } from "../charts/theme";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
-import RunSelectionPanel from "./RunSelectionPanel";
 import SeriesChipStrip from "./SeriesChipStrip";
 import Toggle from "./settings/Toggle";
 import Select from "./settings/Select";
@@ -580,10 +578,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
 
   const showPlotly = !!sourceHash && sourceQ.isSuccess && !!sourceQ.data?.data;
 
-  const { selectedIds, selectedArray, toggle, clear } = useRunSelection();
-  const hasSelectionProvider = useRunSelectionHasProvider();
-
-  const { runInfoMap } = useRunInfo(allRunIds);
+  useRunInfo(allRunIds);
 
   // Re-render when run metadata cache is populated so labels update.
   const runMetaVersion = useRunMetadataVersion();
@@ -737,8 +732,6 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
         runId={runId}
         allRunIds={allRunIds}
         onMetricsChange={(next) => updateSettings({ metrics: next })}
-        onClick={multipleRuns ? toggle : undefined}
-        selectedIds={selectedIds}
       />
     </>
   );
@@ -751,15 +744,6 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     );
   };
 
-  const selectionPanel = !hasSelectionProvider && (
-    <RunSelectionPanel
-      selectedRunIds={selectedArray}
-      allRunIds={allRunIds}
-      onClear={clear}
-      runInfo={runInfoMap}
-      label="Figure selection"
-    />
-  );
 
   const settingsPanel = (
     <>
@@ -838,7 +822,6 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       </>}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
-      selectionPanel={selectionPanel}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

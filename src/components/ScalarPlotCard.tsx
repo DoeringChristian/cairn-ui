@@ -17,8 +17,6 @@ import type {
 import SeriesChipStrip from "./SeriesChipStrip";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
-import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
-import RunSelectionPanel from "./RunSelectionPanel";
 import MetricChips from "./settings/MetricChips";
 import NumberInput from "./settings/NumberInput";
 import Select from "./settings/Select";
@@ -148,7 +146,7 @@ export default function ScalarPlotCard({
   // -------------------------------------------------------------------------
   // Run meta
   // -------------------------------------------------------------------------
-  const { runInfoMap, runCreatedAtByRunId } = useRunInfo(allRunIds);
+  const { runCreatedAtByRunId } = useRunInfo(allRunIds);
 
   // -------------------------------------------------------------------------
   // Data fetch
@@ -216,25 +214,6 @@ export default function ScalarPlotCard({
   // Selection / run info
   // -------------------------------------------------------------------------
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
-  const { selectedIds, selectedArray, toggle, clear } = useRunSelection();
-  const hasSelectionProvider = useRunSelectionHasProvider();
-
-  const seriesKeyToRunId = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const metric of effectiveMetrics) {
-      m.set(seriesKey(metric), metric.runId ?? runId);
-    }
-    return m;
-  }, [effectiveMetrics, runId]);
-
-  const selectedSeriesKeys = useMemo(() => {
-    if (selectedIds.size === 0) return undefined;
-    const s = new Set<string>();
-    for (const [k, rid] of seriesKeyToRunId) {
-      if (selectedIds.has(rid)) s.add(k);
-    }
-    return s;
-  }, [selectedIds, seriesKeyToRunId]);
 
   const compSeries = useMemo((): ComparisonSeriesRef[] => {
     return effectiveMetrics.map((m) => ({
@@ -505,15 +484,6 @@ export default function ScalarPlotCard({
 
   const hasData = series.some((s) => s.points.length > 0);
 
-  const selectionPanel = !hasSelectionProvider && (
-    <RunSelectionPanel
-      selectedRunIds={selectedArray}
-      allRunIds={allRunIds}
-      onClear={clear}
-      runInfo={runInfoMap}
-      label="Scalar plot selection"
-    />
-  );
 
   const plotProps = {
     series,
@@ -530,11 +500,6 @@ export default function ScalarPlotCard({
     lineType: settings.lineType,
     showLegend: settings.showLegend,
     tooltip: settings.tooltip,
-    selectedSeriesKeys,
-    onSeriesClick: (key: string) => {
-      const rid = seriesKeyToRunId.get(key);
-      if (rid) toggle(rid);
-    },
   };
 
   return (
@@ -589,7 +554,6 @@ export default function ScalarPlotCard({
       </>}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
-      selectionPanel={selectionPanel}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

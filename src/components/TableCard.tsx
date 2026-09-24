@@ -25,8 +25,6 @@ import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import NumberInput from "./settings/NumberInput";
 import Toggle from "./settings/Toggle";
-import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
-import RunSelectionPanel from "./RunSelectionPanel";
 import StepSlider from "./StepSlider";
 import {
   computeTableDiff,
@@ -284,10 +282,7 @@ export default function TableCard({
     () => [{ runId, name: metric.name, context_hash: metric.context_hash }],
     [runId, metric.name, metric.context_hash],
   );
-
-  const { selectedIds, selectedArray, toggle, clear } = useRunSelection();
-  const hasSelectionProvider = useRunSelectionHasProvider();
-  const { runInfoMap } = useRunInfo(allRunIds);
+  useRunInfo(allRunIds);
 
   const subtitle = useMemo(() => {
     const dims = meta ? `${meta.n_rows}×${meta.n_cols}` : `${metric.count} pts`;
@@ -434,8 +429,6 @@ export default function TableCard({
         runId={runId}
         allRunIds={allRunIds}
         onMetricsChange={(next) => updateSettings({ metrics: next })}
-        onClick={multipleRuns ? toggle : undefined}
-        selectedIds={selectedIds}
       />
     </>
   );
@@ -443,15 +436,6 @@ export default function TableCard({
   const renderContent = (inModal: boolean) =>
     isMulti ? renderMulti(inModal) : renderSingle();
 
-  const selectionPanel = !hasSelectionProvider && (
-    <RunSelectionPanel
-      selectedRunIds={selectedArray}
-      allRunIds={allRunIds}
-      onClear={clear}
-      runInfo={runInfoMap}
-      label="Table selection"
-    />
-  );
 
   const settingsPanel = (
     <>
@@ -518,7 +502,6 @@ export default function TableCard({
       addToComparisonSlot={<AddToComparisonButton cardType="table" series={compSeries} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
-      selectionPanel={selectionPanel}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

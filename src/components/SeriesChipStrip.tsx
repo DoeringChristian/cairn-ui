@@ -17,10 +17,6 @@ interface Props {
     allRunIds: string[],
   ) => string;
   className?: string;
-  /** Called with the chip's run ID when clicked (typically `toggle` from useRunSelection). */
-  onClick?: (runId: string) => void;
-  /** Set of currently selected run IDs (highlights matching chips). */
-  selectedIds?: Set<string>;
 }
 
 function defaultLabel(
@@ -40,8 +36,6 @@ export default function SeriesChipStrip({
   onMetricsChange,
   labelFn = defaultLabel,
   className,
-  onClick,
-  selectedIds,
 }: Props) {
   const multipleRuns = allRunIds.length > 1;
 
@@ -68,7 +62,6 @@ export default function SeriesChipStrip({
                 name: m.name,
                 context_hash: m.context_hash,
               };
-              const chipRunId = m.runId ?? runId;
               return (
                 <SeriesChip
                   key={tag.name}
@@ -76,8 +69,6 @@ export default function SeriesChipStrip({
                   color={tag.color}
                   label={tag.name}
                   runId={runId}
-                  onClick={onClick ? () => onClick(chipRunId) : undefined}
-                  selected={selectedIds?.has(chipRunId) ?? false}
                   onRemove={
                     tags.length > 1
                       ? () => onMetricsChange(metrics.filter((x) => x.name !== tag.name))
@@ -93,7 +84,6 @@ export default function SeriesChipStrip({
               name: m.name,
               context_hash: m.context_hash,
             };
-            const chipRunId = m.runId ?? runId;
             return (
               <SeriesChip
                 key={seriesKey(m)}
@@ -101,8 +91,6 @@ export default function SeriesChipStrip({
                 color={SERIES_COLORS[i % SERIES_COLORS.length]!}
                 label={labelFn(m, runId, multipleRuns, allRunIds)}
                 runId={runId}
-                onClick={onClick ? () => onClick(chipRunId) : undefined}
-                selected={selectedIds?.has(chipRunId) ?? false}
                 onRemove={
                   metrics.length > 1
                     ? () => onMetricsChange(metrics.filter((_, j) => j !== i))

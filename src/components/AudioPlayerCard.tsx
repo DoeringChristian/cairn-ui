@@ -16,8 +16,6 @@ import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import Toggle from "./settings/Toggle";
-import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
-import RunSelectionPanel from "./RunSelectionPanel";
 import StepSlider from "./StepSlider";
 
 interface Props {
@@ -241,10 +239,7 @@ export default function AudioPlayerCard({ runId, metric, extraSeries, controlled
 
   const runMetaVersion = useRunMetadataVersion();
 
-  const { selectedIds, selectedArray, toggle, clear } = useRunSelection();
-  const hasSelectionProvider = useRunSelectionHasProvider();
-
-  const { runInfoMap } = useRunInfo(allRunIds);
+  useRunInfo(allRunIds);
 
   const subtitle =
     globalSteps.length > 0
@@ -346,8 +341,6 @@ export default function AudioPlayerCard({ runId, metric, extraSeries, controlled
         runId={runId}
         allRunIds={allRunIds}
         onMetricsChange={(next) => updateSettings({ metrics: next })}
-        onClick={multipleRuns ? toggle : undefined}
-        selectedIds={selectedIds}
       />
     </>
   );
@@ -355,15 +348,6 @@ export default function AudioPlayerCard({ runId, metric, extraSeries, controlled
   const renderContent = (inModal: boolean) =>
     isMulti ? renderMultiAudio(inModal) : renderSingleAudio();
 
-  const selectionPanel = !hasSelectionProvider && (
-    <RunSelectionPanel
-      selectedRunIds={selectedArray}
-      allRunIds={allRunIds}
-      onClear={clear}
-      runInfo={runInfoMap}
-      label="Audio selection"
-    />
-  );
 
   return (
     <CardShell cardKind="audio"
@@ -378,7 +362,6 @@ export default function AudioPlayerCard({ runId, metric, extraSeries, controlled
       addToComparisonSlot={<AddToComparisonButton cardType="audio" series={compSeries} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
-      selectionPanel={selectionPanel}
       settingsPanel={
         <Toggle
           label="Autoplay"

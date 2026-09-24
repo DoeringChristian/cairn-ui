@@ -32,8 +32,6 @@ export interface ScalarChartProps {
   lineType: LineType;
   showLegend: boolean;
   tooltip: { showContext: boolean; showWallTime: boolean };
-  selectedSeriesKeys?: Set<string>;
-  onSeriesClick?: (key: string) => void;
   className?: string;
 }
 
@@ -81,7 +79,7 @@ interface Hover {
 export default function ScalarChart(props: ScalarChartProps) {
   const {
     series, xAxis, xScale, yScale, xRange, yRange, view, smoothing, outlierPct,
-    lineType, showLegend, tooltip, selectedSeriesKeys, className,
+    lineType, showLegend, tooltip, className,
   } = props;
   const boxRef = useRef<HTMLDivElement>(null);
   const plotHostRef = useRef<HTMLDivElement>(null);
@@ -90,8 +88,8 @@ export default function ScalarChart(props: ScalarChartProps) {
   const [focused, setFocused] = useState<number | null>(null);
 
   // Callbacks and bounds read at event time, so they never force a rebuild.
-  const live = useRef({ props, focused });
-  live.current = { props, focused };
+  const live = useRef({ props });
+  live.current = { props };
 
   const aligned = useMemo(
     () => alignSeries(series, { smoothing, outlierPct, xScale, yScale }),
@@ -108,7 +106,6 @@ export default function ScalarChart(props: ScalarChartProps) {
   const structureKey = [
     xAxis, xScale, yScale, lineType,
     lines.map((l) => `${l.key}:${l.raw}:${l.color}`).join(","),
-    selectedSeriesKeys ? Array.from(selectedSeriesKeys).sort().join(",") : "*",
   ].join("|");
 
   useEffect(() => {
@@ -172,12 +169,10 @@ export default function ScalarChart(props: ScalarChartProps) {
       series: [
         {},
         ...lines.map((l): uPlot.Series => {
-          const dimmed = selectedSeriesKeys != null && !selectedSeriesKeys.has(l.key);
-          const alpha = l.raw ? 0.25 : dimmed ? 0.25 : 1;
           return {
             label: l.label,
-            stroke: withAlpha(l.color, alpha),
-            width: l.raw ? 1 : dimmed ? 1 : 1.5,
+            stroke: withAlpha(l.color, l.raw ? 0.25 : 1),
+            width: l.raw ? 1 : 1.5,
             spanGaps: true,
             paths: pathsFor(lineType),
             points: { show: false },
@@ -211,18 +206,7 @@ export default function ScalarChart(props: ScalarChartProps) {
     const plot = new uPlot(opts, data, host);
     plotRef.current = plot;
 
-    let downAt: [number, number] | null = null;
-    const onDown = (e: MouseEvent) => { downAt = [e.clientX, e.clientY]; };
-    const onClick = (e: MouseEvent) => {
-      const moved = downAt ? Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) : 0;
-      const idx = live.current.focused;
-      if (moved > 3 || idx == null || idx < 1) return;
-      const line = lines[idx - 1];
-      if (line) live.current.props.onSeriesClick?.(line.key);
-    };
     const onDblClick = () => live.current.props.onViewChange?.(EMPTY_VIEW);
-    plot.over.addEventListener("mousedown", onDown);
-    plot.over.addEventListener("click", onClick);
     plot.over.addEventListener("dblclick", onDblClick);
 
     const ro = new ResizeObserver(() => {
@@ -265,20 +249,12 @@ export default function ScalarChart(props: ScalarChartProps) {
       </div>
       {showLegend && series.length > 1 && (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 px-1 pt-1 text-[10px] text-fg-muted">
-          {series.map((s) => {
-            const dimmed = selectedSeriesKeys != null && !selectedSeriesKeys.has(s.key);
-            return (
-              <button
-                key={s.key}
-                type="button"
-                className={`inline-flex items-center gap-1 hover:text-fg ${dimmed ? "opacity-40" : ""}`}
-                onClick={() => props.onSeriesClick?.(s.key)}
-              >
-                <span className="inline-block h-0.5 w-3 rounded" style={{ background: s.color }} />
-                <span className="truncate max-w-[16rem]">{s.label}</span>
-              </button>
-            );
-          })}
+          {series.map((s) => (
+            <span key={s.key} className="inline-flex items-center gap-1">
+              <span className="inline-block h-0.5 w-3 rounded" style={{ background: s.color }} />
+              <span className="truncate max-w-[16rem]">{s.label}</span>
+            </span>
+          ))}
         </div>
       )}
     </div>

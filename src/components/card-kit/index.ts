@@ -14,5 +14,5 @@ export { resolveAtStep } from "./resolve-at-step";
 export { useOverlaySlot } from "./use-overlay-slot";
 export type { OverlaySlot } from "./use-overlay-slot";
 export { useStepSlider } from "./use-step-slider";
-export { useRunInfo, buildRunInfoMap } from "./use-run-info";
+export { useRunInfo } from "./use-run-info";
 export { default as MultiPaneGrid } from "./MultiPaneGrid";

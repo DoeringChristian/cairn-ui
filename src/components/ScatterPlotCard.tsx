@@ -7,12 +7,10 @@ import ScatterChart, { type ScatterPoint } from "../charts/ScatterChart";
 import type { ParetoDirection } from "../lib/plot-utils/pareto";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
-import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
 import CardShell from "./CardShell";
-import RunSelectionPanel from "./RunSelectionPanel";
 import Toggle from "./settings/Toggle";
 import Select from "./settings/Select";
-import { buildRunInfoMap, type BaseCardSettings } from "./card-kit";
+import type { BaseCardSettings } from "./card-kit";
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -159,13 +157,6 @@ export default function ScatterPlotCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seqQueries.map((q) => q.dataUpdatedAt).join("|")]);
 
-  const { selectedIds, selectedArray, toggle, clear } = useRunSelection();
-  const hasSelectionProvider = useRunSelectionHasProvider();
-
-  const runInfoMap = useMemo(
-    () => buildRunInfoMap(runIds, runQueries),
-    [runIds, runQueries],
-  );
 
   // ---------------------------------------------------------------------------
   // Settings panel
@@ -253,29 +244,8 @@ export default function ScatterPlotCard({
     xLog: settings.xLog,
     yLog: settings.yLog,
     pareto: settings.showPareto ? (settings.paretoDirection ?? "min-min") : undefined,
-    selectedIds,
-    onClick: (id: string) => toggle(id),
-    onBackgroundClick: clear,
   };
 
-  const selectionPanel = !hasSelectionProvider && (
-    <RunSelectionPanel
-      selectedRunIds={selectedArray}
-      allRunIds={runIds}
-      onClear={clear}
-      runInfo={runInfoMap}
-      renderExtra={(rid) => {
-        const pt = scatterPoints.find((p) => p.id === rid);
-        return pt ? (
-          <>
-            <span className="ml-2 text-fg-subtle">{settings.xAxis?.key}: {pt.x.toPrecision(4)}</span>
-            <span className="ml-2 text-fg-subtle">{settings.yAxis?.key}: {pt.y.toPrecision(4)}</span>
-          </>
-        ) : null;
-      }}
-      label="Scatter selection"
-    />
-  );
 
   return (
     <CardShell cardKind="scatter"
@@ -298,7 +268,6 @@ export default function ScatterPlotCard({
         downloadCsv(headers, rows, safeName(settings.title ?? "scatter_plot") + ".csv");
       }}
       onScreenshot={() => { if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? "scatter_plot")); }}
-      selectionPanel={selectionPanel}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}
