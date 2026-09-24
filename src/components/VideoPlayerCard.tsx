@@ -1,17 +1,23 @@
 import { api } from "../api/client";
 import { safeJsonParse } from "../lib/format";
+import { artifactFilename } from "../lib/download";
+import UnsupportedArtifact from "./UnsupportedArtifact";
 import SteppedMediaCard, { type MediaView, type SteppedMediaCardProps, type SteppedMediaSettings } from "./media/SteppedMediaCard";
 import Toggle from "./settings/Toggle";
 import Select from "./settings/Select";
 
+/** Frames logged by the SDK carry every field; a stored file only what could be read from it. */
 interface VideoMetadata {
-  fps: number;
-  num_frames: number;
-  width: number;
-  height: number;
-  channels: number;
+  fps?: number;
+  num_frames?: number;
+  width?: number;
+  height?: number;
+  filename?: string;
   preview?: string;
 }
+
+/** Containers every current browser plays in a <video>. */
+const PLAYABLE = new Set(["video/mp4", "video/webm", "video/ogg"]);
 
 interface VideoSettings extends SteppedMediaSettings {
   autoplay: boolean;
@@ -24,8 +30,19 @@ interface VideoSettings extends SteppedMediaSettings {
  * Player and format line for one video artifact. The card's only pane grows
  * with the card (taller in the modal); a grid pane keeps a fixed max height.
  */
-function VideoClip({ point, hash, settings, single, inModal }: MediaView<VideoSettings>) {
+function VideoClip({ point, hash, name, settings, single, inModal }: MediaView<VideoSettings>) {
   const meta = safeJsonParse<VideoMetadata>(point.artifact_metadata);
+  if (point.artifact_mime && !PLAYABLE.has(point.artifact_mime)) {
+    return (
+      <UnsupportedArtifact
+        label={`${meta?.filename ?? point.artifact_mime} — not playable in the browser`}
+        detail={`step ${point.step}`}
+        previewSrc={meta?.preview}
+        downloadUrl={api.artifactUrl(hash)}
+        filename={meta?.filename ?? artifactFilename(name, point.step, point.artifact_mime)}
+      />
+    );
+  }
   const video = (
     <video
       key={hash}
@@ -39,10 +56,16 @@ function VideoClip({ point, hash, settings, single, inModal }: MediaView<VideoSe
       className={`${single && inModal ? "max-h-[70vh]" : "max-h-64"} object-contain`}
     />
   );
-  const info = meta && (
-    <div className="mono mt-2 text-xs text-fg-subtle">
-      {meta.width}×{meta.height} · {meta.num_frames} frames @ {meta.fps} fps
-    </div>
+  const facts = meta
+    ? [
+        meta.filename,
+        meta.width && meta.height ? `${meta.width}×${meta.height}` : undefined,
+        meta.num_frames ? `${meta.num_frames} frames` : undefined,
+        meta.fps ? `${meta.fps} fps` : undefined,
+      ].filter(Boolean)
+    : [];
+  const info = facts.length > 0 && (
+    <div className="mono mt-2 text-xs text-fg-subtle">{facts.join(" · ")}</div>
   );
   if (single) {
     return (
