@@ -42,6 +42,42 @@ export interface ScalarChartProps {
 }
 
 const EMPTY_VIEW: ScalarView = { xMin: null, xMax: null, yMin: null, yMax: null };
+/** A drag that stays within this many px along one axis zooms only the other. */
+const UNI_PX = 20;
+
+interface SelectBox { left: number; top: number; width: number; height: number }
+
+/**
+ * The drag rectangle for a drag from (x0, y0) to (x1, y1) in plot-area px:
+ * nearly-horizontal drags span the full height (x-only zoom), nearly-vertical
+ * ones the full width (y-only zoom), anything else is a box.
+ */
+function selectBox(u: uPlot, x0: number, y0: number, x1: number, y1: number): SelectBox {
+  const w = u.over.clientWidth;
+  const h = u.over.clientHeight;
+  const dx = Math.abs(x1 - x0);
+  const dy = Math.abs(y1 - y0);
+  if (dy < UNI_PX && dx >= dy) return { left: Math.min(x0, x1), width: dx, top: 0, height: h };
+  if (dx < UNI_PX) return { left: 0, width: w, top: Math.min(y0, y1), height: dy };
+  return { left: Math.min(x0, x1), width: dx, top: Math.min(y0, y1), height: dy };
+}
+
+/**
+ * The view a finished drag selects, or null for a click-sized drag. An x-only
+ * drag lets y re-fit the visible data; a y-only drag keeps the current x view.
+ */
+function viewFromSelect(u: uPlot, sel: SelectBox, prev: ScalarView): ScalarView | null {
+  const fullH = sel.height >= u.over.clientHeight - 1;
+  const fullW = sel.width >= u.over.clientWidth - 1;
+  if (fullH ? sel.width < 4 : fullW ? sel.height < 4 : sel.width < 4 && sel.height < 4) return null;
+  const x = fullW
+    ? { xMin: prev.xMin, xMax: prev.xMax }
+    : { xMin: u.posToVal(sel.left, "x"), xMax: u.posToVal(sel.left + sel.width, "x") };
+  const y = fullH
+    ? { yMin: null, yMax: null }
+    : { yMin: u.posToVal(sel.top + sel.height, "y"), yMax: u.posToVal(sel.top, "y") };
+  return { ...x, ...y };
+}
 const MAX_TOOLTIP_ROWS = 12;
 
 function pathsFor(lineType: LineType): uPlot.Series.PathBuilder {
@@ -162,7 +198,7 @@ export default function ScalarChart(props: ScalarChartProps) {
       legend: { show: false },
       cursor: interactive
         ? {
-          drag: { x: true, y: false, setScale: false },
+          drag: { x: true, y: true, uni: UNI_PX, setScale: false },
           focus: { prox: 16 },
           points: { size: 6 },
         }
@@ -205,11 +241,10 @@ export default function ScalarChart(props: ScalarChartProps) {
       hooks: {
         setSelect: [
           (u) => {
-            if (u.select.width < 4) return;
-            const xMin = u.posToVal(u.select.left, "x");
-            const xMax = u.posToVal(u.select.left + u.select.width, "x");
+            const next = viewFromSelect(u, u.select, live.current.props.view);
+            if (!next) return;
             u.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
-            live.current.props.onViewChange?.({ xMin, xMax, yMin: null, yMax: null });
+            live.current.props.onViewChange?.(next);
           },
         ],
         setCursor: [
@@ -233,37 +268,38 @@ export default function ScalarChart(props: ScalarChartProps) {
     const onDblClick = () => live.current.props.onViewChange?.(EMPTY_VIEW);
     if (interactive) plot.over.addEventListener("dblclick", onDblClick);
 
-    // uPlot only listens to the mouse. On touch (while interactive): drag
-    // horizontally to zoom, tap to show the tooltip, double-tap to reset.
-    let touchX0: number | null = null;
+    // uPlot only listens to the mouse. On touch (while interactive): drag to
+    // zoom (same x-only / y-only / box rule as the mouse), tap to show the
+    // tooltip, double-tap to reset.
+    let touch0: { x: number; y: number } | null = null;
     let lastTap = 0;
-    const overX = (t: Touch) => t.clientX - plot.over.getBoundingClientRect().left;
+    const overPos = (t: Touch) => {
+      const r = plot.over.getBoundingClientRect();
+      return { x: t.clientX - r.left, y: t.clientY - r.top };
+    };
     const onTouchStart = (e: TouchEvent) => {
-      touchX0 = e.touches.length === 1 ? overX(e.touches[0]!) : null;
+      touch0 = e.touches.length === 1 ? overPos(e.touches[0]!) : null;
     };
     const onTouchMove = (e: TouchEvent) => {
-      if (touchX0 == null || e.touches.length !== 1) return;
+      if (touch0 == null || e.touches.length !== 1) return;
       e.preventDefault();
-      const x = overX(e.touches[0]!);
-      plot.setSelect({ left: Math.min(touchX0, x), width: Math.abs(x - touchX0), top: 0, height: plot.over.clientHeight }, false);
+      const p = overPos(e.touches[0]!);
+      plot.setSelect(selectBox(plot, touch0.x, touch0.y, p.x, p.y), false);
     };
     const onTouchEnd = (e: TouchEvent) => {
-      if (touchX0 == null) return;
-      const touch = e.changedTouches[0]!;
-      const x = overX(touch);
-      const width = Math.abs(x - touchX0);
+      if (touch0 == null) return;
+      const p = overPos(e.changedTouches[0]!);
+      const moved = Math.max(Math.abs(p.x - touch0.x), Math.abs(p.y - touch0.y));
       plot.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
-      if (width >= 8) {
-        const left = Math.min(touchX0, x);
-        live.current.props.onViewChange?.({
-          xMin: plot.posToVal(left, "x"), xMax: plot.posToVal(left + width, "x"), yMin: null, yMax: null,
-        });
+      if (moved >= 8) {
+        const next = viewFromSelect(plot, selectBox(plot, touch0.x, touch0.y, p.x, p.y), live.current.props.view);
+        if (next) live.current.props.onViewChange?.(next);
       } else {
         if (e.timeStamp - lastTap < 300) live.current.props.onViewChange?.(EMPTY_VIEW);
-        else plot.setCursor({ left: x, top: touch.clientY - plot.over.getBoundingClientRect().top });
+        else plot.setCursor({ left: p.x, top: p.y });
         lastTap = e.timeStamp;
       }
-      touchX0 = null;
+      touch0 = null;
     };
     if (interactive) {
       plot.over.addEventListener("touchstart", onTouchStart, { passive: true });
