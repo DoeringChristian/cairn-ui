@@ -3,7 +3,8 @@ import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { useCardSettings } from "../lib/card-settings";
-import { ScatterPlot, type ScatterPoint, type ParetoDirection } from "../lib/public-plot";
+import ScatterChart, { type ScatterPoint } from "../charts/ScatterChart";
+import type { ParetoDirection } from "../lib/plot-utils/pareto";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
@@ -251,9 +252,7 @@ export default function ScatterPlotCard({
     colorLabel: settings.colorAxis?.key,
     xLog: settings.xLog,
     yLog: settings.yLog,
-    pareto: settings.showPareto
-      ? { show: true, direction: settings.paretoDirection ?? ("min-min" as ParetoDirection) }
-      : undefined,
+    pareto: settings.showPareto ? (settings.paretoDirection ?? "min-min") : undefined,
     selectedIds,
     onClick: (id: string) => toggle(id),
     onBackgroundClick: clear,
@@ -311,7 +310,7 @@ export default function ScatterPlotCard({
               Select X and Y axes in settings to create the scatter plot.
             </div>
           ) : (
-            <ScatterPlot {...plotProps} className="flex-1 min-h-0" />
+            <ScatterChart {...plotProps} className="flex-1 min-h-0" />
           )}
         </div>
       }
@@ -322,7 +321,7 @@ export default function ScatterPlotCard({
             Select X and Y axes in settings to create the scatter plot.
           </div>
         ) : (
-          <ScatterPlot {...plotProps} className="rounded bg-bg flex-1 min-h-0" />
+          <ScatterChart {...plotProps} className="rounded bg-bg flex-1 min-h-0" />
         )}
       </>
     </CardShell>
