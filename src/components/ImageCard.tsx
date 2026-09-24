@@ -4,6 +4,13 @@ import { useSequencesForRuns } from "../api/hooks";
 import type { SequenceMeta } from "../api/types";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { ComparisonSeriesRef } from "../lib/comparisons";
+import {
+  classColor,
+  EMPTY_OVERLAY_SUMMARY,
+  mergeOverlaySummaries,
+  type OverlaySummary,
+  type OverlayView,
+} from "../lib/overlays";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import type { BaseCardSettings } from "./card-kit";
@@ -39,9 +46,24 @@ interface ImageCardSettings extends BaseCardSettings {
   referenceStep?: number;
   /** Divider position (fraction of pane width), shared by all panes. */
   split: number;
+  /** Overlay annotations (boxes/masks logged with the image). */
+  showBoxes: boolean;
+  showMasks: boolean;
+  maskOpacity: number;
+  minScore: number;
+  hiddenClasses: number[];
 }
 
-const DEFAULTS: ImageCardSettings = { version: 1, showLabels: true, split: 0.5 };
+const DEFAULTS: ImageCardSettings = {
+  version: 1,
+  showLabels: true,
+  split: 0.5,
+  showBoxes: true,
+  showMasks: true,
+  maskOpacity: 0.5,
+  minScore: 0,
+  hiddenClasses: [],
+};
 const IDENTITY: PaneTransform = { scale: 1, x: 0, y: 0 };
 
 type Series = { runId: string; name: string; context_hash: string };
@@ -120,6 +142,36 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     }
   }, [updateSettings]);
 
+  const overlayView = useMemo<OverlayView>(() => ({
+    showBoxes: settings.showBoxes,
+    showMasks: settings.showMasks,
+    maskOpacity: settings.maskOpacity,
+    minScore: settings.minScore,
+    hiddenClasses: settings.hiddenClasses,
+  }), [settings.showBoxes, settings.showMasks, settings.maskOpacity, settings.minScore, settings.hiddenClasses]);
+
+  // Each pane reports what overlays its images carry; the settings show the union.
+  const [paneOverlays, setPaneOverlays] = useState<Record<string, OverlaySummary>>({});
+  const reporters = useRef(new Map<string, (s: OverlaySummary) => void>());
+  const reporterFor = (key: string) => {
+    let fn = reporters.current.get(key);
+    if (!fn) {
+      fn = (s: OverlaySummary) => setPaneOverlays((prev) => (prev[key] === s ? prev : { ...prev, [key]: s }));
+      reporters.current.set(key, fn);
+    }
+    return fn;
+  };
+  const overlaySummary = useMemo(
+    () => mergeOverlaySummaries(paneKeys.map((k) => paneOverlays[k] ?? EMPTY_OVERLAY_SUMMARY)),
+    [paneKeys, paneOverlays],
+  );
+  const toggleClass = (id: number, visible: boolean) => {
+    const hidden = new Set(settings.hiddenClasses);
+    if (visible) hidden.delete(id);
+    else hidden.add(id);
+    updateSettings({ hiddenClasses: [...hidden].sort((a, b) => a - b) });
+  };
+
   const renderPane = (key: string, index: number) => (
     <ImagePointView
       key={key}
@@ -134,6 +186,8 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       transform={transform}
       onTransformChange={setTransform}
       loadingHint={anyLoading}
+      overlayView={overlayView}
+      onOverlays={reporterFor(key)}
     />
   );
 
@@ -185,6 +239,61 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
           </>
         )}
       </SettingsSection>
+      {(overlaySummary.hasBoxes || overlaySummary.hasMasks) && (
+        <SettingsSection title="Overlays">
+          {overlaySummary.hasBoxes && (
+            <Toggle label="Show boxes" checked={settings.showBoxes} onChange={(showBoxes) => updateSettings({ showBoxes })} />
+          )}
+          {overlaySummary.hasBoxes && overlaySummary.hasScores && (
+            <Slider
+              label="Min box score"
+              value={settings.minScore}
+              onChange={(minScore) => updateSettings({ minScore })}
+              min={0}
+              max={1}
+              step={0.01}
+              format={(v) => v.toFixed(2)}
+              description="Boxes without a score always show."
+            />
+          )}
+          {overlaySummary.hasMasks && (
+            <>
+              <Toggle label="Show masks" checked={settings.showMasks} onChange={(showMasks) => updateSettings({ showMasks })} />
+              <Slider
+                label="Mask opacity"
+                value={settings.maskOpacity}
+                onChange={(maskOpacity) => updateSettings({ maskOpacity })}
+                min={0}
+                max={1}
+                step={0.05}
+                format={(v) => `${Math.round(v * 100)}%`}
+              />
+            </>
+          )}
+          {overlaySummary.classes.length > 0 && (
+            <div className="py-1">
+              <p className="mb-1 text-sm text-fg">Classes</p>
+              <ul className="space-y-0.5">
+                {overlaySummary.classes.map((c) => (
+                  <li key={c.id}>
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-fg-muted">
+                      <input
+                        type="checkbox"
+                        className="accent-accent"
+                        checked={!settings.hiddenClasses.includes(c.id)}
+                        onChange={(e) => toggleClass(c.id, e.target.checked)}
+                      />
+                      <span className="h-3 w-3 shrink-0 rounded-sm" style={{ backgroundColor: classColor(c.id) }} aria-hidden="true" />
+                      <span className="min-w-0 truncate">{c.name}</span>
+                      <span className="mono ml-auto text-fg-subtle">{c.id}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </SettingsSection>
+      )}
       <SettingsSection title="Display">
         <Toggle label="Show pane labels" checked={settings.showLabels} onChange={(showLabels) => updateSettings({ showLabels })} />
       </SettingsSection>
