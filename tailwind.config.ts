@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 export default {
   content: ["./index.html", "./embed.html", "./src/**/*.{ts,tsx}"],
@@ -38,5 +39,13 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    plugin(({ addVariant }) => {
+      // `can-hover:` — only devices with a real hover (mouse/trackpad). Reveal-on-
+      // hover controls use it so touch screens keep them visible.
+      addVariant("can-hover", "@media (hover: hover)");
+      // `touch:` — coarse pointers (phones, tablets).
+      addVariant("touch", "@media (pointer: coarse)");
+    }),
+  ],
 } satisfies Config;
