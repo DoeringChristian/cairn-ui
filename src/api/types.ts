@@ -37,6 +37,12 @@ export interface Run {
   user: string | null;
   tags: string | null; // JSON string
   notes: string | null;
+  /**
+   * What the run table shows as metric columns: each scalar sequence's LAST
+   * point, with an explicit `run.summary()` key of the same name replacing it.
+   * Resolved server-side per page; absent on endpoints that do not compute it.
+   */
+  values?: Record<string, number | string | boolean | null>;
 }
 
 export interface Param {

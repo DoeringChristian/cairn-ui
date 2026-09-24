@@ -38,6 +38,7 @@ const MarkdownCard = lazy(() => import("./MarkdownCard"));
 const BarChartCard = lazy(() => import("./BarChartCard"));
 
 const ScalarTileCard = lazy(() => import("./ScalarTileCard"));
+const ScalarValueCard = lazy(() => import("./ScalarValueCard"));
 
 
 /**
@@ -192,6 +193,19 @@ export default function CardRenderer(props: CardDescriptor) {
   const objectType = metric.object_type as SeriesCardType;
   switch (objectType) {
     case "scalar":
+      // One point is a value, not a curve — a component that recorded a
+      // property through track() instead of config() lands here. Decided on
+      // the CURRENT count, so the card becomes a plot as soon as the series
+      // grows; a real metric looks like this only between its first and
+      // second step. Multi-series cards keep the plot: the comparison is the
+      // point even when each run contributed one value.
+      if (metric.count === 1 && !extraSeries?.length && !controlledSeries) {
+        return (
+          <Suspense fallback={<LazyCardFallback label="loading value…" />}>
+            <ScalarValueCard {...baseProps} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />
+          </Suspense>
+        );
+      }
       return (
         <Suspense fallback={<LazyCardFallback label="loading scalar plot…" />}>
           <ScalarPlotCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />

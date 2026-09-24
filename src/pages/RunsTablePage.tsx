@@ -5,6 +5,14 @@ import { useBulkRunMutation, useInfiniteRuns, useSetTags } from "../api/hooks";
 import type { Run, RunStatus } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
 import { formatDuration, formatRelative, safeJsonParse } from "../lib/format";
+import { formatNum } from "../lib/public-plot";
+import {
+  compareValuesDirected,
+  isValueColumn,
+  valueColumnKey,
+  valueColumnsOf,
+  type ValueColumn,
+} from "../lib/run-value-columns";
 import { addCardsToComparison, applyTemplateToRuns, createComparison, useTemplates, type ComparisonTemplate } from "../lib/comparisons";
 import { gcDeletedRunKeys } from "../lib/storage";
 import { api } from "../api/client";
@@ -21,7 +29,10 @@ type SortColumn =
   | "status"
   | "created_at"
   | "duration"
-  | "tags";
+  | "tags"
+  // A metric/summary column, e.g. `value:val.acc`. The prefix keeps the union
+  // open without letting a metric named "status" shadow a built-in column.
+  | `value:${string}`;
 type SortDirection = "asc" | "desc";
 
 interface SortState {
@@ -44,7 +55,14 @@ function durationSeconds(run: Run): number {
   return Math.max(0, end - start);
 }
 
-function compareRuns(a: Run, b: Run, col: SortColumn): number {
+/** Built-in columns only — metric columns are handled by
+ *  `compareValuesDirected`, and excluding them here keeps this switch
+ *  exhaustive over the fixed set. */
+function compareRuns(
+  a: Run,
+  b: Run,
+  col: Exclude<SortColumn, ValueColumn>,
+): number {
   switch (col) {
     case "name": {
       const an = (a.display_name ?? a.id).toLowerCase();
@@ -231,11 +249,23 @@ export default function RunsTablePage() {
     });
   }, [runs, statusFilter, searchRegex, showLatestOnly, latestIds]);
 
+  // Metric columns are the UNION across the loaded runs, not the intersection:
+  // a run that crashed before logging `val.acc` should show a blank cell, not
+  // delete the column for every other run.
+  const valueColumns = useMemo(() => valueColumnsOf(filtered), [filtered]);
+
   const sorted = useMemo(() => {
     const arr = [...filtered];
     arr.sort((a, b) => {
-      const cmp = compareRuns(a, b, sort.column);
-      if (cmp !== 0) return sort.direction === "asc" ? cmp : -cmp;
+      // Metric columns direct themselves: missing values sort last in BOTH
+      // directions, which the negation below would undo.
+      const cmp = isValueColumn(sort.column)
+        ? compareValuesDirected(a, b, valueColumnKey(sort.column), sort.direction)
+        : (() => {
+            const c = compareRuns(a, b, sort.column);
+            return sort.direction === "asc" ? c : -c;
+          })();
+      if (cmp !== 0) return cmp;
       // Stable tiebreaker: run ID is unique and immutable.
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
@@ -679,7 +709,9 @@ export default function RunsTablePage() {
               );
             })}
           </ul>
-          <div className="hidden overflow-hidden rounded-lg border border-border md:block">
+          {/* overflow-x-auto, not -hidden: metric columns are unbounded in
+              number and were previously clipped out of reach. */}
+          <div className="hidden overflow-x-auto overflow-y-hidden rounded-lg border border-border md:block">
             <table className="w-full text-sm">
             <thead className="bg-bg-elevated text-left text-xs uppercase tracking-wide text-fg-muted">
               <tr>
@@ -727,6 +759,16 @@ export default function RunsTablePage() {
                   sort={sort}
                   onClick={toggleSort}
                 />
+                {valueColumns.map((key) => (
+                  <SortableTh
+                    key={key}
+                    label={key}
+                    column={`value:${key}`}
+                    sort={sort}
+                    onClick={toggleSort}
+                    numeric
+                  />
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -784,6 +826,18 @@ export default function RunsTablePage() {
                         />
                       </span>
                     </td>
+                    {valueColumns.map((key) => {
+                      const v = r.values?.[key];
+                      return (
+                        <td key={key} className="mono num px-3 py-2 text-fg-muted">
+                          {v == null
+                            ? ""
+                            : typeof v === "number"
+                              ? formatNum(v)
+                              : String(v)}
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
