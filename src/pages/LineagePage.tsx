@@ -121,8 +121,8 @@ function nodeColor(node: LineageNode): { fill: string; stroke: string } {
   }
 }
 
-function edgeColor(type: string): string {
-  return type === "produced"
+function edgeColor(relation: LineageEdge["relation"]): string {
+  return relation === "produced"
     ? "rgba(34,197,94,0.5)"
     : "rgba(59,130,246,0.5)";
 }
@@ -193,7 +193,7 @@ export default function LineagePage() {
               y1={le.y1}
               x2={le.x2}
               y2={le.y2}
-              stroke={edgeColor(le.edge.type)}
+              stroke={edgeColor(le.edge.relation)}
               strokeWidth={1.5}
               markerEnd="url(#arrowhead)"
             />

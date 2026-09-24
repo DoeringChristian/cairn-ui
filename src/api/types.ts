@@ -202,7 +202,8 @@ export interface LineageNode {
   family_id?: string;
   family_name?: string;
   version?: number;
-  // Run fields may be absent — label derived from id
+  // Run fields: label is the display name (absent for a deleted run — the
+  // page falls back to the id), metadata.status the run status.
   label?: string;
   metadata?: Record<string, unknown>;
 }
@@ -210,7 +211,7 @@ export interface LineageNode {
 export interface LineageEdge {
   source: string;
   target: string;
-  type: "produced" | "consumed";
+  relation: "produced" | "consumed";
 }
 
 export interface LineageGraph {
