@@ -270,3 +270,46 @@ export interface RunArtifactOutput {
   family_name: string;
   version: number;
 }
+
+// ---- Sweeps ------------------------------------------------------------------
+
+export type SweepStatus = "running" | "paused" | "cancelled" | "finished";
+export type SweepMethod = "grid" | "random" | "bayes";
+
+/** One claimed set of params and its outcome (`GET /api/sweeps/{id}`). */
+export interface SweepTrial {
+  id: string;
+  sweep_id: string;
+  /** The first run that joined the trial; null until one does. */
+  run_id: string | null;
+  params: Record<string, unknown>;
+  /** "running", then how the trial ended ("completed", "failed", "killed"). */
+  status: string;
+  value: number | null;
+  created_at: string;
+}
+
+export interface Sweep {
+  id: string;
+  project_id: string;
+  name: string | null;
+  method: SweepMethod;
+  /** The search space as created (wandb's `parameters` block). */
+  space: Record<string, unknown>;
+  metric: string | null;
+  goal: "minimize" | "maximize";
+  command: string | null;
+  status: SweepStatus;
+  created_at: string;
+  trial_count: number;
+  /** Trial count per trial status. */
+  counts: Record<string, number>;
+  /** The best completed trial by metric and goal. */
+  best: SweepTrial | null;
+}
+
+export interface SweepDetail extends Sweep {
+  trials: SweepTrial[];
+}
+
+export type SweepAction = "pause" | "resume" | "cancel";

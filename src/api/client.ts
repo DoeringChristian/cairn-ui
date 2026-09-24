@@ -323,4 +323,12 @@ export const api = {
     get<import("./types").LineageGraph>(
       `/api/projects/${projectId}/lineage`,
     ),
+  sweeps: (projectId: string) =>
+    get<{ sweeps: import("./types").Sweep[] }>(
+      `/api/sweeps?project=${encodeURIComponent(projectId)}`,
+    ),
+  sweep: (sweepId: string) =>
+    get<import("./types").SweepDetail>(`/api/sweeps/${sweepId}`),
+  sweepAction: (sweepId: string, action: import("./types").SweepAction) =>
+    post<import("./types").SweepDetail>(`/api/sweeps/${sweepId}/${action}`, {}),
 };
