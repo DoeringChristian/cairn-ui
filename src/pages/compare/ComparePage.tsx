@@ -295,7 +295,7 @@ export default function ComparePage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[320px_1fr]">
         <aside
           ref={sidebarRef}
-          className={`card p-3 md:sticky md:top-[41px] md:max-h-[calc(100vh-41px)] md:overflow-y-auto ${sidebarOpen ? "" : "hidden md:block"}`}
+          className={`card p-3 md:sticky md:top-[var(--header-h)] md:max-h-[calc(100vh-var(--header-h))] md:overflow-y-auto ${sidebarOpen ? "" : "hidden md:block"}`}
         >
           <Sidebar
             comparisons={comparisons}

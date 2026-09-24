@@ -163,7 +163,7 @@ export default function LineagePage() {
       <h1 className="mono text-xl font-semibold mb-6">
         {projectId} / lineage
       </h1>
-      <div className="overflow-auto rounded-lg border border-border bg-bg-elevated -mx-4 md:mx-0" style={{ WebkitOverflowScrolling: "touch" }}>
+      <div className="overflow-auto rounded-lg border border-border bg-bg-elevated" style={{ WebkitOverflowScrolling: "touch" }}>
         <svg
           width={Math.max(maxX, 300)}
           height={Math.max(maxY, 200)}
