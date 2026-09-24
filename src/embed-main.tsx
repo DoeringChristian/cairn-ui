@@ -1,18 +1,15 @@
 /**
- * WS-EMBED entry — renders ONE viewer card standalone in an iframe.
+ * Embed entry — renders ONE viewer card standalone in an iframe.
  *
- * This is a SECOND vite entry (alongside main.tsx / index.html), wired into
+ * A second vite entry (alongside main.tsx / index.html), wired into
  * vite.config.ts as a rollup input so `vite build` emits `embed.html`
- * beside `index.html`. It is intentionally minimal: a `QueryClientProvider`
- * plus a single `CardRenderer` — NO App chrome, nav, or router.
+ * beside `index.html`. Minimal by design: a `QueryClientProvider` plus a
+ * single `ComparisonCardView` — no App chrome, nav, or router.
  *
  * The card is described by a spec fetched from `/api/embed/specs/:sid`
  * (`?sid=` in the URL). A spec is a viewer `ComparisonCard`
- * (`{type, series:[{runId, name, context_hash}]}`); we render it exactly the
- * way `ReportCardsBlock`'s `ReportCardRenderer` does — by synthesizing a
- * seed `SequenceMeta` from the spec and letting `CardRenderer` fetch the real
- * data. Reusing that precedent means NO fork of the card dispatch and `three`
- * stays lazy.
+ * (`{type, series:[{runId, name, context_hash}]}`), rendered by the same
+ * `ComparisonCardView` comparisons and reports use, so `three` stays lazy.
  *
  * Auto-height: cards take a fixed px height from `CardShell`, so a host that
  * wants to size its iframe to the content needs a signal. We emit the same
@@ -20,22 +17,17 @@
  * plugin cards use (see `card-kit/use-iframe-auto-height.ts` for the host
  * side), measuring the rendered card via a `ResizeObserver`.
  *
- * TODO(remote-embed): cross-origin hosts will need a per-sid capability token
- * in the URL + a server `--embed-origins` CORS allowlist, and this file's
- * `postMessage("*")` target should be narrowed to the allowed host origin.
- * Deferred to a later security-reviewed follow-up — LOCAL / SAME-ORIGIN only.
+ * Local / same-origin only: cross-origin hosts would need a per-sid
+ * capability token, a server CORS allowlist, and a narrowed
+ * `postMessage("*")` target.
  */
 
 import React, { Component, useMemo, useRef, type ReactNode } from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import CardRenderer from "./components/CardRenderer";
-import type { SequenceMeta } from "./api/types";
-import {
-  isMultiRunCardType,
-  cardSettingsKeyForScope,
-} from "./lib/comparisons";
+import ComparisonCardView from "./components/comparison/ComparisonCardView";
+import { cardSettingsKeyForScope } from "./lib/comparisons";
 import type { CardSpec } from "./lib/cards/card-spec";
 import { saveCardSettings } from "./lib/card-settings";
 import { useEmitAutoHeight } from "./lib/use-emit-auto-height";
@@ -84,27 +76,14 @@ class EmbedErrorBoundary extends Component<
   }
 }
 
-/** Render one card from its spec, reusing the ReportCardRenderer precedent. */
+/** Render one card from its spec. */
 function EmbeddedCard({ card }: { card: CardSpec }) {
-  // Ensure a stable id for the settings key even if the stored spec omits it.
-  //
-  // RC2 (WS-MCFIX): seed the card's persisted settings from `spec.settings`
-  // HERE — synchronously, inside this useMemo — rather than in a `useEffect`.
-  // A card reads its persisted settings synchronously on first render (see
-  // `useCardSettings`'s `useRef` initializer in lib/card-settings.ts, which
-  // calls `loadCardSettings` before any effect runs), so seeding via an
-  // effect would always be one render too late: the child `CardRenderer`
-  // below would already have mounted with default settings (mode="normal")
-  // by the time the effect fired. A synchronous `useMemo` in the PARENT's
-  // render body runs strictly before React renders the child, so the write
-  // lands before `CardRenderer`/`useCardSettings` ever reads it — mirrors
-  // `restoreReportCardSettings` (lib/reports/payload.ts), which relies on
-  // the same before-first-render ordering (there, gated behind `blocks`
-  // starting empty until the settings write already happened).
-  //
-  // Keyed by `cardSettingsKeyForScope(EMBED_SCOPE, ...)` — this embed's OWN
-  // scope/localStorage key, never the real app's comparison/report scopes,
-  // so this can't leak into or clobber a user's saved comparisons/reports.
+  // Give the card a stable id for its settings key, and seed its persisted
+  // settings from `spec.settings` synchronously, here in the parent's render:
+  // a card reads its settings on first render (`useCardSettings`'s `useRef`
+  // initializer), so an effect would land one render too late.
+  // `cardSettingsKeyForScope(EMBED_SCOPE, ...)` is the embed's own scope and
+  // never touches a user's comparison/report settings.
   const cardWithId = useMemo<CardSpec>(() => {
     const withId: CardSpec = card.id ? card : { ...card, id: `${EMBED_SCOPE}-card` };
     if (card.settings) {
@@ -116,48 +95,8 @@ function EmbeddedCard({ card }: { card: CardSpec }) {
     return withId;
   }, [card]);
 
-  if (isMultiRunCardType(cardWithId.type)) {
-    const runIds = Array.from(new Set(cardWithId.series.map((s) => s.runId)));
-    return (
-      <CardRenderer
-        kind="multi-run"
-        cardType={cardWithId.type}
-        runIds={runIds}
-        settingsKey={cardSettingsKeyForScope(EMBED_SCOPE, cardWithId)}
-      />
-    );
-  }
-
-  const primary = cardWithId.series[0];
-  if (!primary) {
-    return (
-      <div data-cairn-card className="card p-4 text-sm text-fg-muted">
-        Empty card spec.
-      </div>
-    );
-  }
-
-  // The synthetic-seed SequenceMeta precedent (ReportCardRenderer): metadata
-  // fields are placeholders; CardRenderer fetches the real sequence by
-  // (runId, name, context_hash).
-  const seedMetric: SequenceMeta = {
-    name: primary.name,
-    object_type: cardWithId.type,
-    context: null,
-    context_hash: primary.context_hash,
-    min_step: 0,
-    max_step: 0,
-    count: 0,
-  };
-
   return (
-    <CardRenderer
-      runId={primary.runId}
-      metric={seedMetric}
-      extraSeries={cardWithId.series.slice(1)}
-      controlledSeries
-      settingsKeyOverride={cardSettingsKeyForScope(EMBED_SCOPE, cardWithId)}
-    />
+    <ComparisonCardView card={cardWithId} settingsKey={cardSettingsKeyForScope(EMBED_SCOPE, cardWithId)} />
   );
 }
 

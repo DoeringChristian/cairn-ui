@@ -4,7 +4,7 @@ import { useElementScrollRestore } from "../lib/use-scroll-restore";
 import ComparisonOverviewTab from "./ComparisonOverviewTab";
 import ComparisonSourceTab from "./ComparisonSourceTab";
 import AddCardModal, { type AddCardSelection } from "../components/AddCardModal";
-import CardRenderer from "../components/CardRenderer";
+import ComparisonCardView from "../components/comparison/ComparisonCardView";
 import ReorderableCardGrid from "../components/ReorderableCardGrid";
 import RunSelectorBadge from "../components/RunSelectorBadge";
 import { SectionBlock } from "../components/CardGrid";
@@ -19,7 +19,6 @@ import {
   createComparison,
   createTemplate,
   deleteTemplate,
-  isMultiRunCardType,
   rebuildCardsFromRuns,
   reorderComparisonCards,
   deleteComparison,
@@ -60,7 +59,6 @@ import { api } from "../api/client";
 
 import { disambiguateRunLabels, shortRunId, useRunMetadataVersion } from "../lib/run-label";
 import type { Run } from "../api/types";
-import type { SequenceMeta } from "../api/types";
 
 export default function ComparePage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -1026,9 +1024,9 @@ function ComparisonView({
                     cards={section.cards.map((card) => ({
                       key: card.id,
                       content: (
-                        <ComparisonCardRenderer
+                        <ComparisonCardView
                           card={card}
-                          comparisonId={comparison.id}
+                          settingsKey={cardSettingsKeyFor(comparison.id, card)}
                           onRemove={() => onRemoveCard(card.id)}
                           autoOpenSettings={card.id === autoFocusCardId}
                         />
@@ -1047,81 +1045,6 @@ function ComparisonView({
         <ComparisonSourceTab compRunIds={compRunIds} />
       )}
     </div>
-  );
-}
-
-interface ComparisonCardRendererProps {
-  card: ComparisonCard;
-  comparisonId: string;
-  onRemove: () => void;
-  /** Auto-open this card's settings and scroll to it once, on mount. */
-  autoOpenSettings?: boolean;
-}
-
-function ComparisonCardRenderer({
-  card,
-  comparisonId,
-  onRemove,
-  autoOpenSettings,
-}: ComparisonCardRendererProps) {
-  const runIds = useMemo(
-    () => Array.from(new Set(card.series.map((s) => s.runId))),
-    [card.series],
-  );
-
-  if (isMultiRunCardType(card.type)) {
-    return (
-      <CardRenderer
-        kind="multi-run"
-        cardType={card.type}
-        runIds={runIds}
-        settingsKey={{
-          runId: compareRunId(comparisonId),
-          metricName: card.type,
-          contextHash: card.id,
-        }}
-        onRemove={onRemove}
-        autoOpenSettings={autoOpenSettings}
-      />
-    );
-  }
-
-  const primary = card.series[0];
-  if (!primary) {
-    return (
-      <div data-cairn-card className="card p-4 text-sm text-fg-muted flex items-baseline justify-between gap-2">
-        <span>Empty card.</span>
-        <button type="button" className="btn text-xs" onClick={onRemove}>
-          Remove
-        </button>
-      </div>
-    );
-  }
-
-  const seedMetric: SequenceMeta = {
-    name: primary.name,
-    object_type: card.type,
-    context: null,
-    context_hash: primary.context_hash,
-    min_step: 0,
-    max_step: 0,
-    count: 0,
-  };
-
-  return (
-      <CardRenderer
-        runId={primary.runId}
-        metric={seedMetric}
-        extraSeries={card.series.slice(1)}
-        controlledSeries
-        onRemove={onRemove}
-        settingsKeyOverride={{
-          runId: compareRunId(comparisonId),
-          metricName: card.id,
-          contextHash: "",
-        }}
-        autoOpenSettings={autoOpenSettings}
-      />
   );
 }
 

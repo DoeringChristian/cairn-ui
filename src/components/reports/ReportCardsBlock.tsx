@@ -14,22 +14,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AddCardModal, { type AddCardSelection } from "../AddCardModal";
-import CardRenderer from "../CardRenderer";
+import ComparisonCardView from "../comparison/ComparisonCardView";
 import ReorderableCardGrid from "../ReorderableCardGrid";
 import RunSelectorBadge from "../RunSelectorBadge";
 import { CardMutationContext, CardSettingsChangeContext } from "../../lib/card-settings";
 import {
-  isMultiRunCardType,
   rebindCardsToMetricIndex,
   rebindCardsToRuns,
   rebuildCardsFromRuns,
-  type ComparisonCard,
 } from "../../lib/comparisons";
 import { cardFromSpec, cardSettingsKeyForReport, useMetricIndex, type CardsBlock } from "../../lib/reports";
 import { describeRunSelector, DEFAULT_RUN_SELECTOR_N, type QueryRunSelector } from "../../lib/run-selector";
 import { useRunSelectorResolution } from "../../api/hooks";
 import { disambiguateRunLabels, shortRunId, useRunMetadataVersion } from "../../lib/run-label";
-import type { Run, SequenceMeta } from "../../api/types";
+import type { Run } from "../../api/types";
 
 interface Props {
   projectId: string;
@@ -428,9 +426,9 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
           cards={displayCards.map((card) => ({
             key: card.id,
             content: (
-              <ReportCardRenderer
-                reportId={reportId}
+              <ComparisonCardView
                 card={card}
+                settingsKey={cardSettingsKeyForReport(reportId, card)}
                 onRemove={editMode ? () => removeCard(card.id) : undefined}
               />
             ),
@@ -441,64 +439,5 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
     </div>
     </CardSettingsChangeContext.Provider>
     </CardMutationContext.Provider>
-  );
-}
-
-function ReportCardRenderer({
-  reportId,
-  card,
-  onRemove,
-}: {
-  reportId: string;
-  card: ComparisonCard;
-  onRemove?: () => void;
-}) {
-  const runIds = useMemo(() => Array.from(new Set(card.series.map((s) => s.runId))), [card.series]);
-
-  if (isMultiRunCardType(card.type)) {
-    return (
-      <CardRenderer
-        kind="multi-run"
-        cardType={card.type}
-        runIds={runIds}
-        settingsKey={cardSettingsKeyForReport(reportId, card)}
-        onRemove={onRemove}
-      />
-    );
-  }
-
-  const primary = card.series[0];
-  if (!primary) {
-    return (
-      <div data-cairn-card className="card p-4 text-sm text-fg-muted flex items-baseline justify-between gap-2">
-        <span>Empty card.</span>
-        {onRemove && (
-          <button type="button" className="btn text-xs" onClick={onRemove}>
-            Remove
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  const seedMetric: SequenceMeta = {
-    name: primary.name,
-    object_type: card.type,
-    context: null,
-    context_hash: primary.context_hash,
-    min_step: 0,
-    max_step: 0,
-    count: 0,
-  };
-
-  return (
-    <CardRenderer
-      runId={primary.runId}
-      metric={seedMetric}
-      extraSeries={card.series.slice(1)}
-      controlledSeries
-      onRemove={onRemove}
-      settingsKeyOverride={cardSettingsKeyForReport(reportId, card)}
-    />
   );
 }
