@@ -1,4 +1,4 @@
-/** Generate a stable id for a report block/card — same shape as comparisons' newId(). */
+/** A fresh unique id for a comparison, template, report block or card. */
 export function newId(): string {
   const c =
     typeof globalThis !== "undefined"

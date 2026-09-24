@@ -1,9 +1,8 @@
 // ---------------------------------------------------------------------------
 // Template matching: which template cards can be reconstructed from a run set.
 //
-// Pure (no api, no storage) — `apply-template.ts` fetches the sequences and
-// builds the comparison; this decides what the template resolves to. Report
-// templates reuse it verbatim (see lib/reports/apply-template.ts).
+// Pure (no api, no storage) — lib/templates/apply.ts fetches the sequences;
+// this decides what a comparison or report template resolves to.
 // ---------------------------------------------------------------------------
 
 import { isMultiRunCardType, MULTI_RUN_CARD_LABELS } from "./types.ts";
@@ -22,7 +21,7 @@ export interface MatchedTemplateCard {
 
 /**
  * metric name -> series entries available across the given runs, one entry per
- * (run, context) — see `buildSeqMap` in apply-template.ts.
+ * (run, context) — see `buildSeqMap` in lib/templates/apply.ts.
  */
 export type SeqMap = Map<string, SeriesEntry[]>;
 
@@ -38,8 +37,6 @@ export interface MatchableTemplate {
  * - Multi-run cards (parallel/scatter/bar/tile) span the run set directly —
  *   they don't correspond to a metric name, so they always match as long as
  *   at least one run is given (they carry no `keys`; we branch on `tc.type`).
- *   Templates saved by the pre-`keys` code are normalized on load — see
- *   `normalizeTemplateCards` in template-cards.ts.
  * - Per-metric cards resolve each of their `keys` (`"<name>::<contextHash>"`)
  *   against `seqMap`, concatenating the resulting series — a card that
  *   overlaid several metrics is restored as an overlay, not just its first
