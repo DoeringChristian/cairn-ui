@@ -68,18 +68,9 @@ export function cardSettingsStorageKey(key: CardSettingsKey): string {
   return storageKeys.cardSettings(key.runId, key.metricName, key.contextHash);
 }
 
-/**
- * Load persisted card settings, discarding anything not tagged with the
- * current `version: 1`. Every historical write includes `version: 1` (see
- * each card's `DEFAULT_SETTINGS`, which `useCardSettings` always merges
- * under persisted overrides before saving), so this check is a no-op for
- * real data — it only guards against a future version bump or corrupted
- * storage.
- */
+/** Load persisted card settings, or null when none are stored. */
 export function loadCardSettings<T>(key: CardSettingsKey): T | null {
-  const parsed = loadJson<{ version?: unknown }>(localStorage, cardSettingsStorageKey(key));
-  if (parsed === null || parsed.version !== 1) return null;
-  return parsed as T;
+  return loadJson<T>(localStorage, cardSettingsStorageKey(key));
 }
 
 export function saveCardSettings<T>(key: CardSettingsKey, value: T): void {

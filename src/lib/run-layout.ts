@@ -55,7 +55,7 @@ export function parseCardKey(cardKey: string): { name: string; contextHash: stri
 
 export function loadRunLayout(runId: string): RunLayout {
   const parsed = loadJson<Partial<RunLayout>>(localStorage, storageKeys.runLayout(runId));
-  if (!parsed || parsed.version !== 1) return { ...EMPTY_LAYOUT };
+  if (!parsed) return { ...EMPTY_LAYOUT };
   return {
     version: 1,
     sectionOrder: Array.isArray(parsed.sectionOrder) ? [...parsed.sectionOrder] : [],

@@ -28,7 +28,7 @@ const EMPTY_PROJECT_VIEW: ProjectView = { version: 1, hidden: [] };
 
 export function loadProjectView(projectId: string): ProjectView {
   const parsed = loadJson<Partial<ProjectView>>(localStorage, storageKeys.projectView(projectId));
-  if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.hidden)) {
+  if (!parsed || !Array.isArray(parsed.hidden)) {
     return { ...EMPTY_PROJECT_VIEW };
   }
   return {
