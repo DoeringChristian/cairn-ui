@@ -12,12 +12,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
-import { useModalBehavior } from "../lib/use-modal-behavior";
 import { isMultiRunCardType, type ComparisonSeriesRef } from "../lib/comparisons";
 import { type AddCardSelection } from "../lib/reports";
 import { buildMetricIndex, type MetricIndexEntry } from "../lib/reports/metric-index";
 import { shortRunLabel } from "../lib/run-label";
 import type { SequenceMeta } from "../api/types";
+import Dialog, { DialogFooter } from "./ui/Dialog";
+import { useCompactViewport } from "./ui/use-compact-viewport";
 
 // The type of `onAdd`'s argument, defined with `cardFromSpec` in
 // lib/reports/card-from-spec.ts.
@@ -87,7 +88,7 @@ export default function AddCardModal({
     }
   }, [open]);
 
-  useModalBehavior(open, onClose);
+  const compact = useCompactViewport();
 
   // Fetch sequences for all runs
   const seqQueries = useQueries({
@@ -205,160 +206,138 @@ export default function AddCardModal({
     onClose();
   };
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      <div className="relative z-10 flex flex-col m-8 mx-auto w-full max-w-2xl rounded-lg border border-border bg-bg overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Add Card</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-6 w-6 inline-flex items-center justify-center rounded hover:bg-bg-hover text-fg-muted hover:text-fg text-lg"
-            aria-label="Close"
-          >
-            {"\u00D7"}
-          </button>
-        </div>
-
-        {/* Type tabs */}
-        <div className="flex gap-1 border-b border-border px-4 py-2 overflow-x-auto">
-          {allTypes.map((type) => {
-            const count = grouped.get(type)?.length ?? 0;
-            return (
-              <button
-                key={type}
-                type="button"
-                onClick={() => {
-                  setSelectedType(type);
-                  setManualPickerOpen(false);
-                }}
-                className={`shrink-0 rounded px-3 py-1 text-xs font-medium transition-colors ${
-                  activeType === type
-                    ? "bg-accent text-white"
-                    : "text-fg-muted hover:bg-bg-hover hover:text-fg"
-                }`}
-              >
-                {TYPE_LABELS[type] ?? type} ({count})
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Search */}
-        <div className="flex items-center gap-2 border-b border-border px-4 py-2">
-          <input
-            type="text"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder={manualPickerOpen ? "Filter run · metric..." : "Filter metrics..."}
-            className="input w-full"
-            autoFocus
-          />
-          {activeType === "scalar" && (
+    <Dialog open={open} onClose={onClose} title="Add Card" size="2xl" fill>
+      {/* Type tabs */}
+      <div className="flex shrink-0 gap-1 border-b border-border px-4 py-2 overflow-x-auto">
+        {allTypes.map((type) => {
+          const count = grouped.get(type)?.length ?? 0;
+          return (
             <button
+              key={type}
               type="button"
-              onClick={() => setManualPickerOpen((v) => !v)}
-              className={`shrink-0 rounded px-2 py-1 text-xs font-medium whitespace-nowrap transition-colors ${
-                manualPickerOpen
+              onClick={() => {
+                setSelectedType(type);
+                setManualPickerOpen(false);
+              }}
+              className={`shrink-0 rounded px-3 py-1 text-xs font-medium transition-colors touch:min-h-10 ${
+                activeType === type
                   ? "bg-accent text-white"
-                  : "border border-border-subtle text-fg-muted hover:bg-bg-hover hover:text-fg"
+                  : "text-fg-muted hover:bg-bg-hover hover:text-fg"
               }`}
             >
-              {manualPickerOpen ? "Back to metrics" : "Build custom overlay…"}
+              {TYPE_LABELS[type] ?? type} ({count})
             </button>
-          )}
-        </div>
+          );
+        })}
+      </div>
 
-        {manualPickerOpen ? (
-          <>
-            {/* Custom overlay picker: arbitrary (run, metric) checkboxes —
-                unlike the metric list above, entries may have different
-                names (e.g. run-a's loss overlaid with run-b's accuracy). */}
-            <p className="px-4 pt-2 text-xs text-fg-muted">
-              Pick any combination of run × scalar metric — names don't need to match.
-            </p>
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2">
-              {anyLoading && scalarCombos.length === 0 ? (
-                <div className="p-4 text-sm text-fg-muted">Loading metrics...</div>
-              ) : filteredScalarCombos.length === 0 ? (
-                <div className="p-4 text-sm text-fg-muted">
-                  {q ? "No matching run/metric combinations." : "No scalar metrics available."}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-0.5">
-                  {filteredScalarCombos.map((c) => (
-                    <label
-                      key={c.key}
-                      className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg hover:bg-bg-hover cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={manualSelected.has(c.key)}
-                        onChange={() => toggleManualCombo(c.key)}
-                      />
-                      <span className="mono truncate">{c.label}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center justify-between border-t border-border px-4 py-3">
-              <span className="text-xs text-fg-muted">
-                {manualSelected.size} series selected
-              </span>
-              <button
-                type="button"
-                onClick={handleAddManual}
-                disabled={manualSelected.size === 0}
-                className="btn text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                + Add overlay card
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {anyLoading && metrics.length === 0 ? (
+      {/* Search */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
+        <input
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder={manualPickerOpen ? "Filter run · metric..." : "Filter metrics..."}
+          className="input w-full min-w-0 touch:min-h-10"
+          // On phones focusing would raise the keyboard over the list.
+          autoFocus={!compact}
+        />
+        {activeType === "scalar" && (
+          <button
+            type="button"
+            onClick={() => setManualPickerOpen((v) => !v)}
+            className={`shrink-0 rounded px-2 py-1 text-xs font-medium whitespace-nowrap transition-colors touch:min-h-10 ${
+              manualPickerOpen
+                ? "bg-accent text-white"
+                : "border border-border-subtle text-fg-muted hover:bg-bg-hover hover:text-fg"
+            }`}
+          >
+            {manualPickerOpen ? "Back to metrics" : "Build custom overlay…"}
+          </button>
+        )}
+      </div>
+
+      {manualPickerOpen ? (
+        <>
+          {/* Custom overlay picker: arbitrary (run, metric) checkboxes —
+              unlike the metric list above, entries may have different
+              names (e.g. run-a's loss overlaid with run-b's accuracy). */}
+          <p className="shrink-0 px-4 pt-2 text-xs text-fg-muted">
+            Pick any combination of run × scalar metric — names don't need to match.
+          </p>
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2">
+            {anyLoading && scalarCombos.length === 0 ? (
               <div className="p-4 text-sm text-fg-muted">Loading metrics...</div>
-            ) : filtered.length === 0 ? (
+            ) : filteredScalarCombos.length === 0 ? (
               <div className="p-4 text-sm text-fg-muted">
-                {q ? "No matching metrics." : "No metrics of this type."}
+                {q ? "No matching run/metric combinations." : "No scalar metrics available."}
               </div>
             ) : (
-              <div className="divide-y divide-border-subtle">
-                {filtered.map((m, i) => (
-                    <button
-                      key={`${m.name}::${m.object_type}::${i}`}
-                      type="button"
-                      onClick={() => {
-                        onAdd(toSelection(m));
-                        onClose();
-                      }}
-                      className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm text-fg hover:bg-bg-hover transition-colors"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="mono truncate">{m.name}</div>
-                        <div className="text-xs text-fg-muted mt-0.5">
-                          {m.runs.length} run{m.runs.length !== 1 ? "s" : ""}
-                        </div>
-                      </div>
-                      <span className="ml-2 shrink-0 text-xs text-accent">+ Add</span>
-                    </button>
+              <div className="flex flex-col gap-0.5">
+                {filteredScalarCombos.map((c) => (
+                  <label
+                    key={c.key}
+                    className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg hover:bg-bg-hover cursor-pointer touch:min-h-10"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={manualSelected.has(c.key)}
+                      onChange={() => toggleManualCombo(c.key)}
+                    />
+                    <span className="mono truncate">{c.label}</span>
+                  </label>
                 ))}
               </div>
             )}
           </div>
-        )}
-      </div>
-    </div>
+          <DialogFooter>
+            <span className="text-xs text-fg-muted">
+              {manualSelected.size} series selected
+            </span>
+            <button
+              type="button"
+              onClick={handleAddManual}
+              disabled={manualSelected.size === 0}
+              className="btn text-xs touch:min-h-10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              + Add overlay card
+            </button>
+          </DialogFooter>
+        </>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {anyLoading && metrics.length === 0 ? (
+            <div className="p-4 text-sm text-fg-muted">Loading metrics...</div>
+          ) : filtered.length === 0 ? (
+            <div className="p-4 text-sm text-fg-muted">
+              {q ? "No matching metrics." : "No metrics of this type."}
+            </div>
+          ) : (
+            <div className="divide-y divide-border-subtle">
+              {filtered.map((m, i) => (
+                  <button
+                    key={`${m.name}::${m.object_type}::${i}`}
+                    type="button"
+                    onClick={() => {
+                      onAdd(toSelection(m));
+                      onClose();
+                    }}
+                    className="flex w-full min-w-0 items-center justify-between px-4 py-2.5 text-left text-sm text-fg hover:bg-bg-hover transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="mono truncate">{m.name}</div>
+                      <div className="text-xs text-fg-muted mt-0.5">
+                        {m.runs.length} run{m.runs.length !== 1 ? "s" : ""}
+                      </div>
+                    </div>
+                    <span className="ml-2 shrink-0 text-xs text-accent">+ Add</span>
+                  </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </Dialog>
   );
 }

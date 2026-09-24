@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
+import Dialog, { DialogBody } from "./ui/Dialog";
 
 interface Props {
   open: boolean;
@@ -43,30 +44,24 @@ export default function ImportRunsDialog({ open, onClose }: Props) {
     }
   }, [file, qc]);
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={handleClose}>
-      <div
-        className="rounded-lg border border-border bg-bg-elevated p-6 shadow-lg w-full max-w-md"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-sm font-semibold mb-4">Import Runs</h2>
+    <Dialog open={open} onClose={handleClose} title="Import Runs" size="md">
+      <DialogBody className="p-4">
 
         {result ? (
           <div className="flex flex-col gap-2">
             <p className="text-xs text-accent">
               Imported {result.length} run{result.length === 1 ? "" : "s"}:
             </p>
-            <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+            <div className="flex flex-col gap-1">
               {result.map((r) => (
-                <div key={r.new_id} className="text-xs text-fg-muted rounded border border-border-subtle px-2 py-1">
+                <div key={r.new_id} className="text-xs text-fg-muted rounded border border-border-subtle px-2 py-1 break-all">
                   <span className="mono">{r.name}</span>
                   <span className="text-fg-subtle ml-2">{r.original_id} → {r.new_id}</span>
                 </div>
               ))}
             </div>
-            <button type="button" className="btn mt-2 text-xs" onClick={handleClose}>
+            <button type="button" className="btn mt-2 justify-center text-xs touch:min-h-10" onClick={handleClose}>
               Done
             </button>
           </div>
@@ -92,7 +87,7 @@ export default function ImportRunsDialog({ open, onClose }: Props) {
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) setFile(f); }}
               />
               {file ? (
-                <p className="text-xs text-fg">{file.name} ({(file.size / 1024).toFixed(0)} KB)</p>
+                <p className="text-xs text-fg break-all">{file.name} ({(file.size / 1024).toFixed(0)} KB)</p>
               ) : (
                 <p className="text-xs text-fg-muted">Drop a .zip export here, or click to browse</p>
               )}
@@ -101,12 +96,12 @@ export default function ImportRunsDialog({ open, onClose }: Props) {
             {error && <p className="text-xs text-status-failed">{error}</p>}
 
             <div className="flex justify-end gap-2">
-              <button type="button" className="btn text-xs" onClick={handleClose} disabled={busy}>
+              <button type="button" className="btn text-xs touch:min-h-10" onClick={handleClose} disabled={busy}>
                 Cancel
               </button>
               <button
                 type="button"
-                className="btn text-xs"
+                className="btn text-xs touch:min-h-10"
                 onClick={handleImport}
                 disabled={!file || busy}
               >
@@ -115,7 +110,7 @@ export default function ImportRunsDialog({ open, onClose }: Props) {
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </DialogBody>
+    </Dialog>
   );
 }
