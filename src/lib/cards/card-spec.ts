@@ -73,6 +73,7 @@ export interface CardSettingsSpec {
   version?: number;
   yScale?: "linear" | "log";
   smoothing?: number;
+  smoothingKind?: "ema" | "twema" | "gaussian" | "window";
   step?: number;
   [key: string]: JSONValue | undefined;
 }

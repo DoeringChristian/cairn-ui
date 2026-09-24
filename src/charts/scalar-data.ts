@@ -1,4 +1,4 @@
-import { emaSmooth } from "../lib/plot-utils/smooth.ts";
+import { smoothSeries, type SmoothingKind } from "../lib/plot-utils/smooth.ts";
 import { filterOutliers } from "../lib/plot-utils/outlier.ts";
 import type { AxisScale, Series, SeriesPoint } from "../lib/plot-utils/types.ts";
 
@@ -24,14 +24,14 @@ export interface AlignedData {
  */
 export function alignSeries(
   series: Series[],
-  opts: { smoothing: number; outlierPct: [number, number]; xScale: AxisScale; yScale: AxisScale },
+  opts: { smoothing: number; smoothingKind: SmoothingKind; outlierPct: [number, number]; xScale: AxisScale; yScale: AxisScale },
 ): AlignedData {
   const prepared: Array<{ s: Series; raw: boolean; points: SeriesPoint[] }> = [];
   for (const s of series) {
     let points = filterOutliers(s.points, opts.outlierPct[0], opts.outlierPct[1]);
     if (opts.xScale === "log") points = points.filter((p) => p.x > 0);
     if (opts.yScale === "log") points = points.filter((p) => p.y > 0);
-    const { smoothed, raw } = emaSmooth(points, opts.smoothing);
+    const { smoothed, raw } = smoothSeries(points, opts.smoothingKind, opts.smoothing);
     if (raw) prepared.push({ s, raw: true, points: raw });
     prepared.push({ s, raw: false, points: smoothed });
   }

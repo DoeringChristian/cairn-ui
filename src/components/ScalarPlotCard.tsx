@@ -30,6 +30,7 @@ import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import ScalarChart from "../charts/ScalarChart";
 import { mapToXAxis, type AxisSource } from "../lib/plot-utils/x-axis";
 import { SERIES_COLORS, type AxisScale, type Series } from "../lib/plot-utils/types";
+import { SMOOTHING_KINDS, formatSmoothing, type SmoothingKind } from "../lib/plot-utils/smooth";
 
 const SCALAR_POLICY = plotCardPolicy("scalar");
 
@@ -45,6 +46,7 @@ interface ScalarSettings extends BaseCardSettings {
   xRange: [number | null, number | null];
   yRange: [number | null, number | null];
   smoothing: number;
+  smoothingKind: SmoothingKind;
   outlierPct: [number, number];
   lineType: "linear" | "monotone" | "step" | "stepBefore" | "stepAfter";
   showLegend: boolean;
@@ -70,6 +72,7 @@ const DEFAULT_SCALAR_SETTINGS = (seed: {
   xRange: [null, null],
   yRange: [null, null],
   smoothing: 0,
+  smoothingKind: "ema",
   outlierPct: [0, 100],
   lineType: "linear",
   showLegend: true,
@@ -414,15 +417,33 @@ export default function ScalarPlotCard({
       />
 
       <SettingsSection title="Smoothing" />
+      <Select
+        label="Kind"
+        value={settings.smoothingKind}
+        onChange={(kind) => {
+          const info = SMOOTHING_KINDS[kind];
+          const v = settings.smoothing;
+          // Values don't carry across kinds (a 0.6 EMA weight is not a
+          // 0.6-point window); keep "off" off, otherwise start at the kind's default.
+          updateSettings({
+            smoothingKind: kind,
+            smoothing: v > 0 ? info.defaultValue : 0,
+          });
+        }}
+        options={(Object.keys(SMOOTHING_KINDS) as SmoothingKind[]).map((k) => ({
+          value: k,
+          label: SMOOTHING_KINDS[k].label,
+        }))}
+      />
       <Slider
-        label="EMA smoothing"
+        label={SMOOTHING_KINDS[settings.smoothingKind].short}
         value={settings.smoothing}
         onChange={(v) => updateSettings({ smoothing: v })}
-        min={0}
-        max={0.99}
-        step={0.01}
-        format={(v) => v.toFixed(2)}
-        description="Exponential moving average over each series"
+        min={SMOOTHING_KINDS[settings.smoothingKind].min}
+        max={SMOOTHING_KINDS[settings.smoothingKind].max}
+        step={SMOOTHING_KINDS[settings.smoothingKind].step}
+        format={(v) => formatSmoothing(settings.smoothingKind, v)}
+        description={`${SMOOTHING_KINDS[settings.smoothingKind].description}; 0 is off`}
       />
 
       <SettingsSection title="Outliers" />
@@ -496,6 +517,7 @@ export default function ScalarPlotCard({
     onViewChange: (v: ScalarSettings["viewport"]) =>
       updateSettings({ viewport: v }),
     smoothing: settings.smoothing,
+    smoothingKind: settings.smoothingKind,
     outlierPct: settings.outlierPct,
     lineType: settings.lineType,
     showLegend: settings.showLegend,
@@ -534,7 +556,7 @@ export default function ScalarPlotCard({
             className="h-5 touch:h-10 touch:min-w-[40px] inline-flex items-center justify-center rounded px-1.5 text-[10px] text-accent hover:bg-bg-hover"
             title="Smoothing active — click to open settings"
           >
-            EMA {settings.smoothing.toFixed(2)}
+            {SMOOTHING_KINDS[settings.smoothingKind].short} {formatSmoothing(settings.smoothingKind, settings.smoothing)}
           </button>
         )}
         <button

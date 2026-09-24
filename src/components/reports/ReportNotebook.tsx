@@ -99,7 +99,7 @@ function CellToolbar({
   const btn =
     "inline-flex h-6 w-6 touch:h-10 touch:w-10 items-center justify-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg disabled:opacity-30";
   return (
-    <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded border border-border-subtle bg-bg-elevated px-1 shadow-sm transition-opacity can-hover:opacity-0 can-hover:group-hover/cell:opacity-100 can-hover:group-focus-within/cell:opacity-100">
+    <div className="absolute right-1 top-1 z-10 print:hidden flex items-center gap-0.5 rounded border border-border-subtle bg-bg-elevated px-1 shadow-sm transition-opacity can-hover:opacity-0 can-hover:group-hover/cell:opacity-100 can-hover:group-focus-within/cell:opacity-100">
       <span className="px-1 text-[10px] uppercase tracking-wide text-fg-subtle">{label}</span>
       <button type="button" className={btn} disabled={first} onClick={() => onMove(-1)} title="Move up" aria-label="Move cell up">
         <i className="fa-solid fa-arrow-up" aria-hidden="true" />
@@ -124,7 +124,7 @@ function InsertGap({ onInsert, persistent = false }: { onInsert: (type: CellType
     "inline-flex items-center gap-1 rounded-full border border-border bg-bg-elevated px-2.5 py-0.5 text-[11px] text-fg-muted hover:border-accent hover:text-fg touch:min-h-10 touch:px-3";
   return (
     <div
-      className={`group/gap relative flex h-7 touch:h-12 items-center justify-center ${
+      className={`group/gap relative flex print:hidden h-7 touch:h-12 items-center justify-center ${
         persistent ? "" : "can-hover:opacity-0 can-hover:hover:opacity-100 focus-within:opacity-100"
       } transition-opacity`}
     >

@@ -8,13 +8,20 @@
  *
  * Shared by MarkdownCard (run-logged markdown blobs) and report markdown
  * cells so both surfaces render GFM identically.
+ *
+ * Math: text containing `$$` renders through the lazy KaTeX chunk
+ * (./markdown-math.tsx). Inline math is `$$…$$` inside a line, display math
+ * is `$$` on its own lines; a single `$` stays a dollar sign.
  */
 
+import { lazy, Suspense } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+const MathMarkdown = lazy(() => import("./markdown-math"));
+
 /** `components` override map for react-markdown — theme tokens, no raw HTML. */
-const MD_COMPONENTS = {
+export const MD_COMPONENTS = {
   h1: (p: React.ComponentProps<"h1">) => <h1 className="mt-3 mb-2 text-lg font-semibold text-fg first:mt-0" {...p} />,
   h2: (p: React.ComponentProps<"h2">) => <h2 className="mt-3 mb-1.5 text-base font-semibold text-fg first:mt-0" {...p} />,
   h3: (p: React.ComponentProps<"h3">) => <h3 className="mt-2 mb-1 text-sm font-semibold text-fg first:mt-0" {...p} />,
@@ -60,9 +67,16 @@ const MD_COMPONENTS = {
  * Renders no wrapper element of its own, so call sites control the layout.
  */
 export default function Markdown({ children }: { children: string }) {
-  return (
+  const plain = (
     <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
       {children}
     </ReactMarkdown>
+  );
+  if (!children.includes("$$")) return plain;
+  // Until the KaTeX chunk loads, show the source text rather than nothing.
+  return (
+    <Suspense fallback={plain}>
+      <MathMarkdown>{children}</MathMarkdown>
+    </Suspense>
   );
 }

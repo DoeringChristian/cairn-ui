@@ -4,6 +4,7 @@ import Plotly from "plotly.js-dist-min";
 
 import { readChartTheme, type ChartTheme } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
+import { onPrintLayout } from "../lib/print-layout.ts";
 
 export type PlotlyData = Array<Record<string, unknown>>;
 export type PlotlyLayout = Record<string, unknown>;
@@ -74,12 +75,15 @@ export default function PlotlyChart({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
+    const resize = () => {
       if (el.clientWidth > 0 && el.clientHeight > 0 && el.on) Plotly.Plots.resize(el);
-    });
+    };
+    const ro = new ResizeObserver(resize);
     ro.observe(el);
+    const offPrint = onPrintLayout(resize);
     return () => {
       ro.disconnect();
+      offPrint();
       Plotly.purge(el);
     };
   }, []);

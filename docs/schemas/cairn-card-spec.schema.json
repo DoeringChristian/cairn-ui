@@ -105,6 +105,15 @@
         "smoothing": {
           "type": "number"
         },
+        "smoothingKind": {
+          "type": "string",
+          "enum": [
+            "ema",
+            "twema",
+            "gaussian",
+            "window"
+          ]
+        },
         "step": {
           "type": "number"
         }

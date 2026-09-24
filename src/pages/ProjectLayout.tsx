@@ -85,7 +85,7 @@ export default function ProjectLayout() {
     <ProjectProvider value={projectId}>
       <div className="flex min-h-0">
         {/* Left icon+label nav — desktop */}
-        <nav className="hidden md:flex flex-col items-center gap-2 w-16 shrink-0 border-r border-border py-3 fixed top-[var(--header-h)] left-0 h-[calc(100vh-var(--header-h))] overflow-y-auto z-10">
+        <nav className="hidden md:flex print:!hidden flex-col items-center gap-2 w-16 shrink-0 border-r border-border py-3 fixed top-[var(--header-h)] left-0 h-[calc(100vh-var(--header-h))] overflow-y-auto z-10">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.path}
@@ -107,8 +107,8 @@ export default function ProjectLayout() {
         </nav>
 
         {/* Main content */}
-        <div className="flex-1 min-w-0 pb-20 md:ml-16 md:pb-0">
-          <nav className="mb-3 flex flex-wrap items-center gap-x-1 text-sm text-fg-muted">
+        <div className="flex-1 min-w-0 pb-20 md:ml-16 md:pb-0 print:!m-0 print:!p-0">
+          <nav className="mb-3 print:hidden flex flex-wrap items-center gap-x-1 text-sm text-fg-muted">
             <Link to="/" className="hover:text-fg">
               Projects
             </Link>
@@ -129,7 +129,7 @@ export default function ProjectLayout() {
       </div>
 
       {/* Mobile nav — bottom bar */}
-      <nav className="fixed bottom-0 inset-x-0 flex justify-around border-t border-border bg-bg py-2 md:hidden z-10">
+      <nav className="fixed bottom-0 inset-x-0 print:!hidden flex justify-around border-t border-border bg-bg py-2 md:hidden z-10">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.path}

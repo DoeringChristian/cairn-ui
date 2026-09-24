@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../../api/client";
@@ -6,7 +7,16 @@ import type { SequencePoint } from "../../api/types";
 import { describeEncoding, GALLERY_MIME, isBrowserDisplayable } from "../../lib/artifact-format";
 import { artifactFilename } from "../../lib/download";
 import UnsupportedArtifact from "../UnsupportedArtifact";
+import {
+  maskClassIds,
+  parseOverlays,
+  summarizeOverlays,
+  type ImageOverlays,
+  type OverlaySummary,
+  type OverlayView,
+} from "../../lib/overlays";
 import ImagePane, { type PaneTransform } from "./ImagePane";
+import { decodeMask } from "./decode-mask";
 
 /** One stored image: a single point's artifact, or one entry of a gallery. */
 interface ImageItem {
@@ -59,6 +69,43 @@ interface Props {
   transform: PaneTransform;
   onTransformChange: (t: PaneTransform) => void;
   loadingHint: boolean;
+  overlayView: OverlayView;
+  /** Reports the overlays this point's images carry (for the card's overlay settings). */
+  onOverlays?: (summary: OverlaySummary) => void;
+}
+
+/**
+ * Parse each item's overlays, and report their summary — including the class
+ * ids found in decoded masks, which is the only place a mask without
+ * `class_labels` names its classes.
+ */
+function useItemOverlays(items: ImageItem[], onOverlays?: (summary: OverlaySummary) => void): Array<ImageOverlays | null> {
+  const itemsKey = items.map((i) => i.hash).join("|");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const overlays = useMemo(() => items.map((i) => parseOverlays(i.metadata)), [itemsKey]);
+  const [maskIds, setMaskIds] = useState<number[]>([]);
+  useEffect(() => {
+    const masks = overlays.flatMap((o) => o?.masks ?? []);
+    let alive = true;
+    if (masks.length === 0) {
+      setMaskIds([]);
+      return;
+    }
+    Promise.allSettled(masks.map((m) => decodeMask(m.pngB64))).then((results) => {
+      if (!alive) return;
+      const ids = new Set<number>();
+      for (const r of results) if (r.status === "fulfilled") for (const id of maskClassIds(r.value.data)) ids.add(id);
+      setMaskIds([...ids].sort((a, b) => a - b));
+    });
+    return () => { alive = false; };
+  }, [overlays]);
+  const summary = useMemo(() => summarizeOverlays(overlays, maskIds), [overlays, maskIds]);
+  const summaryKey = JSON.stringify(summary);
+  useEffect(() => {
+    onOverlays?.(summary);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summaryKey, onOverlays]);
+  return overlays;
 }
 
 /**
@@ -67,9 +114,11 @@ interface Props {
  */
 export default function ImagePointView({
   metricName, point, refPoint, refLabel, split, onSplitChange, transform, onTransformChange, loadingHint,
+  overlayView, onOverlays,
 }: Props) {
   const { items, loading } = useImageItems(point);
   const refs = useImageItems(refPoint ?? null);
+  const overlays = useItemOverlays(items, onOverlays);
 
   if (!point || (items.length === 0 && !loading)) {
     return (
@@ -109,6 +158,8 @@ export default function ImagePointView({
         onSplitChange={onSplitChange}
         transform={transform}
         onTransformChange={onTransformChange}
+        overlays={overlays[i]}
+        overlayView={overlayView}
       />
     );
   };

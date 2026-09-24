@@ -5,6 +5,8 @@ import {
   type ReactZoomPanPinchRef,
 } from "react-zoom-pan-pinch";
 import { useInteract } from "../../lib/use-interact";
+import type { ImageOverlays, OverlayView } from "../../lib/overlays";
+import ImageOverlay from "./ImageOverlay";
 
 export interface PaneTransform {
   scale: number;
@@ -28,6 +30,9 @@ interface Props {
   /** Shared zoom/pan: applied when it differs from the pane's own. */
   transform: PaneTransform;
   onTransformChange: (t: PaneTransform) => void;
+  /** Annotations drawn over the pane's own image (never over the reference). */
+  overlays?: ImageOverlays | null;
+  overlayView?: OverlayView;
 }
 
 const MIN_SCALE = 1;
@@ -45,9 +50,15 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
  * see lib/use-interact) zoom, pan and the divider ignore input, so a finger
  * scrolls the page.
  */
-export default function ImagePane({ image, reference, split, onSplitChange, transform, onTransformChange }: Props) {
+export default function ImagePane({
+  image, reference, split, onSplitChange, transform, onTransformChange, overlays, overlayView,
+}: Props) {
   const boxRef = useRef<HTMLDivElement>(null);
-  const fgRef = useRef<HTMLImageElement>(null);
+  /** The foreground layer: the image plus its overlay, clipped together. */
+  const fgRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  // Keyed by src: a new image's overlay waits for that image's size.
+  const [natural, setNatural] = useState<{ src: string; w: number; h: number } | null>(null);
   const zoomRef = useRef<ReactZoomPanPinchRef | null>(null);
   const own = useRef<PaneTransform>({ scale: 1, x: 0, y: 0 });
   const [pixelated, setPixelated] = useState(false);
@@ -71,13 +82,16 @@ export default function ImagePane({ image, reference, split, onSplitChange, tran
     fg.style.clipPath = `inset(0 ${Math.max(0, contentWidth - clipLeft)}px 0 0)`;
   }, [reference, split]);
 
-  // Nearest-neighbour once a source pixel covers more than ~1.5 screen pixels.
+  // Nearest-neighbour once a source pixel covers more than ~1.5 screen pixels;
+  // the overlay's strokes and labels scale by the inverse (see ImageOverlay).
   const updatePixelated = useCallback(() => {
-    const fg = fgRef.current;
+    const img = imgRef.current;
     const box = boxRef.current;
-    if (!fg || !box || !fg.naturalWidth) return;
-    const fit = Math.min(box.clientWidth / fg.naturalWidth, box.clientHeight / fg.naturalHeight);
-    setPixelated(fit * own.current.scale > 1.5);
+    if (!img || !box || !img.naturalWidth) return;
+    const fit = Math.min(box.clientWidth / img.naturalWidth, box.clientHeight / img.naturalHeight);
+    const screenPerImagePx = fit * own.current.scale;
+    setPixelated(screenPerImagePx > 1.5);
+    if (screenPerImagePx > 0) fgRef.current?.style.setProperty("--overlay-px", String(1 / screenPerImagePx));
   }, []);
 
   useLayoutEffect(updateClip, [updateClip]);
@@ -199,18 +213,25 @@ export default function ImagePane({ image, reference, split, onSplitChange, tran
             {reference && (
               <img src={reference.src} alt={reference.label ?? "reference"} draggable={false} className={imgClass} style={imgStyle} />
             )}
-            <img
-              ref={fgRef}
-              src={image.src}
-              alt={image.label ?? "image"}
-              draggable={false}
-              className={imgClass}
-              style={imgStyle}
-              onLoad={() => {
-                updatePixelated();
-                updateClip();
-              }}
-            />
+            <div ref={fgRef} className="absolute inset-0">
+              <img
+                ref={imgRef}
+                src={image.src}
+                alt={image.label ?? "image"}
+                draggable={false}
+                className={imgClass}
+                style={imgStyle}
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  setNatural({ src: image.src, w: img.naturalWidth, h: img.naturalHeight });
+                  updatePixelated();
+                  updateClip();
+                }}
+              />
+              {overlays && overlayView && natural?.src === image.src && (
+                <ImageOverlay overlays={overlays} view={overlayView} width={natural.w} height={natural.h} />
+              )}
+            </div>
           </div>
         </TransformComponent>
       </TransformWrapper>

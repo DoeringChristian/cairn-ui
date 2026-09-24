@@ -176,7 +176,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
     // A card's settings change (step, yScale, …) re-saves the report.
     <CardSettingsChangeContext.Provider value={handleSettingsTouched}>
     <div>
-      <div className="mb-3">
+      <div className="mb-3 print:hidden">
           <RunSetEditor
             title="Runs in this block"
             runIds={runIds}
@@ -212,7 +212,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
       </div>
 
       <AddCardModal open={addCardOpen} onClose={() => setAddCardOpen(false)} runIds={runIds} onAdd={onAddCard} />
-      <div className="mb-3">
+      <div className="mb-3 print:hidden">
         <button
           type="button"
           onClick={() => setAddCardOpen(true)}
