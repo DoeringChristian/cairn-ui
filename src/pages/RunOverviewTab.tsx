@@ -149,7 +149,7 @@ function GitDiffLink({ runId }: { runId: string }) {
 
 /**
  * The run's final values, as the runs table shows them: each scalar's last
- * point, a `define_metric(summary=...)` rule's value, or an explicit
+ * point, a `run.track(..., summary=...)` rule's value, or an explicit
  * `run.summary(...)` key (which wins). `system.*` sampler metrics fold away.
  */
 function MetricsSection({ run, summary, metricDefs }: { run: Run; summary: Param[]; metricDefs: MetricDef[] }) {

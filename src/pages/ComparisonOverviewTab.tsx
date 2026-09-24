@@ -263,7 +263,7 @@ interface MetricsSummaryProps {
 /**
  * Each run's final metric values side by side (columns = runs, rows =
  * metrics): the same values the runs table shows (`run.values`: a scalar's
- * last point, a `define_metric(summary=...)` rule's value, or an explicit
+ * last point, a `run.track(..., summary=...)` rule's value, or an explicit
  * `run.summary(...)` key).
  *
  * Cells are coloured green for the best run and red for the worst. A metric
@@ -357,7 +357,7 @@ function MetricsSummarySection({ runData, labels, onlyDiffs }: MetricsSummaryPro
                     >
                       {name}
                       {lower && (
-                        <span className="ml-1.5 text-[10px] text-fg-subtle" title='define_metric(summary="min"): lower is better'>
+                        <span className="ml-1.5 text-[10px] text-fg-subtle" title='summary="min": lower is better'>
                           ↓
                         </span>
                       )}

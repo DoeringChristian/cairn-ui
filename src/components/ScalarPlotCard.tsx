@@ -32,7 +32,7 @@ import { seriesKey, seriesLabel } from "../lib/series-utils";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import ScalarChart from "../charts/ScalarChart";
 import { mapToXAxis, type AxisSource, type XMetricRef } from "../lib/plot-utils/x-axis";
-import { stepMetricFor } from "../lib/metric-defs";
+import { xMetricFor } from "../lib/metric-defs";
 import { SERIES_COLORS, type AxisScale, type Series } from "../lib/plot-utils/types";
 import { SMOOTHING_KINDS, formatSmoothing, type SmoothingKind } from "../lib/plot-utils/smooth";
 import { groupSeries, type BandKind } from "../lib/plot-utils/aggregate";
@@ -100,7 +100,7 @@ const DEFAULT_SCALAR_SETTINGS = (seed: { name: string }): ScalarSettings => ({
 });
 
 /**
- * A card seeded for a metric with a `define_metric(step_metric=...)` starts on
+ * A card seeded for a metric tracked with `run.track(..., x=...)` starts on
  * that x-axis. Read from the query cache: the run page loads the run detail
  * before any card mounts.
  */
@@ -110,7 +110,7 @@ function seededXAxis(
   seed: { name: string },
 ): Pick<ScalarSettings, "xAxis" | "xMetric"> | null {
   const defs = qc.getQueryData<RunDetailResponse>(qk.run(runId))?.metric_defs;
-  const name = stepMetricFor(seed.name, defs);
+  const name = xMetricFor(seed.name, defs);
   if (!name) return null;
   return { xAxis: "metric", xMetric: { name } };
 }

@@ -126,11 +126,11 @@ export interface UpdatesResponse {
   more: boolean;
 }
 
-/** A `run.define_metric(...)` definition; `name` may be an fnmatch glob. */
+/** A metric's rule, set with `run.track(..., summary=..., x=...)`; `name` is exact. */
 export interface MetricDef {
   name: string;
-  /** The scalar series cards plot this metric against. */
-  step_metric: string | null;
+  /** The full name of the scalar series cards plot this metric against. */
+  x: string | null;
   /** The run table's value for it: "min" | "max" | "mean" | "last". */
   summary: string | null;
 }
