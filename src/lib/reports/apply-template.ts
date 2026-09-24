@@ -46,7 +46,7 @@ export async function applyReportTemplateToRuns(
   const cardsBlock: CardsBlock = { id: newId(), type: "cards", runIds, cards };
   const blocks: ReportBlock[] = [headerBlock, cardsBlock];
 
-  const created = await api.createReport(projectId, template.name, { blocks });
+  const created = await api.createReport(projectId, template.name, { source: "" });
 
   // Restore saved settings from the template into the new report's scope,
   // then fold them into the payload (reports are server-native — settings

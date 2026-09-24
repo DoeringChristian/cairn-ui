@@ -149,7 +149,7 @@ export default function ComparisonView({
       };
       const blocks = [headerBlock, cardsBlock];
 
-      const created = await api.createReport(projectId, comparison.name, { blocks });
+      const created = await api.createReport(projectId, comparison.name, { source: "" });
 
       comparison.cards.forEach((card, i) => {
         const settings = loadCardSettings<Record<string, unknown>>(cardSettingsKeyFor(comparison.id, card));

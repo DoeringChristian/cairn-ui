@@ -16,7 +16,7 @@
  * — smart filters match on run parameters (key/value/regex) and drive a
  * full param-based comparison-builder wizard; RunSelector matches on run
  * name and tags and is a much lighter, embeddable binding. A comparison
- * uses at most one of the two; see ComparePage.tsx's `runSelector`/
+ * uses at most one of the two; see pages/compare/ComparePage.tsx's `runSelector`/
  * `smartFilters` handling for how the UI keeps that mutually exclusive and
  * visible.
  */

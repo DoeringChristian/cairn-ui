@@ -184,8 +184,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
     // Freeze every card's persisted settings (step/iteration, compare mode,
     // yScale, …) outside edit mode — see
     // CardMutationContext's doc. `editMode` here is this block's real
-    // edit-mode flag; CairnFenceCard (the ```cairn fence preview) passes its
-    // own threaded `editMode`, defaulting to `false` for a pure viewer.
+    // edit-mode flag (`false` for a pure viewer).
     <CardMutationContext.Provider value={editMode}>
     <CardSettingsChangeContext.Provider value={editMode ? handleSettingsTouched : undefined}>
     <div>

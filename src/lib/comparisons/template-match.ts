@@ -74,7 +74,7 @@ export function matchTemplateCards(
         ? candidates.filter((s) => s.context_hash === contextHash)
         : [];
       // No context preference (or none of the runs have it): one series per
-      // run, first context wins — the pre-`keys` behavior.
+      // run, first context wins.
       const chosen = inContext.length > 0 ? inContext : firstPerRun(candidates);
       for (const s of chosen) {
         const id = `${s.runId}::${s.name}::${s.context_hash}`;

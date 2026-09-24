@@ -228,7 +228,7 @@ export default function ReportEditorPage() {
   };
 
   // Save every cards-block card across this report as a reusable report
-  // template — mirrors ComparePage's "Save template" (ComparePage.tsx),
+  // template — mirrors the compare page's "Save template",
   // scoped under `cardSettingsKeyForReport` instead of `cardSettingsKeyFor`.
   const handleSaveAsTemplate = () => {
     if (!reportId || !projectId) return;
