@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useParams } from "react-router-dom";
-import { useRun } from "../api/hooks";
+import { useRun, useStopRun } from "../api/hooks";
+import type { Run } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
 import { formatDuration, formatRelative } from "../lib/format";
 
@@ -29,6 +30,7 @@ export default function RunDetailPage() {
           {run.display_name ?? run.id}
         </h1>
         <RunStatusBadge status={run.status} />
+        {run.status === "running" && <StopButton run={run} />}
         {run.display_name ? (
           <span className="mono break-all text-xs text-fg-subtle">{run.id}</span>
         ) : null}
@@ -58,5 +60,24 @@ export default function RunDetailPage() {
       </nav>
       <Outlet context={{ run, params: q.data.params }} />
     </div>
+  );
+}
+
+function StopButton({ run }: { run: Run }) {
+  const stop = useStopRun(run.id);
+  const requested = !!run.stop_requested || stop.isSuccess;
+  return (
+    <button
+      type="button"
+      className="btn px-2 py-0.5 text-xs"
+      disabled={requested || stop.isPending}
+      title="Ask the run to stop; it sees the request on its next heartbeat"
+      onClick={() => {
+        if (confirm(`Stop run ${run.display_name ?? run.id}?`)) stop.mutate();
+      }}
+    >
+      {requested ? "stopping…" : "Stop"}
+      {stop.isError && <span className="ml-1 text-status-failed">failed</span>}
+    </button>
   );
 }

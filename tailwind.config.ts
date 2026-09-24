@@ -35,6 +35,7 @@ export default {
           completed: "#1a7f37",
           failed: "#cf222e",
           killed: "#8b949e",
+          stopped: "#8250df",
         },
       },
     },

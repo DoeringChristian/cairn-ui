@@ -160,6 +160,9 @@ export const api = {
     post<{ run_id: string; status: string }>(`/api/runs/${runId}/archive`, {}),
   unarchiveRun: (runId: string) =>
     post<{ run_id: string; status: string }>(`/api/runs/${runId}/unarchive`, {}),
+  /** Ask a running run to stop; the SDK sees it on its next heartbeat (≤10 s). */
+  stopRun: (runId: string) =>
+    post<{ run_id: string; stop_requested: string }>(`/api/runs/${runId}/stop`, {}),
   exportRuns: async (runIds: string[]): Promise<Blob> => {
     const resp = await checkOk(
       await fetch("/api/export", {

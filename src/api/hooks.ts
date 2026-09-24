@@ -250,7 +250,19 @@ export function useBulkRunMutation() {
       );
       invalidate(runIds);
     },
+    bulkStop: async (runIds: string[]) => {
+      await Promise.all(runIds.map((id) => api.stopRun(id)));
+      invalidate(runIds);
+    },
   };
+}
+
+export function useStopRun(runId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.stopRun(runId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.run(runId) }),
+  });
 }
 
 export function useSetNotes(runId: string) {

@@ -65,6 +65,7 @@ const STATUS_OPTIONS: Array<{ value: "all" | RunStatus; label: string }> = [
   { value: "completed", label: "completed" },
   { value: "failed", label: "failed" },
   { value: "killed", label: "killed" },
+  { value: "stopped", label: "stopped" },
   { value: "archived", label: "archived" },
 ];
 
@@ -124,7 +125,7 @@ export default function RunsTablePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const q = useInfiniteRuns({ project: projectId, include: ["params"] });
-  const { bulkDelete, bulkArchive } = useBulkRunMutation();
+  const { bulkDelete, bulkArchive, bulkStop } = useBulkRunMutation();
 
   const [statusFilter, setStatusFilter] = useState<"all" | RunStatus>("all");
   const [search, setSearch] = useState<string>("");
@@ -224,6 +225,17 @@ export default function RunsTablePage() {
     gcDeletedRunKeys(new Set(ids));
     setSelected(new Set());
   }, [selected, bulkDelete]);
+
+  const selectedRunning = useMemo(
+    () => runs.filter((r) => selected.has(r.id) && r.status === "running").map((r) => r.id),
+    [runs, selected],
+  );
+
+  const onBulkStop = useCallback(async () => {
+    if (!confirm(`Stop ${selectedRunning.length} running run(s)?`)) return;
+    await bulkStop(selectedRunning);
+    setSelected(new Set());
+  }, [selectedRunning, bulkStop]);
 
   const onBulkArchive = useCallback(async () => {
     await bulkArchive([...selected], true);
@@ -507,6 +519,7 @@ export default function RunsTablePage() {
       onClick: onExport,
       disabled: selectedCount === 0 || exporting,
     },
+    { label: "Stop", onClick: onBulkStop, disabled: selectedRunning.length === 0 },
     { label: "Archive", onClick: onBulkArchive, disabled: selectedCount === 0 },
     { label: "Unarchive", onClick: onBulkUnarchive, disabled: selectedCount === 0 },
     { label: "Delete", onClick: onBulkDelete, disabled: selectedCount === 0, danger: true },
