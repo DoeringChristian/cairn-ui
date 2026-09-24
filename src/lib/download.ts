@@ -71,8 +71,7 @@ export function downloadCsv(headers: string[], rows: (string | number)[][], file
 }
 
 /**
- * Export the chart under `container` as a PNG without depending on
- * cairn-plot renderer internals. The app-level rasterizer captures SVG,
+ * Export the chart under `container` as a PNG. html2canvas captures SVG,
  * canvas, and ordinary DOM layers into one image.
  */
 export async function exportChartPng(container: HTMLElement, filename: string): Promise<void> {
@@ -81,7 +80,7 @@ export async function exportChartPng(container: HTMLElement, filename: string): 
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((value) => value ? resolve(value) : reject(new Error("PNG encoding failed")), "image/png");
     });
-    downloadBlob(blob, filename);
+    downloadBlob(blob, filename.endsWith(".png") ? filename : `${filename}.png`);
   } catch (err) {
     console.error("exportChartPng failed", err);
   }
@@ -306,28 +305,27 @@ export async function exportImagesAsComposite(
 }
 
 /**
- * Export a Plotly chart. Uses Plotly's built-in toImage/downloadImage.
+ * Export the Plotly figure under `container` through Plotly's own image
+ * export. Anything other than exactly one plot (an `<img>` fallback, a grid
+ * of panes) is rasterized whole instead.
  */
 export async function exportPlotlyChart(
-  plotEl: HTMLElement,
+  container: HTMLElement,
   filename: string,
   format: ExportFormat,
 ): Promise<void> {
-  // Plotly attaches to the .js-plotly-plot container
-  const plotlyEl = plotEl.querySelector(".js-plotly-plot") ?? plotEl;
-  const Plotly = (window as any).Plotly;
-  if (!Plotly?.downloadImage) {
-    // Fallback: cairn-plot's client-side rasterizer if the Plotly global is
-    // not available (rasterizes the plotted SVG to PNG).
-    await exportChartPng(plotEl, filename);
+  const plots = container.querySelectorAll<HTMLElement>(".js-plotly-plot");
+  if (plots.length !== 1) {
+    await exportChartPng(container, filename);
     return;
   }
-  const plotlyFormat = format === "jpg" ? "jpeg" : format === "pdf" ? "svg" : format;
-  await Plotly.downloadImage(plotlyEl, {
-    format: plotlyFormat,
+  const plot = plots[0]!;
+  const { Plotly } = await import("../charts/PlotlyChart");
+  await Plotly.downloadImage(plot, {
+    format: format === "jpg" ? "jpeg" : format === "pdf" ? "svg" : format,
     filename,
-    width: plotlyEl.clientWidth * 2,
-    height: plotlyEl.clientHeight * 2,
+    width: plot.clientWidth,
+    height: plot.clientHeight,
     scale: 2,
   });
 }
