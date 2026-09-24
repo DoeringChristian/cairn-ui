@@ -31,19 +31,7 @@ export type { ParsedReportMarkdown } from "./markdown-source";
 export { CAIRN_FENCE_LANG, parseReportMarkdown, serializeReportToMarkdown, splitProseBlocks } from "./markdown-source";
 
 export type { ReportTemplate, ReportTemplateCard } from "./templates";
-export {
-  loadReportTemplates,
-  saveReportTemplates,
-  createReportTemplate,
-  deleteReportTemplate,
-  useReportTemplates,
-} from "./templates";
-
-export {
-  syncReportTemplateToServer,
-  deleteReportTemplateFromServer,
-  syncReportTemplatesFromServer,
-} from "./template-sync";
+export { createReportTemplate, deleteReportTemplate, useReportTemplates } from "./templates";
 
 export type { ApplyReportTemplateResult } from "./apply-template";
 export { applyReportTemplateToRuns } from "./apply-template";

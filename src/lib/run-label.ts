@@ -75,23 +75,9 @@ export function addRunMetadata(run: Run): void {
   _notify();
 }
 
-/**
- * Format a run label: "display_name · HH:MM:SS" or short hash fallback.
- */
-export function formatRunLabel(runId: string): string {
-  const run = runMetadataCache.get(runId);
-  if (run) {
-    const name = run.display_name ?? runId.slice(0, 6);
-    try {
-      const d = new Date(run.created_at);
-      const ts = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-      const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-      return `${name} · ${date} ${ts}`;
-    } catch {
-      return name;
-    }
-  }
-  return runId.length > 6 ? runId.slice(0, 6) : runId;
+/** The 6-character id prefix shown when a run has no display name. */
+export function shortRunId(runId: string): string {
+  return runId.slice(0, 6);
 }
 
 /**
@@ -123,14 +109,14 @@ export function disambiguateRunLabels(runIds: string[]): Record<string, string> 
   const resolved: Resolved[] = runIds.map((runId) => {
     const run = runMetadataCache.get(runId);
     if (!run) {
-      return { runId, name: runId.length > 6 ? runId.slice(0, 6) : runId, date: null };
+      return { runId, name: shortRunId(runId), date: null };
     }
     let date: Date | null = null;
     try {
       const d = new Date(run.created_at);
       if (!Number.isNaN(d.getTime())) date = d;
     } catch { /* keep null */ }
-    return { runId, name: run.display_name ?? runId.slice(0, 6), date };
+    return { runId, name: run.display_name ?? shortRunId(runId), date };
   });
 
   // Group by name.
@@ -173,7 +159,7 @@ export function disambiguateRunLabels(runIds: string[]): Record<string, string> 
         }
       } else {
         // No date metadata at all — fall back to hash suffix.
-        label = `${name} (${r.runId.slice(0, 6)})`;
+        label = `${name} (${shortRunId(r.runId)})`;
       }
       if (seen.has(label)) hasCollision = true;
       seen.add(label);
@@ -188,7 +174,7 @@ export function disambiguateRunLabels(runIds: string[]): Record<string, string> 
     // Second pass: append a hash suffix to break ties.
     for (const r of group) {
       const base = tentative[r.runId]!;
-      result[r.runId] = `${base} (${r.runId.slice(0, 6)})`;
+      result[r.runId] = `${base} (${shortRunId(r.runId)})`;
     }
   }
 
@@ -216,5 +202,5 @@ export function shortRunLabel(runId: string, siblingRunIds?: string[]): string {
  */
 export function runName(runId: string): string {
   const run = runMetadataCache.get(runId);
-  return run?.display_name ?? (runId.length > 6 ? runId.slice(0, 6) : runId);
+  return run?.display_name ?? shortRunId(runId);
 }

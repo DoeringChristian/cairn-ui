@@ -9,7 +9,8 @@ import type { RunSelector } from "../run-selector";
 import { isRunSelector } from "../run-selector";
 import type { Comparison, ComparisonCard, SmartFilters } from "./types";
 import { cardSettingsKeyForScope, compareRunId } from "./types";
-import { loadComparisons, newId, saveComparisons } from "./store";
+import { newId } from "../reports/ids";
+import { loadComparisons, saveComparisons } from "./store";
 
 /**
  * The CardSettingsKey a comparison card's settings actually live under.

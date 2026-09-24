@@ -7,21 +7,11 @@
  */
 
 import { loadJson, saveJson, storageKeys } from "../storage";
+import { newId } from "../reports/ids";
 import type { Comparison, ComparisonCard } from "./types";
 import { isComparison } from "./types";
 import { notifyChange } from "./events";
 import { deleteComparisonFromServer, syncComparisonToServer } from "./sync";
-
-export function newId(): string {
-  // crypto.randomUUID is widely supported in modern browsers/Node; fall back
-  // to a timestamp+random string on the off chance it's missing.
-  const c =
-    typeof globalThis !== "undefined"
-      ? (globalThis.crypto as Crypto | undefined)
-      : undefined;
-  if (c && typeof c.randomUUID === "function") return c.randomUUID();
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 export function loadComparisons(projectId: string): Comparison[] {
   const parsed = loadJson<unknown[]>(localStorage, storageKeys.comparisons(projectId));

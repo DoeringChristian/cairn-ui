@@ -15,7 +15,7 @@ import {
   saveRunLayout,
 } from "../lib/run-layout";
 import type { RunLayout } from "../lib/run-layout";
-import { loadJson, saveJson, storageKeys } from "../lib/storage";
+import { useCollapsedSections } from "../lib/use-collapsed-sections";
 import { useProjectId } from "../lib/project-context";
 import { useProjectView } from "../lib/project-view";
 
@@ -29,18 +29,6 @@ interface Entry {
   extras: SequenceMeta[];
 }
 
-// ---------------------------------------------------------------------------
-// Section collapse persistence helpers.
-// ---------------------------------------------------------------------------
-function loadCollapsedSections(runId: string): Set<string> {
-  const raw = loadJson<string[]>(localStorage, storageKeys.collapsedSections(runId));
-  return new Set(Array.isArray(raw) ? raw : []);
-}
-
-function saveCollapsedSections(runId: string, set: Set<string>): void {
-  saveJson(localStorage, storageKeys.collapsedSections(runId), Array.from(set));
-}
-
 export default function CardGrid({ runId, sequences }: Props) {
   const [layout, setLayout] = useState<RunLayout>(() => loadRunLayout(runId));
 
@@ -50,29 +38,12 @@ export default function CardGrid({ runId, sequences }: Props) {
   const { hidden, hide, show, showAll } = useProjectView(projectId);
   const [managingHidden, setManagingHidden] = useState(false);
 
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
-    () => loadCollapsedSections(runId),
-  );
+  const { collapsed: collapsedSections, toggle: toggleSectionCollapse } = useCollapsedSections(runId);
 
   // Reload persisted layout when the run changes.
   useEffect(() => {
     setLayout(loadRunLayout(runId));
-    setCollapsedSections(loadCollapsedSections(runId));
   }, [runId]);
-
-  const toggleSectionCollapse = useCallback(
-    (sectionName: string) => {
-      setCollapsedSections((prev) => {
-        const next = new Set(prev);
-        if (next.has(sectionName)) next.delete(sectionName);
-        else next.add(sectionName);
-        saveCollapsedSections(runId, next);
-        return next;
-      });
-    },
-    [runId],
-  );
-
 
   const commitMove = useCallback(
     (

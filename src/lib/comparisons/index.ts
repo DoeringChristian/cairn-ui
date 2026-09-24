@@ -16,6 +16,7 @@ export type {
 } from "./types";
 export {
   compareRunId,
+  comparisonRunIds,
   cardSettingsKeyForScope,
   MULTI_RUN_CARD_TYPES,
   MULTI_RUN_CARD_LABELS,
@@ -35,27 +36,17 @@ export {
   reorderComparisonCards,
   removeCardFromComparison,
   setComparisonRunSelector,
+  updateComparison,
 } from "./store";
 
-export { rebuildCardsFromRuns, rebindCardsToRuns, rebindCardsToMetricIndex } from "./rebuild-cards";
+export { cardsForRuns, rebuildCardsFromRuns, rebindCardsToRuns, rebindCardsToMetricIndex } from "./rebuild-cards";
 
 export { useComparisons } from "./events";
 
 export type { ComparisonTemplate } from "./templates";
 export type { ComparisonTemplateCard } from "./template-cards";
-export {
-  templateKey,
-  parseTemplateKey,
-  templateCardOf,
-  normalizeTemplateCards,
-} from "./template-cards";
-export {
-  loadTemplates,
-  saveTemplates,
-  createTemplate,
-  deleteTemplate,
-  useTemplates,
-} from "./templates";
+export { templateCardOf } from "./template-cards";
+export { createTemplate, deleteTemplate, useTemplates } from "./templates";
 
 export {
   syncComparisonToServer,
@@ -64,12 +55,5 @@ export {
   cardSettingsKeyFor,
 } from "./sync";
 
-export {
-  syncTemplateToServer,
-  deleteTemplateFromServer,
-  syncTemplatesFromServer,
-} from "./template-sync";
-
 export type { ApplyTemplateResult } from "./apply-template";
-export type { SeriesEntry, MatchedTemplateCard, SeqMap } from "./template-match";
-export { buildSeqMap, matchTemplateCards, applyTemplateToRuns } from "./apply-template";
+export { applyTemplateToRuns } from "./apply-template";

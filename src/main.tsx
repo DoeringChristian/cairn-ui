@@ -7,7 +7,7 @@ import App from "./App";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProjectLayout from "./pages/ProjectLayout";
 import RunsTablePage from "./pages/RunsTablePage";
-import ComparePage from "./pages/ComparePage";
+import ComparePage from "./pages/compare/ComparePage";
 import RunDetailPage from "./pages/RunDetailPage";
 import RunOverviewTab from "./pages/RunOverviewTab";
 import RunMetricsTab from "./pages/RunMetricsTab";

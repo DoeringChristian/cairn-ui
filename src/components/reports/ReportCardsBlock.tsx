@@ -1,35 +1,27 @@
 /**
  * Cards block editor/viewer for a report — bound to either a static set of
  * runIds or a dynamic `RunSelector` (see lib/run-selector.ts), holding a
- * list of ComparisonCard[] that render live via CardRenderer.
- *
- * Mirrors ComparePage's ComparisonCardRenderer dispatch and its runs-picker
- * affordance (ComparisonRunsPanel), but scopes card settings under
- * `reportRunId(reportId)` instead of `compareRunId`. The RunSelector form +
- * "auto" badge/refresh mirror ComparePage's own `ComparisonRunsPanel`
- * RunSelector UI — same mechanism (RunSelectorBadge, rebuildCardsFromRuns),
- * same look, different binding target (a block's cards vs. a whole
- * comparison).
+ * list of ComparisonCard[] rendered by `ComparisonCardView` with settings
+ * scoped under `reportRunId(reportId)`. The run set is edited with the same
+ * `RunSetEditor` a comparison uses.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AddCardModal, { type AddCardSelection } from "../AddCardModal";
-import CardRenderer from "../CardRenderer";
+import ComparisonCardView from "../comparison/ComparisonCardView";
 import ReorderableCardGrid from "../ReorderableCardGrid";
 import RunSelectorBadge from "../RunSelectorBadge";
+import RunSetEditor, { DEFAULT_QUERY_SELECTOR } from "../comparison/RunSetEditor";
 import { CardMutationContext, CardSettingsChangeContext } from "../../lib/card-settings";
 import {
-  isMultiRunCardType,
   rebindCardsToMetricIndex,
   rebindCardsToRuns,
   rebuildCardsFromRuns,
-  type ComparisonCard,
 } from "../../lib/comparisons";
 import { cardFromSpec, cardSettingsKeyForReport, useMetricIndex, type CardsBlock } from "../../lib/reports";
-import { describeRunSelector, DEFAULT_RUN_SELECTOR_N, type QueryRunSelector } from "../../lib/run-selector";
+import { describeRunSelector, type QueryRunSelector } from "../../lib/run-selector";
 import { useRunSelectorResolution } from "../../api/hooks";
-import { disambiguateRunLabels, useRunMetadataVersion } from "../../lib/run-label";
-import type { Run, SequenceMeta } from "../../api/types";
+import type { Run } from "../../api/types";
 
 interface Props {
   projectId: string;
@@ -40,10 +32,7 @@ interface Props {
   onChange: (next: CardsBlock) => void;
 }
 
-const DEFAULT_QUERY_SELECTOR: QueryRunSelector = { kind: "query", mode: "newest-per-name", n: DEFAULT_RUN_SELECTOR_N };
-
 export default function ReportCardsBlock({ projectId, reportId, block, editMode, allProjectRuns, onChange }: Props) {
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -64,7 +53,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
   // selector block's *persisted* `cards` can be stale relative to `runIds`
   // right after this report was hydrated from its markdown `source` (a fresh
   // parse has no live-resolved runs to compile against) or between edits.
-  // Viewers never trigger a save (B2), but they should still see cards bound
+  // Viewers never trigger a save, but they should still see cards bound
   // to the currently-resolved runs rather than a frozen/stale snapshot —
   // this mirrors the ```cairn fence preview's own `opts.resolvedRunIds`
   // handling (cairn-block.ts), just without ever calling `onChange`.
@@ -74,26 +63,8 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
     [selector, block.cards, runIds, liveMetricIndex],
   );
 
-  const includedSet = useMemo(() => new Set(runIds), [runIds]);
-  const candidates = useMemo(
-    () => allProjectRuns.filter((r) => !includedSet.has(r.id)),
-    [allProjectRuns, includedSet],
-  );
-  const includedRuns = useMemo(
-    () => runIds.map((id) => allProjectRuns.find((r) => r.id === id)).filter((r): r is Run => r !== undefined),
-    [runIds, allProjectRuns],
-  );
-
-  const metaVersion = useRunMetadataVersion();
-  const chipLabels = useMemo(() => disambiguateRunLabels(runIds), [runIds, metaVersion]);
-  const candidateLabels = useMemo(
-    () => disambiguateRunLabels(allProjectRuns.map((r) => r.id)),
-    [allProjectRuns, metaVersion],
-  );
-
-  const addRuns = (ids: string[]) => {
-    const next = Array.from(new Set([...staticRunIds, ...ids]));
-    onChange({ ...block, runIds: next });
+  const addRun = (id: string) => {
+    onChange({ ...block, runIds: Array.from(new Set([...staticRunIds, id])) });
   };
   const removeRun = (id: string) => {
     onChange({
@@ -110,11 +81,6 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
     } else {
       onChange({ ...block, runSelector: { ...DEFAULT_QUERY_SELECTOR } });
     }
-  };
-
-  const updateSelector = (patch: Partial<QueryRunSelector>) => {
-    if (!selector) return;
-    onChange({ ...block, runSelector: { ...selector, ...patch } });
   };
 
   // Re-resolve which runs currently match, then REBIND the existing cards to
@@ -136,8 +102,8 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
 
   // Explicit, destructive "start over" action — full regrow (one card per
   // (name, object_type) across the block's runs), discarding curated
-  // cards/order/overlays. Edit-mode only; the auto "refresh" above no longer
-  // does this implicitly (see rebindCardsToRuns).
+  // cards/order/overlays. Edit-mode only; the "refresh" above rebinds instead
+  // (see rebindCardsToRuns).
   const handleResetFromRuns = async () => {
     if (runIds.length === 0) return;
     setResetting(true);
@@ -152,7 +118,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
   // Auto-rebind: when a selector block's resolved run set changes while in
   // edit mode, rebind existing cards to the new runs automatically (mirrors
   // the ```cairn fence path's `opts.resolvedRunIds` handling) so cards don't
-  // go stale between explicit refreshes — the #44 fix. Never runs in view
+  // go stale between explicit refreshes. Never runs in view
   // mode (no mutation/autosave for viewers) and never regrows the card set.
   const resolvedRunIdsKey = selector ? runIds.join("|") : "";
   const lastReboundKeyRef = useRef<string | null>(null);
@@ -203,21 +169,20 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
     onChange({ ...block, cards });
   };
 
-  // WS-NR1 (B7 round-trip fix): a card's settings change (yScale, step,
-  // mode, ...) only ever touched localStorage, never `block`/`blocks[]` —
-  // so it never reached ReportEditorPage's blocks[]-keyed autosave. "Touch"
-  // this block (new object identity, same content) whenever a settings
-  // write actually lands, reusing the existing autosave trigger instead of
-  // adding a second save-scheduling path. Only wired in edit mode — a view
-  // mode settings attempt is already a no-op at the source (CardMutationContext).
+  // A card's settings change (yScale, step, mode, ...) only touches
+  // localStorage, not `block`, so it would never reach ReportEditorPage's
+  // blocks[]-keyed autosave. "Touch" this block (new object identity, same
+  // content) whenever a settings write lands, reusing that autosave trigger.
+  // Only wired in edit mode — a view-mode settings write is already a no-op
+  // at the source (CardMutationContext).
   const handleSettingsTouched = useCallback(() => {
     onChange({ ...block });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [block]);
 
   return (
-    // WS-NR1 (B7/edit-mode gating): freeze every card's persisted settings
-    // (step/iteration, compare mode, yScale, …) outside edit mode — see
+    // Freeze every card's persisted settings (step/iteration, compare mode,
+    // yScale, …) outside edit mode — see
     // CardMutationContext's doc. `editMode` here is this block's real
     // edit-mode flag; CairnFenceCard (the ```cairn fence preview) passes its
     // own threaded `editMode`, defaulting to `false` for a pure viewer.
@@ -225,176 +190,41 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
     <CardSettingsChangeContext.Provider value={editMode ? handleSettingsTouched : undefined}>
     <div>
       {(editMode || selector) && (
-        <div className="mb-3 card p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="text-xs uppercase tracking-wide text-fg-muted">
-              Runs in this block ({runIds.length})
-            </span>
-            <div className="flex items-center gap-2">
-              {selector && (
-                <RunSelectorBadge
-                  title={describeRunSelector(selector)}
-                  count={resolution.runIds.length}
-                  isRefreshing={rebuilding || resolution.isFetching}
-                  onRefresh={() => void handleRefresh()}
-                />
-              )}
-              {editMode && (
-                <button
-                  type="button"
-                  onClick={toggleAutoMode}
-                  className="inline-flex h-6 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg"
-                  title={selector ? "Switch to a fixed run list" : "Switch to a dynamic run selector"}
-                >
-                  {selector ? "Use static runs" : "Use auto (query)"}
-                </button>
-              )}
-              {editMode && (
-                <button
-                  type="button"
-                  onClick={() => void handleResetFromRuns()}
-                  disabled={resetting || runIds.length === 0}
-                  className="inline-flex h-6 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg disabled:opacity-40"
-                  title="Discard current cards and regrow one card per metric across this block's runs"
-                >
-                  {resetting ? "Resetting…" : "Reset cards from runs"}
-                </button>
-              )}
-              {editMode && !selector && (
-                <button
-                  type="button"
-                  onClick={() => setPickerOpen((v) => !v)}
-                  className="inline-flex h-6 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg"
-                >
-                  {pickerOpen ? "Done" : `+ Add runs (${candidates.length} available)`}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {editMode && selector && (
-            <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <label className="text-[10px] text-fg-muted">
-                Name pattern
-                <input
-                  type="text"
-                  value={selector.namePattern ?? ""}
-                  onChange={(e) => updateSelector({ namePattern: e.target.value || undefined })}
-                  placeholder="e.g. training-*"
-                  className="input mt-0.5 w-full text-xs"
-                />
-              </label>
-              <label className="text-[10px] text-fg-muted">
-                Tags (comma-sep)
-                <input
-                  type="text"
-                  value={(selector.tags ?? []).join(", ")}
-                  onChange={(e) =>
-                    updateSelector({
-                      tags: e.target.value
-                        .split(",")
-                        .map((t) => t.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                  placeholder="e.g. prod, nightly"
-                  className="input mt-0.5 w-full text-xs"
-                />
-              </label>
-              <label className="text-[10px] text-fg-muted">
-                Mode
-                <select
-                  value={selector.mode}
-                  onChange={(e) => updateSelector({ mode: e.target.value as QueryRunSelector["mode"] })}
-                  className="input mt-0.5 w-full text-xs"
-                >
-                  <option value="latest-n">Latest N</option>
-                  <option value="newest-per-name">Newest per name</option>
-                </select>
-              </label>
-              <label className="text-[10px] text-fg-muted">
-                N
-                <input
-                  type="number"
-                  min={1}
-                  value={selector.n ?? DEFAULT_RUN_SELECTOR_N}
-                  onChange={(e) => updateSelector({ n: Math.max(1, Number(e.target.value) || 1) })}
-                  className="input mt-0.5 w-full text-xs"
-                />
-              </label>
-            </div>
-          )}
-
-          {selector ? (
-            runIds.length === 0 ? (
-              <p className="text-xs text-fg-subtle">No runs currently match this selector.</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {includedRuns.map((r) => (
-                  <span
-                    key={r.id}
-                    className="inline-flex items-center gap-1 rounded border border-border-subtle bg-bg-hover px-1.5 py-0.5 text-[11px] mono text-fg"
-                    title={r.id}
+        <div className="mb-3">
+          <RunSetEditor
+            title="Runs in this block"
+            runIds={runIds}
+            allProjectRuns={allProjectRuns}
+            selector={selector}
+            editable={editMode}
+            onToggleMode={toggleAutoMode}
+            onSelectorChange={(runSelector) => onChange({ ...block, runSelector })}
+            onAddRun={addRun}
+            onRemoveRun={removeRun}
+            actions={
+              <>
+                {selector && (
+                  <RunSelectorBadge
+                    title={describeRunSelector(selector)}
+                    count={resolution.runIds.length}
+                    isRefreshing={rebuilding || resolution.isFetching}
+                    onRefresh={() => void handleRefresh()}
+                  />
+                )}
+                {editMode && (
+                  <button
+                    type="button"
+                    onClick={() => void handleResetFromRuns()}
+                    disabled={resetting || runIds.length === 0}
+                    className="inline-flex h-6 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg disabled:opacity-40"
+                    title="Discard current cards and regrow one card per metric across this block's runs"
                   >
-                    {chipLabels[r.id] ?? r.id.slice(0, 6)}
-                  </span>
-                ))}
-              </div>
-            )
-          ) : (
-            <>
-              {staticRunIds.length === 0 ? (
-                <p className="text-xs text-fg-subtle">No runs yet. Click "Add runs" to pick some.</p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {includedRuns.map((r) => {
-                    const label = chipLabels[r.id] ?? r.id.slice(0, 6);
-                    return (
-                      <span
-                        key={r.id}
-                        className="group/chip inline-flex items-center gap-1 rounded border border-border-subtle bg-bg-hover px-1.5 py-0.5 text-[11px] mono"
-                        title={r.id}
-                      >
-                        <span className="text-fg">{label}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeRun(r.id)}
-                          className="text-fg-subtle hover:text-status-failed"
-                          aria-label={`Remove ${label}`}
-                          title={`Remove ${label}`}
-                        >
-                          {"×"}
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-
-              {pickerOpen && (
-                <div className="mt-2 border-t border-border-subtle pt-2">
-                  {candidates.length === 0 ? (
-                    <p className="text-xs text-fg-subtle">All project runs already included.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
-                      {candidates.map((r) => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          onClick={() => addRuns([r.id])}
-                          className="inline-flex items-center gap-1 rounded border border-border-subtle bg-bg px-1.5 py-0.5 text-[11px] mono text-fg-muted hover:border-accent hover:text-fg"
-                          title={r.id}
-                        >
-                          <span aria-hidden="true">+</span>
-                          {candidateLabels[r.id] ?? r.id.slice(0, 6)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+                    {resetting ? "Resetting…" : "Reset cards from runs"}
+                  </button>
+                )}
+              </>
+            }
+          />
         </div>
       )}
 
@@ -428,9 +258,9 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
           cards={displayCards.map((card) => ({
             key: card.id,
             content: (
-              <ReportCardRenderer
-                reportId={reportId}
+              <ComparisonCardView
                 card={card}
+                settingsKey={cardSettingsKeyForReport(reportId, card)}
                 onRemove={editMode ? () => removeCard(card.id) : undefined}
               />
             ),
@@ -441,64 +271,5 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
     </div>
     </CardSettingsChangeContext.Provider>
     </CardMutationContext.Provider>
-  );
-}
-
-function ReportCardRenderer({
-  reportId,
-  card,
-  onRemove,
-}: {
-  reportId: string;
-  card: ComparisonCard;
-  onRemove?: () => void;
-}) {
-  const runIds = useMemo(() => Array.from(new Set(card.series.map((s) => s.runId))), [card.series]);
-
-  if (isMultiRunCardType(card.type)) {
-    return (
-      <CardRenderer
-        kind="multi-run"
-        cardType={card.type}
-        runIds={runIds}
-        settingsKey={cardSettingsKeyForReport(reportId, card)}
-        onRemove={onRemove}
-      />
-    );
-  }
-
-  const primary = card.series[0];
-  if (!primary) {
-    return (
-      <div data-cairn-card className="card p-4 text-sm text-fg-muted flex items-baseline justify-between gap-2">
-        <span>Empty card.</span>
-        {onRemove && (
-          <button type="button" className="btn text-xs" onClick={onRemove}>
-            Remove
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  const seedMetric: SequenceMeta = {
-    name: primary.name,
-    object_type: card.type,
-    context: null,
-    context_hash: primary.context_hash,
-    min_step: 0,
-    max_step: 0,
-    count: 0,
-  };
-
-  return (
-    <CardRenderer
-      runId={primary.runId}
-      metric={seedMetric}
-      extraSeries={card.series.slice(1)}
-      controlledSeries
-      onRemove={onRemove}
-      settingsKeyOverride={cardSettingsKeyForReport(reportId, card)}
-    />
   );
 }
