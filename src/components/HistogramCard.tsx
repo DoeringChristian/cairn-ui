@@ -11,12 +11,13 @@ import {
 import { api } from "../api/client";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { SequenceMeta } from "../api/types";
+import type { HistogramData } from "../lib/plot-utils/histogram";
 import {
-  HistogramPlot,
-  COLORMAP_OPTIONS as LIB_COLORMAP_OPTIONS,
-  type HistogramData,
-  type ColormapName,
-} from "../lib/public-plot";
+  COLORMAP_OPTIONS,
+  HistogramBars,
+  StepHistogramHeatmap,
+  type Colormap,
+} from "../charts/HistogramChart";
 import { parseNpz } from "../lib/parse-npz";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
@@ -44,7 +45,7 @@ interface HistogramMeta {
 interface HistogramSettings extends BaseCardSettings {
   viewMode: "bars" | "heatmap";
   logY: boolean;
-  colormap: ColormapName;
+  colormap: Colormap;
   sliderStep?: number;
   xAxis?: "step" | "relative_time" | "wall_time";
 }
@@ -55,9 +56,6 @@ const DEFAULT_HISTOGRAM_SETTINGS: HistogramSettings = {
   logY: false,
   colormap: "turbo",
 };
-
-const COLORMAP_OPTIONS: Array<{ value: ColormapName; label: string }> =
-  LIB_COLORMAP_OPTIONS.map((o) => ({ value: o.id, label: o.label }));
 
 async function fetchNpz(
   hash: string,
@@ -185,8 +183,7 @@ export default function HistogramCard({
       return (
         <div className="flex-1 min-h-0">
           {perStep.length > 0 ? (
-            <HistogramPlot
-              view="heatmap"
+            <StepHistogramHeatmap
               perStep={perStep}
               colormap={settings.colormap}
               logColor={settings.logY}
@@ -206,8 +203,7 @@ export default function HistogramCard({
           {barsQuery.isLoading ? (
             <div className="h-full motion-safe:animate-pulse rounded bg-bg-hover" />
           ) : barsData ? (
-            <HistogramPlot
-              view="bars"
+            <HistogramBars
               counts={barsData.counts}
               edges={barsData.edges}
               logY={settings.logY}
@@ -252,7 +248,7 @@ export default function HistogramCard({
         onChange={(v) => updateSettings({ logY: v })}
       />
       {settings.viewMode === "heatmap" && (
-        <Select<ColormapName>
+        <Select<Colormap>
           label="Colormap"
           value={settings.colormap}
           onChange={(v) => updateSettings({ colormap: v })}
