@@ -7,11 +7,10 @@ import { api } from "../api/client";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { SequenceMeta } from "../api/types";
 import { computeHistogram } from "../lib/plot-utils/histogram";
+import { COLORMAP_OPTIONS, type Colormap } from "../charts/colormaps";
 import {
-  COLORMAP_OPTIONS,
   HistogramBars,
   MatrixHeatmap,
-  type Colormap,
 } from "../charts/HistogramChart";
 import { parseNpy, type NpyArray } from "../lib/parse-npy";
 import AddToComparisonButton from "./AddToComparisonButton";

@@ -12,11 +12,10 @@ import { api } from "../api/client";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { SequenceMeta } from "../api/types";
 import type { HistogramData } from "../lib/plot-utils/histogram";
+import { COLORMAP_OPTIONS, type Colormap } from "../charts/colormaps";
 import {
-  COLORMAP_OPTIONS,
   HistogramBars,
   StepHistogramHeatmap,
-  type Colormap,
 } from "../charts/HistogramChart";
 import { parseNpz } from "../lib/parse-npz";
 import AddToComparisonButton from "./AddToComparisonButton";

@@ -1,4 +1,5 @@
 import { useMemo, useRef, type MouseEvent } from "react";
+import { colorscale } from "./colormaps.ts";
 
 import PlotlyChart, { type PlotlyData } from "./PlotlyChart.tsx";
 import { readChartTheme } from "./theme.ts";
@@ -69,7 +70,7 @@ export default function ScatterChart({
       const withColor = points.filter((p) => p.color != null);
       const without = points.filter((p) => p.color == null);
       traces.push(markers(withColor, withColor.map((p) => p.color), {
-        colorscale: "Viridis",
+        colorscale: colorscale("turbo"),
         showscale: true,
         colorbar: { title: { text: colorLabel ?? "", side: "right" }, thickness: 10, outlinewidth: 0 },
       }));

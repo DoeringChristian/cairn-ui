@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { colorscale } from "./colormaps.ts";
 
 import PlotlyChart, { type PlotlyData } from "./PlotlyChart.tsx";
 import { formatNum } from "../lib/plot-utils/types.ts";
@@ -88,7 +89,7 @@ export default function ParallelChart({ columns, rows, className }: Props) {
       line: colorDim
         ? {
             color: colorDim.values,
-            colorscale: "Viridis",
+            colorscale: colorscale("turbo"),
             showscale: true,
             colorbar: {
               title: { text: colorDim.label, side: "right" },
