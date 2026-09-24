@@ -4,17 +4,18 @@
  * Markdown cells render until clicked; then the whole cell is one textarea,
  * committed on Shift+Enter, Cmd/Ctrl+Enter, Escape or blur. A new (empty)
  * markdown cell opens in edit mode. Cards cells (```cairn fences) are always
- * live: runs, "Add card", reorder and card settings work in place.
+ * live: reorder and card settings work in place; the cell's runs and "Add
+ * card" sit in its toolbar.
  *
- * Structure edits sit on the cells: a toolbar (move up/down, delete) on the
- * hovered or focused cell, and "+ Markdown / + Cards" in the gap between any
+ * Structure edits sit on the cells: a toolbar (move up/down, delete) floating
+ * on the top border of the hovered or focused cell, and "+ Markdown / + Cards" in the gap between any
  * two cells (on hover; always shown on touch) and below the last one.
  *
  * `blocks[]` order is document order; ReportEditorPage serializes it to the
  * canonical markdown `source` on save.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Run } from "../../api/types";
 import Markdown from "../../lib/markdown";
 import {
@@ -26,6 +27,7 @@ import {
   type ReportBlock,
 } from "../../lib/reports";
 import ReportCardsBlock from "./ReportCardsBlock";
+import { CELL_TOOLBAR_BTN } from "./cell-toolbar";
 
 type CellType = ReportBlock["type"];
 
@@ -57,15 +59,17 @@ export default function ReportNotebook({
       {blocks.map((block, idx) => (
         <div key={block.id}>
           <div className="group/cell relative rounded-lg border border-transparent p-2 transition-colors hover:border-border-subtle focus-within:border-accent/40">
-            <CellToolbar
-              label={block.type === "markdown" ? "Markdown" : "Cards"}
-              first={idx === 0}
-              last={idx === blocks.length - 1}
-              onMove={(dir) => onMoveBlock(block.id, dir)}
-              onDelete={() => onDeleteBlock(block.id)}
-            />
             {isMarkdownBlock(block) ? (
-              <MarkdownCell block={block} onChange={(text) => onUpdateBlock(block.id, { ...block, text })} />
+              <>
+                <CellToolbar
+                  label="Markdown"
+                  first={idx === 0}
+                  last={idx === blocks.length - 1}
+                  onMove={(dir) => onMoveBlock(block.id, dir)}
+                  onDelete={() => onDeleteBlock(block.id)}
+                />
+                <MarkdownCell block={block} onChange={(text) => onUpdateBlock(block.id, { ...block, text })} />
+              </>
             ) : isCardsBlock(block) ? (
               <ReportCardsBlock
                 projectId={projectId}
@@ -73,6 +77,16 @@ export default function ReportNotebook({
                 block={block}
                 allProjectRuns={allProjectRuns}
                 onChange={(next) => onUpdateBlock(block.id, next)}
+                toolbar={(extra) => (
+                  <CellToolbar
+                    label="Cards"
+                    first={idx === 0}
+                    last={idx === blocks.length - 1}
+                    onMove={(dir) => onMoveBlock(block.id, dir)}
+                    onDelete={() => onDeleteBlock(block.id)}
+                    extra={extra}
+                  />
+                )}
               />
             ) : null}
           </div>
@@ -86,21 +100,27 @@ export default function ReportNotebook({
   );
 }
 
-/** Cell type + move/delete, pinned to the cell's top-right; revealed on hover/focus (always on touch). */
-function CellToolbar({
-  label, first, last, onMove, onDelete,
+/**
+ * Cell type + cell actions + move/delete. It floats on the cell's top border
+ * (outside the content, so it never covers a card's own toolbar) and is
+ * revealed on hover/focus (always shown on touch). `extra` holds the cell
+ * type's own actions (cards cells: add card, runs).
+ */
+export function CellToolbar({
+  label, first, last, onMove, onDelete, extra,
 }: {
   label: string;
   first: boolean;
   last: boolean;
   onMove: (dir: -1 | 1) => void;
   onDelete: () => void;
+  extra?: ReactNode;
 }) {
-  const btn =
-    "inline-flex h-6 w-6 touch:h-10 touch:w-10 items-center justify-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg disabled:opacity-30";
+  const btn = CELL_TOOLBAR_BTN;
   return (
-    <div className="absolute right-1 top-1 z-10 print:hidden flex items-center gap-0.5 rounded border border-border-subtle bg-bg-elevated px-1 shadow-sm transition-opacity can-hover:opacity-0 can-hover:group-hover/cell:opacity-100 can-hover:group-focus-within/cell:opacity-100">
+    <div className="absolute right-2 -top-3.5 touch:-top-5 z-10 print:hidden flex items-center gap-0.5 rounded border border-border-subtle bg-bg-elevated px-1 shadow-sm transition-opacity can-hover:opacity-0 can-hover:group-hover/cell:opacity-100 can-hover:group-focus-within/cell:opacity-100">
       <span className="px-1 text-[10px] uppercase tracking-wide text-fg-subtle">{label}</span>
+      {extra}
       <button type="button" className={btn} disabled={first} onClick={() => onMove(-1)} title="Move up" aria-label="Move cell up">
         <i className="fa-solid fa-arrow-up" aria-hidden="true" />
       </button>

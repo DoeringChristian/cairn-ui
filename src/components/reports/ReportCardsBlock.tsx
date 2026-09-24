@@ -3,13 +3,16 @@
  * runIds or a dynamic `RunSelector` (see lib/run-selector.ts), holding a
  * list of ComparisonCard[] rendered by `ComparisonCardView` with settings
  * scoped under `reportRunId(reportId)`. The run set is edited with the same
- * `RunSetEditor` a comparison uses.
+ * `RunSetEditor` a comparison uses, folded into a "Runs" dialog opened from
+ * the cell toolbar, so the report itself shows only its cards.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import AddCardModal, { type AddCardSelection } from "../AddCardModal";
 import ComparisonCardView from "../comparison/ComparisonCardView";
 import ReorderableCardGrid from "../ReorderableCardGrid";
+import Dialog, { DialogBody } from "../ui/Dialog";
+import { CELL_TOOLBAR_BTN } from "./cell-toolbar";
 import RunSelectorBadge from "../RunSelectorBadge";
 import RunSetEditor, { DEFAULT_QUERY_SELECTOR } from "../comparison/RunSetEditor";
 import { CardSettingsChangeContext } from "../../lib/card-settings";
@@ -29,10 +32,13 @@ interface Props {
   block: CardsBlock;
   allProjectRuns: Run[];
   onChange: (next: CardsBlock) => void;
+  /** Renders the cell toolbar with this cell's own actions (`extra`) in it. */
+  toolbar: (extra: ReactNode) => ReactNode;
 }
 
-export default function ReportCardsBlock({ projectId, reportId, block, allProjectRuns, onChange }: Props) {
+export default function ReportCardsBlock({ projectId, reportId, block, allProjectRuns, onChange, toolbar }: Props) {
   const [addCardOpen, setAddCardOpen] = useState(false);
+  const [runsOpen, setRunsOpen] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [resetting, setResetting] = useState(false);
 
@@ -176,9 +182,35 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
     // A card's settings change (step, yScale, …) re-saves the report.
     <CardSettingsChangeContext.Provider value={handleSettingsTouched}>
     <div>
-      <div className="mb-3 print:hidden">
+      {toolbar(
+        <>
+          <button
+            type="button"
+            className={CELL_TOOLBAR_BTN}
+            onClick={() => setAddCardOpen(true)}
+            disabled={runIds.length === 0}
+            title={runIds.length === 0 ? "Choose runs for this cell first" : "Add card"}
+            aria-label="Add card"
+          >
+            <i className="fa-solid fa-plus" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={CELL_TOOLBAR_BTN}
+            onClick={() => setRunsOpen(true)}
+            title="Runs in this cell"
+            aria-label="Runs in this cell"
+          >
+            <i className="fa-solid fa-sliders" aria-hidden="true" />
+            <span className="mono text-[10px]">{runIds.length}</span>
+          </button>
+        </>,
+      )}
+
+      <Dialog open={runsOpen} onClose={() => setRunsOpen(false)} title="Runs in this cell">
+        <DialogBody>
           <RunSetEditor
-            title="Runs in this block"
+            title="Runs"
             runIds={runIds}
             allProjectRuns={allProjectRuns}
             selector={selector}
@@ -202,33 +234,28 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
                   onClick={() => void handleResetFromRuns()}
                   disabled={resetting || runIds.length === 0}
                   className="inline-flex h-6 touch:h-10 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg disabled:opacity-40"
-                  title="Discard current cards and regrow one card per metric across this block's runs"
+                  title="Discard current cards and regrow one card per metric across this cell's runs"
                 >
                   {resetting ? "Resetting…" : "Reset cards from runs"}
                 </button>
               </>
             }
           />
-      </div>
+        </DialogBody>
+      </Dialog>
 
       <AddCardModal open={addCardOpen} onClose={() => setAddCardOpen(false)} runIds={runIds} onAdd={onAddCard} />
-      <div className="mb-3 print:hidden">
-        <button
-          type="button"
-          onClick={() => setAddCardOpen(true)}
-          disabled={runIds.length === 0}
-          className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-xs font-medium text-fg-muted hover:border-accent hover:text-fg transition-colors disabled:opacity-40"
-          title={runIds.length === 0 ? "Add runs to this block first" : undefined}
-        >
-          <span aria-hidden="true">+</span> Add card
-        </button>
-      </div>
 
       {displayCards.length === 0 ? (
-        <div className="card p-4 text-sm text-fg-muted">
-          {runIds.length === 0
-            ? "No runs bound to this block yet."
-            : 'No cards yet. Click "Add card" to pick metrics from this block\'s runs.'}
+        <div className="card flex flex-wrap items-center gap-3 p-4 text-sm text-fg-muted print:hidden">
+          {runIds.length === 0 ? "No runs in this cell yet." : "No cards yet."}
+          <button
+            type="button"
+            onClick={() => (runIds.length === 0 ? setRunsOpen(true) : setAddCardOpen(true))}
+            className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-xs font-medium text-fg-muted hover:border-accent hover:text-fg transition-colors"
+          >
+            {runIds.length === 0 ? "Choose runs" : "+ Add card"}
+          </button>
         </div>
       ) : (
         <ReorderableCardGrid
