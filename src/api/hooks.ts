@@ -7,7 +7,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import type { RunDetailResponse, RunsListResponse } from "./types";
+import type { RunDetailResponse, RunsListResponse, RunsQuery } from "./types";
 import { api } from "./client";
 import { qk } from "./query-keys";
 import { addRunMetadata, setRunMetadata } from "../lib/run-label";
@@ -51,7 +51,7 @@ export function useRuns(params: Parameters<typeof api.runs>[0]) {
 
 const INFINITE_PAGE_SIZE = 100;
 
-export function useInfiniteRuns(params: { project?: string; status?: string }) {
+export function useInfiniteRuns(params: Omit<RunsQuery, "limit" | "offset">) {
   const q = useInfiniteQuery<RunsListResponse>({
     queryKey: qk.runsInfinite(params),
     queryFn: ({ pageParam }) =>

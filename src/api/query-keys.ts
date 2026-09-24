@@ -5,12 +5,16 @@
  * reference these builders so keys stay consistent across the app.
  */
 
+import type { RunsQuery } from "./types.ts";
+
 export const qk = {
   health: () => ["health"] as const,
   session: () => ["auth-session"] as const,
   projects: () => ["projects"] as const,
   runs: (params?: unknown) => params != null ? ["runs", params] as const : ["runs"] as const,
-  runsInfinite: (params?: unknown) => params != null ? ["runs-infinite", params] as const : ["runs-infinite"] as const,
+  /** No params: the prefix every runs-infinite query shares (for invalidation). */
+  runsInfinite: (params?: Omit<RunsQuery, "limit" | "offset">) =>
+    params != null ? ["runs-infinite", params] as const : ["runs-infinite"] as const,
   run: (runId: string) => ["run", runId] as const,
   sequences: (runId: string) => ["sequences", runId] as const,
   sequence: (runId: string, name: string, opts: unknown) => ["sequence", runId, name, opts] as const,

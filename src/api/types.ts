@@ -37,6 +37,26 @@ export interface Run {
   user: string | null;
   tags: string | null; // JSON string
   notes: string | null;
+  git_remote: string | null;
+  /** The run this one was forked from, and the step it was forked at. */
+  parent_run_id: string | null;
+  fork_step: number | null;
+  /**
+   * Bumped whenever the run's history is rewritten (rewind); a live client's
+   * rowid cursor for the run is stale once this changes.
+   */
+  data_epoch: number;
+  /** Free-form grouping label (e.g. one per ablation arm). */
+  group: string | null;
+  job_type: string | null;
+  sweep_id: string | null;
+  /** When a stop was requested from the UI; null when none is pending. */
+  stop_requested: string | null;
+  /**
+   * The run's config as `{key: value}` (dotted keys, values JSON-decoded).
+   * Only present when the list was fetched with `include: ["params"]`.
+   */
+  params?: Record<string, unknown>;
   /**
    * What the run table shows as metric columns: each scalar sequence's LAST
    * point, with an explicit `run.summary()` key of the same name replacing it.
@@ -74,6 +94,8 @@ export interface SequencePoint {
   artifact_metadata?: string | null;
   context: string | null;
   object_type: string;
+  /** JSON-stringified per-point metadata (e.g. a caption); null when none. */
+  metadata?: string | null;
 }
 
 export interface SequenceResponse {
@@ -107,6 +129,21 @@ export interface UpdatesResponse {
 export interface RunDetailResponse {
   run: Run;
   params: Param[];
+}
+
+/** Per-run extras `GET /api/runs` adds on request (`?include=`). */
+export type RunInclude = "params";
+
+/** Filters and paging for `GET /api/runs`. */
+export interface RunsQuery {
+  project?: string;
+  status?: string;
+  group?: string;
+  job_type?: string;
+  sweep_id?: string;
+  include?: RunInclude[];
+  limit?: number;
+  offset?: number;
 }
 
 export interface RunsListResponse {

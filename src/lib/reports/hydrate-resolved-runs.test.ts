@@ -29,6 +29,14 @@ function fakeRun(id: string, displayName: string, createdAt: string): Run {
     user: null,
     tags: null,
     notes: null,
+    git_remote: null,
+    parent_run_id: null,
+    fork_step: null,
+    data_epoch: 0,
+    group: null,
+    job_type: null,
+    sweep_id: null,
+    stop_requested: null,
   };
 }
 

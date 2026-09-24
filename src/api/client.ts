@@ -83,10 +83,14 @@ export const api = {
     get<{ projects: import("./types").Project[] }>("/api/projects"),
   createProject: (name: string) =>
     post<{ id: string; name: string; created_at: string }>("/api/projects", { name }),
-  runs: (params: { project?: string; status?: string; limit?: number; offset?: number } = {}) => {
+  runs: (params: import("./types").RunsQuery = {}) => {
     const q = new URLSearchParams();
     if (params.project) q.set("project", params.project);
     if (params.status) q.set("status", params.status);
+    if (params.group) q.set("group", params.group);
+    if (params.job_type) q.set("job_type", params.job_type);
+    if (params.sweep_id) q.set("sweep_id", params.sweep_id);
+    if (params.include?.length) q.set("include", params.include.join(","));
     if (params.limit != null) q.set("limit", String(params.limit));
     if (params.offset != null) q.set("offset", String(params.offset));
     const qs = q.toString();
