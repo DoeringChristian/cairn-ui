@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import SplitPane from "../SplitPane";
+import { useCompactLayout } from "../../lib/use-media-query";
 
 interface Props {
   /** Explicit height of every grid row (e.g. "320px"); absent = fill the container. */
@@ -22,8 +23,8 @@ interface Props {
  * Shared multi-pane layout for comparison cards (figure/audio/video).
  *
  * In a modal, panes are laid out with the draggable `SplitPane`. In a card,
- * panes are laid out in a wrapping grid (up to 2 columns) with an absolute
- * run-label badge in the top-left corner of each pane.
+ * panes are laid out in a wrapping grid (up to 2 columns; one on phones) with
+ * an absolute run-label badge in the top-left corner of each pane.
  */
 export default function MultiPaneGrid({
   rowHeight,
@@ -34,6 +35,7 @@ export default function MultiPaneGrid({
   onPaneWidthsChange,
   renderPane,
 }: Props) {
+  const compact = useCompactLayout();
   if (inModal) {
     return (
       <SplitPane
@@ -54,9 +56,11 @@ export default function MultiPaneGrid({
       // pane then shows nothing. Either the caller supplies a row height (the
       // auto-height card path) or the grid fills its container and splits it
       // evenly (the explicit-card-height path).
+      // Phones stack the panes in one column; each keeps a usable minimum
+      // height and the grid scrolls when they don't all fit.
       style={{
-        gridTemplateColumns: `repeat(${Math.min(paneKeys.length, 2)}, 1fr)`,
-        gridAutoRows: rowHeight ?? "minmax(0, 1fr)",
+        gridTemplateColumns: `repeat(${compact ? 1 : Math.min(paneKeys.length, 2)}, 1fr)`,
+        gridAutoRows: rowHeight ?? (compact ? "minmax(180px, 1fr)" : "minmax(0, 1fr)"),
         height: rowHeight ? undefined : "100%",
       }}
     >

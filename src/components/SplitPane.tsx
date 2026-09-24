@@ -146,7 +146,8 @@ export default function SplitPane({
       items.push(
         <div
           key={`handle-${i}`}
-          className="w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-border"
+          // 4px with a mouse; a 16px strip for a finger.
+          className="w-1 touch:w-4 shrink-0 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-border"
           onPointerDown={(e) => {
             e.preventDefault();
             (e.target as HTMLElement).setPointerCapture(e.pointerId);
