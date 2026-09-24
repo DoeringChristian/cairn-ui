@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { api } from "../api/client";
 import { safeJsonParse } from "../lib/format";
+import { pointCaption } from "../lib/caption";
 import type { SequencePoint } from "../api/types";
 import SteppedMediaCard, { type SteppedMediaCardProps, type SteppedMediaSettings } from "./media/SteppedMediaCard";
 import Toggle from "./settings/Toggle";
@@ -53,8 +54,10 @@ function channelLabel(channels: number): string {
 /** Waveform, player and format line for one audio artifact. */
 function AudioClip({ point, hash, autoplay }: { point: SequencePoint; hash: string; autoplay: boolean }) {
   const meta = useMemo(() => safeJsonParse<AudioMeta>(point.artifact_metadata), [point]);
+  const caption = pointCaption(point.metadata);
   return (
     <div className="rounded bg-bg p-2">
+      {caption && <div className="mb-1 truncate text-xs text-fg" title={caption}>{caption}</div>}
       {meta?.peaks && meta.peaks.length > 0 ? <Waveform peaks={meta.peaks} /> : <div className="h-12" />}
       <audio key={hash} controls autoPlay={autoplay} src={api.artifactUrl(hash)} className="mt-2 w-full" />
       {meta && (
