@@ -16,11 +16,7 @@ Everything here needs a reachable cairn server that is *serving* the viewer,
 since a card is ultimately rendered by the browser at ``/embed/card``. Without
 one the elements degrade to an inline notice rather than raising.
 
-That server may be remote, which is why this module imports under
-``cairn-track[plot]`` alone: constructing a card spec needs the renderer's
-``Element`` and spec models, not a locally installed bundle. ``[ui]`` is what
-you want if the viewer should also run *here* — it adds the bundle and implies
-``[plot]``.
+That server may be remote; building a card spec needs no local bundle.
 """
 
 from __future__ import annotations
@@ -34,13 +30,10 @@ from .compare import (
     pointcloud_compare,
     volume_compare,
 )
-from .elements import CardElement, HtmlElement
-from .report import Report
+from .elements import CardElement
 
 __all__ = [
     "CardElement",
-    "HtmlElement",
-    "Report",
     "CardSpec",
     "CardSettingsSpec",
     "SeriesRef",

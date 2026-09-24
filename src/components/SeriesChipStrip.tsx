@@ -1,4 +1,4 @@
-import { SERIES_COLORS } from "../lib/public-plot";
+import { SERIES_COLORS } from "../lib/plot-utils/types";
 import { seriesKey, seriesLabel } from "../lib/series-utils";
 import SeriesChip, { type SeriesRef } from "./SeriesChip";
 

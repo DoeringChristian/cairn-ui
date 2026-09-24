@@ -39,19 +39,6 @@ __all__ = [
 # re-exported above for the pure/self-contained composable path.
 # ---------------------------------------------------------------------------
 
-# `mode` values for the "one-pane" media-compare compositor these CARD helpers
-# drive (`media_compare` and friends, below) — read by
-# `src/components/card-kit/CompareSettingsPanel.tsx`.
-#
-# NOT the vocabulary of `cp.Compare`, the pure cairn-plot composable re-exported
-# from this module: that one takes `split`/`signed`/`abs`/`square`/`rel_*`/
-# `flip`/`flip_hdr`/`ssim` and validates them itself. Two different compare
-# surfaces share this namespace — passing a mode from one to the other raises.
-# (The previous note here cited a TypeScript `MediaCompareModeKind` type that no
-# longer exists.)
-_COMPARE_MODES = ("split", "blend", "diff")
-
-
 def _resolve_series(data: Any, *, builder: str) -> tuple[SeriesRef, int | None]:
     """A `run[tag]` handle -> a validated `SeriesRef` (+ its optional step).
 
@@ -112,7 +99,6 @@ def _card_element(
     sources: Sequence[Any],
     *,
     builder: str,
-    mode: str | None = None,
     settings: dict[str, Any] | None = None,
 ) -> CardElement:
     """Build + schema-validate one `CardSpec` from `run[tag]` sources, and
@@ -132,8 +118,6 @@ def _card_element(
             reader_server = _server_url_of(source)
 
     merged_settings = dict(settings or {})
-    if mode is not None:
-        merged_settings["mode"] = mode
     if step is not None:
         merged_settings.setdefault("step", float(step))
     settings_obj = CardSettingsSpec(**merged_settings) if merged_settings else None
@@ -146,69 +130,53 @@ def _card_element(
     )
 
 
-def media_compare(a: Any, b: Any, *, mode: str = "diff", card_type: str = "image") -> Any:
-    """Compare two media sources as one card — the Python mirror of the TS
-    media-compare compositor (`OffscreenComparePanes`/`CompareSettingsPanel`).
+def media_compare(*sources: Any, card_type: str = "image") -> Any:
+    """Show several `run[tag]` media sources side by side in one card.
 
-    Args:
-        a: first `run[tag]` handle.
-        b: second `run[tag]` handle.
-        mode: ``"split"`` (image-space split),
-            ``"blend"`` (alpha blend), or ``"diff"`` (pixel diff).
-        card_type: which single-view card type `a`/`b` are —
-            ``"image"`` (default), ``"mesh"``, ``"pointcloud"``,
-            ``"volume"``, or ``"boxes3d"``.
-
-    `compare` sugar: this just sets the card's two `series` plus
-    `settings.mode`/`settings.baselineIndex`; the renderer's existing compare
-    compositor does the rest — no new render path.
-
-    `settings.baselineIndex` designates `a` (series index 0) as the
-    reference the compositor diffs/splits/blends `b` against — see
-    `useMediaReference`'s `seriesBaselineIndex` (card-kit/use-media-
-    reference.ts) and `VisualContentCard.tsx`'s `hasBaseline`/`baselineIdx`:
-    without it, every pane resolves no reference at all and every mode
-    (including "diff") falls back to plain unmodified per-pane rendering
-    plain-per-pane output. `baselineIndex` is set unconditionally so switching
-    modes after render (e.g. via the card's own UI) works immediately without a
-    reload.
+    One pane per source, with zoom (images) or camera (3D) kept together
+    across panes. `card_type` is the kind the sources are: ``"image"``
+    (default), ``"mesh"``, ``"pointcloud"``, ``"volume"`` or ``"boxes3d"``.
     """
-    if mode not in _COMPARE_MODES:
-        raise ValueError(f"mode must be one of {_COMPARE_MODES!r}, got {mode!r}")
+    if len(sources) < 1:
+        raise ValueError("media_compare needs at least one source")
+    return _card_element(card_type, sources, builder="media_compare")
+
+
+def image_compare(a: Any, b: Any) -> Any:
+    """Compare two images.
+
+    Two tags of the same run become one pane split by a draggable divider:
+    ``a`` on the left, ``b`` (the card's reference tag) on the right. Images
+    from different runs are shown side by side instead.
+    """
+    same_run = isinstance(a, DataRef) and isinstance(b, DataRef) and a.run_id == b.run_id
+    if not same_run:
+        return media_compare(a, b, card_type="image")
+    reference = {"name": b.tag, "context_hash": b.context_hash()}
+    if b.step is not None:
+        reference_step = {"referenceStep": b.step}
+    else:
+        reference_step = {}
     return _card_element(
-        card_type, [a, b], builder="media_compare", mode=mode, settings={"baselineIndex": 0}
+        "image", [a], builder="image_compare", settings={"reference": reference, **reference_step}
     )
 
 
-def image_compare(a: Any, b: Any, *, mode: str = "split") -> Any:
-    """`media_compare(a, b, mode=mode, card_type="image")`."""
-    return media_compare(a, b, mode=mode, card_type="image")
+def mesh_compare(a: Any, b: Any) -> Any:
+    """Two meshes side by side, cameras kept together."""
+    return media_compare(a, b, card_type="mesh")
 
 
-def _compare_3d(a: Any, b: Any, mode: str, card_type: str) -> Any:
-    """Shared body for the four 3D ``*_compare`` helpers.
-
-    All modes (``split``/``blend``/``diff``) delegate to the server-backed
-    ``media_compare`` ``CardElement`` iframe (image-space compositing of two
-    rendered frames; standalone 3D compositing is deferred to G3c)."""
-    return media_compare(a, b, mode=mode, card_type=card_type)
+def pointcloud_compare(a: Any, b: Any) -> Any:
+    """Two point clouds side by side, cameras kept together."""
+    return media_compare(a, b, card_type="pointcloud")
 
 
-def mesh_compare(a: Any, b: Any, *, mode: str = "split") -> Any:
-    """Compare two meshes via the server-backed ``media_compare`` iframe (``split``/``blend``/``diff``)."""
-    return _compare_3d(a, b, mode, "mesh")
+def volume_compare(a: Any, b: Any) -> Any:
+    """Two volumes side by side (the viewer offers volumes as downloads)."""
+    return media_compare(a, b, card_type="volume")
 
 
-def pointcloud_compare(a: Any, b: Any, *, mode: str = "split") -> Any:
-    """Compare two point clouds via the server-backed ``media_compare`` iframe (``split``/``blend``/``diff``)."""
-    return _compare_3d(a, b, mode, "pointcloud")
-
-
-def volume_compare(a: Any, b: Any, *, mode: str = "split") -> Any:
-    """Compare two volumes via the server-backed ``media_compare`` iframe (``split``/``blend``/``diff``)."""
-    return _compare_3d(a, b, mode, "volume")
-
-
-def boxes_compare(a: Any, b: Any, *, mode: str = "split") -> Any:
-    """Compare two boxes plots via the server-backed ``media_compare`` iframe (``split``/``blend``/``diff``)."""
-    return _compare_3d(a, b, mode, "boxes3d")
+def boxes_compare(a: Any, b: Any) -> Any:
+    """Two 3D-box scenes side by side, cameras kept together."""
+    return media_compare(a, b, card_type="boxes3d")

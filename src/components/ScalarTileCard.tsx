@@ -3,7 +3,7 @@ import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { useCardSettings } from "../lib/card-settings";
-import { formatNum } from "../lib/public-plot";
+import { formatNum } from "../lib/plot-utils/types";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import CardShell from "./CardShell";
 import Select from "./settings/Select";

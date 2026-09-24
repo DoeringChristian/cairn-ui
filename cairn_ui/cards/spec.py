@@ -13,11 +13,6 @@ Not wired into any runtime path yet — that is WS-PYAPI, where
 ``.model_dump()`` will yield the exact `````cairn`` YAML/JSON the TS
 ``parseCairnSpec`` consumes. Python only ever *emits* validated specs; it
 never parses markdown and never re-implements ``cardFromSpec``.
-
-The PLOT-descriptor slice of this mirror (``PlotSpec``/``PlotDescriptorSpec``/
-``DataSpec``/``PlotNode``/… — everything the pure ``cairn.plot`` path imports)
-comes from ``cairn_plot.spec`` and is **re-exported** here verbatim, so
-``from cairn.ui.card_spec import PlotDescriptorSpec`` keeps working.
 """
 
 from __future__ import annotations
@@ -26,25 +21,11 @@ from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict
 
-# The plot-descriptor models come straight from the renderer distribution;
-# `_Strict` (BaseModel + extra="forbid") is shared by them and by the card
-# models below.
-from cairn_plot.spec import (  # noqa: F401  - re-exported for zero caller changes
-    CompareSpec,
-    DataSpec,
-    GridSpec,
-    ImageDataSpec,
-    ImgHdrDataSpec,
-    InlineDataSpec,
-    NpzDataSpec,
-    PlotDescriptorSpec,
-    PlotLeafSpec,
-    PlotNode,
-    SharedPropsSpec,
-    UrlDataSpec,
-    _Strict,
-    _SyncSpec,
-)
+class _Strict(BaseModel):
+    """Base for objects the schema marks ``additionalProperties: false``."""
+
+    model_config = ConfigDict(extra="forbid")
+
 
 __all__ = [
     "CARD_TYPES",
@@ -58,19 +39,6 @@ __all__ = [
     "RunsSpec",
     "CardsSpec",
     "ReportSpec",
-    # Re-exported from plot_spec (plot-descriptor slice).
-    "InlineDataSpec",
-    "ImageDataSpec",
-    "UrlDataSpec",
-    "NpzDataSpec",
-    "ImgHdrDataSpec",
-    "DataSpec",
-    "PlotLeafSpec",
-    "GridSpec",
-    "CompareSpec",
-    "SharedPropsSpec",
-    "PlotNode",
-    "PlotDescriptorSpec",
 ]
 
 # The canonical card-type vocabulary. Mirrors `CARD_TYPES` in

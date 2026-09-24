@@ -18,20 +18,11 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 # The card surface needs the tracker's DataRef and config to resolve run[tag]
-# handles and find a server, and the renderer's Element and spec models to build
-# a card. cairn-track[ui] depending back on this package is the ordinary plugin
-# shape — that extra points here, this points at base cairn-track.
-# Ranges, not URLs, on purpose. Neither package is on an index yet, so someone
-# has to name a commit — but it must be exactly one someone. `cairn-track[ui]`
-# does it, for cairn-plot and for this package, and a URL here would be a second
-# voice: uv rejects the pair outright ("conflicting URLs for package
-# cairn-plot") the moment a dev checkout redirects cairn-plot to a local path.
-# A range costs nothing, because whoever pins the URL provides a cairn-plot that
-# satisfies it. The consequence is that this package is not installable on its
-# own until both are published; it is pulled by `cairn-track[ui]`, so it is not.
+# handles and find a server. cairn-track[ui] depending back on this package is
+# the ordinary plugin shape. A range, not a URL: `cairn-track[ui]` pins the
+# exact commit of this package, and a URL here would be a second voice.
 dependencies = [
     "cairn-track",
-    "cairn-plot>=0.1,<0.2",
 ]
 
 [project.urls]
@@ -41,15 +32,8 @@ Repository = "https://github.com/DoeringChristian/cairn-ui"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# Deliberately NO [tool.uv.sources]. cairn-plot is vendored as a submodule for
-# the TypeScript build (vite compiles its source in), but declaring a path
-# source here would follow this package into every consumer — and the cairn
-# monorepo supplies its own cairn-plot, so two path sources for one package is
-# a hard resolution conflict.
-#
-# For Python work in this repo before cairn-plot is published, add locally:
+# For Python work in this repo, add locally:
 #   [tool.uv.sources]
-#   cairn-plot = { path = "vendor/cairn-plot", editable = true }
 #   cairn-track = { path = "../cairn", editable = true }
 
 [tool.hatch.build.targets.wheel]

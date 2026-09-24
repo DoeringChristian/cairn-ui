@@ -1,37 +1,13 @@
-"""WS-PYAPI display protocol — the base classes ``cairn.plot`` builders and
-``cairn.Report`` compose.
+"""Notebook display objects for viewer cards.
 
-An **element** is anything a builder in :mod:`cairn.plot` returns (see that
-module for the ``scalar``/``image``/``mesh``/``media_compare``/... factory
-functions) or that gets ``report.add(el)``-ed into a :class:`cairn.Report`.
-Every element implements the standard Jupyter/marimo display protocol —
-``_repr_html_`` and ``_repr_mimebundle_`` — so it renders inline the moment
-it's the last expression in a cell, per
-``docs/superpowers/specs/2026-07-07-notebook-python-and-embed.md`` §5/§11.
-
-Two concrete shapes, matching the design's "reuse the existing viewer, no
-new render path" constraint:
-
-* :class:`CardElement` — a **server-backed** card spec (built from one or
-  more ``run[tag]`` lazy handles). Rendering POSTs the spec to the existing
-  ``/api/embed/specs`` route (WS-EMBED) to get a short-lived ``sid``, then
-  returns an ``<iframe src=".../embed/card?sid=...">`` pointed at the
-  existing ``/embed/card`` SPA entry — the *same* React ``CardRenderer``
-  every other card in the app uses. Zero card reimplementation. This is the
-  one app/server-coupled element and so STAYS in ``cairn`` (it needs
-  ``cairn.config`` + server discovery).
-* :class:`PlotElement` / :class:`HtmlElement` — the **pure**, self-contained
-  display objects (no server round trip). They live in the app-decoupled
-  ``cairn_plot.elements`` and are re-exported
-  here so every existing ``from cairn.ui.elements import PlotElement`` keeps
-  working.
-
-Raw, non-plot MEDIA (an in-memory image/mesh/volume array with no run to
-anchor a ``SeriesRef`` to) has **no** self-contained render path today — the
-card-spec schema (``cairn/ui/card_spec.py``) has no inline-data variant.
-That is WS-INLINE (design spec §6.3, deferred); builders that hit this case
-raise a clear ``NotImplementedError`` rather than silently doing something
-half-right (see ``cairn/plot.py``'s ``_resolve_series``).
+:class:`CardElement` is a **server-backed** card spec (built from one or more
+``run[tag]`` lazy handles). Rendering POSTs the spec to ``/api/embed/specs``
+to get a short-lived ``sid``, then returns an
+``<iframe src=".../embed/card?sid=...">`` pointed at the viewer's
+``/embed/card`` entry — the same React ``CardRenderer`` every card in the app
+uses. It implements the Jupyter/marimo display protocol, so it renders inline
+as the last expression of a cell, and composes into any report that accepts
+objects with ``_repr_html_`` (e.g. ``cairn.plot.Report``).
 """
 
 from __future__ import annotations
@@ -44,13 +20,16 @@ from typing import Any
 
 from cairn import config as _config
 
-# Re-export the pure display objects (factored out to plot_elements.py for the
-# cairn-plot packaging split) so callers importing them from here are unchanged.
-from cairn_plot.elements import (  # noqa: F401  - re-exported for zero caller changes
-    Element,
-    HtmlElement,
-    PlotElement,
-)
+
+
+class Element:
+    """Base for objects that render themselves in a notebook."""
+
+    def _repr_html_(self) -> str:  # pragma: no cover - abstract
+        raise NotImplementedError
+
+    def _repr_mimebundle_(self, include: Any = None, exclude: Any = None) -> dict[str, str]:
+        return {"text/html": self._repr_html_()}
 
 log = logging.getLogger(__name__)
 

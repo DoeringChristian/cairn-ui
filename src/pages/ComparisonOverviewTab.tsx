@@ -6,7 +6,7 @@ import { qk } from "../api/query-keys";
 import type { Param, Run } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
 import { formatDuration, safeJsonParse } from "../lib/format";
-import { formatNum } from "../lib/public-plot";
+import { formatNum } from "../lib/plot-utils/types";
 import { disambiguateRunLabels, useRunMetadataVersion } from "../lib/run-label";
 import { computeCellStatuses, diffCellClassName, isNumericSeries, toNumeric } from "../lib/table-diff";
 

@@ -18,7 +18,7 @@
 
 import { useMemo, useRef } from "react";
 import { useSequence } from "../api/hooks";
-import { formatNum } from "../lib/public-plot";
+import { formatNum } from "../lib/plot-utils/types";
 import { type CardSettingsKey, useCardSettings } from "../lib/card-settings";
 import type { SequenceMeta } from "../api/types";
 import { type BaseCardSettings } from "./card-kit";
