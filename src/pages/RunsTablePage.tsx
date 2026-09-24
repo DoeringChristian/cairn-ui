@@ -899,7 +899,7 @@ function RunTagCell({
   const removeBtnClass =
     variant === "desktop"
       ? "text-fg-subtle hover:text-status-failed can-hover:opacity-0 can-hover:group-hover/tag:opacity-100 transition-opacity -mr-0.5"
-      : "text-fg-subtle hover:text-status-failed -mr-0.5";
+      : "text-fg-subtle hover:text-status-failed -mr-0.5 touch:-my-2 touch:inline-flex touch:h-8 touch:min-w-8 touch:items-center touch:justify-center";
 
   const onRemoveClick = (e: React.MouseEvent, tag: string) => {
     if (variant === "desktop") e.stopPropagation();
@@ -923,6 +923,7 @@ function RunTagCell({
             className={removeBtnClass}
             onClick={(e) => onRemoveClick(e, t)}
             title={variant === "desktop" ? `Remove tag "${t}"` : undefined}
+            aria-label={`Remove tag "${t}"`}
           >
             {"×"}
           </button>
@@ -943,7 +944,7 @@ function RunTagCell({
       ) : (
         <button
           type="button"
-          className="inline-flex items-center justify-center rounded border border-dashed border-border-subtle px-1 py-0.5 text-xs text-fg-subtle hover:text-fg hover:border-border"
+          className="inline-flex items-center justify-center rounded border border-dashed border-border-subtle px-1 py-0.5 text-xs text-fg-subtle hover:text-fg hover:border-border touch:min-h-8 touch:min-w-8"
           onClick={onAddClick}
           title="Add tag"
         >

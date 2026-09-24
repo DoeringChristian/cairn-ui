@@ -531,7 +531,7 @@ export default function ScalarPlotCard({
           <button
             type="button"
             onClick={() => setExpanded(true)}
-            className="h-5 inline-flex items-center justify-center rounded px-1.5 text-[10px] text-accent hover:bg-bg-hover"
+            className="h-5 touch:h-10 touch:min-w-[40px] inline-flex items-center justify-center rounded px-1.5 text-[10px] text-accent hover:bg-bg-hover"
             title="Smoothing active — click to open settings"
           >
             EMA {settings.smoothing.toFixed(2)}
@@ -540,7 +540,7 @@ export default function ScalarPlotCard({
         <button
           type="button"
           onClick={flipYScale}
-          className={`h-5 inline-flex items-center justify-center rounded px-1.5 text-[10px] hover:bg-bg-hover ${
+          className={`h-5 touch:h-10 touch:min-w-[40px] inline-flex items-center justify-center rounded px-1.5 text-[10px] hover:bg-bg-hover ${
             settings.yScale === "log"
               ? "text-accent"
               : "text-fg-muted hover:text-fg"

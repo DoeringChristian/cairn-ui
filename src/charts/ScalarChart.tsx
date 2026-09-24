@@ -215,6 +215,44 @@ export default function ScalarChart(props: ScalarChartProps) {
     const onDblClick = () => live.current.props.onViewChange?.(EMPTY_VIEW);
     if (interactive) plot.over.addEventListener("dblclick", onDblClick);
 
+    // uPlot only listens to the mouse. On touch (while interactive): drag
+    // horizontally to zoom, tap to show the tooltip, double-tap to reset.
+    let touchX0: number | null = null;
+    let lastTap = 0;
+    const overX = (t: Touch) => t.clientX - plot.over.getBoundingClientRect().left;
+    const onTouchStart = (e: TouchEvent) => {
+      touchX0 = e.touches.length === 1 ? overX(e.touches[0]!) : null;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (touchX0 == null || e.touches.length !== 1) return;
+      e.preventDefault();
+      const x = overX(e.touches[0]!);
+      plot.setSelect({ left: Math.min(touchX0, x), width: Math.abs(x - touchX0), top: 0, height: plot.over.clientHeight }, false);
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (touchX0 == null) return;
+      const touch = e.changedTouches[0]!;
+      const x = overX(touch);
+      const width = Math.abs(x - touchX0);
+      plot.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
+      if (width >= 8) {
+        const left = Math.min(touchX0, x);
+        live.current.props.onViewChange?.({
+          xMin: plot.posToVal(left, "x"), xMax: plot.posToVal(left + width, "x"), yMin: null, yMax: null,
+        });
+      } else {
+        if (e.timeStamp - lastTap < 300) live.current.props.onViewChange?.(EMPTY_VIEW);
+        else plot.setCursor({ left: x, top: touch.clientY - plot.over.getBoundingClientRect().top });
+        lastTap = e.timeStamp;
+      }
+      touchX0 = null;
+    };
+    if (interactive) {
+      plot.over.addEventListener("touchstart", onTouchStart, { passive: true });
+      plot.over.addEventListener("touchmove", onTouchMove, { passive: false });
+      plot.over.addEventListener("touchend", onTouchEnd);
+    }
+
     const ro = new ResizeObserver(() => {
       plot.setSize({ width: Math.max(host.clientWidth, 50), height: Math.max(host.clientHeight, 50) });
     });
@@ -242,7 +280,7 @@ export default function ScalarChart(props: ScalarChartProps) {
     <div ref={boxRef} className={`flex flex-col min-h-0 ${className ?? ""}`}>
       <div
         className="relative flex-1 min-h-0"
-        style={{ touchAction: interactive ? undefined : "pan-y" }}
+        style={{ touchAction: interactive ? "none" : "pan-y" }}
         onMouseLeave={() => setHover(null)}
       >
         <div ref={plotHostRef} className="absolute inset-0" />

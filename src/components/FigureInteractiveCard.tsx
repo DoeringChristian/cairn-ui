@@ -813,7 +813,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
           aria-label={settings.displayModeBar ? "Hide modebar" : "Show modebar"}
           aria-pressed={settings.displayModeBar}
           title={settings.displayModeBar ? "Hide modebar" : "Show modebar"}
-          className={`h-5 inline-flex items-center justify-center rounded px-1.5 text-[10px] hover:bg-bg-hover text-fg-muted hover:text-fg${
+          className={`h-5 touch:h-10 touch:min-w-[40px] inline-flex items-center justify-center rounded px-1.5 text-[10px] hover:bg-bg-hover text-fg-muted hover:text-fg${
             settings.displayModeBar ? " text-accent" : ""
           }`}
         >
