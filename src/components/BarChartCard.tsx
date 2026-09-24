@@ -3,12 +3,8 @@ import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { useCardSettings } from "../lib/card-settings";
-import {
-  BarChart,
-  SERIES_COLORS,
-  type BarDatum,
-  type BarCompareMode,
-} from "../lib/public-plot";
+import BarChart, { type BarDatum, type BarCompareMode } from "../charts/BarChart";
+import { seriesColor } from "../lib/plot-utils/types";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
@@ -116,7 +112,7 @@ export default function BarChartCard({
   // Stable per-run color: index in the original runIds list.
   const colorByRun = useMemo(() => {
     const m = new Map<string, string>();
-    runIds.forEach((rid, i) => m.set(rid, SERIES_COLORS[i % SERIES_COLORS.length]!));
+    runIds.forEach((rid, i) => m.set(rid, seriesColor(i)));
     return m;
   }, [runIds]);
 
@@ -147,7 +143,7 @@ export default function BarChartCard({
         id: rid,
         label: shortRunLabel(rid, runIds),
         value,
-        color: colorByRun.get(rid),
+        color: colorByRun.get(rid)!,
       });
     }
 

@@ -9,14 +9,9 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
-import {
-  ParallelCoords,
-  type ParallelColumn,
-  type ParallelRow,
-} from "../lib/public-plot";
+import ParallelChart, { type ParallelColumn, type ParallelRow } from "../charts/ParallelChart";
 import { useCardSettings } from "../lib/card-settings";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
-import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-selection";
 import CardShell from "./CardShell";
 import SettingsSection from "./settings/SettingsSection";
@@ -53,8 +48,6 @@ export default function ParallelCoordsCard({
   onRemove,
   autoOpenSettings,
 }: Props) {
-  const runMetaVersion = useRunMetadataVersion();
-
   const [settings, updateSettings] = useCardSettings(
     settingsKey,
     DEFAULT_SETTINGS,
@@ -87,9 +80,9 @@ export default function ParallelCoordsCard({
   });
 
   // Build data: per-run values for each column
-  const { rowData, columnDomains } = useMemo(() => {
+  const rowData = useMemo(() => {
     const cols = settings.columns;
-    if (cols.length === 0) return { rowData: [], columnDomains: [] as Array<{ min: number; max: number; isNumeric: boolean }> };
+    if (cols.length === 0) return [];
 
     const runParams = new Map<string, Map<string, string>>();
     runQueries.forEach((q, idx) => {
@@ -139,32 +132,16 @@ export default function ParallelCoordsCard({
           values.push(v);
         }
       }
-      rows.push({ id: rid, values, raw, label: shortRunLabel(rid, runIds) });
+      rows.push({ id: rid, values, raw });
     }
 
-    const domains = cols.map((_, ci) => {
-      let min = Infinity;
-      let max = -Infinity;
-      let isNumeric = true;
-      for (const row of rows) {
-        const v = row.values[ci];
-        if (v == null) { if (row.raw[ci] != null) isNumeric = false; continue; }
-        if (v < min) min = v;
-        if (v > max) max = v;
-      }
-      if (!Number.isFinite(min)) { min = 0; max = 1; }
-      if (min === max) { min -= 0.5; max += 0.5; }
-      return { min, max, isNumeric };
-    });
-
-    return { rowData: rows, columnDomains: domains };
+    return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     settings.columns,
     runIds,
     runQueries.map((q) => q.dataUpdatedAt).join("|"),
     metricQueries.map((q) => q.dataUpdatedAt).join("|"),
-    runMetaVersion,
   ]);
 
   // Available columns for the picker
@@ -239,7 +216,7 @@ export default function ParallelCoordsCard({
     [settings.columns, updateSettings],
   );
 
-  const { selectedIds, selectedArray, toggle, clear } = useRunSelection();
+  const { selectedArray, clear } = useRunSelection();
   const hasSelectionProvider = useRunSelectionHasProvider();
 
   const runInfoMap = useMemo(
@@ -342,13 +319,7 @@ export default function ParallelCoordsCard({
 
   const noColumns = settings.columns.length === 0;
 
-  const plotProps = {
-    columns: settings.columns,
-    rows: rowData,
-    columnDomains,
-    selectedIds,
-    onClick: (id: string) => toggle(id),
-  };
+  const plotProps = { columns: settings.columns, rows: rowData };
 
   const selectionPanel = !hasSelectionProvider && (
     <RunSelectionPanel
@@ -390,7 +361,7 @@ export default function ParallelCoordsCard({
               Add columns in settings to build the parallel coordinates plot.
             </div>
           ) : (
-            <ParallelCoords {...plotProps} className="flex-1 min-h-0" />
+            <ParallelChart {...plotProps} className="flex-1 min-h-0" />
           )}
         </div>
       }
@@ -401,7 +372,7 @@ export default function ParallelCoordsCard({
             Add columns in settings to build the parallel coordinates plot.
           </div>
         ) : (
-          <ParallelCoords {...plotProps} className="rounded bg-bg flex-1 min-h-0" />
+          <ParallelChart {...plotProps} className="rounded bg-bg flex-1 min-h-0" />
         )}
       </>
     </CardShell>
