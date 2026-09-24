@@ -28,8 +28,10 @@ class Element:
     def _repr_html_(self) -> str:  # pragma: no cover - abstract
         raise NotImplementedError
 
-    def _repr_mimebundle_(self, include: Any = None, exclude: Any = None) -> dict[str, str]:
-        return {"text/html": self._repr_html_()}
+    def _repr_mimebundle_(
+        self, include: Any = None, exclude: Any = None
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        return {"text/html": self._repr_html_(), "text/plain": repr(self)}, {}
 
 log = logging.getLogger(__name__)
 
