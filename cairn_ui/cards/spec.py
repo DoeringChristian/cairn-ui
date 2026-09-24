@@ -112,6 +112,7 @@ class CardSettingsSpec(BaseModel):
     version: Optional[int] = None
     yScale: Optional[Literal["linear", "log"]] = None
     smoothing: Optional[float] = None
+    smoothingKind: Optional[Literal["ema", "twema", "gaussian", "window"]] = None
     step: Optional[float] = None
 
 

@@ -5,6 +5,7 @@ import "uplot/dist/uPlot.min.css";
 import type { AxisSource } from "../lib/plot-utils/x-axis.ts";
 import { formatNum, type AxisScale, type Series, type SeriesPoint } from "../lib/plot-utils/types.ts";
 import { alignSeries, type DrawnSeries } from "./scalar-data.ts";
+import type { SmoothingKind } from "../lib/plot-utils/smooth.ts";
 import { readChartTheme, withAlpha } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
 
@@ -29,6 +30,7 @@ export interface ScalarChartProps {
   view: ScalarView;
   onViewChange?: (view: ScalarView) => void;
   smoothing: number;
+  smoothingKind: SmoothingKind;
   outlierPct: [number, number];
   lineType: LineType;
   showLegend: boolean;
@@ -81,7 +83,7 @@ interface Hover {
  */
 export default function ScalarChart(props: ScalarChartProps) {
   const {
-    series, xAxis, xScale, yScale, xRange, yRange, view, smoothing, outlierPct,
+    series, xAxis, xScale, yScale, xRange, yRange, view, smoothing, smoothingKind, outlierPct,
     lineType, showLegend, tooltip, className,
   } = props;
   const boxRef = useRef<HTMLDivElement>(null);
@@ -96,8 +98,8 @@ export default function ScalarChart(props: ScalarChartProps) {
   live.current = { props };
 
   const aligned = useMemo(
-    () => alignSeries(series, { smoothing, outlierPct, xScale, yScale }),
-    [series, smoothing, outlierPct, xScale, yScale],
+    () => alignSeries(series, { smoothing, smoothingKind, outlierPct, xScale, yScale }),
+    [series, smoothing, smoothingKind, outlierPct, xScale, yScale],
   );
   const lines = aligned.lines;
 
