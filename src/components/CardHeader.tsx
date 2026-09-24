@@ -12,8 +12,6 @@ interface Props {
    * separates them from the standard group.
    */
   cardActions?: ReactNode;
-  /** @deprecated Use `cardActions` instead. */
-  children?: ReactNode;
   /** If provided, the title becomes editable. */
   onTitleChange?: (newTitle: string) => void;
   /** Whether the card body is collapsed (only header visible). */
@@ -44,7 +42,6 @@ export default function CardHeader({
   title,
   subtitle,
   cardActions,
-  children,
   onTitleChange,
   collapsed,
   onToggleCollapse,
@@ -95,7 +92,6 @@ export default function CardHeader({
     [commitEdit, cancelEdit],
   );
 
-  const resolvedActions = cardActions ?? children;
   const showResetView = !!(onResetView && viewModified);
   const hasStandardActions = !!(showResetView || onDownload || onScreenshot || addToComparisonSlot || onSettings || onRemove);
 
@@ -169,11 +165,11 @@ export default function CardHeader({
       {/* Right section: card-specific actions | divider | standard actions */}
       <div className="flex items-center gap-1 text-xs text-fg-subtle shrink-0">
         {/* Card-specific actions */}
-        {resolvedActions}
+        {cardActions}
 
         {/* Standard buttons: download, settings, remove */}
         {hasStandardActions && (
-          <div className={resolvedActions ? "border-l border-border pl-1.5 flex items-center gap-1" : "flex items-center gap-1"}>
+          <div className={cardActions ? "border-l border-border pl-1.5 flex items-center gap-1" : "flex items-center gap-1"}>
             {showResetView && (
               <button
                 type="button"
