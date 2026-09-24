@@ -69,10 +69,10 @@ const CELL_BOUNDARY_TOKEN = `${CELL_BOUNDARY_MARKER}\n\n`;
 
 import type { Run } from "../../api/types";
 import type { MetricIndex } from "./metric-index";
-import { CairnBlockError, compileCairnBlock, parseCairnSpec, resolveRuns, serializeCairnSpec, stringifyCairnSpec } from "./cairn-block";
-import { newId } from "./ids";
-import { resolveRunSelectorFromRuns } from "../run-selector";
-import { isCardsBlock, isMarkdownBlock, type CardsBlock, type ReportBlock } from "./types";
+import { CairnBlockError, compileCairnBlock, parseCairnSpec, resolveRuns, serializeCairnSpec, stringifyCairnSpec } from "./cairn-block.ts";
+import { newId } from "./ids.ts";
+import { resolveRunSelectorFromRuns } from "../run-selector.ts";
+import { isCardsBlock, isMarkdownBlock, type CardsBlock, type ReportBlock } from "./types.ts";
 
 export const CAIRN_FENCE_LANG = "cairn";
 

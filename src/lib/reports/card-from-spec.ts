@@ -12,8 +12,8 @@
  * shared by both a component and a non-UI parser.
  */
 
-import { type ComparisonCard, type ComparisonSeriesRef, type MultiRunCardType } from "../comparisons";
-import { newId } from "./ids";
+import type { ComparisonCard, ComparisonSeriesRef, MultiRunCardType } from "../comparisons/types.ts";
+import { newId } from "./ids.ts";
 
 /** One entry per run that has a given metric. */
 export type SelectionRuns = Array<{ runId: string; context_hash: string }>;

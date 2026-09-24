@@ -39,10 +39,10 @@ import {
   type ComparisonCard,
   type ComparisonSeriesRef,
   type MultiRunCardType,
-} from "../comparisons";
+} from "../comparisons/types.ts";
 import type { QueryRunSelector, RunSelector } from "../run-selector";
-import { cardFromSpec, type AddCardSelection } from "./card-from-spec";
-import { newId } from "./ids";
+import { cardFromSpec, type AddCardSelection } from "./card-from-spec.ts";
+import { newId } from "./ids.ts";
 import type { MetricIndex } from "./metric-index";
 import type { CardsBlock } from "./types";
 
