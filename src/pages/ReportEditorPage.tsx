@@ -1,17 +1,11 @@
 /**
- * Report editor/viewer — /p/:projectId/reports/:reportId
+ * Report page — /p/:projectId/reports/:reportId
  *
- * View mode (default): vertical render of cells (blocks[]) — prose
- * paragraphs are ALWAYS click-to-edit inline (Obsidian-style: click a
- * rendered paragraph, it becomes a raw `<textarea>`, blur/Cmd+Enter commits
- * and re-renders, autosave picks it up), independent of the Edit toggle;
- * ```cairn card *settings* stay frozen/read-only until Edit is on.
- * Edit mode: additionally exposes structural cell editing (add/remove/
- * reorder/insert cells — see `SegmentedMarkdownEditor`) and card settings
- * mutation, plus rename.
- * Autosave: debounced PUT ~1.5s after the last change, plus an explicit
- * Save button. Card settings are gathered from/restored to localStorage
- * under the report's pseudo-scope on save/load — see lib/reports/payload.ts.
+ * A notebook that is always editable (see `ReportNotebook`): markdown and
+ * cards cells, inserted, moved and deleted in place. Autosave: debounced PUT
+ * ~1.5s after the last change (and on leaving the page). Card settings are
+ * gathered from/restored to localStorage under the report's pseudo-scope on
+ * save/load — see lib/reports/payload.ts.
  *
  * `blocks[]` is the only editing surface. The persisted markdown `source` is
  * available read-only via "View source" — never a second editable copy.
@@ -34,7 +28,7 @@ import {
   type ReportBlock,
   type ReportPayload,
 } from "../lib/reports";
-import SegmentedMarkdownEditor, { makeEmptyBlock } from "../components/reports/SegmentedMarkdownEditor";
+import ReportNotebook, { makeEmptyBlock } from "../components/reports/ReportNotebook";
 
 const AUTOSAVE_DELAY_MS = 1500;
 const DEFAULT_REPORT_NAME = "Untitled report";
@@ -50,7 +44,6 @@ export default function ReportEditorPage() {
   const runsQ = useRuns({ project: projectId, limit: RUN_SELECTOR_FETCH_LIMIT });
   const allProjectRuns = runsQ.data?.runs ?? [];
 
-  const [editMode, setEditMode] = useState(false);
   const [name, setName] = useState("");
   // Inline title rename: click-to-edit, independent of `editMode` — mirrors ReportsListPage's `ReportRow` inline rename so
   // there's exactly one rename affordance style across the reports UI, and
@@ -180,10 +173,18 @@ export default function ReportEditorPage() {
     };
   }, []);
 
-  const handleSaveNow = () => {
-    if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current);
-    doSave();
-  };
+  // Cmd/Ctrl+S saves now instead of waiting for the autosave debounce.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current);
+        doSaveRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const updateBlock = (id: string, next: ReportBlock) => {
     // A CardsBlock's content changed — its cached raw ```cairn fence text
@@ -195,7 +196,9 @@ export default function ReportEditorPage() {
   };
 
   const deleteBlock = (id: string) => {
-    if (!confirm("Delete this cell?")) return;
+    const block = blocks.find((b) => b.id === id);
+    const empty = block && (isCardsBlock(block) ? block.cards.length === 0 : block.text.trim() === "");
+    if (!empty && !confirm("Delete this cell?")) return;
     delete rawCairnSourceRef.current[id];
     setBlocks((prev) => prev.filter((b) => b.id !== id));
   };
@@ -215,16 +218,9 @@ export default function ReportEditorPage() {
 
   // Insert a fresh markdown/cards cell immediately after `afterId` (or at the
   // end when `afterId` is null) — Jupyter's insert-below.
-  const insertBlock = (afterId: string | null, type: ReportBlock["type"]) => {
+  const insertBlock = (index: number, type: ReportBlock["type"]) => {
     const block = makeEmptyBlock(type);
-    setBlocks((prev) => {
-      if (afterId == null) return [...prev, block];
-      const idx = prev.findIndex((b) => b.id === afterId);
-      if (idx < 0) return [...prev, block];
-      const next = [...prev];
-      next.splice(idx + 1, 0, block);
-      return next;
-    });
+    setBlocks((prev) => [...prev.slice(0, index), block, ...prev.slice(index)]);
   };
 
   // Save every cards-block card across this report as a reusable report
@@ -333,21 +329,14 @@ export default function ReportEditorPage() {
           <span className="text-xs text-fg-subtle" title={statusText}>
             {statusText}
           </span>
-          {editMode && (
-            <button type="button" onClick={handleSaveNow} className="btn text-xs" disabled={updateMut.isPending}>
-              Save
-            </button>
-          )}
-          {editMode && (
-            <button
-              type="button"
-              onClick={handleSaveAsTemplate}
-              className="btn text-xs"
-              title="Save this report's cards as a reusable template"
-            >
-              Save as template
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleSaveAsTemplate}
+            className="btn text-xs"
+            title="Save this report's cards as a reusable template"
+          >
+            Save as template
+          </button>
           <button
             type="button"
             onClick={() => setShowSource((v) => !v)}
@@ -355,9 +344,6 @@ export default function ReportEditorPage() {
             title="View the report's canonical markdown source (read-only)"
           >
             {showSource ? "Hide source" : "View source"}
-          </button>
-          <button type="button" onClick={() => setEditMode((v) => !v)} className="btn text-xs">
-            {editMode ? "Done editing" : "Edit"}
           </button>
         </div>
       </div>
@@ -368,11 +354,10 @@ export default function ReportEditorPage() {
         </pre>
       )}
 
-      <SegmentedMarkdownEditor
+      <ReportNotebook
         projectId={projectId}
         reportId={reportId}
         blocks={blocks}
-        editMode={editMode}
         allProjectRuns={allProjectRuns}
         onUpdateBlock={updateBlock}
         onMoveBlock={moveBlock}
@@ -380,16 +365,6 @@ export default function ReportEditorPage() {
         onInsertBlock={insertBlock}
       />
 
-      {editMode && blocks.length > 0 && (
-        <div className="mt-6 flex gap-2">
-          <button type="button" onClick={() => insertBlock(null, "markdown")} className="btn text-xs">
-            + Markdown cell
-          </button>
-          <button type="button" onClick={() => insertBlock(null, "cards")} className="btn text-xs">
-            + Cards cell
-          </button>
-        </div>
-      )}
     </div>
   );
 }

@@ -158,30 +158,6 @@ function splitFences(source: string): Segment[] {
   return segments;
 }
 
-/**
- * Split one `MarkdownBlock`'s prose text into paragraph-granular editing
- * units for `SegmentedMarkdownEditor` — the "Obsidian-style" per-block click-to-edit surface: clicking a *paragraph*
- * swaps just that paragraph into a raw textarea, not the whole prose region
- * (which may itself contain many paragraphs/tables/lists) and not a single
- * physical line (which would break multi-line list items and tables).
- *
- * Splits on blank-line boundaries only (a table/list/heading never contains
- * a blank line in the middle of it under CommonMark, so this can't sever
- * one), and — like `splitFences` — is exactly lossless:
- * `splitProseBlocks(text).join("") === text` always, because each returned
- * chunk carries its own trailing blank-line separator (or none, for the
- * last chunk).
- */
-export function splitProseBlocks(text: string): string[] {
-  if (text === "") return [""];
-  const parts = text.split(/(\n{2,})/);
-  const blocks: string[] = [];
-  for (let i = 0; i < parts.length; i += 2) {
-    blocks.push((parts[i] ?? "") + (parts[i + 1] ?? ""));
-  }
-  return blocks;
-}
-
 export interface ParsedReportMarkdown {
   blocks: ReportBlock[];
   /** cardId → inline settings, aggregated from every ```cairn fence. */
@@ -226,6 +202,8 @@ export function parseReportMarkdown(
       // (deliberately adjacent markdown cells) — split it back into the
       // original per-cell texts. A segment with no marker yields one piece.
       for (const text of seg.text.split(CELL_BOUNDARY_TOKEN)) {
+        // Blank lines between or after fences are separators, not cells.
+        if (text.trim() === "") continue;
         blocks.push({ id: newId(), type: "markdown", text });
       }
       continue;

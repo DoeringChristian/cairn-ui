@@ -12,7 +12,7 @@ import ComparisonCardView from "../comparison/ComparisonCardView";
 import ReorderableCardGrid from "../ReorderableCardGrid";
 import RunSelectorBadge from "../RunSelectorBadge";
 import RunSetEditor, { DEFAULT_QUERY_SELECTOR } from "../comparison/RunSetEditor";
-import { CardMutationContext, CardSettingsChangeContext } from "../../lib/card-settings";
+import { CardSettingsChangeContext } from "../../lib/card-settings";
 import {
   rebindCardsToMetricIndex,
   rebindCardsToRuns,
@@ -27,12 +27,11 @@ interface Props {
   projectId: string;
   reportId: string;
   block: CardsBlock;
-  editMode: boolean;
   allProjectRuns: Run[];
   onChange: (next: CardsBlock) => void;
 }
 
-export default function ReportCardsBlock({ projectId, reportId, block, editMode, allProjectRuns, onChange }: Props) {
+export default function ReportCardsBlock({ projectId, reportId, block, allProjectRuns, onChange }: Props) {
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -86,13 +85,10 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
   // Re-resolve which runs currently match, then REBIND the existing cards to
   // that run set (keep curated cards/order, re-derive series) rather than
   // discarding and regrowing one card per metric — see rebindCardsToRuns.
-  // Only mutates in edit mode: a viewer clicking "refresh" should re-resolve
-  // for display purposes only, never overwrite the persisted card set.
   const handleRefresh = async () => {
     setRebuilding(true);
     try {
       const freshRunIds = await resolution.refresh();
-      if (!editMode) return;
       const cards = await rebindCardsToRuns(block.cards, freshRunIds);
       onChange({ ...block, cards });
     } finally {
@@ -102,8 +98,8 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
 
   // Explicit, destructive "start over" action — full regrow (one card per
   // (name, object_type) across the block's runs), discarding curated
-  // cards/order/overlays. Edit-mode only; the "refresh" above rebinds instead
-  // (see rebindCardsToRuns).
+  // cards/order/overlays; the "refresh" above rebinds instead (see
+  // rebindCardsToRuns).
   const handleResetFromRuns = async () => {
     if (runIds.length === 0) return;
     setResetting(true);
@@ -115,15 +111,13 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
     }
   };
 
-  // Auto-rebind: when a selector block's resolved run set changes while in
-  // edit mode, rebind existing cards to the new runs automatically (mirrors
-  // the ```cairn fence path's `opts.resolvedRunIds` handling) so cards don't
-  // go stale between explicit refreshes. Never runs in view
-  // mode (no mutation/autosave for viewers) and never regrows the card set.
+  // Auto-rebind: when a selector block's resolved run set changes, rebind the
+  // existing cards to the new runs so they don't go stale between explicit
+  // refreshes. Never regrows the card set.
   const resolvedRunIdsKey = selector ? runIds.join("|") : "";
   const lastReboundKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!editMode || !selector) return;
+    if (!selector) return;
     if (block.cards.length === 0) return;
     const boundRunIds = new Set(block.cards.flatMap((c) => c.series.map((s) => s.runId)));
     const resolvedSet = new Set(runIds);
@@ -145,7 +139,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editMode, selector, resolvedRunIdsKey]);
+  }, [selector, resolvedRunIdsKey]);
 
   // AddCardSelection → ComparisonCard is the shared `cardFromSpec` (see
   // lib/reports/card-from-spec.ts) — also consumed by the ```cairn dialect
@@ -173,29 +167,22 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
   // localStorage, not `block`, so it would never reach ReportEditorPage's
   // blocks[]-keyed autosave. "Touch" this block (new object identity, same
   // content) whenever a settings write lands, reusing that autosave trigger.
-  // Only wired in edit mode — a view-mode settings write is already a no-op
-  // at the source (CardMutationContext).
   const handleSettingsTouched = useCallback(() => {
     onChange({ ...block });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [block]);
 
   return (
-    // Freeze every card's persisted settings (step/iteration, compare mode,
-    // yScale, …) outside edit mode — see
-    // CardMutationContext's doc. `editMode` here is this block's real
-    // edit-mode flag (`false` for a pure viewer).
-    <CardMutationContext.Provider value={editMode}>
-    <CardSettingsChangeContext.Provider value={editMode ? handleSettingsTouched : undefined}>
+    // A card's settings change (step, yScale, …) re-saves the report.
+    <CardSettingsChangeContext.Provider value={handleSettingsTouched}>
     <div>
-      {(editMode || selector) && (
-        <div className="mb-3">
+      <div className="mb-3">
           <RunSetEditor
             title="Runs in this block"
             runIds={runIds}
             allProjectRuns={allProjectRuns}
             selector={selector}
-            editable={editMode}
+            editable
             onToggleMode={toggleAutoMode}
             onSelectorChange={(runSelector) => onChange({ ...block, runSelector })}
             onAddRun={addRun}
@@ -210,47 +197,38 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
                     onRefresh={() => void handleRefresh()}
                   />
                 )}
-                {editMode && (
-                  <button
-                    type="button"
-                    onClick={() => void handleResetFromRuns()}
-                    disabled={resetting || runIds.length === 0}
-                    className="inline-flex h-6 touch:h-10 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg disabled:opacity-40"
-                    title="Discard current cards and regrow one card per metric across this block's runs"
-                  >
-                    {resetting ? "Resetting…" : "Reset cards from runs"}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => void handleResetFromRuns()}
+                  disabled={resetting || runIds.length === 0}
+                  className="inline-flex h-6 touch:h-10 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg disabled:opacity-40"
+                  title="Discard current cards and regrow one card per metric across this block's runs"
+                >
+                  {resetting ? "Resetting…" : "Reset cards from runs"}
+                </button>
               </>
             }
           />
-        </div>
-      )}
+      </div>
 
-      {editMode && (
-        <>
-          <AddCardModal open={addCardOpen} onClose={() => setAddCardOpen(false)} runIds={runIds} onAdd={onAddCard} />
-          <div className="mb-3">
-            <button
-              type="button"
-              onClick={() => setAddCardOpen(true)}
-              disabled={runIds.length === 0}
-              className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-xs font-medium text-fg-muted hover:border-accent hover:text-fg transition-colors disabled:opacity-40"
-              title={runIds.length === 0 ? "Add runs to this block first" : undefined}
-            >
-              <span aria-hidden="true">+</span> Add card
-            </button>
-          </div>
-        </>
-      )}
+      <AddCardModal open={addCardOpen} onClose={() => setAddCardOpen(false)} runIds={runIds} onAdd={onAddCard} />
+      <div className="mb-3">
+        <button
+          type="button"
+          onClick={() => setAddCardOpen(true)}
+          disabled={runIds.length === 0}
+          className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-xs font-medium text-fg-muted hover:border-accent hover:text-fg transition-colors disabled:opacity-40"
+          title={runIds.length === 0 ? "Add runs to this block first" : undefined}
+        >
+          <span aria-hidden="true">+</span> Add card
+        </button>
+      </div>
 
       {displayCards.length === 0 ? (
         <div className="card p-4 text-sm text-fg-muted">
           {runIds.length === 0
             ? "No runs bound to this block yet."
-            : editMode
-              ? 'No cards yet. Click "Add card" to pick metrics from this block\'s runs.'
-              : "No cards in this block."}
+            : 'No cards yet. Click "Add card" to pick metrics from this block\'s runs.'}
         </div>
       ) : (
         <ReorderableCardGrid
@@ -260,15 +238,14 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
               <ComparisonCardView
                 card={card}
                 settingsKey={cardSettingsKeyForReport(reportId, card)}
-                onRemove={editMode ? () => removeCard(card.id) : undefined}
+                onRemove={() => removeCard(card.id)}
               />
             ),
           }))}
-          onReorder={editMode ? reorderCards : undefined}
+          onReorder={reorderCards}
         />
       )}
     </div>
     </CardSettingsChangeContext.Provider>
-    </CardMutationContext.Provider>
   );
 }
