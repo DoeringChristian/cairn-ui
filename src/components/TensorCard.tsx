@@ -6,13 +6,13 @@ import { downloadArtifact, artifactFilename } from "../lib/download";
 import { api } from "../api/client";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { SequenceMeta } from "../api/types";
+import { computeHistogram } from "../lib/plot-utils/histogram";
 import {
-  Heatmap,
-  HistogramPlot,
-  computeHistogram,
-  COLORMAP_OPTIONS as LIB_COLORMAP_OPTIONS,
-  type ColormapName,
-} from "../lib/public-plot";
+  COLORMAP_OPTIONS,
+  HistogramBars,
+  MatrixHeatmap,
+  type Colormap,
+} from "../charts/HistogramChart";
 import { parseNpy, type NpyArray } from "../lib/parse-npy";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
@@ -43,7 +43,7 @@ type ViewMode = "stats" | "histogram" | "heatmap";
 
 interface TensorSettings extends BaseCardSettings {
   viewMode: ViewMode;
-  colormap: ColormapName;
+  colormap: Colormap;
   logY: boolean;
   bins: number;
   /** Indices for all-but-last-two dimensions when slicing an ND tensor. */
@@ -59,9 +59,6 @@ const DEFAULT_TENSOR_SETTINGS: TensorSettings = {
   logY: false,
   bins: 64,
 };
-
-const COLORMAP_OPTIONS: Array<{ value: ColormapName; label: string }> =
-  LIB_COLORMAP_OPTIONS.map((o) => ({ value: o.id, label: o.label }));
 
 const SIZE_CAP = 10 * 1024 * 1024;
 
@@ -262,8 +259,7 @@ export default function TensorCard({
       return (
         <div className="flex-1 min-h-0">
           {histogram && (
-            <HistogramPlot
-              view="bars"
+            <HistogramBars
               counts={histogram.counts}
               edges={histogram.edges}
               logY={settings.logY}
@@ -277,16 +273,14 @@ export default function TensorCard({
     return (
       <div className="flex-1 min-h-0">
         {matrix ? (
-          <Heatmap
+          <MatrixHeatmap
             matrix={matrix}
             colormap={settings.colormap}
             min={meta.min}
             max={meta.max}
             logColor={settings.logY}
-            originTop
             xLabel={`dim ${ndim - 1}`}
             yLabel={`dim ${ndim - 2}`}
-            valueLabel="value"
           />
         ) : (
           <div className="text-xs text-fg-muted">tensor is not 2D</div>
@@ -346,7 +340,7 @@ export default function TensorCard({
         />
       )}
       {settings.viewMode === "heatmap" && (
-        <Select<ColormapName>
+        <Select<Colormap>
           label="Colormap"
           value={settings.colormap}
           onChange={(v) => updateSettings({ colormap: v })}
