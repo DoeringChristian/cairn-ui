@@ -164,6 +164,21 @@ export interface ArtifactSummary {
   object_type?: string;
 }
 
+export type AlertLevel = "info" | "warn" | "error";
+
+/** A run alert (``run.alert()``, a failed/killed run) — GET /api/projects/{id}/alerts. */
+export interface Alert {
+  id: string;
+  run_id: string;
+  run_name: string | null;
+  level: AlertLevel;
+  title: string;
+  text: string;
+  created_at: string;
+  /** When the server's webhook task claimed it; null = not (yet) sent. */
+  delivered_at: string | null;
+}
+
 export interface ArtifactsResponse {
   named: ArtifactSummary[];
   from_sequences: ArtifactSummary[];

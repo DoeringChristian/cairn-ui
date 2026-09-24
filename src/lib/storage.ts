@@ -22,6 +22,8 @@ export const storageKeys = {
   runsFilter: (projectId: string) => `cairn:runs-filter:${projectId}`,
   comparisonTemplates: (projectId: string) => `cairn:comparison-templates:${projectId}`,
   reportTemplates: (projectId: string) => `cairn:report-templates:${projectId}`,
+  /** Newest alert created_at the user has seen in the bell — see lib/alerts.ts. */
+  alertsSeen: (projectId: string) => `cairn:alerts-seen:${projectId}`,
   streamMode: "cairn:stream-mode",
   scroll: (key: string) => `cairn:scroll:${key}`, // sessionStorage
   lastComparison: (projectId: string) => `cairn:last-comparison:${projectId}`, // sessionStorage

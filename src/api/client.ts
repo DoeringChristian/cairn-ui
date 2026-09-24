@@ -160,6 +160,16 @@ export const api = {
     post<{ run_id: string; status: string }>(`/api/runs/${runId}/archive`, {}),
   unarchiveRun: (runId: string) =>
     post<{ run_id: string; status: string }>(`/api/runs/${runId}/unarchive`, {}),
+  alerts: (projectId: string, opts: { since?: string; runId?: string; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.since) q.set("since", opts.since);
+    if (opts.runId) q.set("run_id", opts.runId);
+    if (opts.limit != null) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return get<{ alerts: import("./types").Alert[] }>(
+      `/api/projects/${encodeURIComponent(projectId)}/alerts${qs ? `?${qs}` : ""}`,
+    );
+  },
   /** Ask a running run to stop; the SDK sees it on its next heartbeat (≤10 s). */
   stopRun: (runId: string) =>
     post<{ run_id: string; stop_requested: string }>(`/api/runs/${runId}/stop`, {}),

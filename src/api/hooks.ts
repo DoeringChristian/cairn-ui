@@ -257,6 +257,16 @@ export function useBulkRunMutation() {
   };
 }
 
+/** A project's newest alerts (or one run's), polled. */
+export function useAlerts(projectId: string, opts: { runId?: string; limit?: number } = {}) {
+  return useQuery({
+    queryKey: qk.alerts(projectId, opts.runId),
+    queryFn: () => api.alerts(projectId, { runId: opts.runId, limit: opts.limit ?? 20 }),
+    enabled: !!projectId,
+    refetchInterval: 10_000,
+  });
+}
+
 export function useStopRun(runId: string) {
   const qc = useQueryClient();
   return useMutation({

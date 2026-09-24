@@ -30,6 +30,7 @@ export const qk = {
   runInputArtifacts: (runId: string) => ["run-input-artifacts", runId] as const,
   runOutputArtifacts: (runId: string) => ["run-output-artifacts", runId] as const,
   lineage: (projectId: string) => ["lineage", projectId] as const,
+  alerts: (projectId: string, runId?: string) => ["alerts", projectId, runId ?? null] as const,
   reports: (projectId: string, params?: unknown) =>
     params != null ? (["reports", projectId, params] as const) : (["reports", projectId] as const),
   report: (projectId: string, reportId: string) => ["report", projectId, reportId] as const,

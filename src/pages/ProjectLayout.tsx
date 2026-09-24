@@ -9,6 +9,7 @@ import { Link, NavLink, Outlet, useParams } from "react-router-dom";
 import { ProjectProvider } from "../lib/project-context";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import CopyId from "../components/CopyId";
+import AlertBell from "../components/alerts/AlertBell";
 
 
 const NAV_ITEMS = [
@@ -123,6 +124,9 @@ export default function ProjectLayout() {
                 <CopyId id={runId} className="text-[10px]" />
               </>
             )}
+            <span className="ml-auto">
+              <AlertBell projectId={projectId} />
+            </span>
           </nav>
           <Outlet />
         </div>
