@@ -815,8 +815,7 @@ export default function RunsTablePage() {
 
 // Per-row tag editing. Each instance owns a `useSetTags` mutation scoped to
 // its own run, so tag edits invalidate that run's detail cache in addition
-// to the runs list/infinite queries (unlike the old inline-in-parent version,
-// which only invalidated the infinite list).
+// to the runs list/infinite queries.
 function RunTagCell({
   run,
   variant,
