@@ -1,11 +1,9 @@
 /**
  * Pure core of the live-updates poller — no React, no react-query.
  *
- * Cards used to keep themselves fresh by re-downloading their WHOLE sequence
- * every 2s (`useSequencesForRuns` + `refetchInterval`). On a compare page with
- * a dozen cards over a running run that is dozens of megabytes a minute and a
- * saturated server. Instead the app polls ONE cursor-based endpoint per live
- * run (`GET /api/runs/{id}/updates?since=<cursor>`) and appends the delta into
+ * Re-downloading each card's whole sequence on an interval would be dozens
+ * of megabytes a minute on a compare page over a running run. Instead the app
+ * polls ONE cursor-based endpoint per live run (`GET /api/runs/{id}/updates?since=<cursor>`) and appends the delta into
  * the sequences react-query already holds.
  *
  * Everything here is a pure function or the module-level cursor map, so it is

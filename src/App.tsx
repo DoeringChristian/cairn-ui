@@ -65,7 +65,7 @@ export default function App() {
           </div>
         )}
       </header>
-      <main className="mx-auto w-full w-full flex-1 px-4 py-6">
+      <main className="mx-auto w-full flex-1 px-4 py-6">
         <Outlet />
       </main>
       <footer className="flex items-center justify-center gap-2 border-t border-border px-4 py-3 text-center text-xs text-fg-subtle">

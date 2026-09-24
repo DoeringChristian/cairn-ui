@@ -33,10 +33,10 @@ export function useStepSlider(args: {
   updateSettings: (patch: { sliderStep?: number }) => void;
 }): StepSliderState {
   const { seriesPoints, persistedIdx, updateSettings } = args;
-  // WS-NR1 (B7/edit-mode gating): `idx` is local state that mirrors, but is
-  // independent of, `useCardSettings`'s persisted `sliderStep` — a no-op
-  // `updateSettings` alone wouldn't stop the slider from moving locally, so
-  // gate this hook's own state update on the same context directly.
+  // `idx` is local state that mirrors, but is independent of,
+  // `useCardSettings`'s persisted `sliderStep` — a no-op `updateSettings`
+  // alone wouldn't stop the slider moving locally, so gate this hook's own
+  // state update on the same context directly.
   const mutable = useContext(CardMutationContext);
 
   const globalSteps = useMemo(() => {

@@ -1,10 +1,6 @@
 /**
  * Types for report documents (wandb-style reports: a vertical list of
- * markdown/cards blocks, persisted server-side).
- *
- * WS-RX: `CardsBlock.runSelector` is now a real `RunSelector` (see
- * lib/run-selector.ts) — when present, the block's effective run set is
- * resolved live instead of read from `runIds` (see ReportCardsBlock.tsx).
+ * markdown/cards blocks, persisted server-side as markdown source).
  */
 
 import type { ComparisonCard } from "../comparisons";
@@ -22,30 +18,21 @@ export interface CardsBlock {
   title?: string;
   /** Static run ids this block's cards are bound to (used when `runSelector` is absent). */
   runIds?: string[];
-  /** Dynamic run selector (WS-RX) — when present, takes precedence over `runIds`. */
+  /** Dynamic run selector — when present, resolved live and takes precedence over `runIds`. */
   runSelector?: RunSelector;
   cards: ComparisonCard[];
 }
 
 export type ReportBlock = MarkdownBlock | CardsBlock;
 
+/** What the server stores for a report. */
 export interface ReportPayload {
-  blocks: ReportBlock[];
-  /** Per-card settings, keyed by card.id — see lib/reports/payload.ts. */
-  cardSettings?: Record<string, unknown>;
-  /** Report-level dynamic run selector — currently unused (per-block `CardsBlock.runSelector` is what's resolved); carried through unchanged. */
-  runSelector?: RunSelector;
   /**
-   * WS-AR1: the canonical markdown serialization (prose + ```cairn fences —
-   * see lib/reports/markdown-source.ts), written alongside `blocks` on every
-   * save. Additive-only field — older reports persisted before this field
-   * existed simply have no `source`, and load from `blocks` unchanged (see
-   * ReportEditorPage's hydrate effect). When present, `source` is treated as
-   * authoritative on load (`blocks` is its parse cache); `blocks` remains
-   * the persisted shape everything else reads, per the design doc's D6
-   * ("no migration").
+   * The report as markdown: prose plus ```cairn fences carrying each card
+   * and its inline settings (see lib/reports/markdown-source.ts). The editor
+   * parses it into `blocks[]` on load and re-serializes on save.
    */
-  source?: string;
+  source: string;
 }
 
 export function isMarkdownBlock(b: ReportBlock): b is MarkdownBlock {

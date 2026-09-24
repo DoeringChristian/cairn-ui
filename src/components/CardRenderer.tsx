@@ -77,11 +77,7 @@ export type CardDescriptor =
       kind: "multi-run";
       cardType: MultiRunCardType;
       runIds: string[];
-      /**
-       * Settings storage key. Kept as a CardSettingsKey object (not a plain
-       * string) so the string written to localStorage via
-       * cardSettingsStorageKey() stays byte-identical to the legacy path.
-       */
+      /** Settings storage key. */
       settingsKey: CardSettingsKey;
       onRemove?: () => void;
       /** Open the settings modal and scroll into view once on mount (e.g. just-added card). */
@@ -89,20 +85,15 @@ export type CardDescriptor =
     };
 
 /**
- * WS-SCHEMA exhaustiveness (follow-up #61): the per-metric ("series") card
- * types are exactly the canonical `CardType`s (lib/cards/card-spec.ts) that
- * are NOT workspace-level multi-run cards (`MultiRunCardType`:
- * parallel/scatter/bar/tile). Deriving this set with `Exclude` — rather than
- * re-listing the switch's `case` labels in a hand-maintained mirror — means
- * there is ONE source of truth: `CARD_TYPES`.
+ * The per-metric ("series") card types: every canonical `CardType`
+ * (lib/cards/card-spec.ts) that is not a multi-run card
+ * (parallel/scatter/bar/tile), derived so `CARD_TYPES` stays the one list.
  *
  * The `switch` below casts `metric.object_type` to this union and its
- * `default` branch asserts the residual type is `never`. So omitting a
- * `case` (or adding a `CardType` without one, or a `case` for a label that
- * isn't a `SeriesCardType`) is a COMPILE error AT THE SWITCH ITSELF — not a
- * silent runtime fall-through to `UnknownTypeCard`. The cast is erased at
- * runtime, so genuinely-unknown `object_type` strings still reach `default`
- * and render `UnknownTypeCard`; behavior is unchanged.
+ * `default` branch asserts the residual type is `never`, so a missing or
+ * stray `case` is a compile error at the switch. The cast is erased at
+ * runtime: an unknown `object_type` still reaches `default` and renders
+ * `UnknownTypeCard`.
  */
 type SeriesCardType = Exclude<CardType, MultiRunCardType>;
 

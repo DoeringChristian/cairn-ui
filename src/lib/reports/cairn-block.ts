@@ -1,12 +1,10 @@
 /**
  * The ```cairn dialect: a declarative YAML card spec that compiles 1:1 to a
- * `CardsBlock` (see docs/superpowers/specs/2026-07-04-ai-authored-reports.md
- * §2). This is a pure parser — no `eval`, no JS execution, no sandbox. A
- * malformed spec throws `CairnBlockError`; callers (the ```cairn render
- * component, the markdown⇄blocks bridge) catch it and render/emit an inline
- * error instead of crashing the report.
+ * `CardsBlock`. This is a pure parser — no `eval`, no JS execution, no
+ * sandbox. A malformed spec throws `CairnBlockError`; the markdown⇄blocks
+ * bridge catches it and emits an inline error instead of crashing the report.
  *
- * Grammar (see the spec doc for the authoritative version):
+ * Grammar:
  *
  *   runs:
  *     ids: [run_abc, run_def]                 # → CardsBlock.runIds
@@ -39,10 +37,10 @@ import {
   type ComparisonCard,
   type ComparisonSeriesRef,
   type MultiRunCardType,
-} from "../comparisons";
+} from "../comparisons/types.ts";
 import type { QueryRunSelector, RunSelector } from "../run-selector";
-import { cardFromSpec, type AddCardSelection } from "./card-from-spec";
-import { newId } from "./ids";
+import { cardFromSpec, type AddCardSelection } from "./card-from-spec.ts";
+import { newId } from "./ids.ts";
 import type { MetricIndex } from "./metric-index";
 import type { CardsBlock } from "./types";
 
@@ -68,7 +66,7 @@ interface CairnRunsInput {
 
 interface CairnCardInput {
   /**
-   * Optional stable-id carry-through (B4 fix) — same idea as `CairnSpec.id`
+   * Optional stable id — same idea as `CairnSpec.id`
    * for the block: when present, `compileCairnBlock` uses it verbatim as the
    * card's id instead of deriving one, so a settings key
    * (`cardSettingsKeyForReport`/`cardSettingsKeyForScope`, both keyed on
@@ -157,10 +155,9 @@ function validateRunSelector(sel: CairnRunsSelectorInput): RunSelector {
 /**
  * Exported so `markdown-source.ts`'s `parseReportMarkdown` can synchronously
  * resolve a `runs.selector` block's live run set (against an already-fetched
- * run pool) *before* calling `compileCairnBlock` — the hydrate-time fix for
- * the "selector card compiles with empty series" gap (RBUG follow-up): reuse
- * this exact validation/resolution instead of re-deriving `RunSelector` shape
- * a second way.
+ * run pool) *before* calling `compileCairnBlock`, so a selector card doesn't
+ * compile with an empty series — reusing this validation instead of
+ * re-deriving the `RunSelector` shape a second way.
  */
 export function resolveRuns(spec: CairnSpec): { runIds?: string[]; runSelector?: RunSelector } {
   if (!spec.runs) return {};
@@ -187,8 +184,7 @@ export function resolveRuns(spec: CairnSpec): { runIds?: string[]; runSelector?:
  * The card's own declared shape (metric+type, or its exact manual `series`
  * list) — deliberately NOT derived from any resolved data (metricIndex/
  * runIds), so it's identical across recompiles of the same fence text
- * regardless of an async metric-index load (B5) or a selector
- * re-resolution (B4).
+ * regardless of an async metric-index load or a selector re-resolution.
  */
 function cardShapeKey(c: CairnCardInput): string {
   if (c.series !== undefined) return `series:${JSON.stringify(c.series)}`;
@@ -303,7 +299,7 @@ export function compileCairnBlock(
   // Stabilized the same way the block id already is (opts.id/spec.id) — see
   // stableCardId's doc: card ids below are derived from this + each card's
   // own declared shape, never from resolved run/metric data, so they don't
-  // churn across recompiles of the same fence (B4/B5).
+  // churn across recompiles of the same fence.
   const blockId = opts?.id ?? spec.id ?? newId();
 
   const cards: ComparisonCard[] = [];
@@ -381,7 +377,7 @@ export function serializeCairnSpec(block: CardsBlock, settingsByCardId: Record<s
   doc.cards = block.cards.map((card): CairnCardInput => {
     const cardSettings = settingsByCardId[card.id];
     const settingsField = cardSettings !== undefined ? { settings: cardSettings } : {};
-    // Carry the id through explicitly (B4/B5 fix): once a card has been
+    // Carry the id through explicitly: once a card has been
     // compiled once (whether its id came from an explicit `id:` or was
     // stably derived from its shape), writing it back out means the *next*
     // parse/compile uses this exact id verbatim — settings stay bound even

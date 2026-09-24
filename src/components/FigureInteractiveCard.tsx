@@ -615,7 +615,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     const rowH = Math.max(150, Math.min(400, Math.round(paneW * 0.75)));
     const total = Math.min(800, rows * rowH);
     return { figAutoHeight: `${total}px`, figRowHeight: `${rowH}px` };
-  }, [settings.height, settings.height1, settings.height2, settings.colSpan, cardWidth, effectiveMetrics.length, isMulti]);
+  }, [settings.height, settings.colSpan, cardWidth, effectiveMetrics.length, isMulti]);
 
   const renderSingleFigure = (heightClass: string, heightStyle?: React.CSSProperties) => {
     if (q.isLoading) {

@@ -1,43 +1,19 @@
 /**
- * WS-SCHEMA: the single canonical source of truth for cairn's card-type
- * vocabulary, and the schema-root types for the ```cairn dialect (and, via
- * `docs/schemas/cairn-card-spec.schema.json`, the Python side).
+ * The canonical card-type vocabulary and the schema-root types for the
+ * ```cairn dialect.
  *
- * Before this module there were **three independent "card type" lists** —
- * see docs/superpowers/specs/2026-07-07-notebook-python-and-embed.md §3.1:
+ * `CARD_TYPES` is the one list of card types: `ComparisonCard.type` is typed
+ * as `CardType`, and `CardRenderer` derives its per-metric cases from it
+ * with a compile-time exhaustiveness check. The runtime guard
+ * `isComparisonCard` (lib/comparisons/types.ts) stays permissive and accepts
+ * any non-empty type string, so a card type this build doesn't know still
+ * loads and renders `UnknownTypeCard`.
  *
- *   1. The closed `ComparisonCard.type` union (16 members) in
- *      `lib/comparisons/types.ts`.
- *   2. The permissive runtime guard `isComparisonCard` (same file), which
- *      deliberately accepts *any* non-empty `type` string rather than a
- *      hardcoded set — see that function's doc for why (forward-compat: a
- *      newly-added card type must not make already-persisted comparisons
- *      vanish). Kept permissive here too, unchanged.
- *   3. The `CardRenderer` switch on `metric.object_type`
- *      (components/CardRenderer.tsx), which additionally handles
- *      `table`/`html`/`markdown`/`artifact` — types absent from
- *      the closed union above.
- *
- * `CARD_TYPES` below is the superset (21 members) all three now derive
- * from: `ComparisonCard.type` is typed as `CardType` (this file);
- * `CardRenderer` carries a compile-time exhaustiveness check tying its
- * switch back to this same list. It derives the per-metric case set as
- * `SeriesCardType = Exclude<CardType, MultiRunCardType>` and asserts the
- * switch's `default` branch narrows to `never` (see the never-guard in
- * components/CardRenderer.tsx), so there is no hand-maintained mirror of
- * the `case` labels. This keeps `cardFromSpec`/`CardRenderer`/
- * `compileCairnBlock` behavior byte-identical — this is a type-level
- * reconciliation, not a runtime one.
- *
- * This module is also the schema root read by
- * `scripts/gen-card-spec-schema.ts` (via `ts-json-schema-generator`) to
- * produce `docs/schemas/cairn-card-spec.schema.json`, which
- * `cairn/sdk/card_spec.py` mirrors as a pydantic model (see that file's
- * conformance test). Python never re-implements `cardFromSpec` — it only
- * builds/validates specs against this shape.
- *
- * Deliberately composes existing types (`ComparisonCard`,
- * `ComparisonSeriesRef`, `RunSelector`) rather than redefining them.
+ * `scripts/gen-card-spec-schema.mjs` generates
+ * `docs/schemas/cairn-card-spec.schema.json` from `CardSpecSchema` below,
+ * and `cairn_ui/cards/spec.py` mirrors it as pydantic models. Python never
+ * re-implements `cardFromSpec` — it only builds/validates specs against this
+ * shape.
  */
 
 import type { ComparisonCard, ComparisonSeriesRef } from "../comparisons/types";
@@ -48,8 +24,7 @@ import type { RunSelector } from "../run-selector";
  * "series" cards first (a single metric across N runs), then the
  * workspace-level "multi-run" cards (a set of runs, not one metric — see
  * `MULTI_RUN_CARD_TYPES` in lib/comparisons/types.ts), then the
- * renderer-only types that were never folded into the closed
- * `ComparisonCard.type` union before this reconciliation.
+ * renderer-only types.
  */
 export const CARD_TYPES = [
   // Per-metric "series" cards.
@@ -80,11 +55,6 @@ export const CARD_TYPES = [
 
 export type CardType = (typeof CARD_TYPES)[number];
 
-/** Strict membership check against the canonical list — see `isComparisonCard` (lib/comparisons/types.ts) for the deliberately-permissive runtime guard used on parse paths. */
-export function isCardType(x: unknown): x is CardType {
-  return typeof x === "string" && (CARD_TYPES as readonly string[]).includes(x);
-}
-
 /** = `ComparisonSeriesRef` (lib/comparisons/types.ts) — one (run, metric) binding for a card. */
 export type SeriesRef = ComparisonSeriesRef;
 
@@ -95,13 +65,9 @@ export type RunSelectorSpec = RunSelector;
 export type JSONValue = string | number | boolean | null | JSONValue[] | { [key: string]: JSONValue };
 
 /**
- * Per-card `settings` are an untyped side-channel today (`Record<cardId,
- * unknown>` — see `ReportPayload.cardSettings` in lib/reports/types.ts and
- * `CairnCardInput.settings` in lib/reports/cairn-block.ts). Rather than a
- * full discriminated union keyed by card type (which would require typing
- * every one of `lib/card-settings.ts`'s ~20 per-type interfaces up front),
- * this starts permissive with a few well-known keys and tightens over time
- * — see docs/superpowers/specs/2026-07-07-notebook-python-and-embed.md §3.2.
+ * Per-card `settings` (see `CairnCardInput.settings` in
+ * lib/reports/cairn-block.ts): a few well-known keys, otherwise any JSON.
+ * Each card type's full settings interface lives with the card.
  */
 export interface CardSettingsSpec {
   version?: number;
@@ -138,11 +104,9 @@ export interface CardsSpec {
 }
 
 /**
- * The `cairn.Report.publish()` payload shape (§3.3 of the design doc) — a
- * report's canonical markdown `source` plus create-route metadata (mirrors
- * `ReportCreate` in cairn/server/routes/reports.py). Not wired into any
- * runtime path yet (that's WS-PYAPI); included here so the JSON
- * Schema/pydantic model has a stable root for it ahead of that workstream.
+ * A report as published from Python: its markdown `source` plus
+ * create-route metadata (see `ReportCreate` in the cairn server's
+ * routes/reports.py).
  */
 export interface ReportSpec {
   name: string;

@@ -7,8 +7,6 @@ __pycache__/
 # Node / build
 node_modules/
 *.tsbuildinfo
-src/**/__tests__/*.browser.bundle.js
-src/**/__tests__/harness-style.css
 
 # The built bundle at cairn_ui/_dist IS COMMITTED — it is the wheel's payload,
 # so installing never needs Node. It deliberately does not match the usual

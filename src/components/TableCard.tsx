@@ -33,8 +33,7 @@ import {
 } from "../lib/table-diff";
 import DataTable, { type TableData } from "./table/DataTable";
 
-// Out of scope for v1 (noted per spec): media-in-cells, cross-table joins,
-// derived columns. The grid is intentionally hand-rolled — no grid dependency.
+// The grid is intentionally hand-rolled — no grid dependency.
 
 interface Props {
   runId: string;

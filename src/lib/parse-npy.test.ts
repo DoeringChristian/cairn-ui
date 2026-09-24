@@ -3,8 +3,7 @@
  *
  * The SDK saves torch tensors through `np.save` WITHOUT casting
  * (`cairn/sdk/handlers/tensor.py`), so a half-precision tensor lands in the
- * browser as `<f2` (or `>f2` from a big-endian producer) and used to throw
- * "parseNpy: unsupported dtype". There is no `Float16Array` under this
+ * browser as `<f2` (or `>f2` from a big-endian producer). There is no `Float16Array` under this
  * tsconfig's ES2020 lib, so the conversion is hand-written and needs a real
  * proof over the interesting bit patterns: zero, normals, the largest finite
  * half, a subnormal, infinity and NaN.
@@ -96,7 +95,7 @@ test("parseNpy decodes big-endian float16 through the per-element slow path", ()
   assertHalves(array.data, ">f2");
 });
 
-test("parseNpy still decodes the pre-existing dtypes", () => {
+test("parseNpy decodes the other float and int dtypes", () => {
   const f4 = new Uint8Array(new Float32Array([1.5, -2.25]).buffer);
   assert.deepEqual(
     Array.from(parseNpy(npyBuffer("<f4", f4, [2])).data),

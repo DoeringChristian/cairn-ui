@@ -61,8 +61,8 @@ test("showing a card adds it back; show-all clears everything", () => {
   assert.deepEqual(loadProjectView("p1").hidden, []);
 });
 
-test("a corrupt or foreign-version payload degrades to the full view", () => {
-  localStorage.setItem(storageKeys.projectView("p1"), '{"version":99,"hidden":["x::"]}');
+test("a corrupt payload degrades to the full view", () => {
+  localStorage.setItem(storageKeys.projectView("p1"), '{"hidden":"x::"}');
   assert.deepEqual(loadProjectView("p1").hidden, []);
   localStorage.setItem(storageKeys.projectView("p1"), "not json");
   assert.deepEqual(loadProjectView("p1").hidden, []);

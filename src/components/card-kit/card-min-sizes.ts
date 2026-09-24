@@ -12,14 +12,14 @@
 export type CardMinSize = { minHeight: number; minSpan: 1 | 2 | 3 | 4 | 6 };
 
 /** Fallback when a card kind isn't in the table (or none is declared). */
-export const DEFAULT_MIN_SIZE: CardMinSize = { minHeight: 150, minSpan: 1 };
+const DEFAULT_MIN_SIZE: CardMinSize = { minHeight: 150, minSpan: 1 };
 
 /**
  * Minimum height (px) and column span each card type stays usable at. Values
  * are deliberately conservative — small enough not to fight normal use, large
  * enough that controls (sliders, legends, axes, settings rows) don't collapse.
  */
-export const CARD_MIN_SIZES: Record<string, CardMinSize> = {
+const CARD_MIN_SIZES: Record<string, CardMinSize> = {
   scalar: { minHeight: 200, minSpan: 1 },
   image: { minHeight: 220, minSpan: 1 },
   figure: { minHeight: 300, minSpan: 2 },
@@ -49,7 +49,7 @@ export function cardMinSize(kind?: string): CardMinSize {
 export const VALID_CARD_SPANS = [1, 2, 3, 4, 6] as const;
 
 /** Round a raw minimum span up to the nearest valid span value. */
-export function snapSpanUp(minSpan: number): number {
+function snapSpanUp(minSpan: number): number {
   for (const v of VALID_CARD_SPANS) if (v >= minSpan) return v;
   return VALID_CARD_SPANS[VALID_CARD_SPANS.length - 1];
 }

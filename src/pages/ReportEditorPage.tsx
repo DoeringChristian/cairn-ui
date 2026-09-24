@@ -7,18 +7,14 @@
  * and re-renders, autosave picks it up), independent of the Edit toggle;
  * ```cairn card *settings* stay frozen/read-only until Edit is on.
  * Edit mode: additionally exposes structural cell editing (add/remove/
- * reorder/insert cells — WS-NR1's `SegmentedMarkdownEditor`, see that
- * component's doc for the "no separate raw/preview pane" design) and card
- * settings mutation, plus rename.
+ * reorder/insert cells — see `SegmentedMarkdownEditor`) and card settings
+ * mutation, plus rename.
  * Autosave: debounced PUT ~1.5s after the last change, plus an explicit
  * Save button. Card settings are gathered from/restored to localStorage
  * under the report's pseudo-scope on save/load — see lib/reports/payload.ts.
  *
- * WS-NR1 retires the old "Cells"/"Markdown" toggle (AR1's raw-textarea
- * source view): `blocks[]` is now the *only* editing surface, and the
- * canonical markdown `source` (still what's persisted, still authoritative
- * on load) is available read-only via the "View source" escape hatch below
- * — never a second editable copy.
+ * `blocks[]` is the only editing surface. The persisted markdown `source` is
+ * available read-only via "View source" — never a second editable copy.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -35,7 +31,6 @@ import {
   isCardsBlock,
   parseReportMarkdown,
   restoreReportCardSettings,
-  serializeReportToMarkdown,
   type ReportBlock,
   type ReportPayload,
 } from "../lib/reports";
@@ -50,17 +45,14 @@ export default function ReportEditorPage() {
   const { projectId, reportId } = useParams<{ projectId: string; reportId: string }>();
   const q = useReport(projectId ?? "", reportId ?? "");
   const updateMut = useUpdateReport(projectId ?? "", reportId ?? "");
-  // B10 fix: match RUN_SELECTOR_FETCH_LIMIT (the pool a `RunSelector` query
-  // resolves against) so a resolved run never falls outside this page's own
-  // "all project runs" list — a smaller cap here silently dropped chips for
-  // any resolved run beyond it.
+  // Same pool size a `RunSelector` query resolves against, so every resolved
+  // run has a label here.
   const runsQ = useRuns({ project: projectId, limit: RUN_SELECTOR_FETCH_LIMIT });
   const allProjectRuns = runsQ.data?.runs ?? [];
 
   const [editMode, setEditMode] = useState(false);
   const [name, setName] = useState("");
-  // Inline title rename (WS-report-editor-fix): click-to-edit, independent
-  // of `editMode` — mirrors ReportsListPage's `ReportRow` inline rename so
+  // Inline title rename: click-to-edit, independent of `editMode` — mirrors ReportsListPage's `ReportRow` inline rename so
   // there's exactly one rename affordance style across the reports UI, and
   // no blocking `prompt()` anywhere in the create/rename path.
   const [titleEditing, setTitleEditing] = useState(false);
@@ -68,9 +60,8 @@ export default function ReportEditorPage() {
   const [hydrated, setHydrated] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
 
-  // Read-only "View source" escape hatch (design doc §A: "keep a raw-source
-  // escape hatch") — never a second *editable* copy; recomputed from
-  // `blocks[]` on demand, not held as parallel state.
+  // Read-only "View source" — recomputed from `blocks[]` on demand, not held
+  // as parallel state.
   const [showSource, setShowSource] = useState(false);
 
   // `rawCairnSourceRef` caches each ```cairn fence's exact original text so
@@ -104,14 +95,12 @@ export default function ReportEditorPage() {
     setHydrated(false);
   }, [reportId]);
 
-  // RBUG fold-in: wait for `runsQ` too (not just the report itself) before
-  // hydrating — a selector-bound ```cairn block needs the live project run
-  // pool to resolve its run set *before* `compileCairnBlock` runs (see
-  // parseReportMarkdown's `opts.allProjectRuns` doc); parsing with an empty
-  // pool would compile the card with `series: []`, permanently losing its
-  // metric name (no render-time rebind can recover an identity that was
-  // never there). Both queries fire in parallel, so this rarely adds
-  // user-visible latency.
+  // Wait for `runsQ` too (not just the report itself) before hydrating — a
+  // selector-bound ```cairn block needs the live project run pool to resolve
+  // its run set *before* `compileCairnBlock` runs (see parseReportMarkdown's
+  // `opts.allProjectRuns` doc); parsing with an empty pool would compile the
+  // card with `series: []`, losing its metric name for good. Both queries
+  // fire in parallel, so this rarely adds user-visible latency.
   //
   // But don't wait forever: if `runsQ` errors out (data stays undefined
   // after retries are exhausted), proceed anyway and hydrate with an empty
@@ -122,22 +111,10 @@ export default function ReportEditorPage() {
     if (hydrated || !q.data || (!runsQ.data && !runsQ.isError)) return;
     setName(q.data.name);
     const payload = q.data.payload as unknown as ReportPayload;
-
-    // WS-AR1: `source` (canonical markdown) is authoritative when present;
-    // `blocks` is its parse cache. Older reports (saved before this field
-    // existed) simply have no `source` and load from `blocks` unchanged —
-    // additive, no migration (design doc D6).
-    if (typeof payload.source === "string") {
-      const parsed = parseReportMarkdown(payload.source, undefined, { allProjectRuns });
-      setBlocks(parsed.blocks);
-      rawCairnSourceRef.current = parsed.rawCairnSource;
-      if (reportId) restoreReportCardSettings(reportId, { blocks: parsed.blocks, cardSettings: parsed.settings });
-    } else {
-      const loadedBlocks = payload.blocks ?? [];
-      setBlocks(loadedBlocks);
-      rawCairnSourceRef.current = {};
-      if (reportId) restoreReportCardSettings(reportId, payload);
-    }
+    const parsed = parseReportMarkdown(payload.source, undefined, { allProjectRuns });
+    setBlocks(parsed.blocks);
+    rawCairnSourceRef.current = parsed.rawCairnSource;
+    if (reportId) restoreReportCardSettings(reportId, parsed.blocks, parsed.settings);
     setLastSavedAt(q.data.updated_at);
     justHydratedRef.current = true;
     setHydrated(true);
@@ -146,21 +123,17 @@ export default function ReportEditorPage() {
 
   const doSave = useCallback(() => {
     if (!hydrated || !reportId) return;
-    // Blank-name guard: never persist an empty name (RC follow-up fix) —
-    // fall back to the same default the list page's create-time prompt()
-    // uses, and reflect the fallback in the input so it doesn't silently
-    // diverge from what was actually saved.
+    // Never persist an empty name: fall back to DEFAULT_REPORT_NAME and show
+    // it in the input, so the input matches what was saved.
     const trimmed = name.trim();
     const effectiveName = trimmed || DEFAULT_REPORT_NAME;
     if (effectiveName !== name) setName(effectiveName);
     setSaveState("saving");
 
-    const payload = buildReportPayload(reportId, blocks);
-    const source = serializeReportToMarkdown(blocks, payload.cardSettings ?? {}, rawCairnSourceRef.current);
-    const payloadWithSource: ReportPayload = { ...payload, source };
+    const payload = buildReportPayload(reportId, blocks, rawCairnSourceRef.current);
 
     updateMut.mutate(
-      { name: effectiveName, payload: payloadWithSource as unknown as Record<string, unknown> },
+      { name: effectiveName, payload: payload as unknown as Record<string, unknown> },
       {
         onSuccess: (res) => {
           setSaveState("saved");
@@ -240,10 +213,8 @@ export default function ReportEditorPage() {
     });
   };
 
-  // WS-NR1 cell model: insert a fresh markdown/cards cell immediately after
-  // `afterId` (or at the end when `afterId` is null) — the "+ cell"
-  // affordance mirrors Jupyter's insert-below, and replaces the old
-  // append-only addMarkdownBlock/addCardsBlock.
+  // Insert a fresh markdown/cards cell immediately after `afterId` (or at the
+  // end when `afterId` is null) — Jupyter's insert-below.
   const insertBlock = (afterId: string | null, type: ReportBlock["type"]) => {
     const block = makeEmptyBlock(type);
     setBlocks((prev) => {
@@ -293,7 +264,7 @@ export default function ReportEditorPage() {
   // open — cheap relative to a render, and guarantees it's always exactly
   // what a save would persist right now.
   const sourceText = showSource
-    ? serializeReportToMarkdown(blocks, buildReportPayload(reportId, blocks).cardSettings ?? {}, rawCairnSourceRef.current)
+    ? buildReportPayload(reportId, blocks, rawCairnSourceRef.current).source
     : "";
 
   return (

@@ -37,7 +37,7 @@ function axisTheme(theme: ChartTheme): PlotlyLayout {
 }
 
 /** The app theme as a Plotly layout; caller layout keys win (deep for axes). */
-export function themedLayout(layout: PlotlyLayout, theme: ChartTheme): PlotlyLayout {
+function themedLayout(layout: PlotlyLayout, theme: ChartTheme): PlotlyLayout {
   const base: PlotlyLayout = {
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)",

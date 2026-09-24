@@ -7,9 +7,7 @@
  * in `card-settings.ts` and, for `compare:`/`report:`-scoped pseudo runs, in
  * `comparisons.ts`/`reports.ts`).
  *
- * All key strings below are byte-identical to their pre-refactor literals —
- * do not change the interpolation shape without a migration plan for
- * existing persisted data.
+ * Changing a key's shape orphans whatever is already stored under it.
  */
 
 export const storageKeys = {

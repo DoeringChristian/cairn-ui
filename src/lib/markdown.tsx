@@ -6,16 +6,15 @@
  * `<script>` or any other tag in the source renders as inert text. Do not
  * add rehype-raw.
  *
- * Single source of truth for both MarkdownCard (run-logged markdown blobs)
- * and report markdown blocks — extracted here so both surfaces render GFM
- * markdown identically.
+ * Shared by MarkdownCard (run-logged markdown blobs) and report markdown
+ * cells so both surfaces render GFM identically.
  */
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 /** `components` override map for react-markdown — theme tokens, no raw HTML. */
-export const MD_COMPONENTS = {
+const MD_COMPONENTS = {
   h1: (p: React.ComponentProps<"h1">) => <h1 className="mt-3 mb-2 text-lg font-semibold text-fg first:mt-0" {...p} />,
   h2: (p: React.ComponentProps<"h2">) => <h2 className="mt-3 mb-1.5 text-base font-semibold text-fg first:mt-0" {...p} />,
   h3: (p: React.ComponentProps<"h3">) => <h3 className="mt-2 mb-1 text-sm font-semibold text-fg first:mt-0" {...p} />,
@@ -58,29 +57,11 @@ export const MD_COMPONENTS = {
 
 /**
  * Render GFM markdown text with the shared theme + sanitization contract.
- *
- * A thin wrapper around `<ReactMarkdown>` — deliberately renders no wrapper
- * element of its own so drop-in call sites (like MarkdownCard) keep an
- * identical DOM shape to inlining `<ReactMarkdown remarkPlugins={[remarkGfm]}
- * components={MD_COMPONENTS}>` directly.
- *
- * `components` optionally *overlays* extra overrides on top of the base
- * `MD_COMPONENTS` (e.g. reports' `language-cairn` fence renderer, see
- * components/reports/ReportSourceMarkdown.tsx) — MD_COMPONENTS itself is
- * never forked, and every existing call site (MarkdownCard,
- * ReportMarkdownBlock) that omits this prop renders byte-identically to
- * before.
+ * Renders no wrapper element of its own, so call sites control the layout.
  */
-export default function Markdown({
-  children,
-  components,
-}: {
-  children: string;
-  components?: Partial<typeof MD_COMPONENTS>;
-}) {
-  const merged = components ? { ...MD_COMPONENTS, ...components } : MD_COMPONENTS;
+export default function Markdown({ children }: { children: string }) {
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={merged}>
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
       {children}
     </ReactMarkdown>
   );

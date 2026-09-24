@@ -81,7 +81,6 @@ export const api = {
   health: () => get<import("./types").Health>("/api/health"),
   projects: () =>
     get<{ projects: import("./types").Project[] }>("/api/projects"),
-  project: (id: string) => get<import("./types").Project>(`/api/projects/${id}`),
   createProject: (name: string) =>
     post<{ id: string; name: string; created_at: string }>("/api/projects", { name }),
   runs: (params: { project?: string; status?: string; limit?: number; offset?: number } = {}) => {
@@ -298,10 +297,6 @@ export const api = {
     patch<import("./types").ArtifactFamily>(
       `/api/artifact-families/${familyId}`,
       body,
-    ),
-  artifactVersions: (familyId: string) =>
-    get<{ versions: import("./types").ArtifactVersionInfo[] }>(
-      `/api/artifact-families/${familyId}/versions`,
     ),
   setArtifactAlias: (familyId: string, alias: string, version: number) =>
     put<{ alias: string; version: number }>(

@@ -34,8 +34,7 @@ interface BarSettings extends BaseCardSettings {
    * How to compose multiple runs' bars against each other. Only surfaced in
    * settings (and only affects rendering) when the card has more than one
    * run; single-run cards always render a single bar regardless of this
-   * setting. Undefined == "grouped" (today's one-row-per-run layout), so
-   * existing persisted cards are unaffected by this key's introduction.
+   * setting. Undefined == "grouped" (one row per run).
    */
   compareMode?: BarCompareMode;
 }
@@ -151,7 +150,7 @@ export default function BarChartCard({
     // the degenerate case of "sort categories by first run's value" when
     // there's exactly one category. Grouped mode renders `bars` in this
     // order; stacked mode ignores it deliberately (segments stack in
-    // `runOrderIds`/original run order instead, per spec) and overlay mode
+    // `runOrderIds`/original run order instead) and overlay mode
     // uses it for z-order (last drawn = on top).
     out.sort((a, b) => {
       if (settings.sortBy === "name") return a.label.localeCompare(b.label);

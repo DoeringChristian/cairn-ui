@@ -119,7 +119,7 @@
           }
         ]
       },
-      "description": "Per-card `settings` are an untyped side-channel today (`Record<cardId, unknown>` — see `ReportPayload.cardSettings` in lib/reports/types.ts and `CairnCardInput.settings` in lib/reports/cairn-block.ts). Rather than a full discriminated union keyed by card type (which would require typing every one of `lib/card-settings.ts`'s ~20 per-type interfaces up front), this starts permissive with a few well-known keys and tightens over time — see docs/superpowers/specs/2026-07-07-notebook-python-and-embed.md §3.2."
+      "description": "Per-card `settings` (see `CairnCardInput.settings` in lib/reports/cairn-block.ts): a few well-known keys, otherwise any JSON. Each card type's full settings interface lives with the card."
     },
     "JSONValue": {
       "anyOf": [
@@ -299,7 +299,7 @@
         "source"
       ],
       "additionalProperties": false,
-      "description": "The `cairn.Report.publish()` payload shape (§3.3 of the design doc) — a report's canonical markdown `source` plus create-route metadata (mirrors `ReportCreate` in cairn/server/routes/reports.py). Not wired into any runtime path yet (that's WS-PYAPI); included here so the JSON Schema/pydantic model has a stable root for it ahead of that workstream."
+      "description": "A report as published from Python: its markdown `source` plus create-route metadata (see `ReportCreate` in the cairn server's routes/reports.py)."
     },
     "SeriesRef": {
       "$ref": "#/definitions/ComparisonSeriesRef",

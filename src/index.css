@@ -11,7 +11,7 @@
   body {
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
-  /* Numbers and identifiers in monospace per spec §Design principles */
+  /* Numbers and identifiers in tabular monospace */
   .num,
   .mono {
     font-family: theme("fontFamily.mono");

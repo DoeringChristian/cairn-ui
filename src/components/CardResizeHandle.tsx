@@ -8,8 +8,6 @@ import {
 } from "./card-kit/card-min-sizes";
 
 interface Props {
-  /** Current persisted height in px; undefined = auto/default. */
-  height: number | undefined;
   onHeightChange: (h: number | undefined) => void;
   /** Column span (1 = single column, 2 = double, etc.). */
   colSpan: number;
@@ -18,8 +16,6 @@ interface Props {
   gridCols?: number;
   /** Minimum height in px (default 150). */
   minHeight?: number;
-  /** Called with per-colSpan height when dragging. */
-  onPerColHeightChange?: (patch: Record<string, unknown>) => void;
 }
 
 const MAX_HEIGHT = 2000;
@@ -51,7 +47,6 @@ export default function CardResizeHandle({
   onColSpanChange,
   gridCols = 6,
   minHeight = 150,
-  onPerColHeightChange,
 }: Props) {
   const handleRef = useRef<HTMLDivElement>(null);
   const colSpanCbRef = useRef(onColSpanChange);
@@ -232,9 +227,6 @@ export default function CardResizeHandle({
         // direct styles keep feedback smooth without re-rendering every plot.
         onHeightChange(lastH);
         onColSpanChange(currentSpan);
-        if (onPerColHeightChange) {
-          onPerColHeightChange({ [`heights.${currentSpan}`]: lastH, height: lastH });
-        }
         // Broadcast changes to all sibling cards via custom events.
         if (gridEl) {
           gridEl.dispatchEvent(new CustomEvent("cairn:heightChange", { detail: { height: lastH, rowTop: card.getBoundingClientRect().top } }));
@@ -245,7 +237,7 @@ export default function CardResizeHandle({
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
     },
-    [minHeight, onHeightChange, colSpan, onColSpanChange, gridCols, onPerColHeightChange],
+    [minHeight, onHeightChange, colSpan, onColSpanChange, gridCols],
   );
 
   return (

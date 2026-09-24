@@ -38,13 +38,12 @@ export function useArtifactArrays(hash: string | null) {
   });
 }
 
-/** Named per-element properties: `values_<name>` members (a legacy bare `values` becomes `value`). */
+/** Named per-element properties: the `values_<name>` members. */
 export function extractProperties(arrays: ArtifactArrays): Record<string, Float64Array> {
   const out: Record<string, Float64Array> = {};
   for (const key of Object.keys(arrays)) {
     if (key.startsWith("values_")) out[key.slice("values_".length)] = arrays[key]!.data;
   }
-  if (Object.keys(out).length === 0 && arrays.values) out.value = arrays.values.data;
   return out;
 }
 

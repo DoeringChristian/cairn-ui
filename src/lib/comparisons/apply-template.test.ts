@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { matchTemplateCards, type SeqMap, type SeriesEntry } from "./template-match.ts";
-import { normalizeTemplateCards, templateCardOf, templateKey } from "./template-cards.ts";
+import { templateCardOf, templateKey } from "./template-cards.ts";
 import type { ComparisonTemplateCard } from "./template-cards.ts";
 import type { ComparisonCard } from "./types.ts";
 
@@ -115,26 +115,4 @@ test("multi-run cards match on type alone, once per run", () => {
     ["r1", "r2"],
   );
   assert.deepEqual(matchTemplateCards(templateOf([{ type: "parallel", keys: [] }]), [], seqMapOf([])), []);
-});
-
-test("pre-keys templates normalize to keys on load", () => {
-  const legacy = [
-    { type: "scalar", metricName: "loss", contextHash: "train", settings: { logY: true } },
-    { type: "image", metricName: "preview" },
-    // Multi-run cards used to carry their UI label as metricName.
-    { type: "parallel", metricName: "Parallel Coordinates" },
-    { type: "", metricName: "junk" },
-  ];
-  assert.deepEqual(normalizeTemplateCards(legacy), [
-    { type: "scalar", keys: ["loss::train"], settings: { logY: true } },
-    { type: "image", keys: ["preview::"], settings: undefined },
-    { type: "parallel", keys: [], settings: undefined },
-  ]);
-});
-
-test("a normalized legacy card still matches", () => {
-  const cards = normalizeTemplateCards([{ type: "scalar", metricName: "loss" }]);
-  const matched = matchTemplateCards(templateOf(cards), ["r1"], seqMapOf([s("r1", "loss", "train")]));
-  assert.equal(matched.length, 1);
-  assert.equal(matched[0]!.series[0]!.name, "loss");
 });

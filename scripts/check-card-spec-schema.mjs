@@ -1,12 +1,11 @@
-// WS-SCHEMA drift-check: regenerate the card-spec JSON Schema from the TS
+// Drift-check: regenerate the card-spec JSON Schema from the TS
 // source and fail if it differs from the committed
 // docs/schemas/cairn-card-spec.schema.json. This is what keeps TS and the
 // committed schema (and therefore the Python pydantic model derived from it)
 // from silently drifting.
 //
 // Run: `npm run check:card-schema` (exit 0 = in sync, exit 1 = drift; the
-// diff is printed). Mirrors the round-trip-test discipline in
-// src/lib/reports/*.round-trip.ts.
+// diff is printed).
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
