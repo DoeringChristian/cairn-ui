@@ -44,6 +44,7 @@ const PointCloudCard = lazy(() => import("./PointCloudCard"));
 const MeshCard = lazy(() => import("./MeshCard"));
 const Boxes3DCard = lazy(() => import("./Boxes3DCard"));
 const VolumeCard = lazy(() => import("./VolumeCard"));
+const PresetCard = lazy(() => import("./PresetCard"));
 
 
 /**
@@ -288,6 +289,12 @@ export default function CardRenderer(props: CardDescriptor) {
       return (
         <Suspense fallback={<LazyCardFallback label="loading volume…" />}>
           <VolumeCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />
+        </Suspense>
+      );
+    case "preset":
+      return (
+        <Suspense fallback={<LazyCardFallback label="loading chart…" />}>
+          <PresetCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />
         </Suspense>
       );
     default: {

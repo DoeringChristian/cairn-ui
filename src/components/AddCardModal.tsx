@@ -39,6 +39,7 @@ const TYPE_LABELS: Record<string, string> = {
   mesh: "3D Mesh",
   boxes3d: "Octree / BVH",
   volume: "Volumes",
+  preset: "Confusion / PR / ROC",
   artifact: "Artifacts",
   parallel: "Parallel Coords",
   scatter: "Scatter Plot",
@@ -47,7 +48,7 @@ const TYPE_LABELS: Record<string, string> = {
   importance: "Parameter Importance",
 };
 
-const TYPE_ORDER = ["scalar", "image", "figure", "audio", "video", "histogram", "tensor", "text", "table", "html", "markdown", "pointcloud", "mesh", "boxes3d", "volume", "artifact", "parallel", "scatter", "bar", "tile", "importance"];
+const TYPE_ORDER = ["scalar", "image", "figure", "audio", "video", "histogram", "tensor", "text", "table", "html", "markdown", "pointcloud", "mesh", "boxes3d", "volume", "preset", "artifact", "parallel", "scatter", "bar", "tile", "importance"];
 
 /** Map a picked grouping entry (a lib/reports/metric-index.ts entry) to a typed selection. */
 function toSelection(m: MetricIndexEntry): AddCardSelection {

@@ -50,6 +50,7 @@
         "mesh",
         "boxes3d",
         "volume",
+        "preset",
         "parallel",
         "scatter",
         "bar",

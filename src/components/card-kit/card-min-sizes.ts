@@ -27,6 +27,7 @@ const CARD_MIN_SIZES: Record<string, CardMinSize> = {
   parallel: { minHeight: 250, minSpan: 2 },
   scatter: { minHeight: 220, minSpan: 1 },
   histogram: { minHeight: 180, minSpan: 1 },
+  preset: { minHeight: 240, minSpan: 1 },
   tensor: { minHeight: 200, minSpan: 1 },
   pointcloud: { minHeight: 280, minSpan: 2 },
   mesh: { minHeight: 280, minSpan: 2 },

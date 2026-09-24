@@ -59,6 +59,7 @@ CARD_TYPES: tuple[str, ...] = (
     "mesh",
     "boxes3d",
     "volume",
+    "preset",
     # Workspace-level "multi-run" cards.
     "parallel",
     "scatter",
@@ -85,6 +86,7 @@ CardType = Literal[
     "mesh",
     "boxes3d",
     "volume",
+    "preset",
     "parallel",
     "scatter",
     "bar",

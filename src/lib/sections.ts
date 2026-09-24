@@ -27,6 +27,7 @@ const MEDIA_TYPES = new Set([
   "volume",
   "html",
   "markdown",
+  "preset",
 ]);
 
 function sectionOrder(name: string): number {
