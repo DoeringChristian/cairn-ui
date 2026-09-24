@@ -34,7 +34,7 @@ interface Props {
 }
 
 const HEADER_BUTTON =
-  "inline-flex h-6 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg";
+  "inline-flex h-6 touch:h-10 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg";
 
 /**
  * A run set bound either to a static list (removable chips + a "+ run"
@@ -81,11 +81,11 @@ export default function RunSetEditor({
 
   return (
     <div className="card p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs uppercase tracking-wide text-fg-muted">
           {title} ({runIds.length})
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {actions}
           {editable && (
             <button
@@ -173,14 +173,14 @@ export default function RunSetEditor({
             return editable && staticMode ? (
               <span
                 key={r.id}
-                className="group/chip inline-flex items-center gap-1 rounded border border-border-subtle bg-bg-hover px-1.5 py-0.5 text-[11px] mono"
+                className="group/chip inline-flex min-w-0 max-w-full items-center gap-1 rounded border border-border-subtle bg-bg-hover px-1.5 py-0.5 text-[11px] mono"
                 title={r.id}
               >
-                <span className="text-fg">{label}</span>
+                <span className="truncate text-fg">{label}</span>
                 <button
                   type="button"
                   onClick={() => onRemoveRun(r.id)}
-                  className="text-fg-subtle hover:text-status-failed"
+                  className="shrink-0 text-fg-subtle hover:text-status-failed touch:-my-3 touch:-mr-3 touch:inline-flex touch:h-10 touch:w-10 touch:items-center touch:justify-center"
                   aria-label={`Remove ${label}`}
                   title={`Remove ${label}`}
                 >

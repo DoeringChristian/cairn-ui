@@ -309,7 +309,7 @@ export default function ReportEditorPage() {
                 setTitleEditing(false);
               }
             }}
-            className="input text-xl font-semibold flex-1 min-w-[240px]"
+            className="input min-w-[12rem] flex-1 text-xl font-semibold"
           />
         ) : (
           <h1
@@ -323,13 +323,13 @@ export default function ReportEditorPage() {
                 setTitleEditing(true);
               }
             }}
-            className="mono text-xl font-semibold cursor-text rounded hover:bg-bg-hover/60"
+            className="mono min-w-0 break-all text-xl font-semibold cursor-text rounded hover:bg-bg-hover/60"
           >
             {name}
           </h1>
         )}
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="text-xs text-fg-subtle" title={statusText}>
             {statusText}
           </span>

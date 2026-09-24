@@ -60,7 +60,7 @@ export default function SeriesChip({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`mono inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs cursor-grab active:cursor-grabbing ${
+      className={`mono inline-flex min-w-0 max-w-full items-center gap-1 rounded border px-2 py-0.5 text-xs cursor-grab active:cursor-grabbing ${
         dragging ? "opacity-50" : ""
       } border-border bg-bg text-fg-muted`}
       style={{ WebkitUserDrag: "element" } as React.CSSProperties}
@@ -81,7 +81,7 @@ export default function SeriesChip({
         <button
           type="button"
           aria-label={`Remove ${label}`}
-          className="ml-0.5 text-fg-subtle hover:text-fg"
+          className="ml-0.5 shrink-0 text-fg-subtle hover:text-fg touch:-my-3 touch:-mr-3 touch:inline-flex touch:h-10 touch:w-10 touch:items-center touch:justify-center"
           onClick={(e) => {
             e.stopPropagation();
             onRemove();

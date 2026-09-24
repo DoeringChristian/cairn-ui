@@ -215,7 +215,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
                     type="button"
                     onClick={() => void handleResetFromRuns()}
                     disabled={resetting || runIds.length === 0}
-                    className="inline-flex h-6 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg disabled:opacity-40"
+                    className="inline-flex h-6 touch:h-10 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg disabled:opacity-40"
                     title="Discard current cards and regrow one card per metric across this block's runs"
                   >
                     {resetting ? "Resetting…" : "Reset cards from runs"}
