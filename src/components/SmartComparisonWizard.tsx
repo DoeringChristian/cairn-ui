@@ -14,11 +14,11 @@ import { useModalBehavior } from "../lib/use-modal-behavior";
 import type { Run } from "../api/types";
 import { shortRunId } from "../lib/run-label";
 import {
-  createComparison,
   addCardsToComparison,
+  cardsForRuns,
+  createComparison,
   loadComparisons,
   saveComparisons,
-  type ComparisonCard,
   type SmartFilters,
   type SmartFilterEntry,
 } from "../lib/comparisons";
@@ -221,56 +221,11 @@ export default function SmartComparisonWizard({
       })),
     };
 
-    // Build every card in memory BEFORE touching the comparison store. This
-    // matters because `syncComparisonToServer` (lib/comparisons/sync.ts)
-    // decides create-vs-update by checking `cmp.serverId`, which is only
-    // set once the (async) create POST resolves. Previously this loop
-    // called `addCardToComparison` once per card, and each call synced
-    // immediately — so all N calls ran before the first create's response
-    // came back, saw no `serverId` yet, and each POSTed its own "create",
-    // producing N duplicate comparisons server-side. Collecting all cards
-    // first and adding them in a single batched call below means only one
-    // sync fires, which becomes the one-and-only create POST.
-    let cards: Omit<ComparisonCard, "id">[] = [];
-    if (autoCards) {
-      // Fetch sequences for matched runs, build cards
-      const selectedIds = matchedRuns.map((r) => r.id);
-      const seqResults = await Promise.all(
-        selectedIds.map((rid) => api.sequences(rid)),
-      );
-
-      const cardMap = new Map<
-        string,
-        {
-          name: string;
-          object_type: string;
-          series: Array<{ runId: string; name: string; context_hash: string }>;
-        }
-      >();
-      seqResults.forEach((result, idx) => {
-        const runId = selectedIds[idx]!;
-        for (const seq of result.sequences) {
-          const key = `${seq.name}::${seq.object_type}`;
-          const existing = cardMap.get(key);
-          if (existing) {
-            if (!existing.series.some((s) => s.runId === runId && s.name === seq.name)) {
-              existing.series.push({ runId, name: seq.name, context_hash: seq.context_hash });
-            }
-          } else {
-            cardMap.set(key, {
-              name: seq.name,
-              object_type: seq.object_type,
-              series: [{ runId, name: seq.name, context_hash: seq.context_hash }],
-            });
-          }
-        }
-      });
-
-      cards = Array.from(cardMap.values()).map((card) => ({
-        type: card.object_type as "scalar",
-        series: card.series,
-      }));
-    }
+    // Build every card before touching the comparison store: the store
+    // syncs on each add and decides create-vs-update by `serverId`, which
+    // only arrives once the first create resolves — so a single batched
+    // add below is what keeps this to one server-side comparison.
+    const cards = autoCards ? await cardsForRuns(matchedRuns.map((r) => r.id)) : [];
 
     // `createComparison` only touches localStorage — it does not sync to
     // the server by itself. Stash the smart filters onto it (also

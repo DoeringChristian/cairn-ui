@@ -1,26 +1,21 @@
 // ---------------------------------------------------------------------------
-// Rebuild a full card set from a run set's current sequences.
-//
-// Extracted from ComparePage's smart-filters "Refresh" handler so the same
-// rebuild logic can also drive a dynamic `RunSelector`-bound comparison or
-// report cards block (see lib/run-selector.ts) — one mechanism for "regrow
-// this comparison/block's cards from whatever runs currently match",
-// regardless of whether the run set was computed by param filters or a
-// RunSelector query.
+// Grow a card set from a run set's current sequences, or rebind an existing
+// one to a changed run set. Shared by the runs table's "Compare", the Smart
+// Wizard, smart-filter / RunSelector refreshes and report cards blocks.
 // ---------------------------------------------------------------------------
 
 import { api } from "../../api/client";
 import { buildMetricIndex, type MetricIndex } from "../reports/metric-index";
-import { newId } from "./store";
+import { newId } from "../reports/ids";
 import { isMultiRunCardType } from "./types";
 import type { ComparisonCard, ComparisonSeriesRef } from "./types";
 
 /**
  * Fetch each run's current sequences and group same-named series (across
- * runs) into one card per (name, object_type) — a full replace, not a
- * merge. Runs with no matching series simply contribute nothing.
+ * runs) into one card per (name, object_type), one series per run. Runs
+ * with no matching series simply contribute nothing.
  */
-export async function rebuildCardsFromRuns(runIds: string[]): Promise<ComparisonCard[]> {
+export async function cardsForRuns(runIds: string[]): Promise<Omit<ComparisonCard, "id">[]> {
   if (runIds.length === 0) return [];
   const seqResults = await Promise.all(runIds.map((rid) => api.sequences(rid)));
 
@@ -48,10 +43,14 @@ export async function rebuildCardsFromRuns(runIds: string[]): Promise<Comparison
   });
 
   return Array.from(cardMap.values()).map((c) => ({
-    id: newId(),
     type: c.object_type as ComparisonCard["type"],
     series: c.series,
   }));
+}
+
+/** `cardsForRuns` with fresh card ids — a full replace, not a merge. */
+export async function rebuildCardsFromRuns(runIds: string[]): Promise<ComparisonCard[]> {
+  return (await cardsForRuns(runIds)).map((card) => ({ id: newId(), ...card }));
 }
 
 /**
@@ -67,13 +66,11 @@ export async function rebuildCardsFromRuns(runIds: string[]): Promise<Comparison
  *   - kept entries have their `context_hash` refreshed from the run's
  *     current sequences.
  * Multi-run card types (parallel/scatter/bar/tile) don't key off `name`
- * (see `ReportCardRenderer`/`ComparisonCardRenderer` — they consume the
- * distinct `runId` set only), so their series is simply re-pointed at
- * `runIds` while preserving the card's label.
+ * (`ComparisonCardView` hands them the distinct `runId` set only), so their
+ * series is simply re-pointed at `runIds` while preserving the card's label.
  *
- * This is the "re-resolve, don't regrow" fix for the #44 cluster: a
- * `RunSelector`-bound cards block whose resolved runs changed should rebind
- * curated cards to the new runs, not replace the whole card set.
+ * A `RunSelector`-bound cards block whose resolved runs changed rebinds its
+ * curated cards this way instead of replacing the whole card set.
  */
 export async function rebindCardsToRuns(
   cards: ComparisonCard[],

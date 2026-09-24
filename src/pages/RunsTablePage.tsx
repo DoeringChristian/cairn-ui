@@ -13,7 +13,15 @@ import {
   valueColumnsOf,
   type ValueColumn,
 } from "../lib/run-value-columns";
-import { addCardsToComparison, applyTemplateToRuns, createComparison, useTemplates, type ComparisonTemplate } from "../lib/comparisons";
+import {
+  addCardsToComparison,
+  applyTemplateToRuns,
+  cardsForRuns,
+  createComparison,
+  useTemplates,
+  type ComparisonTemplate,
+} from "../lib/comparisons";
+import { downloadBlob } from "../lib/download";
 import { gcDeletedRunKeys } from "../lib/storage";
 import { api } from "../api/client";
 import SettingsPopover from "../components/SettingsPopover";
@@ -341,12 +349,7 @@ export default function RunsTablePage() {
     setExporting(true);
     try {
       const blob = await api.exportRuns(Array.from(selected));
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `cairn_export_${new Date().toISOString().slice(0, 10)}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `cairn_export_${new Date().toISOString().slice(0, 10)}.zip`);
     } catch (err) {
       alert(`Export failed: ${err}`);
     } finally {
@@ -355,63 +358,17 @@ export default function RunsTablePage() {
   }, [selected]);
 
   const onCompare = async () => {
-    // Create a comparison pre-populated with cards: one card per unique
-    // metric across ALL selected runs (union, not intersection).
+    // One card per unique metric across ALL selected runs (union, not
+    // intersection), system metrics left out.
     const selectedIds = Array.from(selected);
     const now = new Date();
     const label = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
     const cmp = createComparison(projectId!, `Comparison ${label}`);
-
-    // Fetch sequences for each selected run.
-    const seqResults = await Promise.all(
-      selectedIds.map((rid) => api.sequences(rid)),
+    const cards = (await cardsForRuns(selectedIds)).filter(
+      (card) => !card.series[0]!.name.startsWith("system."),
     );
-
-    // Union metrics by (name, object_type) → one card per unique metric.
-    const cardMap = new Map<
-      string,
-      {
-        name: string;
-        object_type: string;
-        series: Array<{ runId: string; name: string; context_hash: string }>;
-      }
-    >();
-    seqResults.forEach((result, idx) => {
-      const runId = selectedIds[idx]!;
-      for (const seq of result.sequences) {
-        const key = `${seq.name}::${seq.object_type}`;
-        const existing = cardMap.get(key);
-        if (existing) {
-          // Only add one entry per run per metric (skip duplicate contexts).
-          if (!existing.series.some((s) => s.runId === runId && s.name === seq.name)) {
-            existing.series.push({
-              runId,
-              name: seq.name,
-              context_hash: seq.context_hash,
-            });
-          }
-        } else {
-          cardMap.set(key, {
-            name: seq.name,
-            object_type: seq.object_type,
-            series: [
-              { runId, name: seq.name, context_hash: seq.context_hash },
-            ],
-          });
-        }
-      }
-    });
-
-    // Add all cards in one batch (avoids race condition creating multiple
-    // server-side comparisons). Skip system metrics.
-    addCardsToComparison(
-      projectId!,
-      cmp.id,
-      Array.from(cardMap.values())
-        .filter((card) => !card.name.startsWith("system."))
-        .map((card) => ({ type: card.object_type as "scalar", series: card.series })),
-    );
-
+    // One batched add, so only one server sync creates the comparison.
+    addCardsToComparison(projectId!, cmp.id, cards);
     navigate(`/p/${projectId}/compare?c=${encodeURIComponent(cmp.id)}`);
   };
 
