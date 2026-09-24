@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useSequences } from "../../api/hooks";
 import { api } from "../../api/client";
 import { qk } from "../../api/query-keys";
-import { useClickOutside } from "../../lib/use-click-outside";
+import Popover from "../ui/Popover";
+import { useCompactViewport } from "../ui/use-compact-viewport";
 import type { SequenceMeta } from "../../api/types";
 
 export interface ChipValue {
@@ -61,10 +62,8 @@ export default function MetricChips({
 
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const compact = useCompactViewport();
 
   // In tag mode, selected keys are just tag names
   const selectedKeys = useMemo(() => {
@@ -143,14 +142,6 @@ export default function MetricChips({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runIds, tagRunMap, singleQ.data, objectType, selectedKeys, filter, tagMode]);
 
-  useEffect(() => {
-    if (!open) return;
-    inputRef.current?.focus();
-  }, [open]);
-
-  const excludeRefs = useMemo(() => [addButtonRef], []);
-  useClickOutside(dropdownRef, () => setOpen(false), open, excludeRefs);
-
   const removeChip = (chip: ChipValue) => {
     if (tagMode) {
       onChange(value.filter((c) => c.name !== chip.name));
@@ -172,19 +163,19 @@ export default function MetricChips({
   };
 
   return (
-    <div ref={containerRef} className="relative">
+    <div>
       <div className="flex flex-wrap items-center gap-1.5">
         {displayChips.map((chip) => (
           <span
             key={tagMode ? chip.name : chipKey(chip)}
-            className="mono inline-flex items-center gap-1 rounded border border-border bg-bg px-2 py-0.5 text-xs text-fg-muted"
+            className="mono inline-flex items-center gap-1 rounded border border-border bg-bg px-2 py-0.5 text-xs text-fg-muted touch:py-0 touch:pr-0"
           >
             <span>{chipLabel(chip.name, chip.context_hash, tagMode)}</span>
             <button
               type="button"
               onClick={() => removeChip(chip)}
               aria-label={`Remove ${chip.name}`}
-              className="inline-flex h-3.5 w-3.5 items-center justify-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg"
+              className="inline-flex h-3.5 w-3.5 items-center justify-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg touch:h-8 touch:w-8"
             >
               <span aria-hidden="true" className="text-sm leading-none">×</span>
             </button>
@@ -196,48 +187,49 @@ export default function MetricChips({
           onClick={() => setOpen((v) => !v)}
           aria-label="Add metric"
           aria-expanded={open}
-          className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-bg text-xs text-fg-muted hover:border-accent hover:text-fg"
+          className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-bg text-xs text-fg-muted hover:border-accent hover:text-fg touch:h-10 touch:w-10"
         >
           <span aria-hidden="true">+</span>
         </button>
       </div>
-      {open && (
-        <div
-          ref={dropdownRef}
-          className="absolute left-0 top-full z-40 mt-1 w-64 overflow-hidden rounded-lg border border-border bg-bg-elevated shadow-lg"
-        >
-          <div className="border-b border-border-subtle p-2">
-            <input
-              ref={inputRef}
-              type="text"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter metrics…"
-              className="input"
-            />
-          </div>
-          <div className="max-h-56 overflow-y-auto">
-            {availableMetrics.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-fg-subtle">
-                {(runIds ? multiQueries : [singleQ]).some((q) => q.isLoading)
-                  ? "Loading…"
-                  : "no matching metrics"}
-              </div>
-            ) : (
-              availableMetrics.map((m) => (
-                <button
-                  key={tagMode ? m.name : `${m.name}::${m.context_hash}`}
-                  type="button"
-                  onClick={() => addChip(m)}
-                  className="mono block w-full truncate px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-bg-hover hover:text-fg"
-                >
-                  {chipLabel(m.name, m.context_hash, tagMode)}
-                </button>
-              ))
-            )}
-          </div>
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={addButtonRef}
+        title={tagMode ? "Add tag" : "Add metric"}
+        width={256}
+        align="start"
+      >
+        <div className="sticky top-0 border-b border-border-subtle bg-bg-elevated p-2">
+          <input
+            type="text"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter metrics…"
+            className="input"
+          />
         </div>
-      )}
+        <div className={compact ? "" : "max-h-56 overflow-y-auto"}>
+          {availableMetrics.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-fg-subtle">
+              {(runIds ? multiQueries : [singleQ]).some((q) => q.isLoading)
+                ? "Loading…"
+                : "no matching metrics"}
+            </div>
+          ) : (
+            availableMetrics.map((m) => (
+              <button
+                key={tagMode ? m.name : `${m.name}::${m.context_hash}`}
+                type="button"
+                onClick={() => addChip(m)}
+                className="mono block w-full truncate px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-bg-hover hover:text-fg touch:min-h-10"
+              >
+                {chipLabel(m.name, m.context_hash, tagMode)}
+              </button>
+            ))
+          )}
+        </div>
+      </Popover>
     </div>
   );
 }

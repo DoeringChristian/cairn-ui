@@ -7,6 +7,7 @@ import { safeJsonParse } from "../lib/format";
 import { useProjectTags } from "../lib/use-project-tags";
 import SettingsPopover from "./SettingsPopover";
 import TagInput from "./TagInput";
+import { useCompactViewport } from "./ui/use-compact-viewport";
 
 interface Props {
   open: boolean;
@@ -20,6 +21,7 @@ export default function BulkTagEditor({ open, onClose, anchorRef, selectedRunIds
   const qc = useQueryClient();
   const [newTag, setNewTag] = useState("");
   const [busy, setBusy] = useState(false);
+  const compact = useCompactViewport();
 
   // Build tag → set of run IDs that have it.
   const tagMap = useMemo(() => {
@@ -104,7 +106,7 @@ export default function BulkTagEditor({ open, onClose, anchorRef, selectedRunIds
           />
           <button
             type="button"
-            className="btn px-2 py-1 text-xs"
+            className="btn px-2 py-1 text-xs touch:min-h-10"
             onClick={addTag}
             disabled={busy || !newTag.trim()}
           >
@@ -113,14 +115,14 @@ export default function BulkTagEditor({ open, onClose, anchorRef, selectedRunIds
         </div>
 
         {allTags.length > 0 ? (
-          <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+          <div className={`flex flex-col gap-1 ${compact ? "" : "max-h-48 overflow-y-auto"}`}>
             {allTags.map((tag) => {
               const count = tagMap.get(tag)?.size ?? 0;
               const partial = count < totalSelected;
               return (
                 <div
                   key={tag}
-                  className="flex items-center justify-between gap-2 rounded px-2 py-1 border border-border-subtle text-xs"
+                  className="flex items-center justify-between gap-2 rounded px-2 py-1 touch:py-0 touch:pr-0 border border-border-subtle text-xs"
                 >
                   <span className="mono truncate flex-1">{tag}</span>
                   {partial && (
@@ -130,10 +132,11 @@ export default function BulkTagEditor({ open, onClose, anchorRef, selectedRunIds
                   )}
                   <button
                     type="button"
-                    className="text-fg-muted hover:text-status-failed shrink-0"
+                    className="inline-flex shrink-0 items-center justify-center text-fg-muted hover:text-status-failed touch:h-10 touch:w-10 touch:text-base"
                     onClick={() => removeTag(tag)}
                     disabled={busy}
                     title={`Remove "${tag}" from ${count} run(s)`}
+                    aria-label={`Remove tag ${tag}`}
                   >
                     {"\u00D7"}
                   </button>

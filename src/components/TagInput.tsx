@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import Popover from "./ui/Popover";
 
 interface Props {
   value: string;
@@ -29,7 +30,8 @@ export default function TagInput({
 }: Props) {
   const [activeIdx, setActiveIdx] = useState(-1);
   const [open, setOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   const filtered = useMemo(() => {
     const lower = value.trim().toLowerCase();
@@ -73,39 +75,53 @@ export default function TagInput({
   };
 
   return (
-    <div ref={wrapperRef} className="relative">
+    <>
       <input
+        ref={inputRef}
         autoFocus={autoFocus}
-        className={`input py-0.5 text-xs ${className}`}
+        className={`input py-0.5 text-xs touch:min-h-10 ${className}`}
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        onBlur={() => {
-          // Delay to allow click on dropdown item
-          setTimeout(() => setOpen(false), 150);
+        onBlur={(e) => {
+          // Focus moving elsewhere by keyboard closes the list. Presses on the
+          // list keep focus in the input (mousedown is prevented below), and
+          // presses anywhere else close it through the popover.
+          const next = e.relatedTarget;
+          if (next instanceof Node && !listRef.current?.contains(next)) setOpen(false);
         }}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
       />
-      {showDropdown && (
-        <ul className="absolute left-0 top-full z-10 mt-0.5 max-h-48 w-full overflow-y-auto rounded border border-border bg-bg-surface shadow-md">
+      <Popover
+        open={showDropdown}
+        onClose={() => setOpen(false)}
+        anchorRef={inputRef}
+        width="anchor"
+        minWidth={160}
+        align="start"
+        compact="anchored"
+        initialFocus={false}
+        role="listbox"
+        title="Tag suggestions"
+      >
+        <ul ref={listRef}>
           {filtered.map((tag, i) => (
             <li key={tag}>
               <button
                 type="button"
-                className={`block w-full px-2 py-1 text-left text-xs mono ${
+                className={`block w-full px-2 py-1 text-left text-xs mono touch:min-h-10 ${
                   i === activeIdx
                     ? "bg-accent/10 text-fg"
                     : "text-fg-muted hover:bg-bg-hover"
                 }`}
-                onMouseDown={(e) => {
-                  e.preventDefault(); // prevent blur
-                  commit(tag);
-                }}
+                // Keep focus in the input; the tap/click itself picks the tag.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => commit(tag)}
                 onMouseEnter={() => setActiveIdx(i)}
               >
                 {tag}
@@ -113,7 +129,7 @@ export default function TagInput({
             </li>
           ))}
         </ul>
-      )}
-    </div>
+      </Popover>
+    </>
   );
 }
