@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { RUN_SELECTOR_FETCH_LIMIT, useReport, useRuns, useUpdateReport } from "../api/hooks";
 import { formatRelative } from "../lib/format";
 import { loadCardSettings } from "../lib/card-settings";
@@ -31,6 +32,26 @@ import {
 import ReportNotebook, { makeEmptyBlock } from "../components/reports/ReportNotebook";
 
 const AUTOSAVE_DELAY_MS = 1500;
+const PRINT_WAIT_LIMIT_MS = 20000;
+
+/**
+ * Resolve once the page has settled enough to print: no query in flight and
+ * every image decoded, seen twice in a row (a finished fetch often mounts a
+ * card that starts the next one), then one more frame so charts have drawn.
+ * Gives up waiting after PRINT_WAIT_LIMIT_MS and prints what is there.
+ */
+async function waitForSettledPage(qc: QueryClient): Promise<void> {
+  const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+  const settled = () =>
+    qc.isFetching() === 0 && Array.from(document.images).every((img) => img.complete);
+  const deadline = performance.now() + PRINT_WAIT_LIMIT_MS;
+  let calm = 0;
+  while (calm < 2 && performance.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 150));
+    calm = settled() ? calm + 1 : 0;
+  }
+  await frame();
+}
 const DEFAULT_REPORT_NAME = "Untitled report";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -39,6 +60,17 @@ export default function ReportEditorPage() {
   const { projectId, reportId } = useParams<{ projectId: string; reportId: string }>();
   const q = useReport(projectId ?? "", reportId ?? "");
   const updateMut = useUpdateReport(projectId ?? "", reportId ?? "");
+  const queryClient = useQueryClient();
+  const [printing, setPrinting] = useState(false);
+  const handleExportPdf = async () => {
+    setPrinting(true);
+    try {
+      await waitForSettledPage(queryClient);
+      window.print();
+    } finally {
+      setPrinting(false);
+    }
+  };
   // Same pool size a `RunSelector` query resolves against, so every resolved
   // run has a label here.
   const runsQ = useRuns({ project: projectId, limit: RUN_SELECTOR_FETCH_LIMIT });
@@ -269,7 +301,7 @@ export default function ReportEditorPage() {
       </div>
 
       {applyBanner && (
-        <div className="mb-4 flex items-center justify-between gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-fg">
+        <div className="mb-4 flex items-center justify-between gap-2 print:hidden rounded border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-fg">
           <span>{applyBanner}</span>
           <button
             type="button"
@@ -322,7 +354,7 @@ export default function ReportEditorPage() {
           </h1>
         )}
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 print:hidden">
           <span className="text-xs text-fg-subtle" title={statusText}>
             {statusText}
           </span>
@@ -342,11 +374,20 @@ export default function ReportEditorPage() {
           >
             {showSource ? "Hide source" : "View source"}
           </button>
+          <button
+            type="button"
+            onClick={() => void handleExportPdf()}
+            disabled={printing}
+            className="btn text-xs disabled:opacity-60"
+            title="Print the report; choose “Save as PDF” as the destination"
+          >
+            {printing ? "Preparing…" : "Export PDF"}
+          </button>
         </div>
       </div>
 
       {showSource && (
-        <pre className="mono mb-4 max-h-[50vh] overflow-auto rounded border border-border-subtle bg-bg p-3 text-xs leading-relaxed text-fg-muted whitespace-pre-wrap">
+        <pre className="mono mb-4 print:hidden max-h-[50vh] overflow-auto rounded border border-border-subtle bg-bg p-3 text-xs leading-relaxed text-fg-muted whitespace-pre-wrap">
           {sourceText || "(empty)"}
         </pre>
       )}

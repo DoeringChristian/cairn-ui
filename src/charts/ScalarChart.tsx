@@ -6,6 +6,7 @@ import type { AxisSource } from "../lib/plot-utils/x-axis.ts";
 import { formatNum, type AxisScale, type Series, type SeriesPoint } from "../lib/plot-utils/types.ts";
 import { alignSeries, type DrawnSeries } from "./scalar-data.ts";
 import type { SmoothingKind } from "../lib/plot-utils/smooth.ts";
+import { onPrintLayout } from "../lib/print-layout.ts";
 import { readChartTheme, withAlpha } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
 
@@ -255,13 +256,16 @@ export default function ScalarChart(props: ScalarChartProps) {
       plot.over.addEventListener("touchend", onTouchEnd);
     }
 
-    const ro = new ResizeObserver(() => {
+    const resize = () => {
       plot.setSize({ width: Math.max(host.clientWidth, 50), height: Math.max(host.clientHeight, 50) });
-    });
+    };
+    const ro = new ResizeObserver(resize);
     ro.observe(host);
+    const offPrint = onPrintLayout(resize);
 
     return () => {
       ro.disconnect();
+      offPrint();
       plot.destroy();
       plotRef.current = null;
       setHover(null);

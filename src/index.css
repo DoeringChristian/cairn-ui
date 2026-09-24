@@ -138,3 +138,24 @@ button i[class*="fa-"] { font-size: 12px; line-height: 1; }
   --color-checkerboard-a-rgb: 224 224 224;
   --color-checkerboard-b-rgb: 240 240 240;
 }
+
+/* Printing (reports' "Export PDF"): chrome carries Tailwind `print:hidden`;
+   here the page-level rules. Charts re-measure on print themselves
+   (lib/print-layout.ts). */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+  html,
+  body {
+    background: #ffffff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  [data-cairn-card] {
+    break-inside: avoid;
+  }
+  canvas {
+    max-width: 100%;
+  }
+}

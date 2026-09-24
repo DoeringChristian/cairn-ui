@@ -21,7 +21,7 @@ export default function App() {
     // --header-h is the header's height (row + 1px border) at each breakpoint;
     // everything sticky or fixed below the header offsets by it.
     <div className="flex min-h-full flex-col [--header-h:61px] md:[--header-h:41px]">
-      <header className="sticky top-0 z-30 border-b border-border bg-bg/80 backdrop-blur">
+      <header className="sticky top-0 z-30 print:hidden border-b border-border bg-bg/80 backdrop-blur">
         <div className="mx-auto flex h-[calc(var(--header-h)-1px)] w-full items-center gap-4 px-4">
           <Link
             to="/"
@@ -67,10 +67,10 @@ export default function App() {
           </div>
         )}
       </header>
-      <main className="mx-auto w-full flex-1 px-4 py-6">
+      <main className="mx-auto w-full flex-1 px-4 py-6 print:p-0">
         <Outlet />
       </main>
-      <footer className="flex items-center justify-center gap-2 border-t border-border px-4 py-3 text-center text-xs text-fg-subtle">
+      <footer className="print:hidden flex items-center justify-center gap-2 border-t border-border px-4 py-3 text-center text-xs text-fg-subtle">
         <span>
           {health.data
             ? `Cairn ${health.data.version} · ${Math.round(health.data.uptime_sec)}s uptime`

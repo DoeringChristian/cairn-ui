@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { readChartTheme } from "../../charts/theme";
 import { useInteract } from "../../lib/use-interact";
+import { onPrintLayout } from "../../lib/print-layout";
 import { CameraLink, copyCamera, type LinkedView } from "./camera-link";
 
 interface Props {
@@ -41,7 +42,7 @@ export default function Viewer3D({ objects, link, resetKey = 0, className }: Pro
 
   useEffect(() => {
     const host = hostRef.current!;
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.domElement.style.display = "block";
     renderer.domElement.style.width = "100%";
@@ -102,16 +103,24 @@ export default function Viewer3D({ objects, link, resetKey = 0, className }: Pro
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     media.addEventListener("change", applyTheme);
 
-    const ro = new ResizeObserver(() => {
+    const resize = () => {
       const w = host.clientWidth;
       const h = host.clientHeight;
-      if (w === 0 || h === 0) return;
+      if (w === 0 || h === 0) return false;
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      render();
+      return true;
+    };
+    const ro = new ResizeObserver(() => {
+      if (resize()) render();
     });
     ro.observe(host);
+    // Printing snapshots the page before the next frame, so draw right away;
+    // preserveDrawingBuffer keeps the frame on the canvas for the snapshot.
+    const offPrint = onPrintLayout(() => {
+      if (resize()) renderer.render(scene, camera);
+    });
 
     controls.addEventListener("change", render);
     // Double-click returns to the standard framing (linked panes follow via the camera link).
@@ -124,6 +133,7 @@ export default function Viewer3D({ objects, link, resetKey = 0, className }: Pro
       cancelAnimationFrame(frame);
       renderer.domElement.removeEventListener("dblclick", onDblClick);
       ro.disconnect();
+      offPrint();
       media.removeEventListener("change", applyTheme);
       controls.dispose();
       renderer.dispose();
