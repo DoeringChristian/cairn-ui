@@ -1,3 +1,6 @@
+/** A tracked list of images: a JSON manifest naming each image's own artifact. */
+export const GALLERY_MIME = "application/vnd.cairn.image-gallery+json";
+
 /** Image mime types every current browser decodes in an `<img>`. */
 const BROWSER_IMAGE_MIMES = new Set([
   "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp",

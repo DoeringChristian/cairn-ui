@@ -1,15 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 
-import { api } from "../api/client";
 import { useSequencesForRuns } from "../api/hooks";
-import type { SequenceMeta, SequencePoint } from "../api/types";
-import { describeEncoding, isBrowserDisplayable } from "../lib/artifact-format";
+import type { SequenceMeta } from "../api/types";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { ComparisonSeriesRef } from "../lib/comparisons";
-import { artifactFilename } from "../lib/download";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
-import UnsupportedArtifact from "./UnsupportedArtifact";
 import type { BaseCardSettings } from "./card-kit";
 import { ExternalBaselinePicker } from "./card-kit/ExternalBaselinePicker";
 import MultiPaneGrid from "./card-kit/MultiPaneGrid";
@@ -18,7 +14,8 @@ import { resolveAtStep } from "./card-kit/resolve-at-step";
 import { seriesLabel } from "./card-kit/series-identity";
 import { useRunInfo } from "./card-kit/use-run-info";
 import { useStepSlider } from "./card-kit/use-step-slider";
-import ImagePane, { type PaneTransform } from "./image/ImagePane";
+import { type PaneTransform } from "./image/ImagePane";
+import ImagePointView from "./image/ImagePointView";
 import SettingsSection from "./settings/SettingsSection";
 import Slider from "./settings/Slider";
 import Toggle from "./settings/Toggle";
@@ -49,14 +46,6 @@ const IDENTITY: PaneTransform = { scale: 1, x: 0, y: 0 };
 
 type Series = { runId: string; name: string; context_hash: string };
 
-function parseMetadata(point: SequencePoint | null): Record<string, unknown> | null {
-  if (!point?.artifact_metadata) return null;
-  try {
-    return JSON.parse(point.artifact_metadata) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
 
 export default function ImageCard({ runId, metric, extraSeries = [], settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -131,46 +120,22 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     }
   }, [updateSettings]);
 
-  const renderPane = (key: string, index: number) => {
-    const point = resolveAtStep(points[index] ?? [], currentStep, { nearest: true });
-    const refPoint = reference
-      ? resolveAtStep(refPoints[index] ?? [], settings.referenceStep ?? currentStep, { nearest: true })
-      : null;
-    if (!point) {
-      return (
-        <div className="flex h-full items-center justify-center text-xs text-fg-subtle">
-          {anyLoading ? "Loading…" : "No image logged"}
-        </div>
-      );
-    }
-    const url = api.artifactUrl(point.artifact_hash!);
-    if (!isBrowserDisplayable(point.artifact_mime)) {
-      const meta = parseMetadata(point);
-      return (
-        <UnsupportedArtifact
-          label={`${describeEncoding(point.artifact_mime, meta)} — not viewable in the browser`}
-          detail={`step ${point.step}`}
-          previewSrc={typeof meta?.preview === "string" ? meta.preview : undefined}
-          downloadUrl={url}
-          filename={artifactFilename(metric.name, point.step, point.artifact_mime)}
-        />
-      );
-    }
-    const refShown = refPoint && isBrowserDisplayable(refPoint.artifact_mime)
-      ? { src: api.artifactUrl(refPoint.artifact_hash!), label: `${reference!.name} · ${refPoint.step}` }
-      : null;
-    return (
-      <ImagePane
-        key={key}
-        image={{ src: url, label: `${metric.name} · ${point.step}` }}
-        reference={refShown}
-        split={split}
-        onSplitChange={onSplitChange}
-        transform={transform}
-        onTransformChange={setTransform}
-      />
-    );
-  };
+  const renderPane = (key: string, index: number) => (
+    <ImagePointView
+      key={key}
+      metricName={metric.name}
+      point={resolveAtStep(points[index] ?? [], currentStep, { nearest: true })}
+      refPoint={reference
+        ? resolveAtStep(refPoints[index] ?? [], settings.referenceStep ?? currentStep, { nearest: true })
+        : null}
+      refLabel={reference?.name}
+      split={split}
+      onSplitChange={onSplitChange}
+      transform={transform}
+      onTransformChange={setTransform}
+      loadingHint={anyLoading}
+    />
+  );
 
   const settingsPanel = (
     <>

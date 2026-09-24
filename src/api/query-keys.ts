@@ -20,6 +20,7 @@ export const qk = {
   sourceFile: (runId: string, path: string | null) => ["source-file", runId, path] as const,
   highlight: (selected: string | null, content: string | undefined) => ["highlight", selected, content] as const,
   plotlySource: (sourceHash: string | null | undefined) => ["plotly-source", sourceHash] as const,
+  imageGallery: (hash: string | null | undefined) => ["image-gallery", hash] as const,
   refSeries: (runId: string, name: string, contextHash: string) => ["ref-series", runId, name, contextHash] as const,
   artifactFamilies: (projectId: string) => ["artifact-families", projectId] as const,
   artifactFamily: (projectId: string, familyId: string) => ["artifact-family", projectId, familyId] as const,
