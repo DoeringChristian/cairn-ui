@@ -22,5 +22,5 @@ __all__ = ["__version__", "dist_path"]
 
 
 def dist_path() -> Path:
-    """Directory holding index.html / embed.html / plot.html / assets/."""
+    """Directory holding index.html / embed.html / assets/."""
     return Path(__file__).resolve().parent / "_dist"

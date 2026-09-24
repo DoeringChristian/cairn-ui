@@ -10,7 +10,7 @@ cairn-track because it is part of the viewer, not part of the tracker.
 
 Deliberately NOT imported by ``cairn_ui/__init__.py``: ``cairn.viewer`` imports
 that package to locate the bundle, and pulling this in would make the server
-import the renderer.
+import the card-spec models and the tracker's reader.
 
 Everything here needs a reachable cairn server that is *serving* the viewer,
 since a card is ultimately rendered by the browser at ``/embed/card``. Without

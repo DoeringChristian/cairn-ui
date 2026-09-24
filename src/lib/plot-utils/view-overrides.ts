@@ -1,10 +1,9 @@
 // ---------------------------------------------------------------------------
 // Shared view state synced across comparison panes.
 //
-// Pure module: no react-plotly.js / plotly.js import, so these helpers can be
-// unit-tested under `node --experimental-strip-types --test` without pulling a
-// browser-only bundle into the test process. `Figure.tsx` re-exports every
-// symbol here, so existing `from ".../Figure"` imports keep working.
+// Pure module: no plotly.js import, so these helpers can be unit-tested under
+// `node --experimental-strip-types --test` without pulling a browser-only
+// bundle into the test process.
 // ---------------------------------------------------------------------------
 
 export type SharedView = Record<string, unknown>;

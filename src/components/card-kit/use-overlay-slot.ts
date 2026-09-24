@@ -29,10 +29,10 @@ function sameRect(a: Rect | null, b: Rect): boolean {
 /**
  * Visually promote content into an overlay without moving it in the React tree.
  *
- * Rendering an expensive host (a mounted cairn-plot root, a WebGPU canvas) in
+ * Rendering an expensive host (a three.js viewport with its loaded scene) in
  * one tree position while the panel is closed and another while it is open
  * makes React unmount and rebuild it on every toggle — every pane loses its
- * decoded textures and repaints from "Loading…". So the content stays exactly
+ * GL context and camera and reloads from "Loading…". So the content stays exactly
  * where it is and only its *style* changes: the overlay renders an empty slot,
  * this hook measures it, and the content is positioned `fixed` over that rect.
  *

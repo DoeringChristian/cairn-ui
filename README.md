@@ -28,7 +28,7 @@ thumbnail and a download. cairn-plot is not a dependency; it is the separate
 library for notebooks and standalone HTML reports (`cairn.plot`).
 
 `cairn_ui/__init__.py` exposes exactly one function, `dist_path()`. Everything
-about *serving* the bundle — routes, shells, the CPU-renderer override — lives in
+about *serving* the bundle — routes and shells — lives in
 cairn-track's `cairn/viewer.py`, so this package holds no logic that could drift
 from the server.
 

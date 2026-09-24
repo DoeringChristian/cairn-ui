@@ -4,6 +4,7 @@
  */
 
 import { useContext, useMemo, useRef, useState } from "react";
+import { isBrowserDisplayable } from "../lib/artifact-format";
 import { useSequence, useArtifacts } from "../api/hooks";
 import { api } from "../api/client";
 import { safeJsonParse } from "../lib/format";
@@ -113,7 +114,7 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
         <>
           {current?.artifact_hash ? (() => {
             const mime = meta.mime_type ?? current.artifact_mime ?? "";
-            const isImage = /^image\//i.test(mime);
+            const isImage = isBrowserDisplayable(mime);
             const ext = meta.filename
               ? meta.filename.replace(/^.*\./, ".")
               : mime === "application/python-pickle" || meta.python_type

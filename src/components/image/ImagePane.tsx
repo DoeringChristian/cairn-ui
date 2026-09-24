@@ -29,12 +29,10 @@ interface Props {
   onTransformChange: (t: PaneTransform) => void;
 }
 
-const SPLIT_STEP = 0.02;
 const MIN_SCALE = 1;
 const MAX_SCALE = 64;
 /** Zoom factor per wheel pixel: one mouse notch (~100px) ≈ ×1.35, trackpads stay smooth. */
 const WHEEL_ZOOM = 0.003;
-const SPLIT_STEP_LARGE = 0.1;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /**
@@ -127,8 +125,8 @@ export default function ImagePane({ image, reference, split, onSplitChange, tran
     if (!reference || !onSplitChange) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault();
-    const step = e.shiftKey ? SPLIT_STEP_LARGE : SPLIT_STEP;
-    onSplitChange(clamp01(split + (e.key === "ArrowLeft" ? -step : step)), true);
+    // Flip: ← shows all of the reference, → all of the image.
+    onSplitChange(e.key === "ArrowLeft" ? 0 : 1, true);
   };
 
   const dragDivider = (e: React.PointerEvent) => {
@@ -164,7 +162,7 @@ export default function ImagePane({ image, reference, split, onSplitChange, tran
       // The zoom library cancels mousedown, which would keep focus (and the arrow keys) away.
       onPointerDownCapture={() => boxRef.current?.focus({ preventScroll: true })}
       className="cairn-checkerboard relative h-full w-full overflow-hidden outline-none focus-visible:ring-1 focus-visible:ring-accent"
-      title={reference ? "Drag the divider or use ← / → to move it" : undefined}
+      title={reference ? "Drag the divider; ← / → flip to the reference / the image" : undefined}
     >
       <TransformWrapper
         ref={zoomRef}

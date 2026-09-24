@@ -91,9 +91,9 @@ export default function StepSlider({
     }
     pendingRef.current = index;
     if (frameRef.current || timerRef.current != null) return;
-    // FLIP/HDR-FLIP can submit several GPU passes per pane. Publishing every
-    // native range-input event floods the GPU with obsolete intermediate
-    // iterations. Keep only the latest index and cap authored updates at 20 Hz;
+    // Every step change fetches and decodes one artifact per pane. Publishing
+    // every native range-input event would request obsolete intermediate
+    // steps. Keep only the latest index and cap authored updates at 20 Hz;
     // pointer/key release below flushes the final value immediately.
     const wait = Math.max(0, publishIntervalMs - (performance.now() - lastPublishRef.current));
     if (wait === 0) publishPending();
