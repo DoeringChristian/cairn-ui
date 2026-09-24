@@ -52,7 +52,8 @@ import {
   type QueryRunSelector,
 } from "../lib/run-selector";
 import { loadCardSettings, saveCardSettings } from "../lib/card-settings";
-import { loadJson, saveJson, storageKeys } from "../lib/storage";
+import { storageKeys } from "../lib/storage";
+import { useCollapsedSections } from "../lib/use-collapsed-sections";
 import { formatRelative } from "../lib/format";
 import { useRuns, useRunSelectorResolution } from "../api/hooks";
 import { api } from "../api/client";
@@ -768,19 +769,9 @@ function ComparisonView({
     }
   }, [comparison.id, onRefreshRunSelector, runSelectorResolution]);
 
-  const collapsedKey = storageKeys.collapsedSections(compareRunId(comparison.id));
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
-    const raw = loadJson<string[]>(localStorage, collapsedKey);
-    return new Set(Array.isArray(raw) ? raw : []);
-  });
-  const toggleSection = useCallback((name: string) => {
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name); else next.add(name);
-      saveJson(localStorage, collapsedKey, [...next]);
-      return next;
-    });
-  }, [collapsedKey]);
+  const { collapsed: collapsedSections, toggle: toggleSection } = useCollapsedSections(
+    compareRunId(comparison.id),
+  );
 
   const sections = useMemo(
     () => groupComparisonCardsIntoSections(comparison.cards),
