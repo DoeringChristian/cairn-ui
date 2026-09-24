@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
-// @ts-expect-error - plotly.js-dist-min has no bundled types, but is runtime-compatible with the factory.
-import Plotly from "plotly.js-dist-min";
 import { useSequence } from "../api/hooks";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
@@ -16,16 +14,16 @@ import { useRunSelection, useRunSelectionHasProvider } from "../lib/use-run-sele
 import { seriesKey, seriesLabel } from "../lib/series-utils";
 import type { SequenceMeta, SequenceResponse } from "../api/types";
 import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid, type BaseCardSettings } from "./card-kit";
+import { checkFigureMergeable, mergeFigures, type FigureMergeEntry } from "../lib/plot-utils/figure-merge";
 import {
-  checkFigureMergeable,
-  Figure,
-  mergeFigures,
+  applyViewOverrides,
+  extractViewState,
   mergeRelayout,
-  useContainerSize,
-  type FigureMergeEntry,
-  type PlotlyFigureLike,
   type SharedView,
-} from "@cairn-plot/figure";
+} from "../lib/plot-utils/view-overrides";
+import type { PlotlyFigureLike } from "../lib/plot-utils/types";
+import PlotlyChart from "../charts/PlotlyChart";
+import { readChartTheme, type ChartTheme } from "../charts/theme";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
 import RunSelectionPanel from "./RunSelectionPanel";
@@ -56,9 +54,6 @@ interface FigureMetadata {
   source_hash?: string | null;
 }
 
-// Structural alias: the card-local name for cairn-plot's minimal Plotly
-// figure JSON shape (kept so the rest of this file's `PlotlyFigure` usages
-// stay unchanged).
 type PlotlyFigure = PlotlyFigureLike;
 
 type HoverMode = "closest" | "x unified" | "y unified" | "none";
@@ -105,6 +100,8 @@ const DEFAULT_FIGURE_SETTINGS = (seed: {
   showLegend: true,
 });
 
+const EMPTY_FIGURE: PlotlyFigure = { data: [], layout: {} };
+
 const HOVER_OPTIONS: Array<{ value: HoverMode; label: string }> = [
   { value: "closest", label: "Closest" },
   { value: "x unified", label: "X unified" },
@@ -136,7 +133,143 @@ function usePlotlySource(sourceHash: string | null | undefined) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// User figure renderer.
+// ---------------------------------------------------------------------------
 
+/** Shallow-merge `defaults` UNDER `authored` — the figure author's keys win. */
+function under(authored: unknown, defaults: Record<string, unknown>): Record<string, unknown> {
+  return { ...defaults, ...((authored ?? {}) as Record<string, unknown>) };
+}
+
+/**
+ * The author's layout with app-theme colours filled in underneath: the
+ * figure's backgrounds are transparent so it sits on the card, which means
+ * every foreground colour must come from the app theme too. Fixed
+ * width/height are dropped so the figure fills its pane.
+ */
+function themeFigureLayout(base: Record<string, unknown>, t: ChartTheme): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  out.paper_bgcolor = base.paper_bgcolor ?? "transparent";
+  out.plot_bgcolor = base.plot_bgcolor ?? "transparent";
+  delete out.width;
+  delete out.height;
+  out.font = under(base.font, { color: t.fg });
+  const axis = { gridcolor: t.grid, zerolinecolor: t.grid, linecolor: t.grid };
+  const axisKeys = new Set(["xaxis", "yaxis"]);
+  for (const k of Object.keys(base)) if (/^[xyz]axis\d*$/.test(k)) axisKeys.add(k);
+  for (const k of axisKeys) out[k] = under(base[k], axis);
+  if (base.scene != null) {
+    const scene = { ...(base.scene as Record<string, unknown>) };
+    for (const k of ["xaxis", "yaxis", "zaxis"]) {
+      scene[k] = under(scene[k], { ...axis, backgroundcolor: "transparent", showbackground: false });
+    }
+    out.scene = scene;
+  }
+  out.legend = under(base.legend, { bgcolor: "transparent", bordercolor: t.grid });
+  // Hover labels float over the data, so they must be opaque.
+  out.hoverlabel = under(base.hoverlabel, {
+    bgcolor: t.bg,
+    bordercolor: t.grid,
+    font: under((base.hoverlabel as Record<string, unknown> | undefined)?.font, { color: t.fg }),
+  });
+  out.modebar = under(base.modebar, { bgcolor: "transparent", color: t.fgMuted, activecolor: t.fg });
+  return out;
+}
+
+// A new figure object (a different artifact) gets a fresh `uirevision`, so
+// Plotly drops the previous figure's zoom instead of carrying it over.
+const figureIds = new WeakMap<object, number>();
+let nextFigureId = 0;
+function figureId(fig: object): number {
+  let id = figureIds.get(fig);
+  if (id === undefined) figureIds.set(fig, (id = nextFigureId++));
+  return id;
+}
+
+/**
+ * One user Plotly figure, styled by the interaction settings, with the
+ * shared view (zoom/pan/camera synced across panes) applied on top.
+ * `revision` bumps reset the view to the figure's own.
+ */
+function InteractiveFigure({
+  figure,
+  settings,
+  viewOverrides,
+  onRelayout,
+  revision = 0,
+  className,
+  style,
+  liveRelayout,
+}: {
+  figure: PlotlyFigure;
+  settings: FigureSettings;
+  viewOverrides?: SharedView;
+  onRelayout?: (view: SharedView) => void;
+  revision?: number;
+  className?: string;
+  style?: React.CSSProperties;
+  /** Also sync on `plotly_relayouting` (fires continuously during a 3D camera drag). */
+  liveRelayout?: boolean;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const { hoverMode, dragMode, showLegend, displayModeBar, scrollZoom } = settings;
+
+  const layout = useMemo(() => {
+    // Deep copy: Plotly writes zoom ranges into the layout's arrays in place,
+    // and `figure` is the react-query-cached artifact shared by every pane.
+    const authored = structuredClone((figure.layout ?? {}) as Record<string, unknown>);
+    const themed = themeFigureLayout(authored, readChartTheme(document.documentElement));
+    themed.hovermode = hoverMode === "none" ? false : hoverMode;
+    themed.dragmode = dragMode === "none" ? false : dragMode;
+    themed.showlegend = showLegend;
+    themed.uirevision = `${figureId(figure)}:${revision}`;
+    return viewOverrides && Object.keys(viewOverrides).length > 0 ? applyViewOverrides(themed, viewOverrides) : themed;
+  }, [figure, hoverMode, dragMode, showLegend, revision, viewOverrides]);
+
+  const config = useMemo(() => ({ displayModeBar, scrollZoom }), [displayModeBar, scrollZoom]);
+
+  const handleRelayout = useCallback((e: Record<string, unknown>) => {
+    const view = onRelayout && extractViewState(e);
+    if (view) onRelayout!(view);
+  }, [onRelayout]);
+
+  // PlotlyChart creates the plot asynchronously, so re-check every render.
+  useEffect(() => {
+    if (!liveRelayout || !onRelayout) return;
+    const el = hostRef.current?.querySelector(".js-plotly-plot") as
+      | (HTMLElement & { on?: (ev: string, fn: (e: Record<string, unknown>) => void) => void; removeAllListeners?: (ev: string) => void })
+      | null;
+    if (!el?.on) return;
+    el.on("plotly_relayouting", handleRelayout);
+    return () => el.removeAllListeners?.("plotly_relayouting");
+  });
+
+  return (
+    <div ref={hostRef} className={className ?? "rounded bg-bg h-full"} style={style}>
+      <PlotlyChart
+        data={(figure.data ?? []) as Array<Record<string, unknown>>}
+        layout={layout}
+        config={config}
+        themed={false}
+        onRelayout={handleRelayout}
+      />
+    </div>
+  );
+}
+
+/** Observed content-box width of `ref`'s element (0 until measured). */
+function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setWidth(Math.round(entry!.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return width;
+}
 
 // ---------------------------------------------------------------------------
 // Single pane: renders one figure at the given global step number.
@@ -190,13 +323,13 @@ function FigurePane({
   }
   if (showPlotly) {
     return (
-      <Figure
+      <InteractiveFigure
         figure={sourceQ.data!}
         settings={settings}
         viewOverrides={viewOverrides}
         onRelayout={onRelayout}
         revision={revision}
-        enableLiveRelayout
+        liveRelayout
       />
     );
   }
@@ -433,51 +566,15 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     updatingRef.current = true;
     // Replace an axis's (or scene's) previous keys with the ones this event
     // carries: a reset (`autorange: true`) and a later zoom (`range[0/1]`) must
-    // never coexist, or Plotly resolves the pair to autorange (see cairn-plot
+    // never coexist, or Plotly resolves the pair to autorange (see
     // `mergeRelayout`).
     setSharedView((prev) => mergeRelayout(prev, view));
     requestAnimationFrame(() => { updatingRef.current = false; });
   }, []);
+  // A revision bump gives every plot a fresh `uirevision`, so Plotly drops
+  // the user's zoom/pan/camera and falls back to the figure's own view.
   const resetView = useCallback(() => {
     setSharedView({});
-    // Force Plotly to autorange all axes via relayout on every plot in the card.
-    const container = cardRef.current;
-    if (container) {
-      const plots = container.querySelectorAll<Plotly.PlotlyHTMLElement>(".js-plotly-plot");
-      const update: Record<string, boolean> = {};
-      for (const plot of plots) {
-        // Discover all axes on the plot and set autorange for each.
-        const layout = (plot as any)?.layout as Record<string, unknown> | undefined;
-        if (layout) {
-          for (const key of Object.keys(layout)) {
-            if (/^[xy]axis\d*$/.test(key)) {
-              update[`${key}.autorange`] = true;
-            }
-          }
-        }
-      }
-      // Fallback: always include at least the default axes.
-      if (!update["xaxis.autorange"]) update["xaxis.autorange"] = true;
-      if (!update["yaxis.autorange"]) update["yaxis.autorange"] = true;
-      for (const plot of plots) {
-        // Bug B guard: forcing autorange on a plot whose DOM node is
-        // currently 0×0 (e.g. mid step-transition, before layout settles)
-        // or whose data collapses to a degenerate axis (single point / all
-        // values equal / log axis with non-positive values) makes Plotly's
-        // internal scale computation (`h.setScale` → `drawMarginPushers` →
-        // `layoutReplot`) throw. `Plotly.relayout` returns a promise, and an
-        // unhandled rejection here is exactly the "Uncaught Error:
-        // Something went wrong with axis scaling" reported — so (1) skip
-        // zero-size plots entirely (autorange can't do anything useful
-        // there anyway) and (2) always attach a `.catch` so a bad step logs
-        // a handled warning instead of crashing the card.
-        const rect = plot.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) continue;
-        Promise.resolve(Plotly.relayout(plot, update)).catch((err) => {
-          console.warn("FigureInteractiveCard: reset-view relayout failed", err);
-        });
-      }
-    }
     setPlotRevision((r) => r + 1);
   }, []);
 
@@ -504,8 +601,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   // this observes it directly rather than standing up a second observer on
   // a wrapper div — one ResizeObserver per card (see card-kit/index.ts).
   const cardRef = useRef<HTMLDivElement>(null);
-  const { size: cardSize } = useContainerSize<HTMLDivElement>(cardRef);
-  const cardWidth = cardSize.w;
+  const cardWidth = useElementWidth(cardRef);
 
   // Auto-height for figure containers
   const { figAutoHeight, figRowHeight } = useMemo(() => {
@@ -536,7 +632,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     return (
       <>
         {showPlotly ? (
-          <Figure
+          <InteractiveFigure
             figure={sourceQ.data!}
             settings={settings}
             viewOverrides={sharedView}
@@ -607,10 +703,10 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
 
   // Single merged plot for the "overlay" compare mode — every run's traces
   // in one figure, layout from the first run with fixed ranges dropped (see
-  // mergeFigures/checkFigureMergeable in lib/cairn-plot).
+  // mergeFigures/checkFigureMergeable in lib/plot-utils/figure-merge).
   const renderOverlayPlot = () => (
-    <Figure
-      figure={mergedFigure ?? { data: [], layout: {} }}
+    <InteractiveFigure
+      figure={mergedFigure ?? EMPTY_FIGURE}
       settings={settings}
       viewOverrides={sharedView}
       onRelayout={handlePaneRelayout}

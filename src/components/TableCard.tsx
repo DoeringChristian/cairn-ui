@@ -33,7 +33,7 @@ import {
   type CellComparison,
   type DiffTable,
 } from "../lib/table-diff";
-import { TablePlot, type TableData } from "../lib/public-plot";
+import DataTable, { type TableData } from "./table/DataTable";
 
 // Out of scope for v1 (noted per spec): media-in-cells, cross-table joins,
 // derived columns. The grid is intentionally hand-rolled — no grid dependency.
@@ -74,16 +74,6 @@ interface TableSettings extends BaseCardSettings {
   diffMode?: boolean;
   /** Flip which direction (higher/lower) renders green vs red. */
   invertDiffColors?: boolean;
-}
-
-function TableGrid(props: {
-  table: TableData;
-  rowsPerPage: number;
-  hiddenColumns: string[];
-  diffStatuses?: CellComparison[][];
-  invertDiff?: boolean;
-}) {
-  return <TablePlot {...props} />;
 }
 
 const DEFAULT_ROWS_PER_PAGE = 100;
@@ -187,7 +177,7 @@ function TablePane({
     return <div className="text-sm text-fg-muted">failed to load table</div>;
   }
   return (
-    <TableGrid
+    <DataTable
       table={blob.data}
       rowsPerPage={rowsPerPage}
       hiddenColumns={hiddenColumns}
@@ -387,9 +377,8 @@ export default function TableCard({
     }
     return (
       <>
-        {/* Definite-height cell: `InlinePlot` mounts with `sizing="fill"`. */}
         <div className="flex-1 min-h-0">
-          <TableGrid
+          <DataTable
             table={seedBlob.data}
             rowsPerPage={settings.rowsPerPage}
             hiddenColumns={settings.hiddenColumns}
