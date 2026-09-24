@@ -45,15 +45,24 @@ export default function CardGrid({ runId, sequences }: Props) {
     setLayout(loadRunLayout(runId));
   }, [runId]);
 
+  // `shownOrder` is the section's order as rendered. It seeds the persisted
+  // list first, so an index into it means the same slot in the layout even
+  // when the layout lists only some (or none) of the section's cards.
   const commitMove = useCallback(
     (
       cardKey: string,
-      fromSection: string,
-      toSection: string,
+      section: string,
+      shownOrder: string[],
       toIndex: number | null,
     ) => {
       setLayout((prev) => {
-        const next = moveCard(prev, cardKey, fromSection, toSection, toIndex);
+        const shown = new Set(shownOrder);
+        const rest = (prev.sectionOrderOfCards[section] ?? []).filter((k) => !shown.has(k));
+        const seeded: RunLayout = {
+          ...prev,
+          sectionOrderOfCards: { ...prev.sectionOrderOfCards, [section]: [...shownOrder, ...rest] },
+        };
+        const next = moveCard(seeded, cardKey, section, section, toIndex);
         saveRunLayout(runId, next);
         return next;
       });
@@ -144,9 +153,8 @@ export default function CardGrid({ runId, sequences }: Props) {
                   ),
                 }))}
                 onReorder={(fromKey, toKey) => {
-                  const src = { cardKey: fromKey, section: section.name };
                   const toIdx = entryKeys.indexOf(toKey);
-                  commitMove(fromKey, src.section, section.name, toIdx >= 0 ? toIdx : null);
+                  commitMove(fromKey, section.name, entryKeys, toIdx >= 0 ? toIdx : null);
                 }}
               />
             </SectionBlock>

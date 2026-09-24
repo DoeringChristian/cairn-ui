@@ -2,7 +2,8 @@
  * Shared grid container for cards with drag-to-reorder and drop highlighting.
  *
  * Used by workspace, comparison, and can replace section grids in CardGrid.
- * Cards are wrapped in DraggableCard for the ≡ grip handle.
+ * Cards are wrapped in DraggableCard for the ≡ grip handle and the
+ * move-up / move-down menu entries (touch screens have no HTML5 drag).
  */
 
 import { useCallback, useRef, type ReactNode } from "react";
@@ -106,13 +107,16 @@ export default function ReorderableCardGrid({
       onDrop={handleDrop}
       {...(dataAttributes ?? {})}
     >
-      {cards.map((card) => (
+      {cards.map((card, i) => (
         <DraggableCard
           key={card.key}
           cardKey={card.key}
           section="grid"
           onDragStart={() => {}}
           onDragEnd={() => {}}
+          // Moving onto a neighbour's slot is the same reorder a drop makes.
+          onMoveUp={onReorder && i > 0 ? () => onReorder(card.key, cards[i - 1]!.key) : undefined}
+          onMoveDown={onReorder && i < cards.length - 1 ? () => onReorder(card.key, cards[i + 1]!.key) : undefined}
         >
           {card.content}
         </DraggableCard>

@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 import { useDraggableCard } from "./DraggableCard";
+import { useClickOutside } from "../lib/use-click-outside";
+import { useCoarsePointer, useCompactLayout } from "../lib/use-media-query";
 
 interface Props {
   /** Metric name, e.g. "train.loss". */
@@ -36,6 +38,21 @@ interface Props {
   addToComparisonSlot?: ReactNode;
   /** Remove the card. Renders close button in upper-right. */
   onRemove?: () => void;
+  /**
+   * Touch devices: the tap-to-interact toggle (see lib/use-interact). Renders
+   * a hand button; while `on`, the card's content captures gestures.
+   */
+  interact?: { on: boolean; onToggle: () => void };
+}
+
+/** Header icon button: 22px with a mouse, a 40px tap target on touch. */
+const ICON_BTN =
+  "h-[22px] min-w-[22px] touch:h-10 touch:min-w-[40px] inline-flex items-center justify-center rounded hover:bg-bg-hover text-fg-muted hover:text-fg";
+
+interface MenuItem {
+  icon: string;
+  label: string;
+  onClick: () => void;
 }
 
 export default function CardHeader({
@@ -52,8 +69,13 @@ export default function CardHeader({
   onScreenshot,
   addToComparisonSlot,
   onRemove,
+  interact,
 }: Props) {
   const drag = useDraggableCard();
+  // Below `md` the standard actions fold into a "⋯" menu so the title keeps
+  // its room; touch screens (no HTML5 drag) get move up / down there too.
+  const compact = useCompactLayout();
+  const coarse = useCoarsePointer();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -95,15 +117,41 @@ export default function CardHeader({
   const showResetView = !!(onResetView && viewModified);
   const hasStandardActions = !!(showResetView || onDownload || onScreenshot || addToComparisonSlot || onSettings || onRemove);
 
+  const menuItems: MenuItem[] = [];
+  if (compact) {
+    if (showResetView) menuItems.push({ icon: "fa-house", label: "Reset view", onClick: onResetView! });
+    if (onDownload) menuItems.push({ icon: "fa-arrow-down", label: "Save", onClick: onDownload });
+    if (onScreenshot) menuItems.push({ icon: "fa-camera", label: "Screenshot", onClick: onScreenshot });
+    if (onSettings) menuItems.push({ icon: "fa-gear", label: "Settings", onClick: onSettings });
+  }
+  if (compact || coarse) {
+    if (drag?.onMoveUp) menuItems.push({ icon: "fa-arrow-up-long", label: "Move up", onClick: drag.onMoveUp });
+    if (drag?.onMoveDown) menuItems.push({ icon: "fa-arrow-down-long", label: "Move down", onClick: drag.onMoveDown });
+  }
+  if (compact && onRemove) menuItems.push({ icon: "fa-xmark", label: "Remove card", onClick: onRemove });
+
+  const interactButton = interact && (
+    <button
+      type="button"
+      onClick={interact.onToggle}
+      className={`${ICON_BTN}${interact.on ? " bg-accent/15 !text-accent" : ""}`}
+      aria-pressed={interact.on}
+      aria-label={interact.on ? "Stop interacting (scroll the page)" : "Interact with the content"}
+      title={interact.on ? "Stop interacting" : "Interact"}
+    >
+      <i className="fa-solid fa-hand-pointer" aria-hidden="true" />
+    </button>
+  );
+
   return (
-    <div className="group mb-2 flex items-baseline justify-between gap-2">
+    <div className="group mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
       {/* Left section: collapse chevron, drag grip, title, edit, subtitle */}
-      <div className="flex items-baseline gap-1.5 min-w-0">
+      <div className="flex flex-1 basis-32 items-baseline gap-1.5 min-w-0">
         {onToggleCollapse && (
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="h-[22px] min-w-[22px] inline-flex items-center justify-center select-none text-fg-subtle hover:text-fg text-xs leading-none transition-transform"
+            className="h-[22px] min-w-[22px] touch:h-10 touch:min-w-[40px] inline-flex items-center justify-center select-none text-fg-subtle hover:text-fg text-xs leading-none transition-transform"
             style={{ transform: collapsed ? "rotate(-90deg)" : undefined }}
             aria-label={collapsed ? "Expand card" : "Collapse card"}
             title={collapsed ? "Expand card" : "Collapse card"}
@@ -117,7 +165,7 @@ export default function CardHeader({
           onDragStart={drag?.handleDragStart}
           onDragEnd={drag?.handleDragEnd}
           className={[
-            "cairn-drag-grip select-none text-fg-subtle transition-opacity",
+            "cairn-drag-grip select-none text-fg-subtle transition-opacity touch:hidden",
             drag ? "cursor-grab active:cursor-grabbing" : "",
             "opacity-0",
           ].join(" ")}
@@ -139,7 +187,8 @@ export default function CardHeader({
         ) : (
           <>
             <h3
-              className="mono text-sm font-semibold truncate"
+              // The title keeps its width; the subtitle gives way first.
+              className="mono text-sm font-semibold truncate min-w-0"
               onDoubleClick={startEditing}
             >
               {title}
@@ -148,7 +197,7 @@ export default function CardHeader({
               <button
                 type="button"
                 onClick={startEditing}
-                className="h-[22px] min-w-[22px] inline-flex items-center justify-center text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100"
+                className="h-[22px] min-w-[22px] touch:h-10 touch:min-w-[40px] shrink-0 inline-flex items-center justify-center text-fg-subtle transition-opacity can-hover:opacity-0 can-hover:group-hover:opacity-100"
                 title="Edit title"
                 aria-label="Edit title"
               >
@@ -158,77 +207,99 @@ export default function CardHeader({
           </>
         )}
         {subtitle && (
-          <span className="text-xs text-fg-subtle shrink-0">{subtitle}</span>
+          <span className="min-w-0 shrink-[10000] truncate text-xs text-fg-subtle">{subtitle}</span>
         )}
       </div>
 
-      {/* Right section: card-specific actions | divider | standard actions */}
-      <div className="flex items-center gap-1 text-xs text-fg-subtle shrink-0">
+      {/* Right section: card-specific actions | divider | standard actions.
+          Wraps under the title when both don't fit on one line. */}
+      <div className="ml-auto flex items-center gap-1 text-xs text-fg-subtle shrink-0">
         {/* Card-specific actions */}
         {cardActions}
 
         {/* Standard buttons: download, settings, remove */}
-        {hasStandardActions && (
+        {(hasStandardActions || interactButton || menuItems.length > 0) && (
           <div className={cardActions ? "border-l border-border pl-1.5 flex items-center gap-1" : "flex items-center gap-1"}>
-            {showResetView && (
-              <button
-                type="button"
-                onClick={onResetView}
-                className="h-[22px] min-w-[22px] inline-flex items-center justify-center rounded hover:bg-bg-hover text-fg-muted hover:text-fg"
-                aria-label="Reset view"
-                title="Reset view"
-              >
+            {interactButton}
+            {!compact && showResetView && (
+              <button type="button" onClick={onResetView} className={ICON_BTN} aria-label="Reset view" title="Reset view">
                 <i className="fa-solid fa-house" aria-hidden="true" />
               </button>
             )}
-            {onDownload && (
-              <button
-                type="button"
-                onClick={onDownload}
-                className="h-[22px] min-w-[22px] inline-flex items-center justify-center rounded hover:bg-bg-hover text-fg-muted hover:text-fg"
-                aria-label="Save"
-                title="Save"
-              >
+            {!compact && onDownload && (
+              <button type="button" onClick={onDownload} className={ICON_BTN} aria-label="Save" title="Save">
                 <i className="fa-solid fa-arrow-down" aria-hidden="true" />
               </button>
             )}
-            {onScreenshot && (
-              <button
-                type="button"
-                onClick={onScreenshot}
-                className="h-[22px] min-w-[22px] inline-flex items-center justify-center rounded hover:bg-bg-hover text-fg-muted hover:text-fg"
-                aria-label="Screenshot"
-                title="Screenshot"
-              >
+            {!compact && onScreenshot && (
+              <button type="button" onClick={onScreenshot} className={ICON_BTN} aria-label="Screenshot" title="Screenshot">
                 <i className="fa-solid fa-camera" aria-hidden="true" />
               </button>
             )}
             {addToComparisonSlot}
-            {onSettings && (
-              <button
-                type="button"
-                onClick={onSettings}
-                className="h-[22px] min-w-[22px] inline-flex items-center justify-center rounded hover:bg-bg-hover text-fg-muted hover:text-fg"
-                aria-label="Settings"
-                title="Settings"
-              >
+            {!compact && onSettings && (
+              <button type="button" onClick={onSettings} className={ICON_BTN} aria-label="Settings" title="Settings">
                 <i className="fa-solid fa-gear" aria-hidden="true" />
               </button>
             )}
-            {onRemove && (
-              <button
-                type="button"
-                onClick={onRemove}
-                className="h-[22px] min-w-[22px] inline-flex items-center justify-center rounded hover:bg-bg-hover text-fg-muted hover:text-fg"
-                aria-label="Remove card"
-                title="Remove card"
-              >
+            {menuItems.length > 0 && <OverflowMenu items={menuItems} />}
+            {!compact && onRemove && (
+              <button type="button" onClick={onRemove} className={ICON_BTN} aria-label="Remove card" title="Remove card">
                 <i className="fa-solid fa-xmark" aria-hidden="true" />
               </button>
             )}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * "⋯" button with a small action list, right-aligned under it so it opens
+ * towards the card's interior (the button sits at the card's right edge).
+ */
+function OverflowMenu({ items }: { items: MenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useClickOutside(wrapRef, close, open);
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={ICON_BTN}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="More actions"
+        title="More actions"
+      >
+        <i className="fa-solid fa-ellipsis" aria-hidden="true" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1 min-w-[11rem] max-w-[calc(100vw-2rem)] rounded-md border border-border bg-bg py-1 text-sm text-fg shadow-lg"
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                item.onClick();
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-1.5 touch:py-3 text-left hover:bg-bg-hover"
+            >
+              <i className={`fa-solid ${item.icon} w-4 text-center text-fg-muted`} aria-hidden="true" />
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
