@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArtifacts } from "../api/hooks";
+import { api } from "../api/client";
+import { useArtifacts, useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArtifacts } from "../api/hooks";
 import type { Param, Run } from "../api/types";
-import { safeJsonParse } from "../lib/format";
+import { formatBytes, safeJsonParse } from "../lib/format";
+import { remoteHref } from "../lib/git-remote";
 import { useProjectTags } from "../lib/use-project-tags";
 import TagInput from "../components/TagInput";
 
@@ -33,6 +35,7 @@ export default function RunOverviewTab() {
       <Section title="Git">
         <DefinitionList
           rows={[
+            ["Remote", <GitRemote remote={run.git_remote} />],
             ["Branch", run.git_branch ?? "—"],
             [
               "Commit",
@@ -46,6 +49,7 @@ export default function RunOverviewTab() {
               "Dirty",
               run.git_dirty === null ? "—" : run.git_dirty ? "yes" : "no",
             ],
+            ["Diff", <GitDiffLink runId={run.id} />],
           ]}
         />
       </Section>
@@ -108,6 +112,33 @@ export default function RunOverviewTab() {
       )}
       <RunArtifactsSection run={run} />
     </div>
+  );
+}
+
+function GitRemote({ remote }: { remote: string | null }) {
+  if (!remote) return <>—</>;
+  const href = remoteHref(remote);
+  if (!href) return <>{remote}</>;
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+      {remote}
+    </a>
+  );
+}
+
+/** The ``git.diff`` artifact the SDK uploads for a dirty tree, as a download. */
+function GitDiffLink({ runId }: { runId: string }) {
+  const q = useArtifacts(runId);
+  const diff = q.data?.named.find((a) => a.name === "git.diff");
+  if (!diff) return <>—</>;
+  return (
+    <a
+      href={api.artifactUrl(diff.hash)}
+      download={`${runId}.diff`}
+      className="text-accent hover:underline"
+    >
+      diff ({formatBytes(diff.size_bytes)})
+    </a>
   );
 }
 
