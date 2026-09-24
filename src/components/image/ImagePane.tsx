@@ -168,6 +168,9 @@ export default function ImagePane({ image, reference, split, onSplitChange, tran
       onKeyDown={onKeyDown}
       // The zoom library cancels mousedown, which would keep focus (and the arrow keys) away.
       onPointerDownCapture={() => boxRef.current?.focus({ preventScroll: true })}
+      onDoubleClick={() => {
+        if (interactive) zoomRef.current?.setTransform(0, 0, 1, 0);
+      }}
       className="cairn-checkerboard relative h-full w-full overflow-hidden outline-none focus-visible:ring-1 focus-visible:ring-accent"
       title={reference ? "Drag the divider; ← / → flip to the reference / the image" : undefined}
     >
@@ -182,7 +185,8 @@ export default function ImagePane({ image, reference, split, onSplitChange, tran
         wheel={{ disabled: true }}
         limitToBounds
         centerZoomedOut
-        doubleClick={{ disabled: !interactive, mode: "reset", animationTime: 150 }}
+        // Double-click is ours (onDoubleClick below): reset to the fitted view.
+        doubleClick={{ disabled: true }}
         onTransform={(_ref, state) => {
           own.current = { scale: state.scale, x: state.positionX, y: state.positionY };
           updateClip();

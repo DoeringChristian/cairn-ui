@@ -36,6 +36,8 @@ export default function Viewer3D({ objects, link, resetKey = 0, className }: Pro
   const hostRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<ViewerState | null>(null);
   const interactive = useInteract();
+  const interactiveRef = useRef(interactive);
+  interactiveRef.current = interactive;
 
   useEffect(() => {
     const host = hostRef.current!;
@@ -112,9 +114,15 @@ export default function Viewer3D({ objects, link, resetKey = 0, className }: Pro
     ro.observe(host);
 
     controls.addEventListener("change", render);
+    // Double-click returns to the standard framing (linked panes follow via the camera link).
+    const onDblClick = () => {
+      if (interactiveRef.current) fit();
+    };
+    renderer.domElement.addEventListener("dblclick", onDblClick);
 
     return () => {
       cancelAnimationFrame(frame);
+      renderer.domElement.removeEventListener("dblclick", onDblClick);
       ro.disconnect();
       media.removeEventListener("change", applyTheme);
       controls.dispose();
