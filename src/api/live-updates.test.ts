@@ -17,7 +17,10 @@ import {
   getRunCursor,
   groupPointsBySeries,
   keyContextHash,
+  noteRunEpoch,
+  resetRunCursor,
   resetRunCursors,
+  seedRunEpoch,
   seedRunCursor,
   selectRunsToPoll,
   seriesKey,
@@ -218,6 +221,29 @@ test("the cursor map seeds once and then only advances", () => {
 
   // Keyed per run.
   assert.equal(getRunCursor("r2"), undefined);
+  resetRunCursors();
+});
+
+test("a data-epoch change is reported once and the cursor can be dropped", () => {
+  resetRunCursors();
+  seedRunCursor("r1", 500);
+  seedRunEpoch("r1", 0);
+  seedRunEpoch("r1", 3); // a later read never overrides the first sighting
+  assert.equal(noteRunEpoch("r1", 0), false);
+  assert.equal(noteRunEpoch("r1", 1), true); // rewound
+  assert.equal(noteRunEpoch("r1", 1), false); // reported once
+
+  // setRunCursor can't move backwards, so a rewound run's cursor is dropped
+  // and re-seeded from the refetched sequences.
+  resetRunCursor("r1");
+  assert.equal(getRunCursor("r1"), undefined);
+  seedRunCursor("r1", 40);
+  assert.equal(getRunCursor("r1"), 40);
+
+  // An unseen run just records its epoch.
+  assert.equal(noteRunEpoch("r2", 4), false);
+  assert.equal(noteRunEpoch("r2", undefined), false);
+  assert.equal(noteRunEpoch("r2", 4), false);
   resetRunCursors();
 });
 

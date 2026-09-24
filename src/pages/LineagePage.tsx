@@ -122,9 +122,14 @@ function nodeColor(node: LineageNode): { fill: string; stroke: string } {
 }
 
 function edgeColor(relation: LineageEdge["relation"]): string {
-  return relation === "produced"
-    ? "rgba(34,197,94,0.5)"
-    : "rgba(59,130,246,0.5)";
+  switch (relation) {
+    case "produced":
+      return "rgba(34,197,94,0.5)";
+    case "consumed":
+      return "rgba(59,130,246,0.5)";
+    case "forked":
+      return "rgba(168,85,247,0.6)";
+  }
 }
 
 export default function LineagePage() {
@@ -195,6 +200,7 @@ export default function LineagePage() {
               y2={le.y2}
               stroke={edgeColor(le.edge.relation)}
               strokeWidth={1.5}
+              strokeDasharray={le.edge.relation === "forked" ? "5 3" : undefined}
               markerEnd="url(#arrowhead)"
             />
           ))}

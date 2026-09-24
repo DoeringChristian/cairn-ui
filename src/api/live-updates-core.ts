@@ -47,9 +47,45 @@ export function setRunCursor(runId: string, cursor: number): void {
   if (current === undefined || cursor > current) cursorByRun.set(runId, cursor);
 }
 
-/** Test-only: drop all cursors. */
+/**
+ * Forget a run's cursor. `setRunCursor` only moves forward, but a rewound run
+ * reuses rowids below the old cursor, so after a data-epoch change the cursor
+ * is dropped outright; the refetched sequences seed a fresh one.
+ */
+export function resetRunCursor(runId: string): void {
+  cursorByRun.delete(runId);
+}
+
+// ---------------------------------------------------------------------------
+// Data epoch — bumped server-side when a run's history is rewritten (rewind).
+// ---------------------------------------------------------------------------
+
+const epochByRun = new Map<string, number>();
+
+/** Record the epoch a full sequence read was made in (first sighting only,
+ * like `seedRunCursor`). */
+export function seedRunEpoch(runId: string, epoch: number | undefined): void {
+  if (!runId || typeof epoch !== "number") return;
+  if (!epochByRun.has(runId)) epochByRun.set(runId, epoch);
+}
+
+/**
+ * Fold the epoch an `/updates` response reports. True when it differs from
+ * the one the cached points and cursor belong to: the caller must reset the
+ * run's cursor and refetch its sequences, because points were deleted and
+ * their rowids may be reused.
+ */
+export function noteRunEpoch(runId: string, epoch: number | undefined): boolean {
+  if (typeof epoch !== "number") return false;
+  const prev = epochByRun.get(runId);
+  epochByRun.set(runId, epoch);
+  return prev !== undefined && prev !== epoch;
+}
+
+/** Test-only: drop all cursors and epochs. */
 export function resetRunCursors(): void {
   cursorByRun.clear();
+  epochByRun.clear();
 }
 
 // ---------------------------------------------------------------------------

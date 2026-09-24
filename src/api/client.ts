@@ -11,7 +11,7 @@
 // `checkOk`, which redirects to /login?return=<path> before the caller's
 // `.catch`/error boundary ever sees it.
 
-import { seedRunCursor } from "./live-updates-core";
+import { seedRunCursor, seedRunEpoch } from "./live-updates-core";
 
 function redirectToLogin(): void {
   if (typeof window === "undefined") return;
@@ -119,6 +119,7 @@ export const api = {
     // stream had got, so it can resume with deltas instead of having every
     // card re-download its whole sequence every two seconds.
     if (typeof res.cursor === "number") seedRunCursor(runId, res.cursor);
+    seedRunEpoch(runId, res.data_epoch);
     return res;
   },
   /** Everything appended to a run's sequences after `since`. One poll per

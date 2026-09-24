@@ -107,6 +107,8 @@ export interface SequenceResponse {
    * poller so it resumes past what this response already delivered.
    */
   cursor?: number;
+  /** The run's data epoch the cursor belongs to (see `Run.data_epoch`). */
+  data_epoch?: number;
 }
 
 /** A `/updates` point: a sequence point plus the keys that route it to a card. */
@@ -119,6 +121,8 @@ export interface UpdatePoint extends SequencePoint {
 export interface UpdatesResponse {
   run_id: string;
   status: RunStatus;
+  /** The run's data epoch; a change means the history was rewound. */
+  data_epoch: number;
   /** Pass back as `since` on the next poll. */
   cursor: number;
   points: UpdatePoint[];
@@ -248,7 +252,8 @@ export interface LineageNode {
 export interface LineageEdge {
   source: string;
   target: string;
-  relation: "produced" | "consumed";
+  /** `forked`: run → run, the target was forked from the source. */
+  relation: "produced" | "consumed" | "forked";
 }
 
 export interface LineageGraph {

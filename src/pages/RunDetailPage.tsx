@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useParams } from "react-router-dom";
+import { Link, NavLink, Outlet, useParams } from "react-router-dom";
 import { useRun } from "../api/hooks";
 import RunStatusBadge from "../components/RunStatusBadge";
 import { formatDuration, formatRelative } from "../lib/format";
@@ -32,6 +32,13 @@ export default function RunDetailPage() {
         {run.display_name ? (
           <span className="mono break-all text-xs text-fg-subtle">{run.id}</span>
         ) : null}
+        {run.parent_run_id ? (
+          <ForkedFrom
+            projectId={projectId}
+            parentId={run.parent_run_id}
+            step={run.fork_step}
+          />
+        ) : null}
         <span className="ml-auto text-xs text-fg-muted">
           Started {formatRelative(run.created_at)} · Duration{" "}
           <span className="mono num">{formatDuration(run.created_at, run.ended_at)}</span>
@@ -58,5 +65,37 @@ export default function RunDetailPage() {
       </nav>
       <Outlet context={{ run, params: q.data.params }} />
     </div>
+  );
+}
+
+/** "forked from <parent> @ step k", linking to the parent run. */
+function ForkedFrom({
+  projectId,
+  parentId,
+  step,
+}: {
+  projectId: string;
+  parentId: string;
+  step: number | null;
+}) {
+  // The parent may have been deleted since; the link then shows its id.
+  const parent = useRun(parentId);
+  const label = parent.data?.run.display_name ?? parentId.slice(0, 8);
+  return (
+    <span className="text-xs text-fg-muted">
+      forked from{" "}
+      <Link
+        to={`/p/${projectId}/r/${parentId}`}
+        className="mono text-accent hover:underline"
+        title={parentId}
+      >
+        {label}
+      </Link>
+      {step != null ? (
+        <>
+          {" "}@ step <span className="mono num">{step}</span>
+        </>
+      ) : null}
+    </span>
   );
 }
