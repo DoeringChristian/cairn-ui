@@ -1,23 +1,38 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
+import { useEscapeLayer } from "./use-modal-behavior";
 
 /**
- * Close a dropdown/popover when the user clicks outside or presses Escape.
+ * Close a dropdown/popover when the user presses outside it or presses Escape.
  *
- * @param ref        The element that should be considered "inside".
- * @param onClose    Called when an outside click or Escape is detected.
- * @param active     Only listen when true (default: true).
+ * @param ref         The element that should be considered "inside".
+ * @param onClose     Called when an outside pointerdown or Escape is detected.
+ * @param active      Only listen when true (default: true).
  * @param excludeRefs Additional elements that count as "inside" (e.g. the
  *                    anchor button that toggles the popover).
+ * @param isInside    Extra inside test for presses that land outside `ref` in
+ *                    the DOM but belong to it, e.g. a nested popover portaled
+ *                    to `document.body`.
  */
 export function useClickOutside(
   ref: RefObject<HTMLElement | null>,
   onClose: () => void,
   active?: boolean,
   excludeRefs?: RefObject<HTMLElement | null>[],
+  isInside?: (e: PointerEvent) => boolean,
 ): void {
+  const enabled = active !== false;
+  const onCloseRef = useRef(onClose);
+  const isInsideRef = useRef(isInside);
   useEffect(() => {
-    if (active === false) return;
+    onCloseRef.current = onClose;
+    isInsideRef.current = isInside;
+  });
+
+  useEscapeLayer(enabled, onClose);
+
+  useEffect(() => {
+    if (!enabled) return;
 
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node | null;
@@ -28,21 +43,11 @@ export function useClickOutside(
           if (ex.current?.contains(target)) return;
         }
       }
-      onClose();
-    };
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
+      if (isInsideRef.current?.(e)) return;
+      onCloseRef.current();
     };
 
     document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [ref, onClose, active, excludeRefs]);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [ref, enabled, excludeRefs]);
 }
