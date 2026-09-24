@@ -54,50 +54,26 @@ export function templateCardOf(
 }
 
 /**
- * Coerce a persisted template card into the current shape.
- *
- * Templates live in localStorage AND on the server (which stores the payload
- * opaquely), so both may still hold the pre-`keys` shape: a single
- * `metricName` + optional `contextHash`, with multi-run cards carrying their
- * UI label ("Parallel Coordinates") as `metricName`. Both normalize here, so
- * matching only ever sees `keys`.
+ * Parse a persisted template card (localStorage, or the server's opaque
+ * payload). Any non-empty string is accepted as a type — same rule as
+ * `isComparisonCard` in types.ts — so a card type this build doesn't know
+ * survives and renders `UnknownTypeCard`.
  */
 function normalizeTemplateCard(raw: unknown): ComparisonTemplateCard | null {
   if (!raw || typeof raw !== "object") return null;
-  const c = raw as {
-    type?: unknown;
-    keys?: unknown;
-    metricName?: unknown;
-    contextHash?: unknown;
-    settings?: unknown;
+  const c = raw as { type?: unknown; keys?: unknown; settings?: unknown };
+  if (typeof c.type !== "string" || c.type.length === 0 || !Array.isArray(c.keys)) return null;
+  return {
+    type: c.type as ComparisonTemplateCard["type"],
+    keys: c.keys.filter((k): k is string => typeof k === "string"),
+    settings:
+      c.settings && typeof c.settings === "object"
+        ? (c.settings as Record<string, unknown>)
+        : undefined,
   };
-  if (typeof c.type !== "string" || c.type.length === 0) return null;
-  // Any non-empty string is accepted as a type — same rule as
-  // `isComparisonCard` in types.ts: a template saved by a newer UI (or an
-  // older one) must not silently lose cards whose type this build doesn't
-  // know. Unknown types simply render `UnknownTypeCard`.
-  const type = c.type as ComparisonTemplateCard["type"];
-  const settings =
-    c.settings && typeof c.settings === "object"
-      ? (c.settings as Record<string, unknown>)
-      : undefined;
-
-  if (Array.isArray(c.keys)) {
-    return {
-      type,
-      keys: c.keys.filter((k): k is string => typeof k === "string"),
-      settings,
-    };
-  }
-  // Legacy shape.
-  if (isMultiRunCardType(c.type) || typeof c.metricName !== "string" || !c.metricName) {
-    return { type, keys: [], settings };
-  }
-  const ctx = typeof c.contextHash === "string" ? c.contextHash : "";
-  return { type, keys: [templateKey(c.metricName, ctx)], settings };
 }
 
-/** Normalize every card of a persisted template (see `normalizeTemplateCard`). */
+/** Parse every card of a persisted template, dropping malformed ones. */
 export function normalizeTemplateCards(cards: unknown[]): ComparisonTemplateCard[] {
   return cards
     .map(normalizeTemplateCard)
