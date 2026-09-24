@@ -34,6 +34,7 @@ const CARD_MIN_SIZES: Record<string, CardMinSize> = {
   volume: { minHeight: 280, minSpan: 2 },
   bar: { minHeight: 200, minSpan: 1 },
   tile: { minHeight: 120, minSpan: 1 },
+  importance: { minHeight: 220, minSpan: 1 },
   html: { minHeight: 150, minSpan: 1 },
   markdown: { minHeight: 150, minSpan: 1 },
   text: { minHeight: 150, minSpan: 1 },

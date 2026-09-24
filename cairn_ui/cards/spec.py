@@ -64,6 +64,7 @@ CARD_TYPES: tuple[str, ...] = (
     "scatter",
     "bar",
     "tile",
+    "importance",
     # Renderer-only types (CardRenderer.tsx's object_type switch).
     "table",
     "html",
@@ -88,6 +89,7 @@ CardType = Literal[
     "scatter",
     "bar",
     "tile",
+    "importance",
     "table",
     "html",
     "markdown",
