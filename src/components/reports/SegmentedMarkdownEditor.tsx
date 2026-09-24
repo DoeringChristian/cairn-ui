@@ -91,7 +91,7 @@ export default function SegmentedMarkdownEditor({
                   type="button"
                   onClick={() => onMoveBlock(block.id, -1)}
                   disabled={idx === 0}
-                  className="h-5 w-5 inline-flex items-center justify-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg disabled:opacity-30"
+                  className="h-5 w-5 touch:h-10 touch:w-10 inline-flex items-center justify-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg disabled:opacity-30"
                   title="Move up"
                   aria-label="Move cell up"
                 >
@@ -101,7 +101,7 @@ export default function SegmentedMarkdownEditor({
                   type="button"
                   onClick={() => onMoveBlock(block.id, 1)}
                   disabled={idx === blocks.length - 1}
-                  className="h-5 w-5 inline-flex items-center justify-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg disabled:opacity-30"
+                  className="h-5 w-5 touch:h-10 touch:w-10 inline-flex items-center justify-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg disabled:opacity-30"
                   title="Move down"
                   aria-label="Move cell down"
                 >
@@ -110,7 +110,7 @@ export default function SegmentedMarkdownEditor({
                 <button
                   type="button"
                   onClick={() => onDeleteBlock(block.id)}
-                  className="h-5 w-5 inline-flex items-center justify-center rounded text-fg-subtle hover:bg-bg-hover hover:text-status-failed"
+                  className="h-5 w-5 touch:h-10 touch:w-10 inline-flex items-center justify-center rounded text-fg-subtle hover:bg-bg-hover hover:text-status-failed"
                   title="Delete cell"
                   aria-label="Delete cell"
                 >
@@ -139,7 +139,7 @@ export default function SegmentedMarkdownEditor({
           {editMode && (
             <InsertCellRow
               onInsert={(type) => onInsertBlock(block.id, type)}
-              className="mt-1.5 opacity-0 transition-opacity group-hover/cell:opacity-100 focus-within:opacity-100"
+              className="mt-1.5 transition-opacity can-hover:opacity-0 can-hover:group-hover/cell:opacity-100 focus-within:opacity-100"
             />
           )}
         </div>

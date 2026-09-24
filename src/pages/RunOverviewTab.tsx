@@ -68,9 +68,9 @@ export default function RunOverviewTab() {
             <tbody>
               {params.map((p) => (
                 <tr key={p.key} className="border-t border-border-subtle">
-                  <td className="mono py-1 pr-4">{p.key}</td>
+                  <td className="mono break-all py-1 pr-4">{p.key}</td>
                   <td className="mono py-1 pr-4 text-fg-subtle">{p.value_type}</td>
-                  <td className="mono py-1 text-fg-muted">{p.value}</td>
+                  <td className="mono break-all py-1 text-fg-muted">{p.value}</td>
                 </tr>
               ))}
             </tbody>
@@ -121,7 +121,7 @@ function Section({
   className?: string;
 }) {
   return (
-    <section className={`card p-4 ${className}`}>
+    <section className={`card min-w-0 p-4 ${className}`}>
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-fg-muted">
         {title}
       </h2>
@@ -132,11 +132,11 @@ function Section({
 
 function DefinitionList({ rows }: { rows: Array<[string, React.ReactNode]> }) {
   return (
-    <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm">
+    <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
       {rows.map(([k, v]) => (
         <div key={k} className="contents">
           <dt className="text-fg-muted">{k}</dt>
-          <dd className="mono text-fg">{v}</dd>
+          <dd className="mono break-words text-fg">{v}</dd>
         </div>
       ))}
     </dl>
@@ -169,7 +169,7 @@ function TagsEditor({ run, tags }: { run: Run; tags: string[] }) {
               <button
                 type="button"
                 onClick={() => removeTag(t)}
-                className="ml-0.5 transition-opacity hover:border-status-failed hover:text-status-failed md:opacity-0 md:group-hover:opacity-100"
+                className="ml-0.5 transition-opacity hover:border-status-failed hover:text-status-failed can-hover:opacity-0 can-hover:group-hover:opacity-100"
                 aria-label={`remove tag ${t}`}
               >
                 &times;

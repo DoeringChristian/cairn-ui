@@ -25,12 +25,12 @@ export default function RunDetailPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-baseline gap-3">
-        <h1 className="mono text-xl font-semibold">
+        <h1 className="mono min-w-0 break-all text-xl font-semibold">
           {run.display_name ?? run.id}
         </h1>
         <RunStatusBadge status={run.status} />
         {run.display_name ? (
-          <span className="mono text-xs text-fg-subtle">{run.id}</span>
+          <span className="mono break-all text-xs text-fg-subtle">{run.id}</span>
         ) : null}
         <span className="ml-auto text-xs text-fg-muted">
           Started {formatRelative(run.created_at)} · Duration{" "}

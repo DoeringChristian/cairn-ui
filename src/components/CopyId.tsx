@@ -37,7 +37,7 @@ export default function CopyId({ id, className }: Props) {
       title={`${id}\nClick to copy`}
     >
       {id.slice(0, 6)}
-      <span className="text-[9px] opacity-0 group-hover/copy:opacity-60 transition-opacity">
+      <span className="text-[9px] opacity-60 transition-opacity can-hover:opacity-0 can-hover:group-hover/copy:opacity-60">
         {copied ? "ok" : "\u2398"}
       </span>
     </button>

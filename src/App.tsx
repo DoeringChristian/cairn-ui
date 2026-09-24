@@ -18,9 +18,11 @@ export default function App() {
     }
   }
   return (
-    <div className="min-h-full flex flex-col">
-      <header className="sticky top-0 z-10 border-b border-border bg-bg/80 backdrop-blur">
-        <div className="mx-auto flex w-full items-center gap-4 px-4 py-2">
+    // --header-h is the header's height (row + 1px border) at each breakpoint;
+    // everything sticky or fixed below the header offsets by it.
+    <div className="flex min-h-full flex-col [--header-h:61px] md:[--header-h:41px]">
+      <header className="sticky top-0 z-30 border-b border-border bg-bg/80 backdrop-blur">
+        <div className="mx-auto flex h-[calc(var(--header-h)-1px)] w-full items-center gap-4 px-4">
           <Link
             to="/"
             className="flex items-center gap-2"

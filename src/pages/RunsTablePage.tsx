@@ -108,7 +108,11 @@ export default function RunsTablePage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [templatePopoverOpen, setTemplatePopoverOpen] = useState(false);
   const [templateApplyMessage, setTemplateApplyMessage] = useState<string | null>(null);
-  const templateBtnRef = useRef<HTMLButtonElement | null>(null);
+  // The template popover anchors to whichever button opened it: the inline
+  // "From template" button, or "More" on phones.
+  const templateAnchorRef = useRef<HTMLElement | null>(null);
+  const moreBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
   const tagBtnRef = useRef<HTMLButtonElement | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -408,6 +412,43 @@ export default function RunsTablePage() {
     !q.isLoading && !!q.data,
   );
 
+  const selectionActions: {
+    label: string;
+    onClick: (anchor: HTMLElement | null) => void;
+    disabled: boolean;
+    danger?: boolean;
+  }[] = [
+    {
+      label: "Empty comparison",
+      onClick: () => {
+        if (!projectId) return;
+        const cmp = createComparison(projectId, "New comparison", Array.from(selected));
+        navigate(`/p/${projectId}/compare?c=${cmp.id}`);
+      },
+      disabled: selectedCount === 0,
+    },
+    {
+      label: exporting ? "Exporting..." : "Export",
+      onClick: onExport,
+      disabled: selectedCount === 0 || exporting,
+    },
+    { label: "Archive", onClick: onBulkArchive, disabled: selectedCount === 0 },
+    { label: "Unarchive", onClick: onBulkUnarchive, disabled: selectedCount === 0 },
+    { label: "Delete", onClick: onBulkDelete, disabled: selectedCount === 0, danger: true },
+    ...(templates.length > 0
+      ? [
+          {
+            label: "From template",
+            onClick: (anchor: HTMLElement | null) => {
+              templateAnchorRef.current = anchor;
+              setTemplatePopoverOpen((v) => !v);
+            },
+            disabled: selectedCount === 0,
+          },
+        ]
+      : []),
+  ];
+
   if (!projectId) return null;
   if (q.isLoading) return <p className="text-fg-muted">Loading…</p>;
   if (q.isError)
@@ -415,8 +456,8 @@ export default function RunsTablePage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-baseline justify-between gap-4">
-        <h1 className="mono text-xl font-semibold">{projectId} / runs</h1>
+      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h1 className="mono min-w-0 break-all text-xl font-semibold">{projectId} / runs</h1>
         <p className="text-sm text-fg-muted">
           {sorted.length} of {serverTotal} run{serverTotal === 1 ? "" : "s"}
         </p>
@@ -467,7 +508,7 @@ export default function RunsTablePage() {
           <input type="checkbox" checked={showLatestOnly} onChange={(e) => setShowLatestOnly(e.target.checked)} className="accent-accent" />
           Latest only
         </label>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
           <button type="button" className="btn px-2 py-1 text-xs" onClick={onArchiveOldVersions}>Archive old</button>
           <button type="button" className="btn px-2 py-1 text-xs text-status-failed" onClick={onDeleteOldVersions}>Delete old</button>
           <button
@@ -492,24 +533,28 @@ export default function RunsTablePage() {
       </div>
 
       <div
-        className={`sticky top-[41px] z-20 mb-3 flex items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent/10 backdrop-blur-sm px-3 py-2 text-sm transition-opacity ${selectedCount > 0 ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        className={`sticky top-[var(--header-h)] z-20 mb-3 flex items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent/10 backdrop-blur-sm px-3 py-2 text-sm transition-opacity ${selectedCount > 0 ? "opacity-100" : "opacity-0 pointer-events-none"}`}
         aria-hidden={selectedCount === 0}
       >
-        <span className="text-fg">
-          {selectedCount} run{selectedCount === 1 ? "" : "s"} selected
+        <span className="min-w-0 truncate text-fg">
+          {selectedCount}
+          <span className="hidden md:inline"> run{selectedCount === 1 ? "" : "s"}</span> selected
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            className="btn px-2 py-1 text-xs"
-            onClick={selectNone}
+            className="btn px-2 py-1 text-xs touch:min-h-[40px]"
+            onClick={() => {
+              setMoreOpen(false);
+              selectNone();
+            }}
           >
             Clear
           </button>
           <button
             ref={tagBtnRef}
             type="button"
-            className="btn px-2 py-1 text-xs"
+            className="btn px-2 py-1 text-xs touch:min-h-[40px]"
             onClick={() => setTagPopoverOpen((v) => !v)}
             disabled={selectedCount === 0}
           >
@@ -517,73 +562,76 @@ export default function RunsTablePage() {
           </button>
           <button
             type="button"
-            className="btn px-2 py-1 text-xs"
+            className="btn gap-1 px-2 py-1 text-xs touch:min-h-[40px]"
             onClick={onCompare}
             disabled={selectedCount === 0}
           >
-            Compare {selectedCount} run{selectedCount === 1 ? "" : "s"}
+            Compare
+            <span className="hidden md:inline">{selectedCount} run{selectedCount === 1 ? "" : "s"}</span>
           </button>
-          <button
-            type="button"
-            className="btn px-2 py-1 text-xs"
-            onClick={() => {
-              if (!projectId) return;
-              const cmp = createComparison(projectId!, "New comparison", Array.from(selected));
-              navigate(`/p/${projectId}/compare?c=${cmp.id}`);
-            }}
-            disabled={selectedCount === 0}
-          >
-            Empty comparison
-          </button>
-          <button
-            type="button"
-            className="btn px-2 py-1 text-xs"
-            onClick={onExport}
-            disabled={selectedCount === 0 || exporting}
-          >
-            {exporting ? "Exporting..." : "Export"}
-          </button>
-          <button
-            type="button"
-            className="btn px-2 py-1 text-xs"
-            onClick={onBulkArchive}
-            disabled={selectedCount === 0}
-          >
-            Archive
-          </button>
-          <button
-            type="button"
-            className="btn px-2 py-1 text-xs"
-            onClick={onBulkUnarchive}
-            disabled={selectedCount === 0}
-          >
-            Unarchive
-          </button>
-          <button
-            type="button"
-            className="btn px-2 py-1 text-xs text-status-failed"
-            onClick={onBulkDelete}
-            disabled={selectedCount === 0}
-          >
-            Delete
-          </button>
-          {templates.length > 0 && (
+          {/* Secondary actions sit inline from md up and behind "More" below it. */}
+          <div className="hidden items-center gap-2 md:flex">
+            {selectionActions.map((a) => (
+              <button
+                key={a.label}
+                type="button"
+                className={`btn px-2 py-1 text-xs${a.danger ? " text-status-failed" : ""}`}
+                onClick={(e) => a.onClick(e.currentTarget)}
+                disabled={a.disabled}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+          <div className="relative md:hidden">
             <button
-              ref={templateBtnRef}
+              ref={moreBtnRef}
               type="button"
-              className="btn px-2 py-1 text-xs"
-              onClick={() => setTemplatePopoverOpen((v) => !v)}
+              className="btn px-2 py-1 text-xs touch:min-h-[40px]"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((v) => !v)}
               disabled={selectedCount === 0}
             >
-              From template
+              More
             </button>
-          )}
+            {moreOpen && selectedCount > 0 && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Close menu"
+                  className="fixed inset-0 z-10 cursor-default"
+                  onClick={() => setMoreOpen(false)}
+                />
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full z-20 mt-1 flex w-48 flex-col rounded-lg border border-border bg-bg-elevated py-1 shadow-lg"
+                >
+                  {selectionActions.map((a) => (
+                    <button
+                      key={a.label}
+                      type="button"
+                      role="menuitem"
+                      className={`min-h-[40px] px-3 text-left text-sm hover:bg-bg-hover disabled:opacity-50 ${a.danger ? "text-status-failed" : "text-fg"}`}
+                      onClick={() => {
+                        setMoreOpen(false);
+                        a.onClick(moreBtnRef.current);
+                      }}
+                      disabled={a.disabled}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
       <SettingsPopover
         open={templatePopoverOpen}
         onClose={() => setTemplatePopoverOpen(false)}
-        anchorRef={templateBtnRef}
+        anchorRef={templateAnchorRef}
         title="Apply template"
       >
         <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
@@ -633,7 +681,7 @@ export default function RunsTablePage() {
                     </div>
                     <Link
                       to={`/p/${projectId}/r/${r.id}`}
-                      className="mono min-h-[44px] flex-1 truncate text-accent hover:underline"
+                      className="mono min-h-[44px] min-w-0 flex-1 truncate leading-[44px] text-accent hover:underline"
                     >
                       {r.display_name ?? r.id}
                     </Link>
@@ -850,7 +898,7 @@ function RunTagCell({
 
   const removeBtnClass =
     variant === "desktop"
-      ? "text-fg-subtle hover:text-status-failed opacity-0 group-hover/tag:opacity-100 transition-opacity -mr-0.5"
+      ? "text-fg-subtle hover:text-status-failed can-hover:opacity-0 can-hover:group-hover/tag:opacity-100 transition-opacity -mr-0.5"
       : "text-fg-subtle hover:text-status-failed -mr-0.5";
 
   const onRemoveClick = (e: React.MouseEvent, tag: string) => {

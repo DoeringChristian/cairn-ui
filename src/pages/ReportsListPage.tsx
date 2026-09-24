@@ -105,7 +105,7 @@ export default function ReportsListPage() {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-baseline justify-between gap-4">
-        <h1 className="mono text-xl font-semibold">{projectId} / reports</h1>
+        <h1 className="mono min-w-0 break-all text-xl font-semibold">{projectId} / reports</h1>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -367,7 +367,7 @@ function TemplatePanel({ projectId, allRuns, onApplied }: TemplatePanelProps) {
                   setPickedRunIds(new Set());
                 }}
                 disabled={applyingId === t.id}
-                className="text-[10px] text-accent hover:underline disabled:opacity-50"
+                className="text-[10px] text-accent hover:underline disabled:opacity-50 touch:min-h-[40px]"
                 title="New report from template — pick runs"
               >
                 {applyingId === t.id ? "Applying…" : "New from template"}
@@ -378,7 +378,7 @@ function TemplatePanel({ projectId, allRuns, onApplied }: TemplatePanelProps) {
                   deleteReportTemplate(projectId, t.id);
                   refresh();
                 }}
-                className="text-[10px] text-fg-subtle hover:text-status-failed"
+                className="text-[10px] text-fg-subtle hover:text-status-failed touch:min-h-[40px] touch:min-w-[40px] touch:text-sm"
                 title="Delete template"
               >
                 {"×"}
