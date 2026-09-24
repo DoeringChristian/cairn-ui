@@ -18,6 +18,8 @@ export const storageKeys = {
   comparisons: (projectId: string) => `cairn:comparisons:${projectId}`,
   /** Per-project default view of the Metrics & Media tab — see lib/project-view.ts. */
   projectView: (projectId: string) => `cairn:project-view:${projectId}`,
+  /** The runs table's filter chips and group-by — see lib/run-filter.ts. */
+  runsFilter: (projectId: string) => `cairn:runs-filter:${projectId}`,
   comparisonTemplates: (projectId: string) => `cairn:comparison-templates:${projectId}`,
   reportTemplates: (projectId: string) => `cairn:report-templates:${projectId}`,
   streamMode: "cairn:stream-mode",

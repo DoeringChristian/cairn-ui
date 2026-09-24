@@ -51,7 +51,7 @@ export function useRuns(params: Parameters<typeof api.runs>[0]) {
 
 const INFINITE_PAGE_SIZE = 100;
 
-export function useInfiniteRuns(params: { project?: string; status?: string }) {
+export function useInfiniteRuns(params: { project?: string; status?: string; include?: "params" }) {
   const q = useInfiniteQuery<RunsListResponse>({
     queryKey: qk.runsInfinite(params),
     queryFn: ({ pageParam }) =>

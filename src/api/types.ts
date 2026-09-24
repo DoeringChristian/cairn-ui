@@ -37,6 +37,10 @@ export interface Run {
   user: string | null;
   tags: string | null; // JSON string
   notes: string | null;
+  group?: string | null;
+  job_type?: string | null;
+  /** JSON-decoded params by key; only with `GET /api/runs?include=params`. */
+  params?: Record<string, unknown>;
   /**
    * What the run table shows as metric columns: each scalar sequence's LAST
    * point, with an explicit `run.summary()` key of the same name replacing it.

@@ -83,8 +83,9 @@ export const api = {
     get<{ projects: import("./types").Project[] }>("/api/projects"),
   createProject: (name: string) =>
     post<{ id: string; name: string; created_at: string }>("/api/projects", { name }),
-  runs: (params: { project?: string; status?: string; limit?: number; offset?: number } = {}) => {
+  runs: (params: { project?: string; status?: string; limit?: number; offset?: number; include?: "params" } = {}) => {
     const q = new URLSearchParams();
+    if (params.include) q.set("include", params.include);
     if (params.project) q.set("project", params.project);
     if (params.status) q.set("status", params.status);
     if (params.limit != null) q.set("limit", String(params.limit));
