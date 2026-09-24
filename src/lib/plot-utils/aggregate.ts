@@ -121,7 +121,7 @@ export function aggregateGroups<M>(
 /** One run's series and the group it falls in (null = not grouped). */
 export interface GroupableSeries {
   series: Series;
-  /** Metric identity (name + context): groups never mix metrics. */
+  /** Metric identity (its name): groups never mix metrics. */
   metricKey: string;
   metricName: string;
   group: string | null;

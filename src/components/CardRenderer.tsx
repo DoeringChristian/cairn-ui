@@ -114,7 +114,7 @@ function LazyCardFallback({ label }: { label: string }) {
 
 /** Fallback card for unknown object types — shows type info + download button. */
 function UnknownTypeCard({ runId, metric }: { runId: string; metric: SequenceMeta }) {
-  const q = useSequence(runId, metric.name, { context: metric.context_hash || undefined});
+  const q = useSequence(runId, metric.name);
   const point = useMemo(() => (q.data?.points ?? [])[0], [q.data]);
 
   return (

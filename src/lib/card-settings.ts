@@ -3,8 +3,7 @@
  *
  * Each card type owns its own TS interface (ScalarSettings, ImageSettings, …),
  * all carrying a `version: 1` discriminator. Settings are keyed by
- * (runId, metricName, contextHash) so two cards for the same metric but
- * different contexts (e.g. train/val) have independent settings.
+ * (runId, metricName).
  */
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
@@ -30,11 +29,10 @@ export const CardSettingsChangeContext = createContext<(() => void) | undefined>
 export type CardSettingsKey = {
   runId: string;
   metricName: string;
-  contextHash: string;
 };
 
 export function cardSettingsStorageKey(key: CardSettingsKey): string {
-  return storageKeys.cardSettings(key.runId, key.metricName, key.contextHash);
+  return storageKeys.cardSettings(key.runId, key.metricName);
 }
 
 /** Load persisted card settings, or null when none are stored. */

@@ -75,10 +75,7 @@ interface TableSettings extends BaseCardSettings {
 
 const DEFAULT_ROWS_PER_PAGE = 100;
 
-const DEFAULT_TABLE_SETTINGS = (seed: {
-  name: string;
-  context_hash: string;
-}): TableSettings => ({
+const DEFAULT_TABLE_SETTINGS = (seed: { name: string }): TableSettings => ({
   version: 1,
   metrics: [seed],
   rowsPerPage: DEFAULT_ROWS_PER_PAGE,
@@ -149,9 +146,7 @@ function TablePane({
   invertDiff?: boolean;
 }) {
   const rid = m.runId ?? runId;
-  const q = useSequence(rid, m.name, {
-    context: m.context_hash || undefined,
-  });
+  const q = useSequence(rid, m.name);
   const points = useMemo(
     () => (q.data?.points ?? []).filter((p) => p.artifact_hash),
     [q.data],
@@ -210,9 +205,7 @@ export default function TableCard({
   );
 
   // Seed sequence (drives the step slider + column list + CSV + subtitle).
-  const q = useSequence(runId, metric.name, {
-    context: metric.context_hash || undefined,
-  });
+  const q = useSequence(runId, metric.name);
   const points = useMemo(
     () => (q.data?.points ?? []).filter((p) => p.artifact_hash),
     [q.data],
@@ -225,11 +218,9 @@ export default function TableCard({
         ? effectiveMetrics.map((m) => {
             const rid = m.runId ?? runId;
             return {
-              queryKey: qk.sequence(rid, m.name, m.context_hash),
+              queryKey: qk.sequence(rid, m.name),
               queryFn: () =>
-                api.sequence(rid, m.name, {
-                  context: m.context_hash || undefined,
-                }),
+                api.sequence(rid, m.name),
               refetchInterval: 2_000,
               staleTime: 2_000,
             };
@@ -276,8 +267,8 @@ export default function TableCard({
   const runMetaVersion = useRunMetadataVersion();
 
   const compSeries = useMemo(
-    () => [{ runId, name: metric.name, context_hash: metric.context_hash }],
-    [runId, metric.name, metric.context_hash],
+    () => [{ runId, name: metric.name }],
+    [runId, metric.name],
   );
   useRunInfo(allRunIds);
 

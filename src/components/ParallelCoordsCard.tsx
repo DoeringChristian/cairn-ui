@@ -35,7 +35,7 @@ const DEFAULT_SETTINGS: ParallelSettings = {
 
 interface Props {
   runIds: string[];
-  settingsKey: { runId: string; metricName: string; contextHash: string };
+  settingsKey: { runId: string; metricName: string };
   onRemove?: () => void;
   autoOpenSettings?: boolean;
   /** Settings a fresh card starts from (e.g. a sweep's params and metric). */
@@ -70,8 +70,8 @@ export default function ParallelCoordsCard({
   const metricQueries = useQueries({
     queries: runIds.flatMap((rid) =>
       metricColumns.map((col) => ({
-        queryKey: qk.sequence(rid, col.key, ""),
-        queryFn: () => api.sequence(rid, col.key, {}),
+        queryKey: qk.sequence(rid, col.key),
+        queryFn: () => api.sequence(rid, col.key),
         staleTime: 30_000,
       })),
     ),

@@ -71,7 +71,7 @@ const FIGURE_COMPARE_OPTIONS: Array<{ value: FigureCompareMode; label: string }>
 ];
 
 interface FigureSettings extends BaseCardSettings {
-  metrics: Array<{ runId?: string; name: string; context_hash: string }>;
+  metrics: Array<{ runId?: string; name: string }>;
   paneWidths?: number[];
   sliderStep?: number;
   displayModeBar: boolean;
@@ -84,10 +84,7 @@ interface FigureSettings extends BaseCardSettings {
   figureCompare?: FigureCompareMode;
 }
 
-const DEFAULT_FIGURE_SETTINGS = (seed: {
-  name: string;
-  context_hash: string;
-}): FigureSettings => ({
+const DEFAULT_FIGURE_SETTINGS = (seed: { name: string }): FigureSettings => ({
   version: 1,
   colSpan: FIGURE_POLICY.colSpan,
   metrics: [seed],
@@ -282,7 +279,7 @@ function FigurePane({
   revision,
 }: {
   runId: string;
-  m: { runId?: string; name: string; context_hash: string };
+  m: { runId?: string; name: string };
   targetStep: number;
   settings: FigureSettings;
   viewOverrides?: SharedView;
@@ -290,9 +287,7 @@ function FigurePane({
   revision?: number;
 }) {
   const rid = m.runId ?? runId;
-  const q = useSequence(rid, m.name, {
-    context: m.context_hash || undefined,
-  });
+  const q = useSequence(rid, m.name);
   const points = useMemo(
     () => (q.data?.points ?? []).filter((p) => p.artifact_hash),
     [q.data],
@@ -362,9 +357,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, updateSettings);
 
   // For the single-metric path, fetch points to drive the step slider.
-  const q = useSequence(runId, metric.name, {
-    context: metric.context_hash || undefined,
-  });
+  const q = useSequence(runId, metric.name);
   const points = useMemo(
     () => (q.data?.points ?? []).filter((p) => p.artifact_hash),
     [q.data],
@@ -376,11 +369,9 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       ? effectiveMetrics.map((m) => {
           const rid = m.runId ?? runId;
           return {
-            queryKey: qk.sequence(rid, m.name, m.context_hash),
+            queryKey: qk.sequence(rid, m.name),
             queryFn: () =>
-              api.sequence(rid, m.name, {
-                context: m.context_hash || undefined,
-              }),
+              api.sequence(rid, m.name),
             refetchInterval: 2_000,
             staleTime: 2_000,
           };
@@ -522,8 +513,8 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
   const compSeries = useMemo(
-    () => [{ runId, name: metric.name, context_hash: metric.context_hash }],
-    [runId, metric.name, metric.context_hash],
+    () => [{ runId, name: metric.name }],
+    [runId, metric.name],
   );
 
 
@@ -664,7 +655,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     const map = new Map<string, string>();
     if (multipleRuns) {
       for (const m of effectiveMetrics) {
-        map.set(seriesKey(m), seriesLabel(m.name, m.context_hash, m.runId ?? runId, true, allRunIds));
+        map.set(seriesKey(m), seriesLabel(m.name, m.runId ?? runId, true, allRunIds));
       }
     }
     return map;

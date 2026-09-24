@@ -10,7 +10,7 @@
 import { useCallback, useRef, useState } from "react";
 import { CAIRN_SERIES_MIME, type SeriesRef } from "../components/SeriesChip";
 
-type MetricEntry = { runId?: string; name: string; context_hash: string };
+type MetricEntry = { runId?: string; name: string };
 
 export function useCardDrop(
   effectiveMetrics: MetricEntry[],
@@ -30,11 +30,11 @@ export function useCardDrop(
 interface UseSeriesDropOpts {
   /** Current metrics list — read via ref to avoid re-render loops. */
   metricsRef: React.RefObject<
-    Array<{ runId?: string; name: string; context_hash: string }>
+    Array<{ runId?: string; name: string }>
   >;
   /** Called once on a successful drop with the full new metrics array. */
   onMetricsChange: (
-    next: Array<{ runId?: string; name: string; context_hash: string }>,
+    next: Array<{ runId?: string; name: string }>,
   ) => void;
 }
 
@@ -71,19 +71,12 @@ function useSeriesDrop({ metricsRef, onMetricsChange }: UseSeriesDropOpts) {
       try {
         const dropped: SeriesRef = JSON.parse(raw);
         const existing = metricsRef.current ?? [];
-        const key = `${dropped.runId ?? ""}::${dropped.name}::${dropped.context_hash}`;
-        const alreadyHas = existing.some(
-          (m) =>
-            `${m.runId ?? ""}::${m.name}::${m.context_hash}` === key,
-        );
+        const key = `${dropped.runId ?? ""}::${dropped.name}`;
+        const alreadyHas = existing.some((m) => `${m.runId ?? ""}::${m.name}` === key);
         if (!alreadyHas) {
           onMetricsChange([
             ...existing,
-            {
-              runId: dropped.runId,
-              name: dropped.name,
-              context_hash: dropped.context_hash,
-            },
+            { runId: dropped.runId, name: dropped.name },
           ]);
         }
       } catch {

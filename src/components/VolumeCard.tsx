@@ -67,7 +67,7 @@ export default function VolumeCard({
   const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, updateSettings);
 
   const queries = useSequencesForRuns(
-    effectiveMetrics.map((m) => ({ runId: m.runId ?? runId, name: m.name, contextHash: m.context_hash })),
+    effectiveMetrics.map((m) => ({ runId: m.runId ?? runId, name: m.name })),
   );
   const seriesPoints = useMemo(
     () => queries.map((q) => (q.data?.points ?? []).filter((p) => p.artifact_hash)),

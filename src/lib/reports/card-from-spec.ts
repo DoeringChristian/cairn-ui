@@ -10,7 +10,7 @@ import type { ComparisonCard, ComparisonSeriesRef, MultiRunCardType } from "../c
 import { newId } from "./ids.ts";
 
 /** One entry per run that has a given metric. */
-export type SelectionRuns = Array<{ runId: string; context_hash: string }>;
+export type SelectionRuns = Array<{ runId: string }>;
 
 /**
  * Result of picking a card to add — from a user's `AddCardModal` choice or
@@ -37,8 +37,8 @@ export type AddCardSelection =
  */
 export function cardFromSpec(sel: AddCardSelection): ComparisonCard {
   if (sel.kind === "manual-series") {
-    // Custom overlay: series already carry their own (runId, name,
-    // context_hash) — no shared `name` to fan out across runs.
+    // Custom overlay: series already carry their own (runId, name) — no
+    // shared `name` to fan out across runs.
     return { id: newId(), type: sel.object_type as ComparisonCard["type"], series: sel.series };
   }
   const type: ComparisonCard["type"] =
@@ -46,6 +46,6 @@ export function cardFromSpec(sel: AddCardSelection): ComparisonCard {
   return {
     id: newId(),
     type,
-    series: sel.runs.map((r) => ({ runId: r.runId, name: sel.name, context_hash: r.context_hash })),
+    series: sel.runs.map((r) => ({ runId: r.runId, name: sel.name })),
   };
 }

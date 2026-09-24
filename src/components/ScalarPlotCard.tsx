@@ -45,7 +45,7 @@ const SCALAR_POLICY = plotCardPolicy("scalar");
 // -----------------------------------------------------------------------------
 
 interface ScalarSettings extends BaseCardSettings {
-  metrics: Array<{ runId?: string; name: string; context_hash: string }>;
+  metrics: Array<{ runId?: string; name: string }>;
   xAxis: AxisSource;
   /** The series an `xAxis: "metric"` card plots against (joined on step). */
   xMetric?: XMetricRef;
@@ -58,7 +58,7 @@ interface ScalarSettings extends BaseCardSettings {
   outlierPct: [number, number];
   lineType: "linear" | "monotone" | "step" | "stepBefore" | "stepAfter";
   showLegend: boolean;
-  tooltip: { showContext: boolean; showWallTime: boolean };
+  tooltip: { showWallTime: boolean };
   /** Collapse runs sharing a group / job type / param value into mean ± band. */
   groupBy: GroupBy | null;
   band: BandKind;
@@ -78,10 +78,7 @@ interface GroupBy {
   key: string;
 }
 
-const DEFAULT_SCALAR_SETTINGS = (seed: {
-  name: string;
-  context_hash: string;
-}): ScalarSettings => ({
+const DEFAULT_SCALAR_SETTINGS = (seed: { name: string }): ScalarSettings => ({
   version: 1,
   colSpan: SCALAR_POLICY.colSpan,
   metrics: [seed],
@@ -95,7 +92,7 @@ const DEFAULT_SCALAR_SETTINGS = (seed: {
   outlierPct: [0, 100],
   lineType: "linear",
   showLegend: true,
-  tooltip: { showContext: true, showWallTime: true },
+  tooltip: { showWallTime: true },
   groupBy: { source: "group", key: "" },
   band: "std",
   hideMembers: false,
@@ -105,22 +102,17 @@ const DEFAULT_SCALAR_SETTINGS = (seed: {
 /**
  * A card seeded for a metric with a `define_metric(step_metric=...)` starts on
  * that x-axis. Read from the query cache: the run page loads the run detail
- * and its sequence list before any card mounts.
+ * before any card mounts.
  */
 function seededXAxis(
   qc: QueryClient,
   runId: string,
-  seed: { name: string; context_hash: string },
+  seed: { name: string },
 ): Pick<ScalarSettings, "xAxis" | "xMetric"> | null {
   const defs = qc.getQueryData<RunDetailResponse>(qk.run(runId))?.metric_defs;
   const name = stepMetricFor(seed.name, defs);
   if (!name) return null;
-  const metas =
-    qc.getQueryData<{ sequences: SequenceMeta[] }>(qk.sequences(runId))?.sequences ?? [];
-  const candidates = metas.filter((m) => m.name === name && m.object_type === "scalar");
-  const match =
-    candidates.find((m) => m.context_hash === seed.context_hash) ?? candidates[0];
-  return { xAxis: "metric", xMetric: { name, context_hash: match?.context_hash ?? "" } };
+  return { xAxis: "metric", xMetric: { name } };
 }
 
 /** `<Select>` value for a metric x-axis; the plain sources keep their own. */
@@ -128,13 +120,12 @@ const METRIC_AXIS_PREFIX = "metric:";
 
 function xAxisSelectValue(xAxis: AxisSource, xMetric: XMetricRef | undefined): string {
   if (xAxis !== "metric" || !xMetric) return xAxis;
-  return `${METRIC_AXIS_PREFIX}${xMetric.name}\u0000${xMetric.context_hash}`;
+  return `${METRIC_AXIS_PREFIX}${xMetric.name}`;
 }
 
 function parseXAxisSelectValue(v: string): Pick<ScalarSettings, "xAxis" | "xMetric"> {
   if (!v.startsWith(METRIC_AXIS_PREFIX)) return { xAxis: v as AxisSource };
-  const [name = "", context_hash = ""] = v.slice(METRIC_AXIS_PREFIX.length).split("\u0000");
-  return { xAxis: "metric", xMetric: { name, context_hash } };
+  return { xAxis: "metric", xMetric: { name: v.slice(METRIC_AXIS_PREFIX.length) } };
 }
 
 // -----------------------------------------------------------------------------
@@ -236,7 +227,6 @@ export default function ScalarPlotCard({
       effectiveMetrics.map((m) => ({
         runId: m.runId ?? runId,
         name: m.name,
-        contextHash: m.context_hash,
       })),
     [effectiveMetrics, runId],
   );
@@ -250,7 +240,6 @@ export default function ScalarPlotCard({
         ? allRunIds.map((rid) => ({
             runId: rid,
             name: xMetric.name,
-            contextHash: xMetric.context_hash,
           }))
         : [],
     [xMetric, allRunIds],
@@ -272,20 +261,12 @@ export default function ScalarPlotCard({
     const metas = (runSequences.data?.sequences ?? []).filter(
       (m) => m.object_type === "scalar",
     );
-    const contextsByName = new Map<string, number>();
-    for (const m of metas) contextsByName.set(m.name, (contextsByName.get(m.name) ?? 0) + 1);
-    const refs: XMetricRef[] = metas.map((m) => ({ name: m.name, context_hash: m.context_hash }));
+    const refs: XMetricRef[] = metas.map((m) => ({ name: m.name }));
     // Keep the current choice listed even when this run lacks it.
-    if (xMetric && !refs.some((r) => r.name === xMetric.name && r.context_hash === xMetric.context_hash)) {
-      refs.push(xMetric);
-    }
+    if (xMetric && !refs.some((r) => r.name === xMetric.name)) refs.push(xMetric);
     return refs.map((r) => ({
       value: xAxisSelectValue("metric", r),
-      label: `metric: ${r.name}${
-        (contextsByName.get(r.name) ?? 0) > 1 && r.context_hash
-          ? ` · ${r.context_hash.slice(0, 6)}`
-          : ""
-      }`,
+      label: `metric: ${r.name}`,
     }));
   }, [runSequences.data, xMetric]);
 
@@ -313,7 +294,7 @@ export default function ScalarPlotCard({
 
       return {
         key: k,
-        label: seriesLabel(m.name, m.context_hash, rid, multipleRuns, allRunIds),
+        label: seriesLabel(m.name, rid, multipleRuns, allRunIds),
         color: SERIES_COLORS[idx % SERIES_COLORS.length]!,
         points: mapped,
         runId: rid,
@@ -323,14 +304,14 @@ export default function ScalarPlotCard({
     // Grouping needs several runs; a run without a value for it stays its own line.
     const by = settings.groupBy;
     if (!by || !multipleRuns) return { series: built, groups: 0, isLoading: anyLoading };
-    const metricKeys = new Set(effectiveMetrics.map((m) => `${m.name}\u0000${m.context_hash}`));
+    const metricKeys = new Set(effectiveMetrics.map((m) => m.name));
     const grouped = groupSeries(
       built.map((s, idx) => {
         const m = effectiveMetrics[idx]!;
         return {
           series: s,
-          metricKey: `${m.name}\u0000${m.context_hash}`,
-          metricName: m.context_hash ? `${m.name} · ${m.context_hash.slice(0, 6)}` : m.name,
+          metricKey: m.name,
+          metricName: m.name,
           group: groupValue(by, runById.get(s.runId!), paramsByRunId.get(s.runId!)),
         };
       }),
@@ -376,7 +357,6 @@ export default function ScalarPlotCard({
     return effectiveMetrics.map((m) => ({
       runId: m.runId ?? runId,
       name: m.name,
-      context_hash: m.context_hash,
     }));
   }, [runId, effectiveMetrics]);
 
@@ -420,10 +400,7 @@ export default function ScalarPlotCard({
             runIds={tagPickerRunIds}
             tagMode
             objectType="scalar"
-            value={effectiveMetrics.map((m) => ({
-              name: m.name,
-              context_hash: m.context_hash,
-            }))}
+            value={effectiveMetrics.map((m) => ({ name: m.name }))}
             onChange={(v) => {
               const keepNames = new Set(v.map((c) => c.name));
               const next = effectiveMetrics.filter((m) => keepNames.has(m.name));
@@ -433,7 +410,6 @@ export default function ScalarPlotCard({
               const newEntries = runs.map((r) => ({
                 runId: r.runId,
                 name: _tagName,
-                context_hash: r.context_hash,
               }));
               updateSettings({ metrics: [...effectiveMetrics, ...newEntries] });
             }}
@@ -454,7 +430,6 @@ export default function ScalarPlotCard({
               >
                 <span className="truncate">
                   {m.name}
-                  {m.context_hash ? ` · ${m.context_hash.slice(0, 6)}` : ""}
                   {` · ${shortRunLabel(rid, allRunIds)}`}
                 </span>
                 <button
@@ -482,18 +457,8 @@ export default function ScalarPlotCard({
       ) : (
         <MetricChips
           runId={runId}
-          value={effectiveMetrics.map((m) => ({
-            name: m.name,
-            context_hash: m.context_hash,
-          }))}
-          onChange={(v) =>
-            updateSettings({
-              metrics: v.map((m) => ({
-                name: m.name,
-                context_hash: m.context_hash,
-              })),
-            })
-          }
+          value={effectiveMetrics.map((m) => ({ name: m.name }))}
+          onChange={(v) => updateSettings({ metrics: v.map((m) => ({ name: m.name })) })}
         />
       )}
 
@@ -680,15 +645,6 @@ export default function ScalarPlotCard({
         label="Show legend"
         checked={settings.showLegend}
         onChange={(v) => updateSettings({ showLegend: v })}
-      />
-      <Toggle
-        label="Tooltip: context"
-        checked={settings.tooltip.showContext}
-        onChange={(v) =>
-          updateSettings({
-            tooltip: { ...settings.tooltip, showContext: v },
-          })
-        }
       />
       <Toggle
         label="Tooltip: wall time"

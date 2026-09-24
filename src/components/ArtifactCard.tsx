@@ -40,9 +40,7 @@ interface ArtifactSettings extends BaseCardSettings {
 const DEFAULT_SETTINGS: ArtifactSettings = { version: 1 };
 
 export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
-  const q = useSequence(runId, metric.name, {
-    context: metric.context_hash || undefined,
-  });
+  const q = useSequence(runId, metric.name);
   // Also fetch named artifacts (from log_artifact) as fallback.
   const artifactsQ = useArtifacts(runId);
   const points = useMemo(() => {
@@ -66,7 +64,7 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
   }, [q.data, artifactsQ.data, metric.name]);
 
   const [settings, updateSettings] = useCardSettings(
-    settingsKeyOverride ?? { runId, metricName: metric.name, contextHash: metric.context_hash },
+    settingsKeyOverride ?? { runId, metricName: metric.name },
     DEFAULT_SETTINGS,
   );
 

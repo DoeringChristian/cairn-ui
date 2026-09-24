@@ -11,9 +11,8 @@ import { isMultiRunCardType, type ComparisonCard } from "./types.ts";
 export interface ComparisonTemplateCard {
   type: ComparisonCard["type"];
   /**
-   * The metric keys this card displays, in the card's own series order —
-   * `"<metricName>::<contextHash>"` (the `cardKeyOf` convention from
-   * lib/run-layout.ts; `contextHash` may be "").
+   * The metric names this card displays, in the card's own series order
+   * (the `cardKeyOf` convention from lib/run-layout.ts).
    *
    * A card is not a single reference: it can overlay several metrics (chip
    * drag-drop, the settings picker), and a template restores all of them.
@@ -22,21 +21,6 @@ export interface ComparisonTemplateCard {
    */
   keys: string[];
   settings?: Record<string, unknown>;
-}
-
-/** Build a template key from a series' metric name + context hash. */
-export function templateKey(name: string, contextHash: string): string {
-  return `${name}::${contextHash}`;
-}
-
-/**
- * Split a template key back into its parts. The separator is the FIRST `::`
- * — metric names may not contain it, context hashes never do.
- */
-export function parseTemplateKey(key: string): { name: string; contextHash: string } {
-  const sep = key.indexOf("::");
-  if (sep === -1) return { name: key, contextHash: "" };
-  return { name: key.slice(0, sep), contextHash: key.slice(sep + 2) };
 }
 
 /**
@@ -49,7 +33,7 @@ export function templateCardOf(
 ): ComparisonTemplateCard {
   const keys = isMultiRunCardType(card.type)
     ? []
-    : Array.from(new Set(card.series.map((s) => templateKey(s.name, s.context_hash))));
+    : Array.from(new Set(card.series.map((s) => s.name)));
   return { type: card.type, keys, settings };
 }
 

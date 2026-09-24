@@ -2,8 +2,8 @@
  * Per-card settings and card structure survive the ```cairn dialect:
  *   serializeCairnSpec → stringifyCairnSpec → parseCairnSpec → compileCairnBlock
  * must give back an equivalent card and settings. `metricIndexRuns` stands in
- * for a live `/api/{run}/sequences` fetch — it supplies `context_hash` back
- * to a re-parsed `metric:`-form card (see cairn-block.ts's `selectionForCard`).
+ * for a live `/api/{run}/sequences` fetch — it supplies the `object_type` of
+ * a re-parsed `metric:`-form card (see cairn-block.ts's `selectionForCard`).
  */
 
 import { test } from "node:test";
@@ -17,7 +17,7 @@ import type { CardsBlock } from "./types.ts";
 function seqFixture(runId: string, name: string): { runId: string; sequences: SequenceMeta[] } {
   return {
     runId,
-    sequences: [{ name, object_type: "scalar", context: null, context_hash: "", min_step: 0, max_step: 10, count: 11 }],
+    sequences: [{ name, object_type: "scalar", min_step: 0, max_step: 10, count: 11 }],
   };
 }
 
@@ -38,14 +38,14 @@ const CASES: Case[] = [
       id: "card_scalar_1",
       type: "scalar",
       series: [
-        { runId: "run_a", name: "train/loss", context_hash: "" },
-        { runId: "run_b", name: "train/loss", context_hash: "" },
+        { runId: "run_a", name: "train/loss" },
+        { runId: "run_b", name: "train/loss" },
       ],
     },
     settings: { version: 1, yScale: "log", smoothing: 0.6 },
     metricIndexRuns: [
-      { runId: "run_a", sequences: [{ name: "train/loss", object_type: "scalar", context: null, context_hash: "", min_step: 0, max_step: 100, count: 101 }] },
-      { runId: "run_b", sequences: [{ name: "train/loss", object_type: "scalar", context: null, context_hash: "", min_step: 0, max_step: 100, count: 101 }] },
+      { runId: "run_a", sequences: [{ name: "train/loss", object_type: "scalar", min_step: 0, max_step: 100, count: 101 }] },
+      { runId: "run_b", sequences: [{ name: "train/loss", object_type: "scalar", min_step: 0, max_step: 100, count: 101 }] },
     ],
   },
   {
@@ -55,8 +55,8 @@ const CASES: Case[] = [
       id: "card_image_1",
       type: "image",
       series: [
-        { runId: "run_a", name: "prediction", context_hash: "ctx1" },
-        { runId: "run_b", name: "prediction", context_hash: "ctx1" },
+        { runId: "run_a", name: "prediction" },
+        { runId: "run_b", name: "prediction" },
       ],
     },
     settings: {
@@ -64,8 +64,8 @@ const CASES: Case[] = [
       reference: { source: "external", externalScope: "per-run" },
     },
     metricIndexRuns: [
-      { runId: "run_a", sequences: [{ name: "prediction", object_type: "image", context: null, context_hash: "ctx1", min_step: 0, max_step: 10, count: 11 }] },
-      { runId: "run_b", sequences: [{ name: "prediction", object_type: "image", context: null, context_hash: "ctx1", min_step: 0, max_step: 10, count: 11 }] },
+      { runId: "run_a", sequences: [{ name: "prediction", object_type: "image", min_step: 0, max_step: 10, count: 11 }] },
+      { runId: "run_b", sequences: [{ name: "prediction", object_type: "image", min_step: 0, max_step: 10, count: 11 }] },
     ],
   },
   {
@@ -77,9 +77,9 @@ const CASES: Case[] = [
       // Multi-run cards' series[].name is always MULTI_RUN_CARD_LABELS[type]
       // (see cardFromSpec's multi-run branch) — cosmetic, not a real metric.
       series: [
-        { runId: "run_a", name: "Parallel Coordinates", context_hash: "" },
-        { runId: "run_b", name: "Parallel Coordinates", context_hash: "" },
-        { runId: "run_c", name: "Parallel Coordinates", context_hash: "" },
+        { runId: "run_a", name: "Parallel Coordinates" },
+        { runId: "run_b", name: "Parallel Coordinates" },
+        { runId: "run_c", name: "Parallel Coordinates" },
       ],
     },
     settings: { version: 1, axes: ["lr", "batch_size", "final/loss"] },
@@ -91,11 +91,11 @@ const CASES: Case[] = [
     card: {
       id: "card_scalar_2",
       type: "scalar",
-      series: [{ runId: "run_a", name: "val/accuracy", context_hash: "ctx2" }],
+      series: [{ runId: "run_a", name: "val/accuracy" }],
     },
     settings: { version: 1, yScale: "linear" },
     metricIndexRuns: [
-      { runId: "run_a", sequences: [{ name: "val/accuracy", object_type: "scalar", context: null, context_hash: "ctx2", min_step: 0, max_step: 5, count: 6 }] },
+      { runId: "run_a", sequences: [{ name: "val/accuracy", object_type: "scalar", min_step: 0, max_step: 5, count: 6 }] },
     ],
   },
 ];

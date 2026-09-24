@@ -43,19 +43,19 @@ def _resolve_series(data: Any, *, builder: str) -> tuple[SeriesRef, int | None]:
     """A `run[tag]` handle -> a validated `SeriesRef` (+ its optional step).
 
     Raw (non-`DataRef`) data has no card-spec representation today — a
-    `SeriesRef` is inherently `(runId, name, context_hash)`, a pointer into
+    `SeriesRef` is inherently `(runId, name)`, a pointer into
     server-tracked data, and the schema has no inline-data variant yet. This
     is the WS-INLINE inline-data render path (design spec §6.3), explicitly
     deferred: raise a clear, actionable error rather than doing something
     silently wrong.
     """
     if isinstance(data, DataRef):
-        ref = SeriesRef(runId=data.run_id, name=data.tag, context_hash=data.context_hash())
+        ref = SeriesRef(runId=data.run_id, name=data.tag)
         return ref, data.step
     raise NotImplementedError(
         f"cairn.plot.{builder}(...): raw array/image/bytes data has no "
         "card-spec representation yet (a card `series` entry is a pointer "
-        "into server-tracked data — `(runId, name, context_hash)` — and the "
+        "into server-tracked data — `(runId, name)` — and the "
         "schema has no inline-data variant). This is the WS-INLINE "
         "inline-data render path, deferred — see "
         "docs/superpowers/specs/2026-07-07-notebook-python-and-embed.md "
@@ -152,7 +152,7 @@ def image_compare(a: Any, b: Any) -> Any:
     same_run = isinstance(a, DataRef) and isinstance(b, DataRef) and a.run_id == b.run_id
     if not same_run:
         return media_compare(a, b, card_type="image")
-    reference = {"name": b.tag, "context_hash": b.context_hash()}
+    reference = {"name": b.tag}
     if b.step is not None:
         reference_step = {"referenceStep": b.step}
     else:

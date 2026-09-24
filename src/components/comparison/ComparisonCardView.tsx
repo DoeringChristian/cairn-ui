@@ -53,8 +53,6 @@ export default function ComparisonCardView({ card, settingsKey, onRemove, autoOp
   const seedMetric: SequenceMeta = {
     name: primary.name,
     object_type: card.type,
-    context: null,
-    context_hash: primary.context_hash,
     min_step: 0,
     max_step: 0,
     count: 0,

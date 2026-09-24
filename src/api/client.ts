@@ -104,16 +104,9 @@ export const api = {
     get<{ sequences: import("./types").SequenceMeta[] }>(
       `/api/runs/${runId}/sequences`,
     ),
-  sequence: async (
-    runId: string,
-    name: string,
-    opts: { context?: string;} = {},
-  ) => {
-    const q = new URLSearchParams();
-    if (opts.context != null) q.set("context", opts.context);
-    const qs = q.toString();
+  sequence: async (runId: string, name: string) => {
     const res = await get<import("./types").SequenceResponse>(
-      `/api/runs/${runId}/sequences/${encodeURIComponent(name)}${qs ? `?${qs}` : ""}`,
+      `/api/runs/${runId}/sequences/${encodeURIComponent(name)}`,
     );
     // A full read tells the live-updates poller how far this run's append
     // stream had got, so it can resume with deltas instead of having every

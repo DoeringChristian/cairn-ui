@@ -39,9 +39,7 @@ const FONT_SIZE_CLASS: Record<TextSettings["fontSize"], string> = {
 };
 
 export default function TextViewerCard({ runId, metric, settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
-  const q = useSequence(runId, metric.name, {
-    context: metric.context_hash || undefined,
-  });
+  const q = useSequence(runId, metric.name);
   const points = useMemo(() => q.data?.points ?? [], [q.data]);
   const [idx, setIdx] = useState(0);
   const safeIdx = Math.min(Math.max(0, idx), Math.max(0, points.length - 1));
@@ -66,9 +64,8 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
     () => settingsKeyOverride ?? {
       runId,
       metricName: metric.name,
-      contextHash: metric.context_hash,
     },
-    [settingsKeyOverride, runId, metric.name, metric.context_hash],
+    [settingsKeyOverride, runId, metric.name],
   );
   const [settings, updateSettings] = useCardSettings(
     settingsKey,
@@ -78,8 +75,8 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
   const compSeries = useMemo(
-    () => [{ runId, name: metric.name, context_hash: metric.context_hash }],
-    [runId, metric.name, metric.context_hash],
+    () => [{ runId, name: metric.name }],
+    [runId, metric.name],
   );
 
 

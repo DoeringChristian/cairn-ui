@@ -61,13 +61,9 @@ export function groupIntoSections(meta: SequenceMeta[]): Section[] {
     arr.push(m);
     buckets.set(section, arr);
   }
-  // Sort members deterministically by (name, context_hash).
+  // Sort members deterministically by name.
   for (const arr of buckets.values()) {
-    arr.sort((a, b) => {
-      const c = a.name.localeCompare(b.name);
-      if (c !== 0) return c;
-      return (a.context_hash ?? "").localeCompare(b.context_hash ?? "");
-    });
+    arr.sort((a, b) => a.name.localeCompare(b.name));
   }
   return sortBuckets(buckets).map(([name, items]) => ({ name, items }));
 }

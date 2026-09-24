@@ -44,7 +44,7 @@ const DEFAULT_SETTINGS: ScatterSettings = {
 
 interface Props {
   runIds: string[];
-  settingsKey: { runId: string; metricName: string; contextHash: string };
+  settingsKey: { runId: string; metricName: string };
   onRemove?: () => void;
   autoOpenSettings?: boolean;
   /** Settings a fresh card starts from (e.g. a sweep's params and metric). */
@@ -88,8 +88,8 @@ export default function ScatterPlotCard({
   const metricQueries = useQueries({
     queries: runIds.flatMap((rid) =>
       metricAxes.map((ax) => ({
-        queryKey: qk.sequence(rid, ax.key, ""),
-        queryFn: () => api.sequence(rid, ax.key, {}),
+        queryKey: qk.sequence(rid, ax.key),
+        queryFn: () => api.sequence(rid, ax.key),
         staleTime: 30_000,
       })),
     ),

@@ -145,53 +145,26 @@ export function selectRunsToPoll(candidates: readonly RunCandidate[]): string[] 
 // Query-key routing
 // ---------------------------------------------------------------------------
 
-/** Sentinel for a key slot we cannot read — never equal to a real hash. */
-export const UNROUTABLE = "\u0000unroutable";
-
 /**
- * The context identity carried by a `["sequence", runId, name, opts]` key.
- *
- * Call sites spell that fourth element three ways: a bare context hash
- * (`qk.sequence(rid, name, m.context_hash)`), the empty string for "no
- * context", and an options object (`{ context: hash | undefined }`). All three
- * collapse to the same hash string here. Anything else (e.g. the synthetic
- * "last-summary" key in ComparisonOverviewTab, which has its own queryFn)
- * returns `UNROUTABLE`, which never matches a real point — those queries are
- * left alone.
+ * The series a cached `["sequence", runId, name]` query key belongs to, if
+ * any: its name. A key with any extra slot is not a plain sequence read and
+ * is left alone.
  */
-export function keyContextHash(part: unknown): string {
-  if (part === undefined || part === null) return "";
-  if (typeof part === "string") return part;
-  if (typeof part === "object") {
-    const ctx = (part as { context?: unknown }).context;
-    if (ctx === undefined || ctx === null) return "";
-    if (typeof ctx === "string") return ctx;
-  }
-  return UNROUTABLE;
-}
-
-/** Routing key for a (name, context hash) series. */
-export function seriesKey(name: string, contextHash: string): string {
-  return `${name}\u0000${contextHash}`;
-}
-
-/** The series a cached `["sequence", ...]` query key belongs to, if any. */
 export function seriesKeyOfQueryKey(queryKey: readonly unknown[]): string | null {
-  const [, , name, opts] = queryKey;
-  if (typeof name !== "string") return null;
-  return seriesKey(name, keyContextHash(opts));
+  if (queryKey.length !== 3) return null;
+  const name = queryKey[2];
+  return typeof name === "string" ? name : null;
 }
 
-/** Group a `/updates` payload by the series each point belongs to. */
+/** Group a `/updates` payload by the series (name) each point belongs to. */
 export function groupPointsBySeries(
   points: readonly UpdatePoint[],
 ): Map<string, UpdatePoint[]> {
   const out = new Map<string, UpdatePoint[]>();
   for (const p of points) {
-    const key = seriesKey(p.name, p.context_hash ?? "");
-    const bucket = out.get(key);
+    const bucket = out.get(p.name);
     if (bucket) bucket.push(p);
-    else out.set(key, [p]);
+    else out.set(p.name, [p]);
   }
   return out;
 }
@@ -202,46 +175,39 @@ export function groupPointsBySeries(
 
 /** Drop the routing fields so a cached point keeps the sequence-endpoint shape. */
 function toSequencePoint(p: UpdatePoint): SequencePoint {
-  const { name: _name, context_hash: _ctx, ...point } = p;
+  const { name: _name, ...point } = p;
   return point;
 }
 
 /**
- * Append `incoming` to `points`, deduped by (step, context) and kept sorted by
- * step. Returns `points` UNCHANGED (same reference) when the point is already
+ * Append `incoming` to `points`, deduped by step and kept sorted by step.
+ * Returns `points` UNCHANGED (same reference) when the point is already
  * there, so callers can skip a cache write and the re-render it would cause.
  *
- * Within one cached sequence the name and context hash are fixed by the query
- * key, so (step, context) is exactly the server's (name, step, context_hash)
- * primary key restricted to that series.
+ * Within one cached sequence the name is fixed by the query key, so step is
+ * exactly the server's (run, name, step) key restricted to that series.
  */
 export function appendDedup(
   points: readonly SequencePoint[],
   incoming: UpdatePoint | SequencePoint,
 ): SequencePoint[] {
-  const point = "context_hash" in incoming
+  const point = "name" in incoming
     ? toSequencePoint(incoming as UpdatePoint)
     : (incoming as SequencePoint);
-  const ctx = point.context ?? null;
 
   const last = points[points.length - 1];
   // The common case by far: a live run appends strictly increasing steps.
   if (last === undefined || point.step > last.step) return [...points, point];
 
   // Out-of-order or backfilled delta: walk back to the insertion point,
-  // checking every same-step row on the way (steps are contiguous when equal,
-  // so this sees them all) and landing after the last of them.
+  // landing right after the last smaller step.
   let insertAt = 0;
-  let placed = false;
   for (let i = points.length - 1; i >= 0; i--) {
     const p = points[i]!;
     if (p.step > point.step) continue;
-    if (!placed) {
-      insertAt = i + 1;
-      placed = true;
-    }
-    if (p.step < point.step) break;
-    if ((p.context ?? null) === ctx) return points as SequencePoint[]; // already have it
+    if (p.step === point.step) return points as SequencePoint[]; // already have it
+    insertAt = i + 1;
+    break;
   }
   const next = points.slice();
   next.splice(insertAt, 0, point);

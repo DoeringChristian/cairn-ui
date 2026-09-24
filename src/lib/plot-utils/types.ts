@@ -4,7 +4,6 @@ export interface SeriesPoint {
   x: number;
   y: number;
   wallTime?: string;
-  context?: string | null;
 }
 
 export interface Series {

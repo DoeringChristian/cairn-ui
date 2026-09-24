@@ -1,8 +1,8 @@
 /**
  * The union of metrics available across a set of runs, shared by
  * AddCardModal and the ```cairn dialect interpreter (cairn-block.ts) so both
- * resolve a bare metric name to an `object_type` and a set of
- * (runId, context_hash) pairs the same way. Pure data shaping; fetching
+ * resolve a bare metric name to an `object_type` and a set of runIds the
+ * same way. Pure data shaping; fetching
  * lives in use-metric-index.ts.
  */
 
@@ -11,7 +11,7 @@ import type { SequenceMeta } from "../../api/types";
 export interface MetricIndexEntry {
   name: string;
   object_type: string;
-  runs: Array<{ runId: string; context_hash: string }>;
+  runs: Array<{ runId: string }>;
 }
 
 /** Keyed by `${name}::${object_type}` — the same grouping key AddCardModal uses. */
@@ -31,13 +31,13 @@ export function buildMetricIndex(perRun: Array<{ runId: string; sequences: Seque
       const existing = map.get(key);
       if (existing) {
         if (!existing.runs.some((r) => r.runId === runId)) {
-          existing.runs.push({ runId, context_hash: seq.context_hash });
+          existing.runs.push({ runId });
         }
       } else {
         map.set(key, {
           name: seq.name,
           object_type: seq.object_type,
-          runs: [{ runId, context_hash: seq.context_hash }],
+          runs: [{ runId }],
         });
       }
     }

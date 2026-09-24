@@ -70,10 +70,9 @@ function applyPoints(qc: QueryClient, runId: string, res: UpdatesResponse): void
   if (res.points.length === 0) return;
   const bySeries = groupPointsBySeries(res.points);
 
-  // Route by inspecting the cached keys rather than rebuilding them: card call
-  // sites spell the key's context slot three different ways (see
-  // `keyContextHash`). Inactive-but-cached queries are updated too, so a card
-  // that remounts within the gc window comes back already current.
+  // Route by inspecting the cached keys (`["sequence", runId, name]`).
+  // Inactive-but-cached queries are updated too, so a card that remounts
+  // within the gc window comes back already current.
   for (const query of qc.getQueryCache().findAll({ queryKey: ["sequence", runId] })) {
     const key = seriesKeyOfQueryKey(query.queryKey);
     if (key === null) continue;

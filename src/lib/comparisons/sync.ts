@@ -102,7 +102,7 @@ export async function syncComparisonsFromServer(projectId: string): Promise<void
             const card = cmp.cards.find((k) => k.id === cardId);
             const key: CardSettingsKey = card
               ? cardSettingsKeyFor(cmp.id, card)
-              : { runId: compareRunId(cmp.id), metricName: cardId, contextHash: "" };
+              : { runId: compareRunId(cmp.id), metricName: cardId };
             try {
               localStorage.setItem(cardSettingsStorageKey(key), JSON.stringify(settings));
             } catch { /* ignore */ }

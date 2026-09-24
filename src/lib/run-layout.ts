@@ -32,25 +32,9 @@ export const EMPTY_LAYOUT: RunLayout = {
   sectionOrderOfCards: {},
 };
 
-/**
- * Build the storage cardKey for a SequenceMeta.
- *
- * Uses `::` as a separator (rather than string concat) so that two metrics
- * whose names end / start with the same characters can't collide.
- */
+/** The storage cardKey for a SequenceMeta: its name, the series identity within a run. */
 export function cardKeyOf(meta: SequenceMeta): string {
-  return `${meta.name}::${meta.context_hash}`;
-}
-
-/**
- * Inverse of `cardKeyOf` — splits on the FIRST `::` (metric names may not
- * contain it, context hashes never do). Used to label a card that isn't
- * present in the current run (e.g. one hidden from the project view).
- */
-export function parseCardKey(cardKey: string): { name: string; contextHash: string } {
-  const sep = cardKey.indexOf("::");
-  if (sep === -1) return { name: cardKey, contextHash: "" };
-  return { name: cardKey.slice(0, sep), contextHash: cardKey.slice(sep + 2) };
+  return meta.name;
 }
 
 export function loadRunLayout(runId: string): RunLayout {

@@ -9,7 +9,6 @@ import type { SequenceMeta } from "../../api/types";
 
 export interface ChipValue {
   name: string;
-  context_hash: string;
 }
 
 interface Props {
@@ -20,23 +19,11 @@ interface Props {
   value: ChipValue[];
   onChange: (next: ChipValue[]) => void;
   /** Called when adding a tag in multi-run mode, with the runs that have it. */
-  onAddTag?: (tagName: string, runs: Array<{ runId: string; context_hash: string }>) => void;
+  onAddTag?: (tagName: string, runs: Array<{ runId: string }>) => void;
   /** Filter available metrics; default: scalar only. Pass "any" to include all types. */
   objectType?: string | "scalar" | "any";
-  /** When true, chips show only tag names (no context hash) and dedup by name. */
+  /** Multi-run tag picking: `value` holds one entry per run, shown once per name. */
   tagMode?: boolean;
-}
-
-function chipKey(c: ChipValue): string {
-  return `${c.name}::${c.context_hash}`;
-}
-
-function chipLabel(name: string, contextHash: string, tagMode: boolean): string {
-  if (tagMode) return name;
-  if (contextHash && contextHash.length > 0) {
-    return `${name} ${contextHash.slice(0, 6)}`;
-  }
-  return name;
 }
 
 export default function MetricChips({
@@ -65,29 +52,22 @@ export default function MetricChips({
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
   const compact = useCompactViewport();
 
-  // In tag mode, selected keys are just tag names
-  const selectedKeys = useMemo(() => {
-    if (tagMode) {
-      return new Set(value.map((c) => c.name));
-    }
-    return new Set(value.map(chipKey));
-  }, [value, tagMode]);
+  const selectedKeys = useMemo(() => new Set(value.map((c) => c.name)), [value]);
 
-  // Display chips: in tag mode, deduplicate by name
+  // Display chips, deduplicated by name (tag mode holds one entry per run).
   const displayChips = useMemo(() => {
-    if (!tagMode) return value;
     const seen = new Set<string>();
     return value.filter((c) => {
       if (seen.has(c.name)) return false;
       seen.add(c.name);
       return true;
     });
-  }, [value, tagMode]);
+  }, [value]);
 
   // Map tag name → runs (for multi-run mode)
   const tagRunMap = useMemo(() => {
     if (!runIds) return null;
-    const map = new Map<string, Array<{ runId: string; context_hash: string }>>();
+    const map = new Map<string, Array<{ runId: string }>>();
     multiQueries.forEach((q, idx) => {
       const rid = runIds[idx];
       if (!rid || !q.data) return;
@@ -95,7 +75,7 @@ export default function MetricChips({
         if (objectType !== "any" && seq.object_type !== objectType) continue;
         const arr = map.get(seq.name) ?? [];
         if (!arr.some((r) => r.runId === rid)) {
-          arr.push({ runId: rid, context_hash: seq.context_hash });
+          arr.push({ runId: rid });
         }
         map.set(seq.name, arr);
       }
@@ -112,7 +92,7 @@ export default function MetricChips({
         .sort();
       const q = filter.trim().toLowerCase();
       if (q) arr = arr.filter((n) => n.toLowerCase().includes(q));
-      return arr.map((name) => ({ name, context_hash: "" }));
+      return arr.map((name) => ({ name }));
     }
     // Single-run mode
     const sequences: SequenceMeta[] = singleQ.data?.sequences ?? [];
@@ -120,34 +100,16 @@ export default function MetricChips({
       objectType === "any"
         ? sequences
         : sequences.filter((s) => s.object_type === objectType);
-    const notSelected = byType.filter((s) => {
-      const key = tagMode ? s.name : chipKey({ name: s.name, context_hash: s.context_hash });
-      return !selectedKeys.has(key);
-    });
-    // Deduplicate by name in tag mode
-    let result = notSelected;
-    if (tagMode) {
-      const seen = new Set<string>();
-      result = notSelected.filter((s) => {
-        if (seen.has(s.name)) return false;
-        seen.add(s.name);
-        return true;
-      });
-    }
+    const result = byType.filter((s) => !selectedKeys.has(s.name));
     const q = filter.trim().toLowerCase();
-    if (!q) return result.map((s) => ({ name: s.name, context_hash: s.context_hash }));
     return result
-      .filter((s) => s.name.toLowerCase().includes(q))
-      .map((s) => ({ name: s.name, context_hash: s.context_hash }));
+      .filter((s) => !q || s.name.toLowerCase().includes(q))
+      .map((s) => ({ name: s.name }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runIds, tagRunMap, singleQ.data, objectType, selectedKeys, filter, tagMode]);
+  }, [runIds, tagRunMap, singleQ.data, objectType, selectedKeys, filter]);
 
   const removeChip = (chip: ChipValue) => {
-    if (tagMode) {
-      onChange(value.filter((c) => c.name !== chip.name));
-    } else {
-      onChange(value.filter((c) => chipKey(c) !== chipKey(chip)));
-    }
+    onChange(value.filter((c) => c.name !== chip.name));
   };
 
   const addChip = (chip: ChipValue) => {
@@ -156,7 +118,7 @@ export default function MetricChips({
       const runs = tagRunMap.get(chip.name) ?? [];
       onAddTag(chip.name, runs);
     } else {
-      if (selectedKeys.has(tagMode ? chip.name : chipKey(chip))) return;
+      if (selectedKeys.has(chip.name)) return;
       onChange([...value, chip]);
     }
     setFilter("");
@@ -167,10 +129,10 @@ export default function MetricChips({
       <div className="flex flex-wrap items-center gap-1.5">
         {displayChips.map((chip) => (
           <span
-            key={tagMode ? chip.name : chipKey(chip)}
+            key={chip.name}
             className="mono inline-flex items-center gap-1 rounded border border-border bg-bg px-2 py-0.5 text-xs text-fg-muted touch:py-0 touch:pr-0"
           >
-            <span>{chipLabel(chip.name, chip.context_hash, tagMode)}</span>
+            <span>{chip.name}</span>
             <button
               type="button"
               onClick={() => removeChip(chip)}
@@ -219,12 +181,12 @@ export default function MetricChips({
           ) : (
             availableMetrics.map((m) => (
               <button
-                key={tagMode ? m.name : `${m.name}::${m.context_hash}`}
+                key={m.name}
                 type="button"
                 onClick={() => addChip(m)}
                 className="mono block w-full truncate px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-bg-hover hover:text-fg touch:min-h-10"
               >
-                {chipLabel(m.name, m.context_hash, tagMode)}
+                {m.name}
               </button>
             ))
           )}

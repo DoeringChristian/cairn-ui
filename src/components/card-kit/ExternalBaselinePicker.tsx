@@ -21,7 +21,7 @@ export function ExternalBaselinePicker({
   objectType: string;
   currentMetricName: string;
   selected?: string;
-  onSelect: (name: string, contextHash: string) => void;
+  onSelect: (name: string) => void;
 }) {
   const { data } = useSequences(runId);
   const [open, setOpen] = useState(false);
@@ -74,9 +74,9 @@ export function ExternalBaselinePicker({
           ) : (
             filtered.map((m) => (
               <button
-                key={`${m.name}::${m.context_hash}`}
+                key={m.name}
                 type="button"
-                onClick={() => { onSelect(m.name, m.context_hash); setOpen(false); }}
+                onClick={() => { onSelect(m.name); setOpen(false); }}
                 className={`mono block w-full truncate px-3 py-1.5 text-left text-xs hover:bg-bg-hover touch:min-h-10 ${
                   selected === m.name ? "text-accent" : "text-fg-muted hover:text-fg"
                 }`}

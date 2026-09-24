@@ -70,8 +70,8 @@ interface BlocksCase {
   settingsByCardId: Record<string, unknown>;
 }
 
-const card1: ComparisonCard = { id: "card_1", type: "scalar", series: [{ runId: "run_a", name: "loss", context_hash: "" }] };
-const card2: ComparisonCard = { id: "card_2", type: "parallel", series: [{ runId: "run_a", name: "Parallel Coordinates", context_hash: "" }] };
+const card1: ComparisonCard = { id: "card_1", type: "scalar", series: [{ runId: "run_a", name: "loss" }] };
+const card2: ComparisonCard = { id: "card_2", type: "parallel", series: [{ runId: "run_a", name: "Parallel Coordinates" }] };
 
 const BLOCKS_CASES: BlocksCase[] = [
   {

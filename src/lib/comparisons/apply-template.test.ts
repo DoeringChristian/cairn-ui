@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { matchTemplateCards, type SeqMap, type SeriesEntry } from "./template-match.ts";
-import { templateCardOf, templateKey } from "./template-cards.ts";
+import { templateCardOf } from "./template-cards.ts";
 import type { ComparisonTemplateCard } from "./template-cards.ts";
 import type { ComparisonCard } from "./types.ts";
 
@@ -19,11 +19,7 @@ function templateOf(cards: ComparisonTemplateCard[]): { cards: ComparisonTemplat
   return { cards };
 }
 
-const s = (runId: string, name: string, context_hash = ""): SeriesEntry => ({
-  runId,
-  name,
-  context_hash,
-});
+const s = (runId: string, name: string): SeriesEntry => ({ runId, name });
 
 test("templateCardOf records every key a card displays", () => {
   const card: ComparisonCard = {
@@ -31,7 +27,7 @@ test("templateCardOf records every key a card displays", () => {
     type: "scalar",
     series: [s("r1", "loss"), s("r2", "loss"), s("r1", "val_loss")],
   };
-  assert.deepEqual(templateCardOf(card).keys, ["loss::", "val_loss::"]);
+  assert.deepEqual(templateCardOf(card).keys, ["loss", "val_loss"]);
 });
 
 test("templateCardOf leaves multi-run cards keyless", () => {
@@ -40,7 +36,7 @@ test("templateCardOf leaves multi-run cards keyless", () => {
 });
 
 test("a multi-metric card restores as an overlay across every run", () => {
-  const tmpl = templateOf([{ type: "scalar", keys: ["loss::", "val_loss::"] }]);
+  const tmpl = templateOf([{ type: "scalar", keys: ["loss", "val_loss"] }]);
   const matched = matchTemplateCards(
     tmpl,
     ["r1", "r2"],
@@ -54,54 +50,15 @@ test("a multi-metric card restores as an overlay across every run", () => {
 });
 
 test("a card matches when only some of its keys resolve", () => {
-  const tmpl = templateOf([{ type: "scalar", keys: ["loss::", "gone::"] }]);
+  const tmpl = templateOf([{ type: "scalar", keys: ["loss", "gone"] }]);
   const matched = matchTemplateCards(tmpl, ["r1"], seqMapOf([s("r1", "loss")]));
   assert.equal(matched.length, 1);
   assert.equal(matched[0]!.series.length, 1);
 });
 
 test("a card whose keys all vanish is dropped", () => {
-  const tmpl = templateOf([{ type: "scalar", keys: ["gone::", "system.cpu::"] }]);
+  const tmpl = templateOf([{ type: "scalar", keys: ["gone", "system.cpu"] }]);
   assert.deepEqual(matchTemplateCards(tmpl, ["r1"], seqMapOf([s("r1", "loss")])), []);
-});
-
-test("a key with a context prefers that context; without one, first per run", () => {
-  const seqMap = seqMapOf([
-    s("r1", "loss", "train"),
-    s("r1", "loss", "val"),
-    s("r2", "loss", "train"),
-    s("r2", "loss", "val"),
-  ]);
-
-  const pinned = matchTemplateCards(
-    templateOf([{ type: "scalar", keys: [templateKey("loss", "val")] }]),
-    ["r1", "r2"],
-    seqMap,
-  );
-  assert.deepEqual(
-    pinned[0]!.series.map((e) => `${e.runId}/${e.context_hash}`),
-    ["r1/val", "r2/val"],
-  );
-
-  const loose = matchTemplateCards(
-    templateOf([{ type: "scalar", keys: ["loss::"] }]),
-    ["r1", "r2"],
-    seqMap,
-  );
-  assert.deepEqual(
-    loose[0]!.series.map((e) => `${e.runId}/${e.context_hash}`),
-    ["r1/train", "r2/train"],
-  );
-});
-
-test("a context that no run has falls back to any context", () => {
-  const matched = matchTemplateCards(
-    templateOf([{ type: "scalar", keys: [templateKey("loss", "stale-hash")] }]),
-    ["r1"],
-    seqMapOf([s("r1", "loss", "train")]),
-  );
-  assert.equal(matched[0]!.series.length, 1);
-  assert.equal(matched[0]!.series[0]!.context_hash, "train");
 });
 
 test("multi-run cards match on type alone, once per run", () => {

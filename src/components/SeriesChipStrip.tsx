@@ -2,7 +2,7 @@ import { SERIES_COLORS } from "../lib/plot-utils/types";
 import { seriesKey, seriesLabel } from "../lib/series-utils";
 import SeriesChip, { type SeriesRef } from "./SeriesChip";
 
-type MetricEntry = { runId?: string; name: string; context_hash: string };
+type MetricEntry = { runId?: string; name: string };
 
 interface Props {
   metrics: MetricEntry[];
@@ -25,7 +25,7 @@ function defaultLabel(
   multipleRuns: boolean,
   allRunIds: string[],
 ): string {
-  return seriesLabel(m.name, m.context_hash, m.runId, multipleRuns, allRunIds);
+  return seriesLabel(m.name, m.runId, multipleRuns, allRunIds);
 }
 
 export default function SeriesChipStrip({
@@ -60,7 +60,6 @@ export default function SeriesChipStrip({
               const ref: SeriesRef = {
                 runId: m.runId,
                 name: m.name,
-                context_hash: m.context_hash,
               };
               return (
                 <SeriesChip
@@ -82,7 +81,6 @@ export default function SeriesChipStrip({
             const ref: SeriesRef = {
               runId: m.runId,
               name: m.name,
-              context_hash: m.context_hash,
             };
             return (
               <SeriesChip

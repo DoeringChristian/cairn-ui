@@ -25,13 +25,12 @@ test("empty input is a no-op", () => {
 });
 
 test("smoothing keeps x and extra fields, and returns the raw points", () => {
-  const p: SeriesPoint[] = [{ x: 1, y: 1, wallTime: "t", context: "c" }, { x: 2, y: 3 }];
+  const p: SeriesPoint[] = [{ x: 1, y: 1, wallTime: "t" }, { x: 2, y: 3 }];
   for (const k of kinds) {
     const r = smoothSeries(p, k, SMOOTHING_KINDS[k].defaultValue);
     assert.equal(r.raw, p);
     assert.deepEqual(r.smoothed.map((q) => q.x), [1, 2]);
     assert.equal(r.smoothed[0]!.wallTime, "t");
-    assert.equal(r.smoothed[0]!.context, "c");
   }
 });
 

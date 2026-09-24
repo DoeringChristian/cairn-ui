@@ -104,14 +104,12 @@ class SeriesRef(_Strict):
 
     runId: str
     name: str
-    context_hash: str
 
 
 class XMetricRef(_Strict):
     """= ``XMetricRef`` — the scalar series a ``"metric"`` x-axis reads."""
 
     name: str
-    context_hash: str
 
 
 class CardSettingsSpec(BaseModel):

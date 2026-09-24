@@ -35,8 +35,6 @@ export default function RunMetricsTab() {
     const artifactMetas: SequenceMeta[] = Array.from(byName.entries()).map(([name, info]) => ({
       name,
       object_type: "artifact",
-      context: null,
-      context_hash: "",
       min_step: Math.min(...info.steps),
       max_step: Math.max(...info.steps),
       count: info.steps.length,

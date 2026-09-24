@@ -7,7 +7,6 @@ import { seriesKey } from "../../lib/series-utils";
 export interface SeriesRef {
   runId?: string;
   name: string;
-  context_hash: string;
 }
 
 export interface CardSeriesResult<TSettings> {
@@ -31,7 +30,7 @@ export interface CardSeriesResult<TSettings> {
  *  - default metrics = dedupe(seed ∪ extraSeries) sorted by `seriesKey`;
  *    the full defaults object is produced by the card's `makeDefaults`
  *    factory (read via a ref, so an inline arrow at the call site is fine).
- *  - settingsKey     = settingsKeyOverride ?? {runId, metricName, contextHash}.
+ *  - settingsKey     = settingsKeyOverride ?? {runId, metricName}.
  *  - effective       (controlled)   = props series first, then persisted
  *                                     metrics whose *name* is not among the
  *                                     prop series names, deduped by `seriesKey`.
@@ -53,7 +52,7 @@ export function useCardSeries<
    * internally so an inline arrow at the call site is fine.
    */
   makeDefaults: (
-    seed: { name: string; context_hash: string },
+    seed: { name: string },
     metrics: SeriesRef[],
   ) => TSettings;
 }): CardSeriesResult<TSettings> {
@@ -67,18 +66,18 @@ export function useCardSeries<
   } = args;
 
   const seed = useMemo(
-    () => ({ name: metric.name, context_hash: metric.context_hash }),
-    [metric.name, metric.context_hash],
+    () => ({ name: metric.name }),
+    [metric.name],
   );
 
   const extraSeriesKey = useMemo(
     () =>
       (extraSeries ?? [])
-        .map((s) => `${s.runId}::${s.name}::${s.context_hash}`)
+        .map((s) => `${s.runId}::${s.name}`)
         .sort()
         .join("|"),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify((extraSeries ?? []).map((s) => [s.runId, s.name, s.context_hash]).sort())],
+    [JSON.stringify((extraSeries ?? []).map((s) => [s.runId, s.name]).sort())],
   );
 
   const defaultMetrics = useMemo<SeriesRef[]>(() => {
@@ -87,7 +86,6 @@ export function useCardSeries<
       ...(extraSeries ?? []).map((s) => ({
         runId: s.runId,
         name: s.name,
-        context_hash: s.context_hash,
       })),
     ];
     const seen = new Set<string>();
@@ -118,9 +116,8 @@ export function useCardSeries<
       settingsKeyOverride ?? {
         runId,
         metricName: metric.name,
-        contextHash: metric.context_hash,
       },
-    [settingsKeyOverride, runId, metric.name, metric.context_hash],
+    [settingsKeyOverride, runId, metric.name],
   );
 
   const [settings, updateSettings] = useCardSettings<TSettings>(
@@ -131,11 +128,10 @@ export function useCardSeries<
   const effectiveMetrics = useMemo<SeriesRef[]>(() => {
     if (!controlledSeries) return settings.metrics;
     const all: SeriesRef[] = [
-      { name: metric.name, context_hash: metric.context_hash },
+      { name: metric.name },
       ...(extraSeries ?? []).map((s) => ({
         runId: s.runId,
         name: s.name,
-        context_hash: s.context_hash,
       })),
     ];
     const propsTagNames = new Set(all.map((m) => m.name));
@@ -152,7 +148,7 @@ export function useCardSeries<
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [controlledSeries, settings.metrics, metric.name, metric.context_hash, extraSeriesKey]);
+  }, [controlledSeries, settings.metrics, metric.name, extraSeriesKey]);
 
   const allRunIds = useMemo(() => {
     const set = new Set<string>([runId]);

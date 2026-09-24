@@ -15,7 +15,6 @@ export const CAIRN_SERIES_MIME = "application/x-cairn-series";
 export interface SeriesRef {
   runId?: string;
   name: string;
-  context_hash: string;
   /** Optional object type for consumers that need same-type filtering. */
   objectType?: string;
 }
@@ -44,7 +43,6 @@ export default function SeriesChip({
       JSON.stringify({
         runId: series.runId ?? runId,
         name: series.name,
-        context_hash: series.context_hash,
       }),
     );
     e.dataTransfer.setData("text/plain", label);

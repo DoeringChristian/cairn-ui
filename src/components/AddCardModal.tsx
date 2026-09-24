@@ -139,7 +139,7 @@ export default function AddCardModal({
         byType.set(type, [{
           name,
           object_type: type,
-          runs: runIds.map((rid) => ({ runId: rid, context_hash: "" })),
+          runs: runIds.map((rid) => ({ runId: rid })),
         }]);
       }
     }
@@ -169,16 +169,14 @@ export default function AddCardModal({
       key: string;
       runId: string;
       name: string;
-      context_hash: string;
       label: string;
     }> = [];
     for (const entry of scalarEntries) {
       for (const r of entry.runs) {
         combos.push({
-          key: `${r.runId}::${entry.name}::${r.context_hash}`,
+          key: `${r.runId}::${entry.name}`,
           runId: r.runId,
           name: entry.name,
-          context_hash: r.context_hash,
           label: `${shortRunLabel(r.runId, runIds)} · ${entry.name}`,
         });
       }
@@ -203,7 +201,7 @@ export default function AddCardModal({
   const handleAddManual = () => {
     const series: ComparisonSeriesRef[] = scalarCombos
       .filter((c) => manualSelected.has(c.key))
-      .map((c) => ({ runId: c.runId, name: c.name, context_hash: c.context_hash }));
+      .map((c) => ({ runId: c.runId, name: c.name }));
     if (series.length === 0) return;
     onAdd({ kind: "manual-series", object_type: "scalar", series });
     onClose();

@@ -72,7 +72,7 @@ function ConfusionPane({ runId, m, targetStep, normalize }: {
   targetStep: number;
   normalize: Normalize;
 }) {
-  const q = useSequence(m.runId ?? runId, m.name, { context: m.context_hash || undefined });
+  const q = useSequence(m.runId ?? runId, m.name);
   const points = useMemo(() => (q.data?.points ?? []).filter((p) => p.artifact_hash), [q.data]);
   const current = resolveAtStep(points, targetStep) ?? points[0];
   const blob = useQuery(blobQuery(current?.artifact_hash));
@@ -118,8 +118,8 @@ export default function PresetCard({
     queries: effectiveMetrics.map((m) => {
       const rid = m.runId ?? runId;
       return {
-        queryKey: qk.sequence(rid, m.name, m.context_hash),
-        queryFn: () => api.sequence(rid, m.name, { context: m.context_hash || undefined }),
+        queryKey: qk.sequence(rid, m.name),
+        queryFn: () => api.sequence(rid, m.name),
         refetchInterval: 2_000,
         staleTime: 2_000,
       };
@@ -172,8 +172,8 @@ export default function PresetCard({
   ].filter(Boolean).join(" · ");
 
   const compSeries = useMemo(
-    () => [{ runId, name: metric.name, context_hash: metric.context_hash }],
-    [runId, metric.name, metric.context_hash],
+    () => [{ runId, name: metric.name }],
+    [runId, metric.name],
   );
   const paneKeys = useMemo(() => effectiveMetrics.map(seriesKey), [effectiveMetrics]);
   const paneLabels = useMemo(() => {

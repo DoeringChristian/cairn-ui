@@ -47,16 +47,15 @@ export default function ScalarValueCard({
       settingsKeyOverride ?? {
         runId,
         metricName: metric.name,
-        contextHash: metric.context_hash,
       },
-    [settingsKeyOverride, runId, metric.name, metric.context_hash],
+    [settingsKeyOverride, runId, metric.name],
   );
   const [settings, updateSettings] = useCardSettings(
     settingsKey,
     DEFAULT_VALUE_SETTINGS,
   );
 
-  const q = useSequence(runId, metric.name, { context: metric.context_hash });
+  const q = useSequence(runId, metric.name);
   const point = q.data?.points?.[0];
   const value = point?.scalar_value;
 

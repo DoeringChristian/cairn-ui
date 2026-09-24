@@ -30,13 +30,13 @@ export async function cardsForRuns(runIds: string[]): Promise<Omit<ComparisonCar
       const existing = cardMap.get(key);
       if (existing) {
         if (!existing.series.some((s) => s.runId === runId && s.name === seq.name)) {
-          existing.series.push({ runId, name: seq.name, context_hash: seq.context_hash });
+          existing.series.push({ runId, name: seq.name });
         }
       } else {
         cardMap.set(key, {
           name: seq.name,
           object_type: seq.object_type,
-          series: [{ runId, name: seq.name, context_hash: seq.context_hash }],
+          series: [{ runId, name: seq.name }],
         });
       }
     }
@@ -62,9 +62,7 @@ export async function rebuildCardsFromRuns(runIds: string[]): Promise<Comparison
  *   - for "simple" per-metric cards (every series entry shares one
  *     `name`/`object_type` — i.e. not a curated overlay of differing
  *     metrics), entries are added back for any newly-included run that
- *     carries that same metric;
- *   - kept entries have their `context_hash` refreshed from the run's
- *     current sequences.
+ *     carries that same metric.
  * Multi-run card types (parallel/scatter/bar/tile) don't key off `name`
  * (`ComparisonCardView` hands them the distinct `runId` set only), so their
  * series is simply re-pointed at `runIds` while preserving the card's label.
@@ -94,17 +92,11 @@ export function rebindCardsToMetricIndex(
   return cards.map((card) => {
     if (isMultiRunCardType(card.type)) {
       const label = card.series[0]?.name ?? "";
-      return { ...card, series: runIds.map((runId) => ({ runId, name: label, context_hash: "" })) };
+      return { ...card, series: runIds.map((runId) => ({ runId, name: label })) };
     }
 
     const kept = card.series.filter((s) => runIdSet.has(s.runId));
     const keptRunIds = new Set(kept.map((s) => s.runId));
-    const refreshed = kept.map((s) => {
-      const entry = metricIndex.get(`${s.name}::${card.type}`);
-      const match = entry?.runs.find((r) => r.runId === s.runId);
-      return match ? { ...s, context_hash: match.context_hash } : s;
-    });
-
     // Only "simple" per-metric cards (single shared name across all series —
     // i.e. not a manual/curated overlay of differing metrics) grow into
     // newly-included runs automatically.
@@ -116,12 +108,12 @@ export function rebindCardsToMetricIndex(
       if (entry) {
         for (const r of entry.runs) {
           if (runIdSet.has(r.runId) && !keptRunIds.has(r.runId)) {
-            added.push({ runId: r.runId, name: name!, context_hash: r.context_hash });
+            added.push({ runId: r.runId, name: name! });
           }
         }
       }
     }
 
-    return { ...card, series: [...refreshed, ...added] };
+    return { ...card, series: [...kept, ...added] };
   });
 }

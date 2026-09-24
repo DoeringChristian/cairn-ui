@@ -11,8 +11,8 @@
  */
 
 export const storageKeys = {
-  cardSettings: (runId: string, metricName: string, contextHash: string) =>
-    `cairn:card-settings:${runId}:${metricName}:${contextHash}`,
+  cardSettings: (runId: string, metricName: string) =>
+    `cairn:card-settings:${runId}:${metricName}`,
   runLayout: (runId: string) => `cairn:run-layout:${runId}`,
   collapsedSections: (scope: string) => `cairn:collapsed-sections:${scope}`,
   comparisons: (projectId: string) => `cairn:comparisons:${projectId}`,

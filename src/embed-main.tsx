@@ -8,7 +8,7 @@
  *
  * The card is described by a spec fetched from `/api/embed/specs/:sid`
  * (`?sid=` in the URL). A spec is a viewer `ComparisonCard`
- * (`{type, series:[{runId, name, context_hash}]}`), rendered by the same
+ * (`{type, series:[{runId, name}]}`), rendered by the same
  * `ComparisonCardView` comparisons and reports use, so `three` stays lazy.
  *
  * Auto-height: cards take a fixed px height from `CardShell`, so a host that

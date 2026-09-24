@@ -114,9 +114,7 @@ export default function TensorCard({
   onRemove,
   autoOpenSettings,
 }: Props) {
-  const q = useSequence(runId, metric.name, {
-    context: metric.context_hash || undefined,
-  });
+  const q = useSequence(runId, metric.name);
   const points = useMemo(
     () => (q.data?.points ?? []).filter((p) => p.artifact_hash),
     [q.data],
@@ -127,9 +125,8 @@ export default function TensorCard({
       settingsKeyOverride ?? {
         runId,
         metricName: metric.name,
-        contextHash: metric.context_hash,
       },
-    [settingsKeyOverride, runId, metric.name, metric.context_hash],
+    [settingsKeyOverride, runId, metric.name],
   );
   const [settings, updateSettings] = useCardSettings(
     settingsKey,
@@ -188,8 +185,8 @@ export default function TensorCard({
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
   const compSeries = useMemo(
-    () => [{ runId, name: metric.name, context_hash: metric.context_hash }],
-    [runId, metric.name, metric.context_hash],
+    () => [{ runId, name: metric.name }],
+    [runId, metric.name],
   );
 
   const shapeLabel = ndim > 0 ? shape.join("×") : "scalar";

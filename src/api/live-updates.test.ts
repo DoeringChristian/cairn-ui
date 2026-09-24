@@ -16,16 +16,13 @@ import {
   appendDedup,
   getRunCursor,
   groupPointsBySeries,
-  keyContextHash,
   noteRunEpoch,
   resetRunCursor,
   resetRunCursors,
   seedRunEpoch,
   seedRunCursor,
   selectRunsToPoll,
-  seriesKey,
   seriesKeyOfQueryKey,
-  UNROUTABLE,
   setRunCursor,
   shouldPollRun,
 } from "./live-updates-core.ts";
@@ -35,23 +32,21 @@ type Pt = {
   wall_time: string;
   scalar_value: number | null;
   artifact_hash: string | null;
-  context: string | null;
   object_type: string;
 };
 
-function pt(step: number, context: string | null = null): Pt {
+function pt(step: number): Pt {
   return {
     step,
     wall_time: `t${step}`,
     scalar_value: step,
     artifact_hash: null,
-    context,
     object_type: "scalar",
   };
 }
 
-function upd(step: number, name = "loss", contextHash = "", context: string | null = null) {
-  return { ...pt(step, context), name, context_hash: contextHash };
+function upd(step: number, name = "loss") {
+  return { ...pt(step), name };
 }
 
 // ---------------------------------------------------------------------------
@@ -66,11 +61,10 @@ test("appendDedup appends a strictly newer step", () => {
   assert.deepEqual(points.map((p) => p.step), [0, 1]);
 });
 
-test("appendDedup strips the routing fields from the stored point", () => {
-  const [stored] = appendDedup([], upd(0, "loss", "abc123"));
+test("appendDedup strips the routing field from the stored point", () => {
+  const [stored] = appendDedup([], upd(0, "loss"));
   assert.ok(stored);
   assert.equal("name" in stored, false);
-  assert.equal("context_hash" in stored, false);
   assert.deepEqual(stored, pt(0));
 });
 
@@ -87,15 +81,6 @@ test("appendDedup keeps points sorted when a delta arrives out of order", () => 
   assert.deepEqual(appendDedup(points, upd(1)).map((p) => p.step), [0, 1, 2, 5]);
   // Before everything.
   assert.deepEqual(appendDedup(points, upd(-1)).map((p) => p.step), [-1, 0, 2, 5]);
-});
-
-test("appendDedup treats the same step under a different context as new", () => {
-  const points = [pt(0, '{"subset":"train"}')];
-  const next = appendDedup(points, upd(0, "loss", "hval", '{"subset":"val"}'));
-  assert.equal(next.length, 2);
-  assert.deepEqual(next.map((p) => p.context), ['{"subset":"train"}', '{"subset":"val"}']);
-  // ...and re-delivering it is still a no-op.
-  assert.equal(appendDedup(next, upd(0, "loss", "hval", '{"subset":"val"}')), next);
 });
 
 test("appendAllDedup folds a batch and reports 'nothing new' by identity", () => {
@@ -251,50 +236,22 @@ test("a data-epoch change is reported once and the cursor can be dropped", () =>
 // Query-key routing
 // ---------------------------------------------------------------------------
 
-test("keyContextHash collapses every spelling of the key's context slot", () => {
-  assert.equal(keyContextHash(""), "");
-  assert.equal(keyContextHash("abc123"), "abc123");
-  assert.equal(keyContextHash({}), "");
-  assert.equal(keyContextHash({ context: undefined }), "");
-  assert.equal(keyContextHash({ context: "abc123" }), "abc123");
-  assert.equal(keyContextHash(undefined), "");
-  assert.equal(keyContextHash(null), "");
-  assert.equal(keyContextHash(7), UNROUTABLE);
+test("a plain sequence key routes to its series name", () => {
+  assert.equal(seriesKeyOfQueryKey(["sequence", "r1", "loss"]), "loss");
 });
 
-test("both card key spellings route to the same series", () => {
-  const fromSpec = seriesKeyOfQueryKey(["sequence", "r1", "loss", "abc123"]);
-  const fromOpts = seriesKeyOfQueryKey(["sequence", "r1", "loss", { context: "abc123" }]);
-  assert.equal(fromSpec, seriesKey("loss", "abc123"));
-  assert.equal(fromOpts, fromSpec);
-
-  const noCtxSpec = seriesKeyOfQueryKey(["sequence", "r1", "loss", ""]);
-  const noCtxOpts = seriesKeyOfQueryKey(["sequence", "r1", "loss", { context: undefined }]);
-  assert.equal(noCtxSpec, seriesKey("loss", ""));
-  assert.equal(noCtxOpts, noCtxSpec);
-  assert.notEqual(noCtxSpec, fromSpec);
-});
-
-test("a synthetic sequence key never matches a real point", () => {
-  // ComparisonOverviewTab parks its own queryFn under this key.
-  const synthetic = seriesKeyOfQueryKey(["sequence", "r1", "loss", "last-summary"]);
-  const real = groupPointsBySeries([upd(0, "loss", ""), upd(0, "loss", "abc123")]);
-  assert.equal(real.has(synthetic!), false);
+test("a key with an extra slot never matches a real point", () => {
+  assert.equal(seriesKeyOfQueryKey(["sequence", "r1", "loss", "last-summary"]), null);
   assert.equal(seriesKeyOfQueryKey(["sequence", "r1", 42]), null);
 });
 
-test("groupPointsBySeries splits a poll by (name, context hash)", () => {
+test("groupPointsBySeries splits a poll by name", () => {
   const grouped = groupPointsBySeries([
-    upd(0, "loss", ""),
-    upd(0, "loss", "hval", '{"subset":"val"}'),
-    upd(1, "loss", ""),
-    upd(0, "acc", ""),
+    upd(0, "loss"),
+    upd(1, "loss"),
+    upd(0, "acc"),
   ]);
-  assert.deepEqual([...grouped.keys()].sort(), [
-    seriesKey("acc", ""),
-    seriesKey("loss", ""),
-    seriesKey("loss", "hval"),
-  ].sort());
-  assert.deepEqual(grouped.get(seriesKey("loss", ""))!.map((p) => p.step), [0, 1]);
-  assert.equal(grouped.get(seriesKey("acc", ""))!.length, 1);
+  assert.deepEqual([...grouped.keys()].sort(), ["acc", "loss"]);
+  assert.deepEqual(grouped.get("loss")!.map((p) => p.step), [0, 1]);
+  assert.equal(grouped.get("acc")!.length, 1);
 });

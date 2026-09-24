@@ -11,8 +11,8 @@
  * per-viewer preference, not project data.
  *
  * Cards are identified by the `cardKey` convention from lib/run-layout.ts
- * (`"<metricName>::<contextHash>"`), which is stable across runs: the same
- * metric logged under the same context has the same key in every run.
+ * (the metric name), which is stable across runs: the same metric has the
+ * same key in every run.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";

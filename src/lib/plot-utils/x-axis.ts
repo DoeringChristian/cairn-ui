@@ -7,7 +7,6 @@ export type AxisSource = "step" | "relative_time" | "wall_time" | "metric";
 /** The scalar series a `metric` x-axis reads, as card settings name it. */
 export type XMetricRef = {
   name: string;
-  context_hash: string;
 };
 
 /**
@@ -55,7 +54,6 @@ export function mapToXAxis(
     step: number;
     scalar_value: number | null;
     wall_time: string;
-    context?: string | null;
   }>,
   source: AxisSource,
   runCreatedAt?: number | null,
@@ -88,7 +86,6 @@ export function mapToXAxis(
       x,
       y: p.scalar_value,
       wallTime: p.wall_time,
-      context: p.context ?? null,
     });
   }
   mapped.sort((a, b) => a.x - b.x);

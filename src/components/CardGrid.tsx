@@ -10,7 +10,6 @@ import {
   isEmptyLayout,
   loadRunLayout,
   moveCard,
-  parseCardKey,
   resetRunLayout,
   saveRunLayout,
 } from "../lib/run-layout";
@@ -216,7 +215,7 @@ export function SectionBlock({
 // -----------------------------------------------------------------------------
 
 function toEntries(metas: SequenceMeta[]): Entry[] {
-  // Each (name, context_hash) pair is an independent card — no grouping.
+  // Each metric name is an independent card — no grouping.
   // Users can merge metrics via chip drag-drop or the settings picker.
   return metas.map((m) => ({ primary: m, extras: [] }));
 }
@@ -262,14 +261,14 @@ function HiddenCardsPanel({
       </div>
       <ul className="flex flex-wrap gap-1.5">
         {hiddenKeys.map((key) => {
-          const { name, contextHash } = parseCardKey(key);
+          const name = key;
           return (
             <li key={key}>
               <button
                 type="button"
                 onClick={() => onShow(key)}
                 className="mono inline-flex items-center gap-1 rounded bg-bg-hover px-1.5 py-0.5 text-xs text-fg-muted hover:text-fg"
-                title={contextHash ? `${name} (context ${contextHash.slice(0, 8)})` : `Show ${name}`}
+                title={`Show ${name}`}
               >
                 <span aria-hidden="true">+</span>
                 {name}

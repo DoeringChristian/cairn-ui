@@ -41,7 +41,7 @@ const DEFAULT_SETTINGS: TileSettings = {
 
 interface Props {
   runIds: string[];
-  settingsKey: { runId: string; metricName: string; contextHash: string };
+  settingsKey: { runId: string; metricName: string };
   onRemove?: () => void;
   autoOpenSettings?: boolean;
 }
@@ -77,8 +77,8 @@ export default function ScalarTileCard({
   const metricQueries = useQueries({
     queries: needsMetricFetch
       ? runIds.map((rid) => ({
-          queryKey: qk.sequence(rid, metric!.key, ""),
-          queryFn: () => api.sequence(rid, metric!.key, {}),
+          queryKey: qk.sequence(rid, metric!.key),
+          queryFn: () => api.sequence(rid, metric!.key),
           staleTime: 30_000,
         }))
       : [],

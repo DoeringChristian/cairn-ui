@@ -10,8 +10,6 @@ export interface ComparisonSeriesRef {
   runId: string;
   /** Metric name. */
   name: string;
-  /** "" for "no context"; otherwise the context hash returned by /sequences. */
-  context_hash: string;
 }
 
 export interface ComparisonCard {
@@ -111,9 +109,9 @@ export function compareRunId(comparisonId: string): string {
  * via `reportRunId` in lib/reports).
  *
  * Multi-run cards (parallel/scatter/bar/tile, rendered via CardRenderer's
- * "multi-run" kind) key on `{runId: scopeRunId, metricName: card.type,
- * contextHash: card.id}`; every other card type keys on `{runId: scopeRunId,
- * metricName: card.id, contextHash: ""}` (the `settingsKeyOverride` shape).
+ * "multi-run" kind) key on `{runId: scopeRunId, metricName:
+ * "<card.type>:<card.id>"}`; every other card type keys on `{runId:
+ * scopeRunId, metricName: card.id}` (the `settingsKeyOverride` shape).
  *
  * Single source of truth for this key-shape so every scope (comparisons,
  * reports, future scopes) agrees on the same convention — see
@@ -122,9 +120,9 @@ export function compareRunId(comparisonId: string): string {
  */
 export function cardSettingsKeyForScope(scopeRunId: string, card: ComparisonCard): CardSettingsKey {
   if (isMultiRunCardType(card.type)) {
-    return { runId: scopeRunId, metricName: card.type, contextHash: card.id };
+    return { runId: scopeRunId, metricName: `${card.type}:${card.id}` };
   }
-  return { runId: scopeRunId, metricName: card.id, contextHash: "" };
+  return { runId: scopeRunId, metricName: card.id };
 }
 
 export function isComparisonCard(x: unknown): x is ComparisonCard {
@@ -140,8 +138,7 @@ export function isComparisonCard(x: unknown): x is ComparisonCard {
     const r = s as Partial<ComparisonSeriesRef>;
     return (
       typeof r.runId === "string" &&
-      typeof r.name === "string" &&
-      typeof r.context_hash === "string"
+      typeof r.name === "string"
     );
   });
 }

@@ -18,7 +18,7 @@
  *       settings: { yScale: log }               # → card-settings store
  *     - type: parallel                          # multi-run card (no `metric`)
  *     - type: scalar                             # manual-series (explicit overlay)
- *       series: [{ runId: run_a, name: loss, context_hash: "" }]
+ *       series: [{ runId: run_a, name: loss }]
  *
  * Field → existing-model mapping:
  *   runs.ids            → CardsBlock.runIds
@@ -218,7 +218,7 @@ function selectionForCard(c: CairnCardInput, index: number, metricIndex: MetricI
       if (typeof r.runId !== "string" || typeof r.name !== "string") {
         throw new CairnBlockError(`cards[${index}].series[${i}] must have string \`runId\` and \`name\``);
       }
-      return { runId: r.runId, name: r.name, context_hash: typeof r.context_hash === "string" ? r.context_hash : "" };
+      return { runId: r.runId, name: r.name };
     });
     return { kind: "manual-series", object_type: c.type, series };
   }
@@ -235,7 +235,7 @@ function selectionForCard(c: CairnCardInput, index: number, metricIndex: MetricI
       kind: "multi-run",
       cardType,
       name: MULTI_RUN_CARD_LABELS[cardType],
-      runs: runIds.map((runId) => ({ runId, context_hash: "" })),
+      runs: runIds.map((runId) => ({ runId })),
     };
   }
 
@@ -266,13 +266,9 @@ function selectionForCard(c: CairnCardInput, index: number, metricIndex: MetricI
     objectType = matches[0]!.object_type;
   }
 
-  // Enrich with real context_hash where the metricIndex has data for this
-  // (metric, type, run) combo; otherwise fall back to "" (no context) for
-  // every block runId so the card still renders (e.g. sequences not yet
-  // fetched, or a metric that doesn't exist on every run).
-  const known = metricIndex.get(`${metric}::${objectType}`);
-  const knownByRun = new Map((known?.runs ?? []).map((r) => [r.runId, r.context_hash]));
-  const runs = runIds.map((runId) => ({ runId, context_hash: knownByRun.get(runId) ?? "" }));
+  // One series per block runId, so the card still renders even where the
+  // metric is missing (e.g. sequences not yet fetched).
+  const runs = runIds.map((runId) => ({ runId }));
 
   return { kind: "series", name: metric, object_type: objectType, runs };
 }
@@ -400,7 +396,7 @@ export function serializeCairnSpec(block: CardsBlock, settingsByCardId: Record<s
 
     return {
       type: card.type,
-      series: card.series.map((s) => ({ runId: s.runId, name: s.name, context_hash: s.context_hash })),
+      series: card.series.map((s) => ({ runId: s.runId, name: s.name })),
       ...idField,
       ...settingsField,
     };

@@ -41,7 +41,7 @@ interface ImageCardSettings extends BaseCardSettings {
   /** Index into the union of logged steps. */
   sliderStep?: number;
   /** Reference tag; every pane compares against this tag from its own run. */
-  reference?: { name: string; context_hash: string };
+  reference?: { name: string };
   /** Fixed reference step; absent follows the slider. */
   referenceStep?: number;
   /** Divider position (fraction of pane width), shared by all panes. */
@@ -66,7 +66,7 @@ const DEFAULTS: ImageCardSettings = {
 };
 const IDENTITY: PaneTransform = { scale: 1, x: 0, y: 0 };
 
-type Series = { runId: string; name: string; context_hash: string };
+type Series = { runId: string; name: string };
 
 
 export default function ImageCard({ runId, metric, extraSeries = [], settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
@@ -74,8 +74,8 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
   const [settingsOpen, setSettingsOpen] = useState(autoOpenSettings ?? false);
   const policy = plotCardPolicy("image");
   const settingsKey = useMemo<CardSettingsKey>(
-    () => settingsKeyOverride ?? { runId, metricName: metric.name, contextHash: metric.context_hash },
-    [settingsKeyOverride, runId, metric.name, metric.context_hash],
+    () => settingsKeyOverride ?? { runId, metricName: metric.name },
+    [settingsKeyOverride, runId, metric.name],
   );
   const [settings, updateSettings] = useCardSettings<ImageCardSettings>(
     settingsKey,
@@ -84,16 +84,16 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
 
   const series = useMemo<Series[]>(() => {
     const seen = new Set<string>();
-    return [{ runId, name: metric.name, context_hash: metric.context_hash }, ...extraSeries]
-      .map((s) => ({ runId: s.runId, name: s.name, context_hash: s.context_hash }))
+    return [{ runId, name: metric.name }, ...extraSeries]
+      .map((s) => ({ runId: s.runId, name: s.name }))
       .filter((s) => {
-        const key = `${s.runId}:${s.name}:${s.context_hash}`;
+        const key = `${s.runId}:${s.name}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });
-  }, [runId, metric.name, metric.context_hash, extraSeries]);
-  const paneKeys = useMemo(() => series.map((s) => `${s.runId}:${s.name}:${s.context_hash}`), [series]);
+  }, [runId, metric.name, extraSeries]);
+  const paneKeys = useMemo(() => series.map((s) => `${s.runId}:${s.name}`), [series]);
   const runIds = useMemo(() => [...new Set(series.map((s) => s.runId))], [series]);
   useRunInfo(runIds);
   const labels = useMemo(() => {
@@ -104,8 +104,8 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
   // Foreground sequences, then (when a reference tag is set) the same tag per run.
   const reference = settings.reference;
   const bindings = useMemo(() => [
-    ...series.map((s) => ({ runId: s.runId, name: s.name, contextHash: s.context_hash })),
-    ...(reference ? series.map((s) => ({ runId: s.runId, name: reference.name, contextHash: reference.context_hash })) : []),
+    ...series.map((s) => ({ runId: s.runId, name: s.name })),
+    ...(reference ? series.map((s) => ({ runId: s.runId, name: reference.name })) : []),
   ], [series, reference]);
   const queries = useSequencesForRuns(bindings);
   const dataKey = queries.map((q) => q.dataUpdatedAt).join("|");
@@ -215,7 +215,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
           objectType="image"
           currentMetricName={metric.name}
           selected={reference?.name}
-          onSelect={(name, context_hash) => updateSettings({ reference: { name, context_hash } })}
+          onSelect={(name) => updateSettings({ reference: { name } })}
         />
         {reference && (
           <>

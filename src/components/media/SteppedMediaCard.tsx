@@ -77,8 +77,8 @@ interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
   renderArtifact: (view: MediaView<S>) => ReactNode;
 }
 
-function useArtifactPoints(runId: string, m: { name: string; context_hash: string }) {
-  const q = useSequence(runId, m.name, { context: m.context_hash || undefined });
+function useArtifactPoints(runId: string, m: { name: string }) {
+  const q = useSequence(runId, m.name);
   const points = useMemo(
     () => (q.data?.points ?? []).filter((p) => p.artifact_hash),
     [q.data],
@@ -162,8 +162,8 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       ? effectiveMetrics.map((m) => {
           const rid = m.runId ?? runId;
           return {
-            queryKey: qk.sequence(rid, m.name, m.context_hash),
-            queryFn: () => api.sequence(rid, m.name, { context: m.context_hash || undefined }),
+            queryKey: qk.sequence(rid, m.name),
+            queryFn: () => api.sequence(rid, m.name),
             refetchInterval: 2_000,
             staleTime: 2_000,
           };
@@ -193,8 +193,8 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
   const compSeries = useMemo(
-    () => [{ runId, name: metric.name, context_hash: metric.context_hash }],
-    [runId, metric.name, metric.context_hash],
+    () => [{ runId, name: metric.name }],
+    [runId, metric.name],
   );
 
   const runMetaVersion = useRunMetadataVersion();

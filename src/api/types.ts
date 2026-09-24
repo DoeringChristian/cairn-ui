@@ -74,8 +74,6 @@ export interface Param {
 export interface SequenceMeta {
   name: string;
   object_type: string;
-  context: string | null;
-  context_hash: string;
   min_step: number;
   max_step: number;
   count: number;
@@ -92,7 +90,6 @@ export interface SequencePoint {
   artifact_size?: number | null;
   /** JSON-stringified handler-specific metadata (null for scalar rows). */
   artifact_metadata?: string | null;
-  context: string | null;
   object_type: string;
   /** JSON-stringified per-point metadata (e.g. a caption); null when none. */
   metadata?: string | null;
@@ -111,10 +108,9 @@ export interface SequenceResponse {
   data_epoch?: number;
 }
 
-/** A `/updates` point: a sequence point plus the keys that route it to a card. */
+/** A `/updates` point: a sequence point plus the name that routes it to a card. */
 export interface UpdatePoint extends SequencePoint {
   name: string;
-  context_hash: string;
 }
 
 /** One poll of `GET /api/runs/{id}/updates?since=<cursor>`. */

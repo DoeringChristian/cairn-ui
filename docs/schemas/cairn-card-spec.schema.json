@@ -155,14 +155,10 @@
       "properties": {
         "name": {
           "type": "string"
-        },
-        "context_hash": {
-          "type": "string"
         }
       },
       "required": [
-        "name",
-        "context_hash"
+        "name"
       ],
       "additionalProperties": false,
       "description": "The scalar series a `metric` x-axis reads, as card settings name it."
@@ -205,16 +201,11 @@
         "name": {
           "type": "string",
           "description": "Metric name."
-        },
-        "context_hash": {
-          "type": "string",
-          "description": "\"\" for \"no context\"; otherwise the context hash returned by /sequences."
         }
       },
       "required": [
         "runId",
-        "name",
-        "context_hash"
+        "name"
       ],
       "additionalProperties": false
     },

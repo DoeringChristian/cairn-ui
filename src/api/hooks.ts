@@ -144,33 +144,26 @@ export function useSequences(runId: string) {
  * cached data. Re-downloading the whole sequence every 2s is what saturated
  * the server; `staleTime: Infinity` makes sure it never happens again.
  */
-export function useSequence(
-  runId: string,
-  name: string,
-  opts: { context?: string;} = {},
-) {
+export function useSequence(runId: string, name: string) {
   return useQuery({
-    queryKey: qk.sequence(runId, name, opts),
-    queryFn: () => api.sequence(runId, name, opts),
+    queryKey: qk.sequence(runId, name),
+    queryFn: () => api.sequence(runId, name),
     staleTime: Infinity,
   });
 }
 
 /**
- * Fetch sequences for multiple (runId, name, contextHash) specs at once —
+ * Fetch sequences for multiple (runId, name) specs at once —
  * e.g. a multi-run card. Like `useSequence`, each spec is read in full once
  * and then kept current by the app-wide live-updates poller.
  */
 export function useSequencesForRuns(
-  specs: Array<{ runId: string; name: string; contextHash: string;}>,
+  specs: Array<{ runId: string; name: string }>,
 ) {
   return useQueries({
     queries: specs.map((spec) => ({
-      queryKey: qk.sequence(spec.runId, spec.name, spec.contextHash),
-      queryFn: () =>
-        api.sequence(spec.runId, spec.name, {
-          context: spec.contextHash || undefined,
-        }),
+      queryKey: qk.sequence(spec.runId, spec.name),
+      queryFn: () => api.sequence(spec.runId, spec.name),
       staleTime: Infinity,
     })),
   });

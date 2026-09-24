@@ -12,10 +12,7 @@ import type { Template } from "./store";
  * Fetch sequences for `runIds` and build the metric-name -> series map used by
  * `matchTemplateCards`.
  *
- * One entry per (run, context) — a run emitting the same metric under several
- * contexts (train/val) contributes one entry per context, so a template key
- * that recorded a context can actually prefer it. `matchTemplateCards` narrows
- * back to one series per run when the key expresses no context preference.
+ * One entry per (run, name).
  */
 export async function buildSeqMap(runIds: string[]): Promise<SeqMap> {
   const seqResults = await Promise.all(runIds.map((rid) => api.sequences(rid)));
@@ -23,10 +20,10 @@ export async function buildSeqMap(runIds: string[]): Promise<SeqMap> {
   seqResults.forEach((result, idx) => {
     const runId = runIds[idx]!;
     for (const seq of result.sequences) {
-      const entry: SeriesEntry = { runId, name: seq.name, context_hash: seq.context_hash };
+      const entry: SeriesEntry = { runId, name: seq.name };
       const existing = seqMap.get(seq.name);
       if (existing) {
-        if (!existing.some((s) => s.runId === runId && s.context_hash === seq.context_hash)) {
+        if (!existing.some((s) => s.runId === runId)) {
           existing.push(entry);
         }
       } else {

@@ -47,7 +47,7 @@ export default function SweepDetailPage() {
   if (q.isLoading) return <p className="text-fg-muted">Loading...</p>;
   if (q.isError || !sweep) return <p className="text-status-failed">Error: {String(q.error)}</p>;
 
-  const settingsKey = (card: string) => ({ runId: `sweep:${sweep.id}`, metricName: card, contextHash: "" });
+  const settingsKey = (card: string) => ({ runId: `sweep:${sweep.id}`, metricName: card });
   const metricColumn = sweep.metric ? [{ key: sweep.metric, source: "metric" as const }] : [];
   const firstParam = searched[0] ?? paramKeys[0];
 

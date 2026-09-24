@@ -50,7 +50,7 @@ function parseParam(raw: string): unknown {
 
 interface Props {
   runIds: string[];
-  settingsKey: { runId: string; metricName: string; contextHash: string };
+  settingsKey: { runId: string; metricName: string };
   onRemove?: () => void;
   autoOpenSettings?: boolean;
 }

@@ -132,7 +132,7 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, updateSettings);
 
   const queries = useSequencesForRuns(
-    effectiveMetrics.map((m) => ({ runId: m.runId ?? runId, name: m.name, contextHash: m.context_hash })),
+    effectiveMetrics.map((m) => ({ runId: m.runId ?? runId, name: m.name })),
   );
   const seriesPoints = useMemo(
     () => queries.map((q) => (q.data?.points ?? []).filter((p) => p.artifact_hash)),
@@ -175,8 +175,8 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   }, [multipleRuns, effectiveMetrics, allRunIds, runId, runMetaVersion]);
 
   const compSeries = useMemo(
-    () => [{ runId, name: metric.name, context_hash: metric.context_hash }],
-    [runId, metric.name, metric.context_hash],
+    () => [{ runId, name: metric.name }],
+    [runId, metric.name],
   );
   const isMulti = effectiveMetrics.length > 1;
   const subtitle = globalSteps.length > 0

@@ -37,7 +37,7 @@ export interface ScalarChartProps {
   outlierPct: [number, number];
   lineType: LineType;
   showLegend: boolean;
-  tooltip: { showContext: boolean; showWallTime: boolean };
+  tooltip: { showWallTime: boolean };
   className?: string;
 }
 
@@ -422,7 +422,7 @@ function ChartTooltip({
   header: string;
   rows: TooltipRow[];
   focusedKey?: string;
-  tooltip: { showContext: boolean; showWallTime: boolean };
+  tooltip: { showWallTime: boolean };
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const flip = hover.left > boxWidth / 2;
@@ -449,7 +449,6 @@ function ChartTooltip({
         <div key={r.key} className={`flex items-center gap-1.5 ${r.key === focusedKey ? "font-semibold text-fg" : "text-fg-muted"}`}>
           <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: r.color }} />
           <span className="truncate">{r.label}</span>
-          {tooltip.showContext && r.point.context ? <span className="text-fg-subtle">{r.point.context}</span> : null}
           <span className="mono ml-auto pl-2 text-fg">
             {formatNum(r.point.y)}
             {r.band && <span className="text-fg-subtle">{` [${formatNum(r.band[0])}, ${formatNum(r.band[1])}]`}</span>}
