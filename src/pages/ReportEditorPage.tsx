@@ -196,9 +196,6 @@ export default function ReportEditorPage() {
   };
 
   const deleteBlock = (id: string) => {
-    const block = blocks.find((b) => b.id === id);
-    const empty = block && (isCardsBlock(block) ? block.cards.length === 0 : block.text.trim() === "");
-    if (!empty && !confirm("Delete this cell?")) return;
     delete rawCairnSourceRef.current[id];
     setBlocks((prev) => prev.filter((b) => b.id !== id));
   };
