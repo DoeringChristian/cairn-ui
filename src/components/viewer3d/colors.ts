@@ -1,7 +1,5 @@
 /** Color helpers for the 3D viewers: a turbo colormap and a categorical palette, both 0..1 RGB. */
 
-import { SERIES_COLORS } from "../../lib/plot-utils/types";
-
 /** Turbo colormap (polynomial approximation), `t` in 0..1. */
 export function turbo(t: number, out: Float32Array, at: number): void {
   const x = Number.isFinite(t) ? Math.min(1, Math.max(0, t)) : 0;
@@ -35,10 +33,17 @@ export function valuesToColors(values: ArrayLike<number>, n: number, stride = 1,
   return out;
 }
 
-/** The app's series palette as 0xRRGGBB, for three.js vertex colors. */
-const CATEGORY_RGB = SERIES_COLORS.map((hex) => parseInt(hex.slice(1), 16));
+/**
+ * Ten distinct category colours (0xRRGGBB). Deliberately longer than the
+ * six-colour series palette: segmentations routinely carry more classes than
+ * a card carries runs.
+ */
+const CATEGORY_RGB = [
+  0x1f77b4, 0xff7f0e, 0x2ca02c, 0xd62728, 0x9467bd,
+  0x8c564b, 0xe377c2, 0x7f7f7f, 0xbcbd22, 0x17becf,
+];
 
-/** Integer category ids (strided) → interleaved RGB from the cycled series palette. */
+/** Integer category ids (strided) → interleaved RGB from a cycled ten-colour palette. */
 export function categoriesToColors(ids: ArrayLike<number>, n: number, stride = 1, offset = 0): Float32Array {
   const out = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
