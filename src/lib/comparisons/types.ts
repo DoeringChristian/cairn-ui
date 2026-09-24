@@ -78,11 +78,20 @@ export interface Comparison {
    * When present, this comparison's run set is dynamically resolved (see
    * lib/run-selector.ts) instead of pinned. Mutually exclusive with
    * `smartFilters` in the UI — a comparison uses at most one dynamic-set
-   * mechanism at a time (see ComparePage.tsx).
+   * mechanism at a time (see `setComparisonRunSelector`).
    */
   runSelector?: RunSelector;
   /** Server-side ID (set after first save to server). */
   serverId?: string;
+}
+
+/** Every run a comparison touches: its run list plus every card's series runs. */
+export function comparisonRunIds(comparison: Comparison): string[] {
+  const ids = new Set<string>(comparison.runIds ?? []);
+  for (const card of comparison.cards) {
+    for (const s of card.series) ids.add(s.runId);
+  }
+  return Array.from(ids);
 }
 
 /**

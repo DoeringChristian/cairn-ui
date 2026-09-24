@@ -16,6 +16,7 @@ export type {
 } from "./types";
 export {
   compareRunId,
+  comparisonRunIds,
   cardSettingsKeyForScope,
   MULTI_RUN_CARD_TYPES,
   MULTI_RUN_CARD_LABELS,
@@ -35,6 +36,7 @@ export {
   reorderComparisonCards,
   removeCardFromComparison,
   setComparisonRunSelector,
+  updateComparison,
 } from "./store";
 
 export { cardsForRuns, rebuildCardsFromRuns, rebindCardsToRuns, rebindCardsToMetricIndex } from "./rebuild-cards";

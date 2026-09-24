@@ -667,7 +667,7 @@ export default function RunsTablePage() {
             })}
           </ul>
           {/* overflow-x-auto, not -hidden: metric columns are unbounded in
-              number and were previously clipped out of reach. */}
+              number and must stay reachable. */}
           <div className="hidden overflow-x-auto overflow-y-hidden rounded-lg border border-border md:block">
             <table className="w-full text-sm">
             <thead className="bg-bg-elevated text-left text-xs uppercase tracking-wide text-fg-muted">
