@@ -57,7 +57,7 @@ import { formatRelative } from "../lib/format";
 import { useRuns, useRunSelectorResolution } from "../api/hooks";
 import { api } from "../api/client";
 
-import { disambiguateRunLabels, useRunMetadataVersion } from "../lib/run-label";
+import { disambiguateRunLabels, shortRunId, useRunMetadataVersion } from "../lib/run-label";
 import type { Run } from "../api/types";
 import type { SequenceMeta } from "../api/types";
 
@@ -1481,7 +1481,7 @@ function ComparisonRunsPanel({
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {includedRuns.map((r) => {
-            const label = chipLabels[r.id] ?? r.id.slice(0, 6);
+            const label = chipLabels[r.id] ?? shortRunId(r.id);
             return runSelector ? (
               <span
                 key={r.id}
@@ -1528,7 +1528,7 @@ function ComparisonRunsPanel({
                   title={r.id}
                 >
                   <span aria-hidden="true">+</span>
-                  {candidateLabels[r.id] ?? r.id.slice(0, 6)}
+                  {candidateLabels[r.id] ?? shortRunId(r.id)}
                 </button>
               ))}
             </div>

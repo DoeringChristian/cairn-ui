@@ -28,7 +28,7 @@ import {
 import { cardFromSpec, cardSettingsKeyForReport, useMetricIndex, type CardsBlock } from "../../lib/reports";
 import { describeRunSelector, DEFAULT_RUN_SELECTOR_N, type QueryRunSelector } from "../../lib/run-selector";
 import { useRunSelectorResolution } from "../../api/hooks";
-import { disambiguateRunLabels, useRunMetadataVersion } from "../../lib/run-label";
+import { disambiguateRunLabels, shortRunId, useRunMetadataVersion } from "../../lib/run-label";
 import type { Run, SequenceMeta } from "../../api/types";
 
 interface Props {
@@ -336,7 +336,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
                     className="inline-flex items-center gap-1 rounded border border-border-subtle bg-bg-hover px-1.5 py-0.5 text-[11px] mono text-fg"
                     title={r.id}
                   >
-                    {chipLabels[r.id] ?? r.id.slice(0, 6)}
+                    {chipLabels[r.id] ?? shortRunId(r.id)}
                   </span>
                 ))}
               </div>
@@ -348,7 +348,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {includedRuns.map((r) => {
-                    const label = chipLabels[r.id] ?? r.id.slice(0, 6);
+                    const label = chipLabels[r.id] ?? shortRunId(r.id);
                     return (
                       <span
                         key={r.id}
@@ -386,7 +386,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, editMode,
                           title={r.id}
                         >
                           <span aria-hidden="true">+</span>
-                          {candidateLabels[r.id] ?? r.id.slice(0, 6)}
+                          {candidateLabels[r.id] ?? shortRunId(r.id)}
                         </button>
                       ))}
                     </div>

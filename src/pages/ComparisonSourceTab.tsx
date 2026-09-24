@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { diffLines } from "diff";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
-import { disambiguateRunLabels, useRunMetadataVersion } from "../lib/run-label";
+import { disambiguateRunLabels, shortRunId, useRunMetadataVersion } from "../lib/run-label";
 
 interface Props {
   compRunIds: string[];
@@ -124,7 +124,7 @@ export default function ComparisonSourceTab({ compRunIds }: Props) {
           >
             {compRunIds.map((id) => (
               <option key={id} value={id}>
-                {labels[id] ?? id.slice(0, 8)}
+                {labels[id] ?? shortRunId(id)}
               </option>
             ))}
           </select>
@@ -138,7 +138,7 @@ export default function ComparisonSourceTab({ compRunIds }: Props) {
           >
             {compRunIds.map((id) => (
               <option key={id} value={id}>
-                {labels[id] ?? id.slice(0, 8)}
+                {labels[id] ?? shortRunId(id)}
               </option>
             ))}
           </select>
@@ -194,8 +194,8 @@ export default function ComparisonSourceTab({ compRunIds }: Props) {
               <DiffView
                 leftContent={leftFile.data?.encoding === "utf-8" ? leftFile.data.content : null}
                 rightContent={rightFile.data?.encoding === "utf-8" ? rightFile.data.content : null}
-                leftLabel={labels[leftId] ?? leftId.slice(0, 8)}
-                rightLabel={labels[rightId] ?? rightId.slice(0, 8)}
+                leftLabel={labels[leftId] ?? shortRunId(leftId)}
+                rightLabel={labels[rightId] ?? shortRunId(rightId)}
                 path={selectedFile}
               />
             )}

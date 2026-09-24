@@ -12,6 +12,7 @@ import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { useModalBehavior } from "../lib/use-modal-behavior";
 import type { Run } from "../api/types";
+import { shortRunId } from "../lib/run-label";
 import {
   createComparison,
   addCardsToComparison,
@@ -43,14 +44,6 @@ interface Props {
   projectId: string;
   /** Called after the comparison is created, with the new comparison ID. */
   onCreated: (comparisonId: string) => void;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function shortRunId(id: string): string {
-  return id.length > 8 ? id.slice(0, 8) : id;
 }
 
 // ---------------------------------------------------------------------------

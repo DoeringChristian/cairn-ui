@@ -7,7 +7,7 @@ import type { Param, Run } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
 import { formatDuration, safeJsonParse } from "../lib/format";
 import { formatNum } from "../lib/plot-utils/types";
-import { disambiguateRunLabels, useRunMetadataVersion } from "../lib/run-label";
+import { disambiguateRunLabels, shortRunId, useRunMetadataVersion } from "../lib/run-label";
 import { computeCellStatuses, diffCellClassName, isNumericSeries, toNumeric } from "../lib/table-diff";
 
 /** Cap on metrics shown in the summary table (per spec). */
@@ -123,7 +123,7 @@ export default function ComparisonOverviewTab({ compRunIds }: Props) {
             <RunSummaryCard
               key={rd.run.id}
               run={rd.run}
-              label={labels[rd.run.id] ?? rd.run.id.slice(0, 8)}
+              label={labels[rd.run.id] ?? shortRunId(rd.run.id)}
             />
           ))}
         </div>
@@ -150,7 +150,7 @@ export default function ComparisonOverviewTab({ compRunIds }: Props) {
                   <th className="pb-1 pr-4 sticky left-0 bg-bg-surface">Key</th>
                   {runData.map((rd) => (
                     <th key={rd.run.id} className="pb-1 pr-4 whitespace-nowrap">
-                      {labels[rd.run.id] ?? rd.run.id.slice(0, 8)}
+                      {labels[rd.run.id] ?? shortRunId(rd.run.id)}
                     </th>
                   ))}
                 </tr>
@@ -215,7 +215,7 @@ export default function ComparisonOverviewTab({ compRunIds }: Props) {
                 <th className="pb-1 pr-4 sticky left-0 bg-bg-surface">Field</th>
                 {runData.map((rd) => (
                   <th key={rd.run.id} className="pb-1 pr-4 whitespace-nowrap">
-                    {labels[rd.run.id] ?? rd.run.id.slice(0, 8)}
+                    {labels[rd.run.id] ?? shortRunId(rd.run.id)}
                   </th>
                 ))}
               </tr>
@@ -379,7 +379,7 @@ function MetricsSummarySection({ runData, labels, onlyDiffs }: MetricsSummaryPro
                 <th className="pb-1 pr-4 sticky left-0 bg-bg-surface">Metric</th>
                 {runData.map((rd) => (
                   <th key={rd.run.id} className="pb-1 pr-4 whitespace-nowrap">
-                    {labels[rd.run.id] ?? rd.run.id.slice(0, 8)}
+                    {labels[rd.run.id] ?? shortRunId(rd.run.id)}
                   </th>
                 ))}
               </tr>
