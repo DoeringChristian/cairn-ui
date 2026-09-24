@@ -6,6 +6,7 @@ import ComparisonSourceTab from "./ComparisonSourceTab";
 import AddCardModal, { type AddCardSelection } from "../components/AddCardModal";
 import ComparisonCardView from "../components/comparison/ComparisonCardView";
 import ReorderableCardGrid from "../components/ReorderableCardGrid";
+import RunSetEditor, { DEFAULT_QUERY_SELECTOR } from "../components/comparison/RunSetEditor";
 import RunSelectorBadge from "../components/RunSelectorBadge";
 import { SectionBlock } from "../components/CardGrid";
 import { groupComparisonCardsIntoSections } from "../lib/sections";
@@ -45,11 +46,7 @@ import {
   cardSettingsKeyForReport,
   newId as newReportEntityId,
 } from "../lib/reports";
-import {
-  describeRunSelector,
-  DEFAULT_RUN_SELECTOR_N,
-  type QueryRunSelector,
-} from "../lib/run-selector";
+import { describeRunSelector } from "../lib/run-selector";
 import { loadCardSettings, saveCardSettings } from "../lib/card-settings";
 import { storageKeys } from "../lib/storage";
 import { useCollapsedSections } from "../lib/use-collapsed-sections";
@@ -57,7 +54,7 @@ import { formatRelative } from "../lib/format";
 import { useRuns, useRunSelectorResolution } from "../api/hooks";
 import { api } from "../api/client";
 
-import { disambiguateRunLabels, shortRunId, useRunMetadataVersion } from "../lib/run-label";
+import { disambiguateRunLabels, useRunMetadataVersion } from "../lib/run-label";
 import type { Run } from "../api/types";
 
 export default function ComparePage() {
@@ -979,14 +976,29 @@ function ComparisonView({
 
       {tab === "metrics" && (
         <>
-          <ComparisonRunsPanel
-            compRunIds={compRunIds}
+          <RunSetEditor
+            title="Runs in comparison"
+            runIds={compRunIds}
             allProjectRuns={allProjectRuns}
-            onAddRuns={onAddRuns}
+            selector={comparison.runSelector}
+            editable
+            onToggleMode={() => {
+              if (comparison.runSelector) {
+                onSetRunSelector(undefined);
+                return;
+              }
+              // A selector replaces the Smart Wizard's filters (the two are exclusive).
+              if (
+                comparison.smartFilters &&
+                !confirm("This comparison was built with Smart Filters. Switching to a run selector replaces that binding — continue?")
+              ) {
+                return;
+              }
+              onSetRunSelector({ ...DEFAULT_QUERY_SELECTOR });
+            }}
+            onSelectorChange={onSetRunSelector}
+            onAddRun={(runId) => onAddRuns([runId])}
             onRemoveRun={onRemoveRun}
-            runSelector={comparison.runSelector}
-            hasSmartFilters={!!comparison.smartFilters}
-            onSetRunSelector={onSetRunSelector}
           />
 
           <AddCardModal
@@ -1220,233 +1232,6 @@ function TemplateSidebar({ projectId, currentRunIds, allRunIds, runInfo, onAppli
               ? "Applying\u2026"
               : `Apply to ${pickedRunIds.size} run${pickedRunIds.size === 1 ? "" : "s"}`}
           </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ComparisonRunsPanel — view + add/remove runs for a comparison
-// ---------------------------------------------------------------------------
-
-interface ComparisonRunsPanelProps {
-  compRunIds: string[];
-  allProjectRuns: Run[];
-  onAddRuns: (runIds: string[]) => void;
-  onRemoveRun: (runId: string) => void;
-  /** Dynamic run selector, if this comparison uses one instead of a static run list. */
-  runSelector: Comparison["runSelector"];
-  /** True when this comparison was built by the Smart Wizard — switching to
-   *  a RunSelector clears `smartFilters` (mutually exclusive), so confirm. */
-  hasSmartFilters: boolean;
-  onSetRunSelector: (sel: Comparison["runSelector"]) => void;
-}
-
-const DEFAULT_COMPARISON_QUERY_SELECTOR: QueryRunSelector = {
-  kind: "query",
-  mode: "newest-per-name",
-  n: DEFAULT_RUN_SELECTOR_N,
-};
-
-function ComparisonRunsPanel({
-  compRunIds,
-  allProjectRuns,
-  onAddRuns,
-  onRemoveRun,
-  runSelector,
-  hasSmartFilters,
-  onSetRunSelector,
-}: ComparisonRunsPanelProps) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const includedSet = useMemo(() => new Set(compRunIds), [compRunIds]);
-
-  const candidates = useMemo(
-    () => allProjectRuns.filter((r) => !includedSet.has(r.id)),
-    [allProjectRuns, includedSet],
-  );
-
-  const includedRuns = useMemo(
-    () => compRunIds
-      .map((id) => allProjectRuns.find((r) => r.id === id))
-      .filter((r): r is Run => r !== undefined),
-    [compRunIds, allProjectRuns],
-  );
-
-  // Re-render + recompute labels when the run metadata cache is seeded
-  // (seeding happens in a useEffect in api/hooks.ts, after first paint).
-  const metaVersion = useRunMetadataVersion();
-
-  // Disambiguate chip labels (recomputed when set changes).
-  const chipLabels = useMemo(
-    () => disambiguateRunLabels(compRunIds),
-    [compRunIds, metaVersion],
-  );
-
-  // Disambiguate the candidate picker labels too — using ALL project runs
-  // as siblings so duplicates surface clearly.
-  const candidateLabels = useMemo(
-    () => disambiguateRunLabels(allProjectRuns.map((r) => r.id)),
-    [allProjectRuns, metaVersion],
-  );
-
-  return (
-    <div className="card p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-xs uppercase tracking-wide text-fg-muted">
-          Runs in comparison ({compRunIds.length})
-        </span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (!runSelector && hasSmartFilters) {
-                if (!confirm("This comparison was built with Smart Filters. Switching to a run selector replaces that binding — continue?")) {
-                  return;
-                }
-              }
-              onSetRunSelector(runSelector ? undefined : { ...DEFAULT_COMPARISON_QUERY_SELECTOR });
-            }}
-            className="inline-flex h-6 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg"
-            title={
-              runSelector
-                ? "Switch to a fixed run list"
-                : "Switch to a dynamic run selector (always tracks matching runs)"
-            }
-          >
-            {runSelector ? "Use static runs" : "Use auto (query)"}
-          </button>
-          {!runSelector && (
-            <button
-              type="button"
-              onClick={() => setPickerOpen((v) => !v)}
-              className="inline-flex h-6 items-center justify-center rounded border border-border bg-bg px-2 text-[10px] text-fg-muted hover:border-accent hover:text-fg"
-            >
-              {pickerOpen ? "Done" : `+ Add runs (${candidates.length} available)`}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {runSelector && runSelector.kind === "query" && (
-        <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <label className="text-[10px] text-fg-muted">
-            Name pattern
-            <input
-              type="text"
-              value={runSelector.namePattern ?? ""}
-              onChange={(e) =>
-                onSetRunSelector({ ...runSelector, namePattern: e.target.value || undefined })
-              }
-              placeholder="e.g. training-*"
-              className="input mt-0.5 w-full text-xs"
-            />
-          </label>
-          <label className="text-[10px] text-fg-muted">
-            Tags (comma-sep)
-            <input
-              type="text"
-              value={(runSelector.tags ?? []).join(", ")}
-              onChange={(e) =>
-                onSetRunSelector({
-                  ...runSelector,
-                  tags: e.target.value.split(",").map((t) => t.trim()).filter(Boolean),
-                })
-              }
-              placeholder="e.g. prod, nightly"
-              className="input mt-0.5 w-full text-xs"
-            />
-          </label>
-          <label className="text-[10px] text-fg-muted">
-            Mode
-            <select
-              value={runSelector.mode}
-              onChange={(e) =>
-                onSetRunSelector({ ...runSelector, mode: e.target.value as QueryRunSelector["mode"] })
-              }
-              className="input mt-0.5 w-full text-xs"
-            >
-              <option value="latest-n">Latest N</option>
-              <option value="newest-per-name">Newest per name</option>
-            </select>
-          </label>
-          <label className="text-[10px] text-fg-muted">
-            N
-            <input
-              type="number"
-              min={1}
-              value={runSelector.n ?? DEFAULT_RUN_SELECTOR_N}
-              onChange={(e) =>
-                onSetRunSelector({ ...runSelector, n: Math.max(1, Number(e.target.value) || 1) })
-              }
-              className="input mt-0.5 w-full text-xs"
-            />
-          </label>
-        </div>
-      )}
-
-      {/* Included runs — removable chips (static) or read-only (auto) */}
-      {compRunIds.length === 0 ? (
-        <p className="text-xs text-fg-subtle">
-          {runSelector
-            ? "No runs currently match this selector. Click the header “refresh” once matching runs exist."
-            : 'No runs yet. Click "Add runs" or drag a series chip into a card.'}
-        </p>
-      ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {includedRuns.map((r) => {
-            const label = chipLabels[r.id] ?? shortRunId(r.id);
-            return runSelector ? (
-              <span
-                key={r.id}
-                className="inline-flex items-center gap-1 rounded border border-border-subtle bg-bg-hover px-1.5 py-0.5 text-[11px] mono text-fg"
-                title={r.id}
-              >
-                {label}
-              </span>
-            ) : (
-              <span
-                key={r.id}
-                className="group/chip inline-flex items-center gap-1 rounded border border-border-subtle bg-bg-hover px-1.5 py-0.5 text-[11px] mono"
-                title={r.id}
-              >
-                <span className="text-fg">{label}</span>
-                <button
-                  type="button"
-                  onClick={() => onRemoveRun(r.id)}
-                  className="text-fg-subtle hover:text-status-failed"
-                  aria-label={`Remove ${label} from comparison`}
-                  title={`Remove ${label}`}
-                >
-                  {"×"}
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Picker — list of candidate runs, click to add (static mode only) */}
-      {!runSelector && pickerOpen && (
-        <div className="mt-2 border-t border-border-subtle pt-2">
-          {candidates.length === 0 ? (
-            <p className="text-xs text-fg-subtle">All runs already in this comparison.</p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
-              {candidates.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => onAddRuns([r.id])}
-                  className="inline-flex items-center gap-1 rounded border border-border-subtle bg-bg px-1.5 py-0.5 text-[11px] mono text-fg-muted hover:border-accent hover:text-fg"
-                  title={r.id}
-                >
-                  <span aria-hidden="true">+</span>
-                  {candidateLabels[r.id] ?? shortRunId(r.id)}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>

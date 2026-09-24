@@ -17,13 +17,7 @@ export interface ComparisonSeriesRef {
 export interface ComparisonCard {
   /** Stable uuid. Distinct from the settings storage key — see lib/card-settings.ts. */
   id: string;
-  /**
-   * Derives from the single canonical `CardType` (lib/cards/card-spec.ts —
-   * the WS-SCHEMA source of truth). Previously a hand-maintained closed
-   * union of 16 members here; now the one list every dispatch site
-   * (`CardRenderer` switch, this union, the `isComparisonCard` guard) agrees
-   * on. See card-spec.ts for how the three former definitions reconcile.
-   */
+  /** The canonical `CardType` (lib/cards/card-spec.ts) every dispatch site agrees on. */
   type: CardType;
   series: ComparisonSeriesRef[];
 }
