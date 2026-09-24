@@ -4,12 +4,15 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSequencesForRuns } from "../api/hooks";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useSequences, useSequencesForRuns } from "../api/hooks";
+import { qk } from "../api/query-keys";
 import type { CardSettingsKey } from "../lib/card-settings";
 import type { ComparisonSeriesRef } from "../lib/comparisons";
 import { useCardDrop } from "../lib/use-series-drop";
 import { useCardSeries, useRunInfo, type BaseCardSettings } from "./card-kit";
 import type {
+  RunDetailResponse,
   SequenceMeta,
   SequencePoint,
   SequenceResponse,
@@ -28,7 +31,8 @@ import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { seriesKey, seriesLabel } from "../lib/series-utils";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import ScalarChart from "../charts/ScalarChart";
-import { mapToXAxis, type AxisSource } from "../lib/plot-utils/x-axis";
+import { mapToXAxis, type AxisSource, type XMetricRef } from "../lib/plot-utils/x-axis";
+import { stepMetricFor } from "../lib/metric-defs";
 import { SERIES_COLORS, type AxisScale, type Series } from "../lib/plot-utils/types";
 import { SMOOTHING_KINDS, formatSmoothing, type SmoothingKind } from "../lib/plot-utils/smooth";
 
@@ -41,6 +45,8 @@ const SCALAR_POLICY = plotCardPolicy("scalar");
 interface ScalarSettings extends BaseCardSettings {
   metrics: Array<{ runId?: string; name: string; context_hash: string }>;
   xAxis: AxisSource;
+  /** The series an `xAxis: "metric"` card plots against (joined on step). */
+  xMetric?: XMetricRef;
   xScale: AxisScale;
   yScale: AxisScale;
   xRange: [number | null, number | null];
@@ -80,6 +86,41 @@ const DEFAULT_SCALAR_SETTINGS = (seed: {
   viewport: { xMin: null, xMax: null, yMin: null, yMax: null },
 });
 
+/**
+ * A card seeded for a metric with a `define_metric(step_metric=...)` starts on
+ * that x-axis. Read from the query cache: the run page loads the run detail
+ * and its sequence list before any card mounts.
+ */
+function seededXAxis(
+  qc: QueryClient,
+  runId: string,
+  seed: { name: string; context_hash: string },
+): Pick<ScalarSettings, "xAxis" | "xMetric"> | null {
+  const defs = qc.getQueryData<RunDetailResponse>(qk.run(runId))?.metric_defs;
+  const name = stepMetricFor(seed.name, defs);
+  if (!name) return null;
+  const metas =
+    qc.getQueryData<{ sequences: SequenceMeta[] }>(qk.sequences(runId))?.sequences ?? [];
+  const candidates = metas.filter((m) => m.name === name && m.object_type === "scalar");
+  const match =
+    candidates.find((m) => m.context_hash === seed.context_hash) ?? candidates[0];
+  return { xAxis: "metric", xMetric: { name, context_hash: match?.context_hash ?? "" } };
+}
+
+/** `<Select>` value for a metric x-axis; the plain sources keep their own. */
+const METRIC_AXIS_PREFIX = "metric:";
+
+function xAxisSelectValue(xAxis: AxisSource, xMetric: XMetricRef | undefined): string {
+  if (xAxis !== "metric" || !xMetric) return xAxis;
+  return `${METRIC_AXIS_PREFIX}${xMetric.name}\u0000${xMetric.context_hash}`;
+}
+
+function parseXAxisSelectValue(v: string): Pick<ScalarSettings, "xAxis" | "xMetric"> {
+  if (!v.startsWith(METRIC_AXIS_PREFIX)) return { xAxis: v as AxisSource };
+  const [name = "", context_hash = ""] = v.slice(METRIC_AXIS_PREFIX.length).split("\u0000");
+  return { xAxis: "metric", xMetric: { name, context_hash } };
+}
+
 // -----------------------------------------------------------------------------
 // Palette & helpers
 // -----------------------------------------------------------------------------
@@ -113,6 +154,7 @@ export default function ScalarPlotCard({
   settingsKeyOverride,
   autoOpenSettings,
 }: Props) {
+  const qc = useQueryClient();
   const {
     settings,
     updateSettings: rawUpdateSettings,
@@ -127,6 +169,7 @@ export default function ScalarPlotCard({
     settingsKeyOverride,
     makeDefaults: (seed, metrics) => ({
       ...DEFAULT_SCALAR_SETTINGS(seed),
+      ...seededXAxis(qc, runId, seed),
       metrics,
     }),
   });
@@ -165,13 +208,61 @@ export default function ScalarPlotCard({
   );
   const queries = useSequencesForRuns(sequenceSpecs);
 
+  // A metric x-axis: the x series of every run the card shows.
+  const xMetric = settings.xAxis === "metric" ? settings.xMetric : undefined;
+  const xMetricSpecs = useMemo(
+    () =>
+      xMetric
+        ? allRunIds.map((rid) => ({
+            runId: rid,
+            name: xMetric.name,
+            contextHash: xMetric.context_hash,
+          }))
+        : [],
+    [xMetric, allRunIds],
+  );
+  const xQueries = useSequencesForRuns(xMetricSpecs);
+  const xPointsByRun = useMemo(() => {
+    const out = new Map<string, SequencePoint[]>();
+    xMetricSpecs.forEach((spec, i) => {
+      const data = xQueries[i]?.data as SequenceResponse | undefined;
+      if (data) out.set(spec.runId, data.points);
+    });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [xMetricSpecs, xQueries.map((q) => q.dataUpdatedAt).join("|")]);
+
+  // The run's scalars, offered as x-axes.
+  const runSequences = useSequences(runId);
+  const xMetricOptions = useMemo(() => {
+    const metas = (runSequences.data?.sequences ?? []).filter(
+      (m) => m.object_type === "scalar",
+    );
+    const contextsByName = new Map<string, number>();
+    for (const m of metas) contextsByName.set(m.name, (contextsByName.get(m.name) ?? 0) + 1);
+    const refs: XMetricRef[] = metas.map((m) => ({ name: m.name, context_hash: m.context_hash }));
+    // Keep the current choice listed even when this run lacks it.
+    if (xMetric && !refs.some((r) => r.name === xMetric.name && r.context_hash === xMetric.context_hash)) {
+      refs.push(xMetric);
+    }
+    return refs.map((r) => ({
+      value: xAxisSelectValue("metric", r),
+      label: `metric: ${r.name}${
+        (contextsByName.get(r.name) ?? 0) > 1 && r.context_hash
+          ? ` · ${r.context_hash.slice(0, 6)}`
+          : ""
+      }`,
+    }));
+  }, [runSequences.data, xMetric]);
+
   // -------------------------------------------------------------------------
   // Build series
   // -------------------------------------------------------------------------
   const runMetaVersion = useRunMetadataVersion();
 
   const { series, isLoading } = useMemo(() => {
-    const anyLoading = queries.some((q) => q.isLoading);
+    const anyLoading =
+      queries.some((q) => q.isLoading) || xQueries.some((q) => q.isLoading);
 
     const built: Series[] = effectiveMetrics.map((m, idx) => {
       const k = seriesKey(m);
@@ -179,7 +270,12 @@ export default function ScalarPlotCard({
       const raw: SequencePoint[] = resp?.points ?? [];
       const rid = m.runId ?? runId;
 
-      const mapped = mapToXAxis(raw, settings.xAxis, runCreatedAtByRunId.get(rid));
+      const mapped = mapToXAxis(
+        raw,
+        settings.xAxis,
+        runCreatedAtByRunId.get(rid),
+        xPointsByRun.get(rid),
+      );
 
       return {
         key: k,
@@ -194,6 +290,7 @@ export default function ScalarPlotCard({
   }, [
     effectiveMetrics,
     settings.xAxis,
+    xPointsByRun,
     multipleRuns,
     runId,
     runCreatedAtByRunId,
@@ -346,12 +443,13 @@ export default function ScalarPlotCard({
       <SettingsSection title="Axes" />
       <Select
         label="X axis"
-        value={settings.xAxis}
-        onChange={(v) => updateSettings({ xAxis: v })}
+        value={xAxisSelectValue(settings.xAxis, settings.xMetric)}
+        onChange={(v) => updateSettings(parseXAxisSelectValue(v))}
         options={[
           { value: "step", label: "Step" },
           { value: "relative_time", label: "Relative time (s)" },
           { value: "wall_time", label: "Wall time" },
+          ...xMetricOptions,
         ]}
       />
       <Select
@@ -509,6 +607,7 @@ export default function ScalarPlotCard({
   const plotProps = {
     series,
     xAxis: settings.xAxis,
+    xLabel: xMetric?.name,
     xScale: settings.xScale,
     yScale: settings.yScale,
     xRange: settings.xRange,

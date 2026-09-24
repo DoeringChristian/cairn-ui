@@ -130,9 +130,19 @@ export interface UpdatesResponse {
   more: boolean;
 }
 
+/** A `run.define_metric(...)` definition; `name` may be an fnmatch glob. */
+export interface MetricDef {
+  name: string;
+  /** The scalar series cards plot this metric against. */
+  step_metric: string | null;
+  /** The run table's value for it: "min" | "max" | "mean" | "last". */
+  summary: string | null;
+}
+
 export interface RunDetailResponse {
   run: Run;
   params: Param[];
+  metric_defs?: MetricDef[];
 }
 
 /** Per-run extras `GET /api/runs` adds on request (`?include=`). */
