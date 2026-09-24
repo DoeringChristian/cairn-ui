@@ -18,6 +18,8 @@
  *     top of the layer-1 primitives.
  */
 
+import { mediaOf } from "./table-media.ts";
+
 // ---------------------------------------------------------------------------
 // Layer 1: generic numeric classification + per-position comparison.
 // ---------------------------------------------------------------------------
@@ -151,7 +153,10 @@ function detectKeyColumn(tables: DiffTable[]): number | null {
 function rowGroupKey(row: unknown[], keyCol: number | null, rowIdx: number): string {
   if (keyCol === null) return `#${rowIdx}`;
   const v = row[keyCol];
-  return v === null || v === undefined ? `#null-${rowIdx}` : `id:${String(v)}`;
+  if (v === null || v === undefined) return `#null-${rowIdx}`;
+  // A media cell is identified by its content hash.
+  const media = mediaOf(v);
+  return media ? `media:${media.hash}` : `id:${String(v)}`;
 }
 
 /**
