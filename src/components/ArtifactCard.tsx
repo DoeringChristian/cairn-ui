@@ -3,17 +3,17 @@
  * Shows file metadata (name, size, MIME type) and a step slider.
  */
 
-import { useContext, useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
 import { isBrowserDisplayable } from "../lib/artifact-format";
 import { useSequence, useArtifacts } from "../api/hooks";
 import { api } from "../api/client";
-import { safeJsonParse } from "../lib/format";
+import { formatBytes, safeJsonParse } from "../lib/format";
 import { downloadArtifact, artifactFilename } from "../lib/download";
-import { CardMutationContext, useCardSettings, type CardSettingsKey } from "../lib/card-settings";
+import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { SequenceMeta } from "../api/types";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
-import type { BaseCardSettings } from "./card-kit";
+import { useStepSlider, resolveAtStep, type BaseCardSettings } from "./card-kit";
 
 interface Props {
   runId: string;
@@ -38,13 +38,6 @@ interface ArtifactSettings extends BaseCardSettings {
 }
 
 const DEFAULT_SETTINGS: ArtifactSettings = { version: 1 };
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
 
 export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
   const q = useSequence(runId, metric.name, {
@@ -77,17 +70,24 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
     DEFAULT_SETTINGS,
   );
 
-  // WS-NR1 (B7/edit-mode gating): local mirror of settings.sliderStep, same
-  // caveat as card-kit/use-step-slider.ts — gate the state update directly,
-  // since a no-op updateSettings alone wouldn't stop this local idx moving.
-  const mutable = useContext(CardMutationContext);
-  const [idx, setIdx] = useState(settings.sliderStep ?? 0);
-  const safeIdx = Math.min(Math.max(0, idx), Math.max(0, points.length - 1));
-  const current = points[safeIdx];
+  const seriesPoints = useMemo(() => [points], [points]);
+  const { safeIdx, currentStep, onSliderChange } = useStepSlider({
+    seriesPoints,
+    persistedIdx: settings.sliderStep,
+    updateSettings,
+  });
+  const current = useMemo(() => resolveAtStep<(typeof points)[number]>(points, currentStep), [points, currentStep]);
   const meta = useMemo(
     () => safeJsonParse<ArtifactMeta>(current?.artifact_metadata ?? null) ?? {},
     [current],
   );
+  const mime = meta.mime_type ?? current?.artifact_mime ?? "";
+  const ext = meta.filename
+    ? meta.filename.replace(/^.*\./, ".")
+    : mime === "application/python-pickle" || meta.python_type
+      ? ".pkl"
+      : "";
+  const downloadName = current ? artifactFilename(metric.name, current.step, null, ext) : "";
 
   const subtitle = points.length > 0
     ? `step ${current?.step ?? 0} (${safeIdx + 1}/${points.length})`
@@ -103,7 +103,7 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
       title={metric.name}
       subtitle={subtitle}
       onRemove={onRemove}
-      onDownload={current?.artifact_hash ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), artifactFilename(metric.name, current.step, "application/python-pickle")) : undefined}
+      onDownload={current?.artifact_hash ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), downloadName) : undefined}
       headerActions={
         <span className="inline-flex items-center rounded bg-bg-hover px-1.5 py-0.5 text-[10px] text-fg-muted">
           artifact
@@ -112,73 +112,63 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
       scrollIntoViewOnMount={autoOpenSettings}
     >
         <>
-          {current?.artifact_hash ? (() => {
-            const mime = meta.mime_type ?? current.artifact_mime ?? "";
-            const isImage = isBrowserDisplayable(mime);
-            const ext = meta.filename
-              ? meta.filename.replace(/^.*\./, ".")
-              : mime === "application/python-pickle" || meta.python_type
-                ? ".pkl"
-                : "";
-            const downloadName = `${metric.name.replace(/[^a-zA-Z0-9._-]/g, "_")}_step${current.step}${ext}`;
-            return (
-              <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-auto">
-                {/* Image preview for image MIME types */}
-                {isImage && (
-                  <div className="flex justify-center items-center rounded bg-bg p-2 min-h-[6rem]">
-                    <img
-                      src={api.artifactUrl(current.artifact_hash!)}
-                      alt={`${metric.name} @ step ${current.step}`}
-                      className="max-w-full max-h-full object-contain"
-                      style={{ maxHeight: "320px" }}
-                    />
-                  </div>
-                )}
-                <div className="rounded border border-border bg-bg p-3 text-xs">
-                  <div className="flex flex-col gap-1">
-                    {meta.python_type && (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-fg-subtle">Type:</span>
-                        <span className="mono text-fg">
-                          {meta.python_module && meta.python_module !== "builtins" ? `${meta.python_module}.` : ""}{meta.python_type}
-                        </span>
-                      </div>
-                    )}
-                    {meta.size_bytes != null && (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-fg-subtle">Size:</span>
-                        <span className="mono num text-fg">{formatBytes(meta.size_bytes)}</span>
-                      </div>
-                    )}
-                    {(mime || ext) && (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-fg-subtle">Format:</span>
-                        <span className="mono text-fg">{mime || `pickle (${ext})`}</span>
-                      </div>
-                    )}
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-fg-subtle">Hash:</span>
-                      <span className="mono text-fg-muted">{current.artifact_hash!.slice(0, 16)}...</span>
-                    </div>
-                    {/* Show any extra metadata keys */}
-                    {Object.entries(meta).filter(([k]) => !["filename", "size_bytes", "mime_type", "python_type", "python_module"].includes(k)).map(([k, v]) => (
-                      <div key={k} className="flex items-baseline gap-2">
-                        <span className="text-fg-subtle">{k}:</span>
-                        <span className="mono text-fg">{String(v)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <a
-                    href={api.artifactUrl(current.artifact_hash!)}
-                    download={downloadName}
-                    className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded border border-accent text-accent hover:bg-accent/10 text-xs font-medium"
-                  >
-                    {"\u2913"} Download{ext ? ` ${ext}` : ""}
-                  </a>
+          {current?.artifact_hash ? (
+            <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-auto">
+              {/* Image preview for image MIME types */}
+              {isBrowserDisplayable(mime) && (
+                <div className="flex justify-center items-center rounded bg-bg p-2 min-h-[6rem]">
+                  <img
+                    src={api.artifactUrl(current.artifact_hash!)}
+                    alt={`${metric.name} @ step ${current.step}`}
+                    className="max-w-full max-h-full object-contain"
+                    style={{ maxHeight: "320px" }}
+                  />
                 </div>
+              )}
+              <div className="rounded border border-border bg-bg p-3 text-xs">
+                <div className="flex flex-col gap-1">
+                  {meta.python_type && (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-fg-subtle">Type:</span>
+                      <span className="mono text-fg">
+                        {meta.python_module && meta.python_module !== "builtins" ? `${meta.python_module}.` : ""}{meta.python_type}
+                      </span>
+                    </div>
+                  )}
+                  {meta.size_bytes != null && (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-fg-subtle">Size:</span>
+                      <span className="mono num text-fg">{formatBytes(meta.size_bytes)}</span>
+                    </div>
+                  )}
+                  {(mime || ext) && (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-fg-subtle">Format:</span>
+                      <span className="mono text-fg">{mime || `pickle (${ext})`}</span>
+                    </div>
+                  )}
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-fg-subtle">Hash:</span>
+                    <span className="mono text-fg-muted">{current.artifact_hash!.slice(0, 16)}...</span>
+                  </div>
+                  {/* Show any extra metadata keys */}
+                  {Object.entries(meta).filter(([k]) => !["filename", "size_bytes", "mime_type", "python_type", "python_module"].includes(k)).map(([k, v]) => (
+                    <div key={k} className="flex items-baseline gap-2">
+                      <span className="text-fg-subtle">{k}:</span>
+                      <span className="mono text-fg">{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+                <a
+                  href={api.artifactUrl(current.artifact_hash!)}
+                  download={downloadName}
+                  className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded border border-accent text-accent hover:bg-accent/10 text-xs font-medium"
+                >
+                  {"\u2913"} Download{ext ? ` ${ext}` : ""}
+                </a>
               </div>
-            );
-          })() : (
+            </div>
+          ) : (
             <div className="flex-1 flex items-center justify-center text-sm text-fg-muted">
               No artifact at this step
             </div>
@@ -187,11 +177,7 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
           <StepSlider
             points={points}
             currentIndex={safeIdx}
-            onChange={(v) => {
-              if (!mutable) return;
-              setIdx(v);
-              updateSettings({ sliderStep: v });
-            }}
+            onChange={onSliderChange}
             xAxis={settings.xAxis}
             onXAxisChange={(m) => updateSettings({ xAxis: m })}
             className="mt-3"

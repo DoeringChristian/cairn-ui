@@ -1,5 +1,7 @@
 /** Color helpers for the 3D viewers: a turbo colormap and a categorical palette, both 0..1 RGB. */
 
+import { SERIES_COLORS } from "../../lib/plot-utils/types";
+
 /** Turbo colormap (polynomial approximation), `t` in 0..1. */
 export function turbo(t: number, out: Float32Array, at: number): void {
   const x = Number.isFinite(t) ? Math.min(1, Math.max(0, t)) : 0;
@@ -33,16 +35,14 @@ export function valuesToColors(values: ArrayLike<number>, n: number, stride = 1,
   return out;
 }
 
-const CATEGORY_HEX = [
-  0x1f77b4, 0xff7f0e, 0x2ca02c, 0xd62728, 0x9467bd,
-  0x8c564b, 0xe377c2, 0x7f7f7f, 0xbcbd22, 0x17becf,
-];
+/** The app's series palette as 0xRRGGBB, for three.js vertex colors. */
+const CATEGORY_RGB = SERIES_COLORS.map((hex) => parseInt(hex.slice(1), 16));
 
-/** Integer category ids (strided) → interleaved RGB from a cycled categorical palette. */
+/** Integer category ids (strided) → interleaved RGB from the cycled series palette. */
 export function categoriesToColors(ids: ArrayLike<number>, n: number, stride = 1, offset = 0): Float32Array {
   const out = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
-    const c = CATEGORY_HEX[Math.max(0, Math.round(ids[i * stride + offset]!)) % CATEGORY_HEX.length]!;
+    const c = CATEGORY_RGB[Math.max(0, Math.round(ids[i * stride + offset]!)) % CATEGORY_RGB.length]!;
     out[i * 3] = ((c >> 16) & 255) / 255;
     out[i * 3 + 1] = ((c >> 8) & 255) / 255;
     out[i * 3 + 2] = (c & 255) / 255;

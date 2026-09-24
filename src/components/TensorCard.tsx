@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { safeJsonParse } from "../lib/format";
+import { formatNum } from "../lib/plot-utils/types";
 import { downloadArtifact, artifactFilename } from "../lib/download";
 import { api } from "../api/client";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
@@ -60,12 +61,6 @@ const DEFAULT_TENSOR_SETTINGS: TensorSettings = {
 };
 
 const SIZE_CAP = 10 * 1024 * 1024;
-
-function fmtSig(n: number, sig = 4): string {
-  if (!Number.isFinite(n)) return String(n);
-  if (n === 0) return "0";
-  return Number(n.toPrecision(sig)).toString();
-}
 
 /** C- or Fortran-order strides for a shape. */
 function strides(shape: number[], fortran: boolean): number[] {
@@ -212,11 +207,11 @@ export default function TensorCard({
       <span>dtype</span>
       <span className="mono num">{meta.dtype}</span>
       <span>min</span>
-      <span className="mono num">{fmtSig(meta.min)}</span>
+      <span className="mono num">{formatNum(meta.min)}</span>
       <span>max</span>
-      <span className="mono num">{fmtSig(meta.max)}</span>
+      <span className="mono num">{formatNum(meta.max)}</span>
       <span>mean</span>
-      <span className="mono num">{fmtSig(meta.mean)}</span>
+      <span className="mono num">{formatNum(meta.mean)}</span>
       <span>size</span>
       <span className="mono num">{meta.size_bytes} B</span>
     </div>

@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { safeJsonParse } from "../lib/format";
+import { formatNum } from "../lib/plot-utils/types";
 import {
   downloadArtifact,
   artifactFilename,
@@ -69,12 +70,6 @@ function toHistogram(
 ): HistogramData | null {
   if (!npz?.counts || !npz?.edges) return null;
   return { counts: Array.from(npz.counts.data), edges: Array.from(npz.edges.data) };
-}
-
-function fmtSig(n: number, sig = 4): string {
-  if (!Number.isFinite(n)) return String(n);
-  if (n === 0) return "0";
-  return Number(n.toPrecision(sig)).toString();
 }
 
 export default function HistogramCard({
@@ -257,11 +252,11 @@ export default function HistogramCard({
       {meta && (
         <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-fg-muted">
           <span>min</span>
-          <span className="mono num">{fmtSig(meta.min)}</span>
+          <span className="mono num">{formatNum(meta.min)}</span>
           <span>max</span>
-          <span className="mono num">{fmtSig(meta.max)}</span>
+          <span className="mono num">{formatNum(meta.max)}</span>
           <span>mean</span>
-          <span className="mono num">{fmtSig(meta.mean)}</span>
+          <span className="mono num">{formatNum(meta.mean)}</span>
           <span>count</span>
           <span className="mono num">{meta.count}</span>
           <span>num_bins</span>
