@@ -1,28 +1,36 @@
 import { downloadArtifact } from "../lib/download";
 
 interface Props {
+  /** What this is and why it isn't shown, e.g. "Volume — not viewable in the browser". */
   label: string;
+  /** Secondary line, e.g. shape/dtype. */
   detail?: string;
+  /** Optional thumbnail, drawn pixelated. */
   previewSrc?: string;
   downloadUrl: string;
   filename?: string;
 }
 
-/** Placeholder for an artifact the browser can't display: thumbnail, what it is, and a download. */
+/** Placeholder for an artifact the browser can't render: optional thumbnail, a label, and a Download button. */
 export default function UnsupportedArtifact({ label, detail, previewSrc, downloadUrl, filename }: Props) {
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-3 text-center">
+    <div className="flex h-full w-full flex-col items-center justify-center gap-2 overflow-hidden rounded bg-bg p-4 text-center">
       {previewSrc && (
-        <img src={previewSrc} alt="" className="max-h-[50%] max-w-full object-contain opacity-80" style={{ imageRendering: "pixelated" }} />
+        <img
+          src={previewSrc}
+          alt=""
+          className="min-h-0 max-w-full flex-shrink object-contain"
+          style={{ imageRendering: "pixelated", maxHeight: "50%" }}
+        />
       )}
-      <div className="text-xs text-fg-muted">{label}</div>
-      {detail && <div className="text-[10px] text-fg-subtle">{detail}</div>}
+      <div className="text-sm text-fg-muted">{label}</div>
+      {detail && <div className="mono text-xs text-fg-subtle">{detail}</div>}
       <button
         type="button"
-        className="inline-flex items-center gap-1 rounded border border-accent px-2 py-0.5 text-xs text-accent hover:bg-accent/10"
-        onClick={() => downloadArtifact(downloadUrl, filename ?? "artifact")}
+        className="rounded border border-border px-3 py-1 text-xs hover:bg-bg-hover"
+        onClick={() => downloadArtifact(downloadUrl, filename ?? "")}
       >
-        <i className="fa-solid fa-download" aria-hidden="true" /> Download
+        Download
       </button>
     </div>
   );
