@@ -26,10 +26,12 @@
     "react-markdown": "^10.1.0",
     "react-plotly.js": "^2.6.0",
     "react-router-dom": "^6.27.0",
+    "react-zoom-pan-pinch": "^4.2.0",
     "recharts": "^2.13.0",
     "remark-gfm": "^4.0.1",
     "shiki": "^4.0.2",
     "three": "^0.185.1",
+    "uplot": "^1.6.32",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

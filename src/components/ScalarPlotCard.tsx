@@ -29,14 +29,9 @@ import { plotCardPolicy } from "./card-kit/plot-card-policy";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { seriesKey, seriesLabel } from "../lib/series-utils";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
-import {
-  ScalarPlot,
-  SERIES_COLORS,
-  mapToXAxis,
-  type AxisSource,
-  type AxisScale,
-  type Series,
-} from "@cairn-plot/scalar";
+import ScalarChart from "../charts/ScalarChart";
+import { mapToXAxis, type AxisSource } from "../lib/plot-utils/x-axis";
+import { SERIES_COLORS, type AxisScale, type Series } from "../lib/plot-utils/types";
 
 const SCALAR_POLICY = plotCardPolicy("scalar");
 
@@ -530,11 +525,6 @@ export default function ScalarPlotCard({
     view: settings.viewport,
     onViewChange: (v: ScalarSettings["viewport"]) =>
       updateSettings({ viewport: v }),
-    // The card owns the axis scales, so cairn-plot's toolbar offers its
-    // per-axis log/linear toggle only because we accept the change here —
-    // the same setting the panel's X/Y scale selects write.
-    onScaleChange: (axis: "x" | "y", scale: AxisScale) =>
-      updateSettings(axis === "x" ? { xScale: scale } : { yScale: scale }),
     smoothing: settings.smoothing,
     outlierPct: settings.outlierPct,
     lineType: settings.lineType,
@@ -607,7 +597,7 @@ export default function ScalarPlotCard({
       modalContent={
         <div className="flex flex-col h-[calc(100vh-12rem)]">
           <div className="flex-1 min-h-0">
-            <ScalarPlot {...plotProps} className="h-full" />
+            <ScalarChart {...plotProps} className="h-full" />
           </div>
         </div>
       }
@@ -616,7 +606,7 @@ export default function ScalarPlotCard({
       {isLoading && !hasData ? (
         <div className="flex-1 motion-safe:animate-pulse rounded bg-bg-hover" />
       ) : (
-        <ScalarPlot {...plotProps} className="flex-1 min-h-0" />
+        <ScalarChart {...plotProps} className="flex-1 min-h-0" />
       )}
 
       <SeriesChipStrip
