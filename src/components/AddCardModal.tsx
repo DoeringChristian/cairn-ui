@@ -18,7 +18,7 @@ import { buildMetricIndex, type MetricIndexEntry } from "../lib/reports/metric-i
 import { shortRunLabel } from "../lib/run-label";
 import type { SequenceMeta } from "../api/types";
 import Dialog, { DialogFooter } from "./ui/Dialog";
-import { useCompactViewport } from "./ui/use-compact-viewport";
+import { useCompactViewport } from "../lib/use-media-query";
 
 // The type of `onAdd`'s argument, defined with `cardFromSpec` in
 // lib/reports/card-from-spec.ts.

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useSequences } from "../../api/hooks";
 import Popover from "../ui/Popover";
-import { useCompactViewport } from "../ui/use-compact-viewport";
+import { useCompactViewport } from "../../lib/use-media-query";
 
 /**
  * The "+ Reference tag" dropdown every per-kind media card renders in its

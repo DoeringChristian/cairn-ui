@@ -15,7 +15,7 @@ import {
 import { useProjectId } from "../lib/project-context";
 import { formatRelative } from "../lib/format";
 import SettingsPopover from "./SettingsPopover";
-import { useCompactViewport } from "./ui/use-compact-viewport";
+import { useCompactViewport } from "../lib/use-media-query";
 
 interface Props {
   /** Card object type, e.g. "scalar", "image", "audio", etc. */

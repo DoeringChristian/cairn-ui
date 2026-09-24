@@ -2,7 +2,7 @@ import { useId } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useModalBehavior } from "../../lib/use-modal-behavior";
-import { useCompactViewport } from "./use-compact-viewport";
+import { useCompactViewport } from "../../lib/use-media-query";
 
 const MAX_WIDTH = {
   md: "max-w-md",

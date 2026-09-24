@@ -4,7 +4,7 @@ import { useSequences } from "../../api/hooks";
 import { api } from "../../api/client";
 import { qk } from "../../api/query-keys";
 import Popover from "../ui/Popover";
-import { useCompactViewport } from "../ui/use-compact-viewport";
+import { useCompactViewport } from "../../lib/use-media-query";
 import type { SequenceMeta } from "../../api/types";
 
 export interface ChipValue {

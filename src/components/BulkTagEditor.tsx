@@ -7,7 +7,7 @@ import { safeJsonParse } from "../lib/format";
 import { useProjectTags } from "../lib/use-project-tags";
 import SettingsPopover from "./SettingsPopover";
 import TagInput from "./TagInput";
-import { useCompactViewport } from "./ui/use-compact-viewport";
+import { useCompactViewport } from "../lib/use-media-query";
 
 interface Props {
   open: boolean;

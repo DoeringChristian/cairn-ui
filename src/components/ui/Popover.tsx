@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent, ReactNode, RefObject } from "re
 import { createPortal } from "react-dom";
 import { useClickOutside } from "../../lib/use-click-outside";
 import { computePlacement } from "./placement";
-import { useCompactViewport } from "./use-compact-viewport";
+import { useCompactViewport } from "../../lib/use-media-query";
 
 /**
  * Above `Dialog` / `CardDetailModal` (z-50) and the content `use-overlay-slot`

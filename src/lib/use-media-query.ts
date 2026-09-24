@@ -25,3 +25,11 @@ export function useCoarsePointer(): boolean {
 export function useCompactLayout(): boolean {
   return useMediaQuery("(max-width: 767px)");
 }
+
+/**
+ * Phone-sized viewports for overlays: below `md`, or too short for an anchored
+ * panel (a phone in landscape). Popovers become bottom sheets, dialogs full screen.
+ */
+export function useCompactViewport(): boolean {
+  return useMediaQuery("(max-width: 767.98px), (max-height: 499.98px)");
+}
