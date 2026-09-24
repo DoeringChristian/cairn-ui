@@ -15,12 +15,17 @@ without it; only `cairn ui` and `cairn server --ui` need it.
 ## What is in here
 
 - `src/`, `scripts/`, and the bundler config — the React/TypeScript application.
-- `cairn_ui/_dist/` — its built bundle (three HTML entries plus hashed assets),
+- `cairn_ui/_dist/` — its built bundle (two HTML entries plus hashed assets),
   **committed** so installing never needs Node.
 - `cairn_ui/cards/` — the Python surface that builds card specs for that bundle
   to render, reached as `cairn.ui` once installed.
-- `vendor/cairn-plot` — the renderer, as a submodule. The build compiles its
-  TypeScript in, so clone with `--recurse-submodules`.
+
+Charts are drawn with [uPlot](https://github.com/leeoniya/uPlot) (scalar
+lines) and Plotly (everything else), images with
+[react-zoom-pan-pinch](https://github.com/BetterTyped/react-zoom-pan-pinch),
+and 3D with three.js. Images the browser can't decode (EXR, npy) show their
+thumbnail and a download. cairn-plot is not a dependency; it is the separate
+library for notebooks and standalone HTML reports (`cairn.plot`).
 
 `cairn_ui/__init__.py` exposes exactly one function, `dist_path()`. Everything
 about *serving* the bundle — routes, shells, the CPU-renderer override — lives in
@@ -30,7 +35,6 @@ from the server.
 ## Building
 
 ```
-git submodule update --init
 npm ci
 npm run build          # -> cairn_ui/_dist
 ```

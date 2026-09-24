@@ -59,7 +59,6 @@ import { api } from "../api/client";
 
 import { disambiguateRunLabels, useRunMetadataVersion } from "../lib/run-label";
 import { RunSelectionContext, useRunSelectionState } from "../lib/use-run-selection";
-import { CameraSyncContext, DEFAULT_CAMERA_SYNC_GROUP } from "../lib/camera-sync";
 import RunSelectionPanel from "../components/RunSelectionPanel";
 import type { Run } from "../api/types";
 import type { SequenceMeta } from "../api/types";
@@ -353,7 +352,7 @@ export default function ComparePage() {
 
   return (
     <RunSelectionContext.Provider value={selectionState}>
-    <CameraSyncContext.Provider value={DEFAULT_CAMERA_SYNC_GROUP}>
+    <>
       <div>
         <h1 className="mono mb-4 text-xl font-semibold">
           Compare
@@ -490,7 +489,7 @@ export default function ComparePage() {
           />
         )}
       </div>
-    </CameraSyncContext.Provider>
+    </>
     </RunSelectionContext.Provider>
   );
 }

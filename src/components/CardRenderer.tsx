@@ -11,7 +11,6 @@ import type { CardSettingsKey } from "../lib/card-settings";
 import { useSequence } from "../api/hooks";
 import { api } from "../api/client";
 import { downloadArtifact, artifactFilename } from "../lib/download";
-import CairnPlotCard from "./CairnPlotCard";
 import ImageCard from "./ImageCard";
 import AudioPlayerCard from "./AudioPlayerCard";
 import VideoPlayerCard from "./VideoPlayerCard";
@@ -40,6 +39,10 @@ const BarChartCard = lazy(() => import("./BarChartCard"));
 
 const ScalarTileCard = lazy(() => import("./ScalarTileCard"));
 const ScalarValueCard = lazy(() => import("./ScalarValueCard"));
+const PointCloudCard = lazy(() => import("./PointCloudCard"));
+const MeshCard = lazy(() => import("./MeshCard"));
+const Boxes3DCard = lazy(() => import("./Boxes3DCard"));
+const VolumeCard = lazy(() => import("./VolumeCard"));
 
 
 /**
@@ -265,13 +268,29 @@ export default function CardRenderer(props: CardDescriptor) {
     case "artifact":
       return <ArtifactCard {...baseProps} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
     case "pointcloud":
-      return <CairnPlotCard {...baseProps} extraSeries={extraSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />;
+      return (
+        <Suspense fallback={<LazyCardFallback label="loading point cloud…" />}>
+          <PointCloudCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />
+        </Suspense>
+      );
     case "mesh":
-      return <CairnPlotCard {...baseProps} extraSeries={extraSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />;
+      return (
+        <Suspense fallback={<LazyCardFallback label="loading mesh…" />}>
+          <MeshCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />
+        </Suspense>
+      );
     case "boxes3d":
-      return <CairnPlotCard {...baseProps} extraSeries={extraSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />;
+      return (
+        <Suspense fallback={<LazyCardFallback label="loading boxes…" />}>
+          <Boxes3DCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />
+        </Suspense>
+      );
     case "volume":
-      return <CairnPlotCard {...baseProps} extraSeries={extraSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />;
+      return (
+        <Suspense fallback={<LazyCardFallback label="loading volume…" />}>
+          <VolumeCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />
+        </Suspense>
+      );
     default: {
       // Exhaustiveness guard tied to the actual switch: if a `SeriesCardType`
       // case above is removed/renamed (or a new `CardType` is added without a

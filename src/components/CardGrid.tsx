@@ -16,7 +16,6 @@ import {
 } from "../lib/run-layout";
 import type { RunLayout } from "../lib/run-layout";
 import { loadJson, saveJson, storageKeys } from "../lib/storage";
-import { CameraSyncContext, DEFAULT_CAMERA_SYNC_GROUP } from "../lib/camera-sync";
 import { useProjectId } from "../lib/project-context";
 import { useProjectView } from "../lib/project-view";
 
@@ -113,7 +112,7 @@ export default function CardGrid({ runId, sequences }: Props) {
   const showReset = !isEmptyLayout(layout);
 
   return (
-    <CameraSyncContext.Provider value={DEFAULT_CAMERA_SYNC_GROUP}>
+    <>
       <div className="space-y-8">
         {(showReset || hiddenKeys.length > 0) && (
           <div className="flex items-center justify-end gap-3">
@@ -183,7 +182,7 @@ export default function CardGrid({ runId, sequences }: Props) {
           );
         })}
       </div>
-    </CameraSyncContext.Provider>
+    </>
   );
 }
 
