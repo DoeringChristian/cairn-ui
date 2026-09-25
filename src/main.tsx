@@ -58,6 +58,7 @@ const router = createBrowserRouter([
           { path: "reports/:reportId", element: <ReportEditorPage /> },
           { path: "sweeps", element: <SweepsListPage /> },
           { path: "sweeps/:sweepId", element: <SweepDetailPage /> },
+          { path: "defaults", lazy: () => import("./pages/DefaultsPage").then((m) => ({ Component: m.default })) },
           {
             path: "r/:runId",
             element: <RunDetailPage />,

@@ -13,7 +13,7 @@
 
 import type { SequenceMeta } from "../api/types";
 import type { Section } from "./sections";
-import { loadJson, saveJson, storageKeys } from "./storage";
+import { loadJson, saveJson, storageKeys } from "./storage.ts";
 
 export interface RunLayout {
   version: 1;
@@ -38,7 +38,12 @@ export function cardKeyOf(meta: SequenceMeta): string {
 }
 
 export function loadRunLayout(runId: string): RunLayout {
-  const parsed = loadJson<Partial<RunLayout>>(localStorage, storageKeys.runLayout(runId));
+  return normalizeRunLayout(loadJson<unknown>(localStorage, storageKeys.runLayout(runId)));
+}
+
+/** Coerce anything (stored JSON, a saved view's copy) into a valid layout. */
+export function normalizeRunLayout(raw: unknown): RunLayout {
+  const parsed = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Partial<RunLayout>) : null;
   if (!parsed) return { ...EMPTY_LAYOUT };
   return {
     version: 1,

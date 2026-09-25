@@ -7,27 +7,43 @@ import ComparisonCardView from "../../components/comparison/ComparisonCardView";
 import RunSetEditor, { DEFAULT_QUERY_SELECTOR } from "../../components/comparison/RunSetEditor";
 import ReorderableCardGrid from "../../components/ReorderableCardGrid";
 import RunSelectorBadge from "../../components/RunSelectorBadge";
-import { SectionBlock } from "../../components/CardGrid";
+import SectionBlock from "../../components/SectionBlock";
+import WorkspaceToolbar from "../../components/WorkspaceToolbar";
 import {
+  addCardToComparison,
   cardSettingsKeyFor,
   compareRunId,
   comparisonRunIds,
   createTemplate,
+  isMultiRunCardType,
+  MULTI_RUN_CARD_LABELS,
   templateCardOf,
   type Comparison,
   type ComparisonCard,
   type ComparisonTemplateCard,
   type SmartFilters,
 } from "../../lib/comparisons";
-import { buildReportPayload, cardSettingsKeyForReport, newId } from "../../lib/reports";
+import { useComparisonUndo } from "../../lib/comparisons/undo";
+import { useMetricIndex } from "../../lib/reports";
 import { describeRunSelector } from "../../lib/run-selector";
 import { loadCardOverrides, saveCardOverrides } from "../../lib/card-settings";
-import { groupComparisonCardsIntoSections } from "../../lib/sections";
+import { groupComparisonCardsIntoSections, orderSections } from "../../lib/sections";
+import { CardNavProvider } from "../../lib/card-nav";
+import { WorkspaceDefaultsProvider } from "../../lib/settings-scope";
+import { compilePanelFilter, filterPanels } from "../../lib/workspace/panel-filter";
+import type { BuiltPanel } from "../../lib/workspace/panel-builder";
+import { sendCardsToReport } from "../../lib/workspace/send-to-report";
+import { useWorkspace } from "../../lib/workspace/use-workspace";
 import { useCollapsedSections } from "../../lib/use-collapsed-sections";
 import { disambiguateRunLabels, useRunMetadataVersion } from "../../lib/run-label";
 import { useRunSelectorResolution } from "../../api/hooks";
-import { api } from "../../api/client";
 import type { Run } from "../../api/types";
+
+/** The name a comparison card is searched and sorted by. */
+function comparisonCardLabel(card: ComparisonCard): string {
+  if (isMultiRunCardType(card.type)) return MULTI_RUN_CARD_LABELS[card.type];
+  return card.series[0]?.name ?? card.type;
+}
 
 const COMPARISON_TABS = [
   { id: "overview", label: "Overview" },
@@ -107,9 +123,26 @@ export default function ComparisonView({
     compareRunId(comparison.id),
   );
 
+  // Workspace: defaults, hide patterns, section pins/sorting, sync zoom.
+  const { doc } = useWorkspace(projectId);
+  const [query, setQuery] = useState("");
+  const visibleCards = useMemo(
+    () => filterPanels(comparison.cards, comparisonCardLabel, { query, hidePatterns: doc.hidePatterns }),
+    [comparison.cards, query, doc.hidePatterns],
+  );
+  const matchCount = useMemo(() => {
+    if (!query.trim()) return 0;
+    const f = compilePanelFilter(query);
+    return comparison.cards.filter((c) => f.test(comparisonCardLabel(c))).length;
+  }, [comparison.cards, query]);
   const sections = useMemo(
-    () => groupComparisonCardsIntoSections(comparison.cards),
-    [comparison.cards],
+    () =>
+      orderSections(
+        groupComparisonCardsIntoSections(visibleCards).map((s) => ({ name: s.name, items: s.cards })),
+        doc.sections,
+        comparisonCardLabel,
+      ),
+    [visibleCards, doc.sections],
   );
 
   const handleRefresh = useCallback(async () => {
@@ -134,35 +167,65 @@ export default function ComparisonView({
   const handleCreateReport = useCallback(async () => {
     setCreatingReport(true);
     try {
-      const newCards: ComparisonCard[] = comparison.cards.map((card) => ({ ...card, id: newId() }));
       const runList = compRunIds.map((id) => runLabels[id] ?? id).join(", ");
-      const headerBlock = {
-        id: newId(),
-        type: "markdown" as const,
-        text: `# ${comparison.name}\n\nFrom comparison "${comparison.name}". Runs: ${runList || "(none)"}`,
-      };
-      const cardsBlock = {
-        id: newId(),
-        type: "cards" as const,
+      const reportId = await sendCardsToReport({
+        projectId,
+        name: comparison.name,
+        intro: `From comparison "${comparison.name}". Runs: ${runList || "(none)"}`,
         runIds: compRunIds,
-        cards: newCards,
-      };
-      const blocks = [headerBlock, cardsBlock];
-
-      const created = await api.createReport(projectId, comparison.name, { source: "" });
-
-      comparison.cards.forEach((card, i) => {
-        const overrides = loadCardOverrides(cardSettingsKeyFor(comparison.id, card));
-        if (overrides) saveCardOverrides(cardSettingsKeyForReport(created.id, newCards[i]!), overrides);
+        cards: comparison.cards,
+        settingsKeyOf: (card) => cardSettingsKeyFor(comparison.id, card),
       });
-      const fullPayload = buildReportPayload(created.id, blocks);
-      await api.updateReport(projectId, created.id, { payload: fullPayload as unknown as Record<string, unknown> });
-
-      navigate(`/p/${projectId}/reports/${created.id}`);
+      navigate(`/p/${projectId}/reports/${reportId}`);
     } finally {
       setCreatingReport(false);
     }
   }, [comparison, compRunIds, runLabels, projectId, navigate]);
+
+  // One section into a new report.
+  const sendSection = useCallback(
+    async (sectionName: string, cards: ComparisonCard[]) => {
+      const runList = compRunIds.map((id) => runLabels[id] ?? id).join(", ");
+      const reportId = await sendCardsToReport({
+        projectId,
+        name: `${sectionName} · ${comparison.name}`,
+        intro: `Section “${sectionName}” of comparison "${comparison.name}". Runs: ${runList || "(none)"}`,
+        runIds: compRunIds,
+        cards,
+        settingsKeyOf: (card) => cardSettingsKeyFor(comparison.id, card),
+      });
+      navigate(`/p/${projectId}/reports/${reportId}`);
+    },
+    [comparison, compRunIds, runLabels, projectId, navigate],
+  );
+
+  // Quick panel builder: one line plot per built panel, across every run
+  // of the comparison that logs its metrics.
+  const { index: metricIndex } = useMetricIndex(compRunIds);
+  const scalarNames = useMemo(
+    () => Array.from(metricIndex.values()).filter((e) => e.object_type === "scalar").map((e) => e.name),
+    [metricIndex],
+  );
+  const track = useComparisonUndo(projectId);
+  const buildPanels = useCallback(
+    (panels: BuiltPanel[]) => {
+      const cards = panels.map((p) => ({
+        type: "scalar" as const,
+        series: p.metrics.flatMap((name) =>
+          (metricIndex.get(`${name}::scalar`)?.runs ?? []).map((r) => ({ runId: r.runId, name })),
+        ),
+      }));
+      track(`Add ${cards.length} panel(s)`, comparison.id, () => {
+        panels.forEach((p, i) => {
+          const card = cards[i]!;
+          const id = addCardToComparison(projectId, comparison.id, card);
+          // The panel's title is its card title.
+          saveCardOverrides(cardSettingsKeyFor(comparison.id, { id, ...card }), { title: p.title });
+        });
+      });
+    },
+    [metricIndex, track, projectId, comparison.id],
+  );
 
   useEffect(() => {
     if (!editingName) setDraft(comparison.name);
@@ -336,22 +399,37 @@ export default function ComparisonView({
             </button>
           </div>
 
+          <WorkspaceToolbar
+            projectId={projectId}
+            query={query}
+            onQueryChange={setQuery}
+            matchCount={matchCount}
+            builderMetrics={scalarNames}
+            onBuildPanels={buildPanels}
+          />
+
           {comparison.cards.length === 0 ? (
             <div className="card p-6 text-sm text-fg-muted">
               No cards yet. Click "Add card" to pick metrics from the comparison's runs.
             </div>
           ) : (
+            <WorkspaceDefaultsProvider defaults={doc.defaults}>
+            {/* MERGER: ChartSyncProvider (lib/chart-sync.tsx) wraps from here, driven by doc.prefs.syncZoom / doc.prefs.syncCursor. */}
+            <CardNavProvider>
             <div className="space-y-8">
+              {sections.length === 0 && <p className="text-sm text-fg-muted">No cards match.</p>}
               {sections.map((section) => (
                 <SectionBlock
                   key={section.name}
                   sectionName={section.name}
-                  itemCount={section.cards.length}
+                  itemCount={section.items.length}
                   collapsed={collapsedSections.has(section.name)}
                   onToggleCollapse={() => toggleSection(section.name)}
+                  cardTypes={Array.from(new Set(section.items.map((c) => c.type)))}
+                  onSendToReport={() => sendSection(section.name, section.items)}
                 >
                   <ReorderableCardGrid
-                    cards={section.cards.map((card) => ({
+                    cards={section.items.map((card) => ({
                       key: card.id,
                       content: (
                         <ComparisonCardView
@@ -362,11 +440,14 @@ export default function ComparisonView({
                         />
                       ),
                     }))}
-                    onReorder={onReorderCards}
+                    // A sorted section has no manual order to change.
+                    onReorder={doc.sections.sort.includes(section.name) ? undefined : onReorderCards}
                   />
                 </SectionBlock>
               ))}
             </div>
+            </CardNavProvider>
+            </WorkspaceDefaultsProvider>
           )}
         </>
       )}

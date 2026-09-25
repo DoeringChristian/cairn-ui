@@ -17,8 +17,8 @@ export const storageKeys = {
   runLayout: (runId: string) => `cairn:run-layout:${runId}`,
   collapsedSections: (scope: string) => `cairn:collapsed-sections:${scope}`,
   comparisons: (projectId: string) => `cairn:comparisons:${projectId}`,
-  /** Per-project default view of the Metrics & Media tab — see lib/project-view.ts. */
-  projectView: (projectId: string) => `cairn:project-view:${projectId}`,
+  /** The project workspace document's last server-confirmed copy — see lib/workspace/store.ts. */
+  workspace: (projectId: string) => `cairn:workspace:${projectId}`,
   /** The runs table's filter chips and group-by — see lib/run-filter.ts. */
   runsFilter: (projectId: string) => `cairn:runs-filter:${projectId}`,
   comparisonTemplates: (projectId: string) => `cairn:comparison-templates:${projectId}`,

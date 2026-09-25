@@ -338,4 +338,38 @@ export const api = {
     get<import("./types").SweepDetail>(`/api/sweeps/${sweepId}`),
   sweepAction: (sweepId: string, action: import("./types").SweepAction) =>
     post<import("./types").SweepDetail>(`/api/sweeps/${sweepId}/${action}`, {}),
+
+  // ── Project workspace + saved views (lib/workspace/*) ──────────────────
+  workspace: (projectId: string) =>
+    get<import("./types").WorkspaceGet>(`/api/projects/${projectId}/workspace`),
+  /** A stale `baseRev` resolves to `{conflict}` (the server's document), not an error. */
+  putWorkspace: async (
+    projectId: string,
+    baseRev: number,
+    payload: Record<string, unknown>,
+  ): Promise<import("./types").WorkspacePutResult> => {
+    const path = `/api/projects/${projectId}/workspace`;
+    const res = await fetch(path, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ base_rev: baseRev, payload }),
+    });
+    if (res.status === 409) {
+      const body = (await res.json()) as { rev: number; payload: Record<string, unknown> | null };
+      return { conflict: { rev: body.rev, payload: body.payload } };
+    }
+    await checkOk(res, path);
+    return { ok: (await res.json()) as { rev: number; updated_at: string } };
+  },
+  views: (projectId: string) =>
+    get<{ views: import("./types").SavedViewSummary[] }>(`/api/projects/${projectId}/views`),
+  view: (projectId: string, id: string) =>
+    get<import("./types").SavedView>(`/api/projects/${projectId}/views/${id}`),
+  createView: (projectId: string, name: string, payload: Record<string, unknown>) =>
+    post<{ id: string; name: string; rev: number; created_at: string }>(
+      `/api/projects/${projectId}/views`,
+      { name, payload },
+    ),
+  deleteView: (projectId: string, id: string) =>
+    del_<{ deleted: string }>(`/api/projects/${projectId}/views/${id}`),
 };

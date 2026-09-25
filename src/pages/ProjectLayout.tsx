@@ -11,6 +11,7 @@ import { UndoProvider } from "../lib/undo-context";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import CopyId from "../components/CopyId";
 import AlertBell from "../components/alerts/AlertBell";
+import ShortcutsDialog from "../components/ShortcutsDialog";
 
 
 const NAV_ITEMS = [
@@ -88,6 +89,19 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+  {
+    path: "defaults",
+    end: false,
+    label: "Defaults",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <line x1="3" y1="5" x2="15" y2="5" />
+        <line x1="3" y1="13" x2="15" y2="13" />
+        <circle cx="7" cy="5" r="1.8" fill="currentColor" />
+        <circle cx="11" cy="13" r="1.8" fill="currentColor" />
+      </svg>
+    ),
+  },
 ];
 
 export default function ProjectLayout() {
@@ -99,6 +113,7 @@ export default function ProjectLayout() {
     <ProjectProvider value={projectId}>
     {/* One undo stack per project: keyed so switching projects starts fresh. */}
     <UndoProvider key={projectId}>
+      <ShortcutsDialog />
       <div className="flex min-h-0">
         {/* Left icon+label nav — desktop */}
         <nav className="hidden md:flex print:!hidden flex-col items-center gap-2 w-16 shrink-0 border-r border-border py-3 fixed top-[var(--header-h)] left-0 h-[calc(100vh-var(--header-h))] overflow-y-auto z-10">

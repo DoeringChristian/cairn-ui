@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useModalBehavior } from "../lib/use-modal-behavior";
+import { isTypingTarget } from "../lib/shortcuts";
 
 interface Props {
   open: boolean;
@@ -7,6 +8,17 @@ interface Props {
   children: ReactNode;
   settingsContent: ReactNode;
   title: string;
+  /** Step to the previous / next card (lib/card-nav.tsx); omitted at either end. */
+  onPrev?: () => void;
+  onNext?: () => void;
+}
+
+/** Arrow keys belong to a focused control (a slider, a select), not to card navigation. */
+function isControl(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  if (!el || typeof el.tagName !== "string") return false;
+  const tag = el.tagName.toUpperCase();
+  return isTypingTarget(el) || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA";
 }
 
 /**
@@ -25,8 +37,27 @@ export default function CardDetailModal({
   children,
   settingsContent,
   title,
+  onPrev,
+  onNext,
 }: Props) {
   useModalBehavior(open, onClose);
+  const hasNav = !!onPrev || !!onNext;
+  const navRef = useRef({ onPrev, onNext });
+  navRef.current = { onPrev, onNext };
+  useEffect(() => {
+    if (!open || !hasNav) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (isControl(e.target)) return;
+      const step = e.key === "ArrowLeft" ? navRef.current.onPrev : navRef.current.onNext;
+      if (!step) return;
+      e.preventDefault();
+      step();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, hasNav]);
   const [tab, setTab] = useState<"card" | "settings">("card");
   useEffect(() => {
     if (open) setTab("card");
@@ -65,6 +96,7 @@ export default function CardDetailModal({
         <div className="sticky top-0 z-10 shrink-0 border-b border-border bg-bg md:hidden">
           <div className="flex items-center gap-2 pl-4 pr-1">
             <h2 className="mono min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
+          {hasNav && <NavButtons onPrev={onPrev} onNext={onNext} size="h-11 w-11" />}
             <button
               type="button"
               onClick={onClose}
@@ -88,13 +120,16 @@ export default function CardDetailModal({
             showSettings ? "hidden" : "flex"
           }`}
         >
-          <h2 className="mono mb-4 hidden shrink-0 text-lg font-semibold md:block">{title}</h2>
+          <div className="mb-4 hidden shrink-0 items-center gap-2 md:flex">
+            <h2 className="mono min-w-0 flex-1 truncate text-lg font-semibold">{title}</h2>
+            {hasNav && <NavButtons onPrev={onPrev} onNext={onNext} size="h-7 w-7" />}
+          </div>
           <div className="flex-1 min-h-0">{children}</div>
         </div>
 
         {/* Settings panel */}
         <div
-          className={`min-h-0 flex-1 overflow-y-auto bg-bg-elevated p-4 md:block md:w-80 md:flex-none md:shrink-0 md:border-l md:border-border ${
+          className={`min-h-0 flex-1 overflow-y-auto bg-bg-elevated p-4 md:block md:w-96 md:flex-none md:shrink-0 md:border-l md:border-border ${
             showSettings ? "block" : "hidden"
           }`}
         >
@@ -115,5 +150,19 @@ export default function CardDetailModal({
         </div>
       </div>
     </div>
+  );
+}
+
+function NavButtons({ onPrev, onNext, size }: { onPrev?: () => void; onNext?: () => void; size: string }) {
+  const cls = `${size} shrink-0 inline-flex items-center justify-center rounded text-fg-muted hover:bg-bg-hover hover:text-fg disabled:opacity-30 disabled:hover:bg-transparent`;
+  return (
+    <span className="inline-flex shrink-0 items-center">
+      <button type="button" onClick={onPrev} disabled={!onPrev} className={cls} aria-label="Previous card" title="Previous card (←)">
+        <i className="fa-solid fa-chevron-left" aria-hidden="true" />
+      </button>
+      <button type="button" onClick={onNext} disabled={!onNext} className={cls} aria-label="Next card" title="Next card (→)">
+        <i className="fa-solid fa-chevron-right" aria-hidden="true" />
+      </button>
+    </span>
   );
 }

@@ -4,11 +4,16 @@
  * Used by workspace, comparison, and can replace section grids in CardGrid.
  * Cards are wrapped in DraggableCard for the ≡ grip handle and the
  * move-up / move-down menu entries (touch screens have no HTML5 drag).
+ *
+ * The grid reports its rendered order to the enclosing `CardNavProvider`
+ * (lib/card-nav.tsx) for ←/→ in the detail modal, and makes its own
+ * provider when there is none.
  */
 
 import { Fragment, useCallback, useContext, useRef, type ReactNode } from "react";
 import DraggableCard, { CAIRN_CARD_MIME } from "./DraggableCard";
 import { CardMutationContext } from "../lib/card-settings";
+import { CardNavItem, CardNavProvider, useCardNavGrid, useHasCardNav } from "../lib/card-nav";
 
 interface CardEntry {
   key: string;
@@ -45,7 +50,17 @@ function findCardUnderCursor(
   return null;
 }
 
-export default function ReorderableCardGrid({
+export default function ReorderableCardGrid(props: Props) {
+  const hasNav = useHasCardNav();
+  if (hasNav) return <Grid {...props} />;
+  return (
+    <CardNavProvider>
+      <Grid {...props} />
+    </CardNavProvider>
+  );
+}
+
+function Grid({
   cards,
   onReorder,
   className,
@@ -54,6 +69,7 @@ export default function ReorderableCardGrid({
   const gridRef = useRef<HTMLDivElement | null>(null);
   // Read-only grids (report viewers) have no drag grips or move entries.
   const mutable = useContext(CardMutationContext);
+  const gridId = useCardNavGrid(gridRef, cards.map((c) => c.key));
 
   const clearHighlight = useCallback(() => {
     gridRef.current
@@ -111,7 +127,9 @@ export default function ReorderableCardGrid({
       {...(dataAttributes ?? {})}
     >
       {cards.map((card, i) => !mutable ? (
-        <Fragment key={card.key}>{card.content}</Fragment>
+        <Fragment key={card.key}>
+          <CardNavItem gridId={gridId} cardKey={card.key}>{card.content}</CardNavItem>
+        </Fragment>
       ) : (
         <DraggableCard
           key={card.key}
@@ -123,7 +141,7 @@ export default function ReorderableCardGrid({
           onMoveUp={onReorder && i > 0 ? () => onReorder(card.key, cards[i - 1]!.key) : undefined}
           onMoveDown={onReorder && i < cards.length - 1 ? () => onReorder(card.key, cards[i + 1]!.key) : undefined}
         >
-          {card.content}
+          <CardNavItem gridId={gridId} cardKey={card.key}>{card.content}</CardNavItem>
         </DraggableCard>
       ))}
     </div>
