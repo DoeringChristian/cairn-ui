@@ -19,11 +19,7 @@ import { api } from "../api/client";
 import { useIframeAutoHeight } from "./card-kit";
 import SteppedMediaCard, { type SteppedMediaCardProps } from "./media/SteppedMediaCard";
 import type { HtmlSettings } from "./cards-settings/html";
-import Toggle from "./settings/Toggle";
-import Slider from "./settings/Slider";
-
-const MIN_HEIGHT = 80;
-const MAX_HEIGHT = 2000;
+import HtmlSettingsPanel, { HTML_MAX_HEIGHT as MAX_HEIGHT, HTML_MIN_HEIGHT as MIN_HEIGHT } from "./settings-panels/HtmlSettingsPanel";
 
 /**
  * Resize shim injected into the srcdoc.
@@ -124,25 +120,7 @@ export default function HtmlCard(props: SteppedMediaCardProps) {
       defaultMime="text/html"
       defaultHeight={360}
       nearest
-      settingsPanel={(ctl) => (
-        <>
-          <Toggle
-            label="Auto-height"
-            checked={ctl.value.autoHeight}
-            onChange={(v) => ctl.set({ autoHeight: v })}
-            description={'Resize to the document’s content height via the "cairn:resize" postMessage shim. Falls back to a fixed height if the document never posts a size.'}
-          />
-          <Slider
-            label="Fixed height"
-            value={ctl.value.fixedHeight}
-            onChange={(v) => ctl.set({ fixedHeight: v })}
-            min={MIN_HEIGHT}
-            max={MAX_HEIGHT}
-            step={20}
-            format={(v) => `${v}px`}
-          />
-        </>
-      )}
+      settingsPanel={(ctl, ctx) => <HtmlSettingsPanel ctl={ctl} ctx={ctx} mode="card" />}
       renderArtifact={({ hash, name, settings, single }) => {
         const frame = <HtmlFrame hash={hash} name={name} autoHeight={settings.autoHeight} fixedHeight={settings.fixedHeight} />;
         return single ? <div className="flex-1 min-h-0 overflow-auto">{frame}</div> : frame;

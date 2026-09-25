@@ -12,7 +12,7 @@ import Markdown from "../lib/markdown";
 import { api } from "../api/client";
 import SteppedMediaCard, { type SteppedMediaCardProps } from "./media/SteppedMediaCard";
 import type { MarkdownFontSize as FontSize, MarkdownSettings } from "./cards-settings/markdown";
-import Select from "./settings/Select";
+import MarkdownSettingsPanel from "./settings-panels/MarkdownSettingsPanel";
 
 const FONT_SIZE_CLASS: Record<FontSize, string> = {
   xs: "text-xs",
@@ -49,18 +49,7 @@ export default function MarkdownCard(props: SteppedMediaCardProps) {
       defaultMime="text/markdown"
       defaultHeight={300}
       nearest
-      settingsPanel={(ctl) => (
-        <Select
-          label="Font size"
-          value={ctl.value.fontSize}
-          onChange={(v) => ctl.set({ fontSize: v as FontSize })}
-          options={[
-            { value: "xs", label: "Extra small" },
-            { value: "sm", label: "Small" },
-            { value: "base", label: "Base" },
-          ]}
-        />
-      )}
+      settingsPanel={(ctl, ctx) => <MarkdownSettingsPanel ctl={ctl} ctx={ctx} mode="card" />}
       renderArtifact={({ hash, settings, single }) => (
         <MarkdownBody hash={hash} fontSize={settings.fontSize} fill={single} />
       )}

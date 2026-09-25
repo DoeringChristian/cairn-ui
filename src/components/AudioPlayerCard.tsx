@@ -5,7 +5,7 @@ import { pointCaption } from "../lib/caption";
 import type { SequencePoint } from "../api/types";
 import SteppedMediaCard, { type SteppedMediaCardProps } from "./media/SteppedMediaCard";
 import type { AudioSettings } from "./cards-settings/audio";
-import Toggle from "./settings/Toggle";
+import AudioSettingsPanel from "./settings-panels/AudioSettingsPanel";
 
 interface AudioMeta {
   sample_rate: number;
@@ -74,14 +74,7 @@ export default function AudioPlayerCard(props: SteppedMediaCardProps) {
       noun="audio"
       defaultMime="audio/wav"
       nearest
-      settingsPanel={(ctl) => (
-        <Toggle
-          label="Autoplay"
-          checked={ctl.value.autoplay}
-          onChange={(v) => ctl.set({ autoplay: v })}
-          description="Play the clip automatically when the card loads"
-        />
-      )}
+      settingsPanel={(ctl, ctx) => <AudioSettingsPanel ctl={ctl} ctx={ctx} mode="card" />}
       renderArtifact={({ point, hash, settings }) => (
         <AudioClip point={point} hash={hash} autoplay={settings.autoplay} />
       )}

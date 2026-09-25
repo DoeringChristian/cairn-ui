@@ -7,20 +7,21 @@
  */
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { useSequence } from "../../api/hooks";
+import { useSequencesForRuns } from "../../api/hooks";
 import { api } from "../../api/client";
-import { qk } from "../../api/query-keys";
 import { downloadArtifact, artifactFilename } from "../../lib/download";
-import { type CardSettingsKey, type SettingsController } from "../../lib/card-settings";
+import { cardOverridesStorageKey, type CardSettingsKey, type SettingsController } from "../../lib/card-settings";
 import { useCardDrop } from "../../lib/use-series-drop";
 import type { ComparisonSeriesRef } from "../../lib/comparisons";
-import { shortRunLabel, useRunMetadataVersion } from "../../lib/run-label";
-import { seriesKey } from "../../lib/series-utils";
-import type { SequenceMeta, SequencePoint, SequenceResponse } from "../../api/types";
-import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid } from "../card-kit";
+import { gridValues, normalizeSlots, slotValue } from "../../lib/media/panel-layout";
+import { STEP_KEY, formatKeyValue } from "../../lib/media/slider-key";
+import type { SequenceMeta, SequencePoint } from "../../api/types";
+import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid } from "../card-kit";
+import ComparePanes from "../card-kit/ComparePanes";
+import GridPanes from "../card-kit/GridPanes";
+import { useMediaPanes, useScalarMetricNames } from "../card-kit/use-media-panes";
 import { steppedMediaInstanceDefaults, type SteppedMediaSettings } from "../cards-settings/stepped-media";
-import type { SeriesRef } from "../card-kit/use-card-series";
+import type { MediaPanelCtx } from "../settings-panels/media-panel-kit";
 import AddToComparisonButton from "../AddToComparisonButton";
 import CardShell from "../CardShell";
 import SeriesChipStrip from "../SeriesChipStrip";
@@ -45,9 +46,20 @@ export interface MediaView<S> {
   /** Series name of the pane. */
   name: string;
   settings: S;
-  /** True when this is the card's only pane (it fills the card); false for one pane of the grid. */
+  /** True when this is the card's only pane (it fills the card); false for one pane of a grid. */
   single: boolean;
   inModal: boolean;
+  /** Stable id of the pane (per series and layout slot). */
+  paneId: string;
+  /** How many panes the card shows at once. */
+  paneCount: number;
+  /** The card follows a section media sync right now. */
+  following: boolean;
+}
+
+/** Runtime info a stepped media settings panel gets. */
+export interface SteppedMediaPanelCtx extends MediaPanelCtx {
+  paneKeys: readonly string[];
 }
 
 interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
@@ -64,51 +76,15 @@ interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
    * state (see resolveAtStep's `nearest`).
    */
   nearest: boolean;
-  settingsPanel: (ctl: SettingsController<S>) => ReactNode;
+  settingsPanel: (ctl: SettingsController<S>, ctx: SteppedMediaPanelCtx) => ReactNode;
   renderArtifact: (view: MediaView<S>) => ReactNode;
-}
-
-function useArtifactPoints(runId: string, m: { name: string }) {
-  const q = useSequence(runId, m.name);
-  const points = useMemo(
-    () => (q.data?.points ?? []).filter((p) => p.artifact_hash),
-    [q.data],
-  );
-  return { points, isLoading: q.isLoading };
+  /** Extra controls between the panes and the slider (the video transport). */
+  footer?: (args: { settings: S; paneCount: number; following: boolean }) => ReactNode;
 }
 
 function Placeholder({ loading, noun }: { loading: boolean; noun: string }) {
   if (loading) return <div className="h-48 motion-safe:animate-pulse rounded bg-bg-hover" />;
   return <div className="text-sm text-fg-muted">no {noun} logged yet</div>;
-}
-
-/** One series' pane in the multi-series grid, resolved at the card's step. */
-function MediaPane<S extends SteppedMediaSettings>({
-  runId,
-  m,
-  targetStep,
-  nearest,
-  noun,
-  settings,
-  inModal,
-  renderArtifact,
-}: {
-  runId: string;
-  m: SeriesRef;
-  targetStep: number;
-  nearest: boolean;
-  noun: string;
-  settings: S;
-  inModal: boolean;
-  renderArtifact: (view: MediaView<S>) => ReactNode;
-}) {
-  const { points, isLoading } = useArtifactPoints(m.runId ?? runId, m);
-  const current = useMemo(
-    () => resolveAtStep(points, targetStep, { nearest }),
-    [points, targetStep, nearest],
-  );
-  if (isLoading || !current?.artifact_hash) return <Placeholder loading={isLoading} noun={noun} />;
-  return renderArtifact({ point: current, hash: current.artifact_hash, name: m.name, settings, single: false, inModal });
 }
 
 export default function SteppedMediaCard<S extends SteppedMediaSettings>({
@@ -126,8 +102,9 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   nearest,
   settingsPanel,
   renderArtifact,
+  footer,
 }: Props<S>) {
-  const { ctl, effectiveMetrics, allRunIds, multipleRuns } =
+  const { ctl, effectiveMetrics, allRunIds } =
     useCardSeries<S>({
       runId,
       metric,
@@ -138,49 +115,43 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       instanceDefaults: steppedMediaInstanceDefaults as (seed: { name: string }) => Partial<S>,
     });
   const settings = ctl.value;
+  const cardId = cardOverridesStorageKey(settingsKeyOverride ?? { runId, metricName: metric.name });
 
   // Patches of the shell-owned fields; generic S can't prove they are Partial<S>.
-  const updateShared = ctl.set as unknown as (patch: Record<string, unknown>) => void;
+  const updateShared = ctl.set as unknown as (patch: Partial<SteppedMediaSettings>, opts?: { mergeKey?: string }) => void;
 
   const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, updateShared);
 
-  // The card's own series drives the slider track, the header download and the single-pane view.
-  const { points, isLoading } = useArtifactPoints(runId, metric);
+  const panes = useMediaPanes(effectiveMetrics, runId, settings.maxRuns);
+  const shown = panes.shown;
+  const paneKeys = panes.keys;
+  const queries = useSequencesForRuns(shown.map((m, i) => ({ runId: panes.runIds[i]!, name: m.name })));
+  const dataKey = queries.map((q) => q.dataUpdatedAt).join("|");
+  const seriesPoints = useMemo(
+    () => queries.map((q) => (q.data?.points ?? []).filter((p) => p.artifact_hash)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dataKey, shown.length],
+  );
+  const loadingAt = (i: number) => queries[i]?.isLoading ?? false;
 
-  // With several series, every series' steps join the slider.
-  const isMulti = effectiveMetrics.length > 1;
-  const multiQueries = useQueries({
-    queries: isMulti
-      ? effectiveMetrics.map((m) => {
-          const rid = m.runId ?? runId;
-          return {
-            queryKey: qk.sequence(rid, m.name),
-            queryFn: () => api.sequence(rid, m.name),
-            refetchInterval: 2_000,
-            staleTime: 2_000,
-          };
-        })
-      : [],
-  });
-
-  const seriesPoints = useMemo(() => {
-    const arr: Array<Array<{ step: number }>> = [points];
-    if (isMulti) {
-      for (const mq of multiQueries) {
-        const pts = (mq.data as SequenceResponse | undefined)?.points ?? [];
-        arr.push(pts.filter((p) => p.artifact_hash));
-      }
-    }
-    return arr;
-  }, [isMulti, points, multiQueries]);
-
-  const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
+  const slider = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
     updateSettings: updateShared,
+    sliderKey: settings.sliderKey,
+    seriesRunIds: panes.runIds,
+    sync: { cardId, follow: settings.followSection },
   });
+  const { values, safeIdx, currentValue, keyName, stepFor } = slider;
+  const following = slider.sync != null;
+  const scalarMetrics = useScalarMetricNames(runId);
 
-  const current = useMemo(() => resolveAtStep(points, currentStep), [points, currentStep]);
+  const pointAt = (i: number, value: number, near: boolean): SequencePoint | null => {
+    const step = stepFor(i, value, { nearest: near });
+    return step == null ? null : resolveAtStep(seriesPoints[i] ?? [], step, { nearest: near });
+  };
+  // The first pane's artifact drives the header download.
+  const current = pointAt(0, currentValue, false);
 
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
@@ -189,83 +160,121 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
     [runId, metric.name],
   );
 
-  const runMetaVersion = useRunMetadataVersion();
-  useRunInfo(allRunIds);
-
   const subtitle =
-    globalSteps.length > 0
-      ? `step ${currentStep} (${safeIdx + 1}/${globalSteps.length})`
+    values.length > 0
+      ? `${keyName === STEP_KEY ? "step" : keyName} ${formatKeyValue(currentValue)} (${safeIdx + 1}/${values.length})`
       : `${metric.count} pts`;
 
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const paneKeys = useMemo(() => effectiveMetrics.map(seriesKey), [effectiveMetrics]);
-  const paneLabels = useMemo(() => {
-    const map = new Map<string, string>();
-    if (multipleRuns) {
-      for (const m of effectiveMetrics) {
-        map.set(seriesKey(m), shortRunLabel(m.runId ?? runId, allRunIds));
-      }
-    }
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [multipleRuns, effectiveMetrics, allRunIds, runId, runMetaVersion]);
-
-  const slider = (
-    <StepSlider
-      points={points}
-      currentIndex={safeIdx}
-      onChange={onSliderChange}
-      xAxis={settings.xAxis}
-      onXAxisChange={(m) => updateShared({ xAxis: m })}
-      className="mt-3"
-    />
+  const mode = settings.panelMode;
+  const paneOptions = useMemo(
+    () => paneKeys.map((k, i) => ({
+      key: k,
+      label: panes.labels.get(k) ?? shown[i]!.name,
+      color: panes.multiRun ? panes.colors.get(panes.runIds[i]!) : undefined,
+    })),
+    [paneKeys, panes, shown],
   );
+  const compareSlots = useMemo(() => normalizeSlots(settings.compareSlots, paneKeys), [settings.compareSlots, paneKeys]);
+  const gridCols = mode === "grid" ? gridValues(values, settings.columns) : [];
+  const paneCount = mode === "grid"
+    ? shown.length * gridCols.length
+    : mode === "compare" ? compareSlots.length : shown.length;
 
-  const renderSingle = (inModal: boolean) => {
-    if (isLoading || !current?.artifact_hash) return <Placeholder loading={isLoading} noun={noun} />;
+  const view = (i: number, point: SequencePoint | null, paneId: string, single: boolean, inModal: boolean) => {
+    if (!point?.artifact_hash) return <Placeholder loading={loadingAt(i)} noun={noun} />;
+    return renderArtifact({
+      point,
+      hash: point.artifact_hash,
+      name: shown[i]?.name ?? metric.name,
+      settings,
+      single,
+      inModal,
+      paneId,
+      paneCount,
+      following,
+    });
+  };
+
+  const renderPanes = (inModal: boolean) => {
+    if (mode === "grid") {
+      return (
+        <GridPanes
+          rows={paneOptions}
+          columns={gridCols.map((v) => ({ value: v, label: `${keyName} ${formatKeyValue(v)}` }))}
+          current={currentValue}
+          onColumnClick={slider.setValue}
+          rowHeight={inModal ? 220 : 140}
+          renderCell={(row, col) => (
+            <div className="h-full overflow-auto">
+              {view(row, pointAt(row, gridCols[col]!, false), `grid:${row}:${col}`, false, inModal)}
+            </div>
+          )}
+        />
+      );
+    }
+    if (mode === "compare") {
+      return (
+        <ComparePanes
+          slots={compareSlots}
+          onSlotsChange={(slots) => updateShared({ compareSlots: slots })}
+          linked={settings.compareLinked}
+          onLinkedChange={(linked, slots) => updateShared({ compareLinked: linked, compareSlots: slots })}
+          panes={paneOptions}
+          values={values}
+          keyName={keyName}
+          current={currentValue}
+          columns={settings.columns}
+          renderSlot={(slot, _value, i) => {
+            const idx = paneKeys.indexOf(slot.pane);
+            if (idx < 0) return null;
+            const v = slotValue(slot, settings.compareLinked, currentValue);
+            return <div className="h-full overflow-auto">{view(idx, pointAt(idx, v, nearest), `compare:${i}`, false, inModal)}</div>;
+          }}
+        />
+      );
+    }
+    if (shown.length <= 1) {
+      return view(0, pointAt(0, currentValue, false), paneKeys[0] ?? "single", true, inModal);
+    }
     return (
-      <>
-        {renderArtifact({ point: current, hash: current.artifact_hash, name: metric.name, settings, single: true, inModal })}
-        {slider}
-      </>
+      <MultiPaneGrid
+        paneKeys={paneKeys}
+        labels={panes.labels}
+        inModal={inModal}
+        columns={settings.columns}
+        paneWidths={settings.paneWidths}
+        onPaneWidthsChange={(w) => updateShared({ paneWidths: w })}
+        renderPane={(key, i) => view(i, pointAt(i, currentValue, nearest), key, false, inModal)}
+      />
     );
   };
 
-  const renderMulti = (inModal: boolean) => (
+  const renderContent = (inModal: boolean) => (
     <>
-      <MultiPaneGrid
-        paneKeys={paneKeys}
-        labels={paneLabels}
-        inModal={inModal}
-        paneWidths={settings.paneWidths}
-        onPaneWidthsChange={(w) => updateShared({ paneWidths: w })}
-        renderPane={(key, i) => (
-          <MediaPane<S>
-            key={key}
-            runId={runId}
-            m={effectiveMetrics[i]!}
-            targetStep={currentStep}
-            nearest={nearest}
-            noun={noun}
-            settings={settings}
-            inModal={inModal}
-            renderArtifact={renderArtifact}
-          />
-        )}
+      {renderPanes(inModal)}
+      {footer?.({ settings, paneCount, following })}
+      <StepSlider
+        points={slider.sliderPoints}
+        currentIndex={safeIdx}
+        onChange={slider.onSliderChange}
+        xAxis={settings.xAxis}
+        onXAxisChange={(m) => updateShared({ xAxis: m })}
+        keyName={keyName}
+        className="mt-3"
       />
-      {slider}
-      <SeriesChipStrip
-        metrics={effectiveMetrics}
-        controlledSeries={controlledSeries}
-        runId={runId}
-        allRunIds={allRunIds}
-        onMetricsChange={(next) => updateShared({ metrics: next })}
-      />
+      {effectiveMetrics.length > 1 && (
+        <SeriesChipStrip
+          metrics={effectiveMetrics}
+          controlledSeries={controlledSeries}
+          runId={runId}
+          allRunIds={allRunIds}
+          onMetricsChange={(next) => updateShared({ metrics: next })}
+        />
+      )}
     </>
   );
-
-  const renderContent = (inModal: boolean) => (isMulti ? renderMulti(inModal) : renderSingle(inModal));
 
   return (
     <CardShell cardKind={kind}
@@ -281,7 +290,12 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       addToComparisonSlot={<AddToComparisonButton cardType={kind} series={compSeries} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
-      settingsPanel={settingsPanel(ctl)}
+      settingsPanel={settingsPanel(ctl, {
+        paneKeys,
+        multi: shown.length > 1,
+        following,
+        scalarMetrics,
+      })}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}
       modalContent={<div className="flex flex-col h-full">{renderContent(true)}</div>}
