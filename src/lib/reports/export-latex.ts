@@ -18,8 +18,9 @@ import { isCardsBlock, type ReportBlock } from "./types";
 const SETTLE_LIMIT_MS = 30000;
 const POLL_MS = 200;
 
-const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// A background tab runs no animation frames; don't hang the export on one.
+const frame = () => Promise.race([new Promise<void>((r) => requestAnimationFrame(() => r())), sleep(100)]);
 
 /** Every card element under `root`: a card still loading its chunk shows a pulsing placeholder. */
 function cardsUnder(root: HTMLElement): HTMLElement[] {
