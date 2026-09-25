@@ -63,6 +63,24 @@ export interface Run {
    * Resolved server-side per page; absent on endpoints that do not compute it.
    */
   values?: Record<string, number | string | boolean | null>;
+  // --- wave 2 / B: per-metric stats (GET /api/runs/{id}; /api/runs?include=stats) ---
+  /** Per scalar metric: count, first/last (by step), min/max/mean, step span, rule. */
+  stats?: Record<string, RunMetricStats>;
+}
+
+// --- wave 2 / B: per-metric stats ---
+/** One metric's `run.stats` entry (the server's `_metric_stats`). */
+export interface RunMetricStats {
+  count: number;
+  first: number | null;
+  last: number | null;
+  min: number | null;
+  max: number | null;
+  mean: number | null;
+  first_step: number;
+  last_step: number;
+  /** The metric's summary rule (min|max|mean|last), or null. */
+  rule: string | null;
 }
 
 export interface Param {

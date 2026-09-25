@@ -8,6 +8,8 @@ export interface BarDatum {
   label: string;
   value: number;
   color: string;
+  /** An error bar half-width (± a group's std); grouped mode only. */
+  error?: number;
 }
 
 /**
@@ -45,6 +47,9 @@ export default function BarChart({
         customdata: bars.map((b) => [b.id, b.label]),
         hovertemplate: "<b>%{customdata[1]}</b><br>%{x}<extra></extra>",
         marker: { color: bars.map((b) => b.color) },
+        ...(bars.some((b) => b.error != null)
+          ? { error_x: { type: "data", array: bars.map((b) => b.error ?? 0), visible: true, thickness: 1.5, width: 4 } }
+          : {}),
       }];
     }
     const category = valueLabel ?? "value";

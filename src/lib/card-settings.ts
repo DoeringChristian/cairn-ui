@@ -304,3 +304,21 @@ export function resolveCardHeight(
   if (resolved == null) return undefined;
   return minHeight != null ? Math.max(resolved, minHeight) : resolved;
 }
+
+/**
+ * Bind one setting to a palette control (`Bound<V>`):
+ * `<Switch label="…" {...bind(ctl, "logY")} />`.
+ */
+export function bind<T, K extends keyof T & string>(
+  ctl: SettingsController<T>,
+  key: K,
+  opts?: SetOptions,
+): { value: T[K]; onChange: (v: T[K]) => void; overridden: boolean; onReset: () => void; disabled: boolean } {
+  return {
+    value: ctl.value[key],
+    onChange: (v) => ctl.set({ [key]: v } as unknown as Partial<T>, opts),
+    overridden: ctl.isOverridden(key),
+    onReset: () => ctl.reset(key),
+    disabled: ctl.readOnly,
+  };
+}

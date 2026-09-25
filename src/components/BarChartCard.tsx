@@ -1,41 +1,17 @@
 import { useMemo, useRef, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { qk } from "../api/query-keys";
 import { useCardSettings } from "../lib/card-settings";
-import type { BarAggregation as Aggregation, BarSettings, BarSortBy as SortBy } from "./cards-settings/bar";
-import BarChart, { type BarDatum, type BarCompareMode } from "../charts/BarChart";
-import { seriesColor } from "../lib/plot-utils/types";
+import type { BarSettings } from "./cards-settings/bar";
+import BarChart, { type BarDatum } from "../charts/BarChart";
+import DistributionChart, { type DistributionGroup } from "../charts/DistributionChart";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
+import { assignRunColors } from "../lib/run-color";
+import { useRunColors, useVisibleRuns } from "../lib/run-view";
+import { useScalarExprs } from "../lib/use-scalar-exprs";
+import { toNumber, toText } from "../lib/scalar-exprs";
+import { groupRuns, summarize } from "../lib/grouping";
 import CardShell from "./CardShell";
-import Toggle from "./settings/Toggle";
-import Select from "./settings/Select";
-
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
-
-
-function aggregate(values: number[], mode: Aggregation): number | null {
-  const vals = values.filter((v) => Number.isFinite(v));
-  if (!vals.length) return null;
-  switch (mode) {
-    case "min":
-      return Math.min(...vals);
-    case "max":
-      return Math.max(...vals);
-    case "mean":
-      return vals.reduce((a, b) => a + b, 0) / vals.length;
-    case "last":
-    default:
-      return vals[vals.length - 1]!;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+import BarSettingsPanel from "./settings-panels/BarSettingsPanel";
 
 interface Props {
   runIds: string[];
@@ -44,8 +20,15 @@ interface Props {
   autoOpenSettings?: boolean;
 }
 
+interface RunValue {
+  id: string;
+  label: string;
+  value: number;
+  group: unknown;
+}
+
 export default function BarChartCard({
-  runIds,
+  runIds: allRunIds,
   settingsKey,
   onRemove,
   autoOpenSettings,
@@ -55,237 +38,139 @@ export default function BarChartCard({
   const settings = ctl.value;
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
-  // Run details (for params + labels).
-  const runQueries = useQueries({
-    queries: runIds.map((rid) => ({
-      queryKey: qk.run(rid),
-      queryFn: () => api.run(rid),
-      staleTime: 30_000,
-    })),
-  });
+  const runIds = useVisibleRuns(allRunIds);
+  const colorByRun = useRunColors(runIds);
 
   const metric = settings.metric;
-  const needsMetricFetch = metric?.source === "metric";
+  const groupBy = settings.groupBy;
+  const srcs = useMemo(() => [metric?.src ?? "", groupBy?.src ?? ""], [metric, groupBy]);
+  const exprs = useScalarExprs(runIds, srcs);
 
-  const metricQueries = useQueries({
-    queries: needsMetricFetch
-      ? runIds.map((rid) => ({
-          queryKey: qk.sequence(rid, metric!.key),
-          queryFn: () => api.sequence(rid, metric!.key),
-          staleTime: 30_000,
-        }))
-      : [],
-  });
-
-  // Stable per-run color: index in the original runIds list.
-  const colorByRun = useMemo(() => {
-    const m = new Map<string, string>();
-    runIds.forEach((rid, i) => m.set(rid, seriesColor(i)));
-    return m;
-  }, [runIds]);
-
-  const bars = useMemo<BarDatum[]>(() => {
+  const runValues = useMemo<RunValue[]>(() => {
     if (!metric) return [];
-    const resolve = (rid: string): number | null => {
-      if (metric.source === "param") {
-        const rq = runQueries[runIds.indexOf(rid)];
-        const p = (rq?.data?.params ?? []).find((pp) => pp.key === metric.key);
-        if (!p) return null;
-        const n = Number(p.value);
-        return Number.isFinite(n) ? n : null;
-      }
-      const mq = metricQueries[runIds.indexOf(rid)];
-      const pts = mq?.data?.points;
-      if (!pts?.length) return null;
-      const scalars = pts
-        .map((pt) => pt.scalar_value)
-        .filter((v): v is number => v != null);
-      return aggregate(scalars, settings.aggregation);
-    };
-
-    const out: BarDatum[] = [];
+    const out: RunValue[] = [];
     for (const rid of runIds) {
-      const value = resolve(rid);
+      const value = toNumber(exprs.values[0]!.get(rid));
       if (value == null) continue;
-      out.push({
-        id: rid,
-        label: shortRunLabel(rid, runIds),
-        value,
-        color: colorByRun.get(rid)!,
-      });
+      out.push({ id: rid, label: shortRunLabel(rid, runIds), value, group: exprs.values[1]!.get(rid) });
     }
-
-    // This card only ever plots one metric (one "category" in the
-    // grouped/stacked/overlay sense — see BarChart's compareMode doc), so
-    // sorting the runs directly here *is* "sort by [the metric's] value":
-    // the degenerate case of "sort categories by first run's value" when
-    // there's exactly one category. Grouped mode renders `bars` in this
-    // order; stacked mode ignores it deliberately (segments stack in
-    // `runOrderIds`/original run order instead) and overlay mode
-    // uses it for z-order (last drawn = on top).
-    out.sort((a, b) => {
-      if (settings.sortBy === "name") return a.label.localeCompare(b.label);
-      return a.value - b.value;
-    });
-    if (settings.sortDesc ?? true) out.reverse();
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    metric,
-    settings.aggregation,
-    settings.sortBy,
-    settings.sortDesc,
-    runIds,
-    colorByRun,
-    runQueries.map((q) => q.dataUpdatedAt).join("|"),
-    metricQueries.map((q) => q.dataUpdatedAt).join("|"),
-    runMetaVersion,
-  ]);
+  }, [metric, runIds, exprs, runMetaVersion]);
 
-  // Stack segment order is intentionally independent of the sort setting
-  // (spec: "stacked ... in run order") — this is the original runIds order,
-  // filtered down to runs that actually resolved a value.
-  const runOrderIds = useMemo(() => {
-    const present = new Set(bars.map((b) => b.id));
-    return runIds.filter((rid) => present.has(rid));
-  }, [runIds, bars]);
+  const groups = useMemo(() => {
+    if (!groupBy) return null;
+    const gs = groupRuns(runValues, (r) => r.group);
+    const colors = assignRunColors(gs.map((g) => g.key), () => undefined);
+    return gs.map((g) => ({ ...g, color: colors.get(g.key)!, summary: summarize(g.items.map((r) => r.value)) }));
+  }, [groupBy, runValues]);
 
-  // Available axes for the picker.
-  const availableParams = useMemo(() => {
-    const keys = new Set<string>();
-    for (const q of runQueries) for (const p of q.data?.params ?? []) keys.add(p.key);
-    return Array.from(keys).sort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runQueries.map((q) => q.dataUpdatedAt).join("|")]);
-
-  const seqQueries = useQueries({
-    queries: runIds.map((rid) => ({
-      queryKey: qk.sequences(rid),
-      queryFn: () => api.sequences(rid),
-      staleTime: 30_000,
-    })),
-  });
-
-  const availableMetrics = useMemo(() => {
-    const names = new Set<string>();
-    for (const q of seqQueries) for (const seq of q.data?.sequences ?? []) {
-      if (seq.object_type === "scalar") names.add(seq.name);
-    }
-    return Array.from(names).sort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seqQueries.map((q) => q.dataUpdatedAt).join("|")]);
-
-  const axisOptions = useMemo(() => {
-    const opts: Array<{ key: string; source: "param" | "metric"; label: string }> = [];
-    for (const k of availableMetrics) opts.push({ key: k, source: "metric", label: `[M] ${k}` });
-    for (const k of availableParams) opts.push({ key: k, source: "param", label: `[P] ${k}` });
-    return opts;
-  }, [availableParams, availableMetrics]);
-
-
-  // ---------------------------------------------------------------------------
-  // Settings panel
-  // ---------------------------------------------------------------------------
-  const settingsPanel = (
-    <>
-      <div className="mb-2">
-        <label className="block text-[10px] uppercase tracking-wide text-fg-muted mb-1">
-          Metric
-        </label>
-        <select
-          value={metric ? `${metric.source}:${metric.key}` : ""}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (!v) { ctl.set({ metric: null }); return; }
-            const [source, ...rest] = v.split(":");
-            ctl.set({ metric: { key: rest.join(":"), source: source as "param" | "metric" } });
-          }}
-          className="input w-full text-xs"
-        >
-          <option value="">-- select metric --</option>
-          {axisOptions.map((o) => (
-            <option key={`${o.source}:${o.key}`} value={`${o.source}:${o.key}`}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <Select<Aggregation>
-        label="Aggregation"
-        value={settings.aggregation}
-        onChange={(v) => ctl.set({ aggregation: v })}
-        options={[
-          { value: "last", label: "Last" },
-          { value: "min", label: "Min" },
-          { value: "max", label: "Max" },
-          { value: "mean", label: "Mean" },
-        ]}
-      />
-      <Select<SortBy>
-        label="Sort by"
-        value={settings.sortBy}
-        onChange={(v) => ctl.set({ sortBy: v })}
-        options={[
-          { value: "value", label: "Value" },
-          { value: "name", label: "Name" },
-        ]}
-      />
-      <div className="mt-2 flex flex-col gap-1">
-        <Toggle
-          label="Descending"
-          checked={settings.sortDesc ?? true}
-          onChange={(v) => ctl.set({ sortDesc: v })}
-        />
-        <Toggle
-          label="Log value axis"
-          checked={!!settings.logX}
-          onChange={(v) => ctl.set({ logX: v })}
-        />
-      </div>
-      {/* Comparison mode only makes sense with more than one run — a
-          single-run card always has exactly one bar. */}
-      {runIds.length > 1 && (
-        <Select<BarCompareMode>
-          label="Compare runs"
-          value={settings.compareMode ?? "grouped"}
-          onChange={(v) => ctl.set({ compareMode: v })}
-          options={[
-            { value: "grouped", label: "Grouped (one row per run)" },
-            {
-              value: "stacked",
-              label: "Stacked (summed total)",
-              disabled: !!settings.logX,
-            },
-            { value: "overlay", label: "Overlay (translucent, superimposed)" },
-          ]}
-          description={
-            settings.logX
-              ? "Stacked totals are misleading on a log axis, so it's disabled while log axis is on."
-              : (settings.compareMode ?? "grouped") === "stacked"
-                ? "Bars stack in run order (not the sort setting); tooltip shows each run's share of the total."
-                : (settings.compareMode ?? "grouped") === "overlay"
-                  ? "Bars are superimposed with transparency, drawn in sorted order (last drawn is on top)."
-                  : undefined
-          }
-        />
-      )}
-    </>
-  );
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
-  const cardRef = useRef<HTMLDivElement>(null);
-  const noMetric = !metric;
-
-  const plotProps = {
-    bars,
-    valueLabel: metric?.key,
-    logX: settings.logX,
-    compareMode: settings.compareMode ?? "grouped",
-    runOrder: runOrderIds,
+  const desc = settings.sortDesc ?? true;
+  const sortRows = <T extends { label: string; value: number }>(rows: T[]): T[] => {
+    // Sorting the one metric's bars *is* "sort by value": the degenerate case
+    // of sorting categories by their value. Stacked mode ignores the order
+    // (segments stack in run order); overlay uses it for z-order.
+    const out = [...rows].sort((a, b) =>
+      settings.sortBy === "name" ? a.label.localeCompare(b.label, undefined, { numeric: true }) : a.value - b.value,
+    );
+    return desc ? out.reverse() : out;
   };
 
+  const bars = useMemo<BarDatum[]>(() => {
+    if (groups) {
+      return sortRows(
+        groups.map((g) => ({
+          id: g.key,
+          label: `${g.label} (${g.items.length})`,
+          value: g.summary.mean,
+          color: g.color,
+          error: g.summary.std,
+        })),
+      );
+    }
+    return sortRows(runValues.map((r) => ({ id: r.id, label: r.label, value: r.value, color: colorByRun.get(r.id)! })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, runValues, colorByRun, settings.sortBy, desc]);
+
+  const distGroups = useMemo<DistributionGroup[]>(() => {
+    const gs = groups ?? [
+      {
+        key: "all",
+        label: "all runs",
+        color: "#1f77b4",
+        items: runValues,
+        summary: summarize(runValues.map((r) => r.value)),
+      },
+    ];
+    const rows = sortRows(gs.map((g) => ({ g, label: g.label, value: g.summary.median })));
+    return rows.map(({ g }) => ({
+      key: g.key,
+      label: g.label,
+      color: g.color,
+      values: g.items.map((r) => r.value),
+      names: g.items.map((r) => r.label),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, runValues, settings.sortBy, desc]);
+
+  // Stack segment order is intentionally independent of the sort setting
+  // ("stacked ... in run order"): the run order, filtered to runs with a value.
+  const runOrderIds = useMemo(() => runValues.map((r) => r.id), [runValues]);
+
+  const settingsPanel = (
+    <BarSettingsPanel
+      ctl={ctl}
+      mode="card"
+      ctx={{
+        options: exprs.options,
+        runCount: runIds.length,
+        errors: {
+          metric: metric ? exprs.errors[0] ?? null : null,
+          groupBy: groupBy ? exprs.errors[1] ?? null : null,
+        },
+      }}
+    />
+  );
+
+  const cardRef = useRef<HTMLDivElement>(null);
+  const distribution = settings.groupPlot !== "bar";
+  const valueLabel = metric?.src;
+  const message = !metric
+    ? "Select a value in settings to create the bar chart."
+    : exprs.errors[0]
+      ? `Invalid value: ${exprs.errors[0]}`
+      : runValues.length === 0
+        ? exprs.loading
+          ? "Loading…"
+          : "No values for this metric across the runs."
+        : null;
+
+  const chart = (className: string) =>
+    message ? (
+      <div className={`flex items-center justify-center text-sm text-fg-muted ${className}`}>{message}</div>
+    ) : distribution ? (
+      <DistributionChart
+        groups={distGroups}
+        kind={settings.groupPlot as "box" | "violin" | "strip"}
+        valueLabel={valueLabel}
+        log={settings.logX}
+        className={className}
+      />
+    ) : (
+      <BarChart
+        bars={bars}
+        valueLabel={valueLabel}
+        logX={settings.logX}
+        compareMode={groups ? "grouped" : (settings.compareMode ?? "grouped")}
+        runOrder={groups ? bars.map((b) => b.id) : runOrderIds}
+        className={className}
+      />
+    );
+
+  const n = runValues.length;
+  const subtitle = groups
+    ? `${groups.length} group${groups.length === 1 ? "" : "s"} · ${n} run${n === 1 ? "" : "s"}`
+    : `${n} run${n === 1 ? "" : "s"}`;
 
   return (
     <CardShell cardKind="bar"
@@ -293,13 +178,18 @@ export default function BarChartCard({
       settings={settings}
       updateSettings={ctl.set}
       title="Bar Chart"
-      subtitle={`${bars.length} run${bars.length === 1 ? "" : "s"}`}
+      subtitle={subtitle}
       defaultHeight={350}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
       onDownload={() => {
-        const headers = ["run_id", "label", metric?.key ?? "value"];
-        const rows: (string | number)[][] = bars.map((b) => [b.id, b.label, b.value]);
+        const headers = ["run_id", "label", metric?.src ?? "value"];
+        if (groupBy) headers.push(groupBy.src);
+        const rows: (string | number)[][] = runValues.map((r) => {
+          const row: (string | number)[] = [r.id, r.label, r.value];
+          if (groupBy) row.push(toText(r.group) ?? "");
+          return row;
+        });
         downloadCsv(headers, rows, safeName(settings.title ?? "bar_chart") + ".csv");
       }}
       onScreenshot={() => { if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? "bar_chart")); }}
@@ -307,31 +197,9 @@ export default function BarChartCard({
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}
       scrollIntoViewOnMount={autoOpenSettings}
-      modalContent={
-        <div className="flex flex-col h-[calc(100vh-12rem)]">
-          {noMetric ? (
-            <div className="flex items-center justify-center flex-1 text-sm text-fg-muted">
-              Select a metric in settings to create the bar chart.
-            </div>
-          ) : (
-            <BarChart {...plotProps} className="flex-1 min-h-0" />
-          )}
-        </div>
-      }
+      modalContent={<div className="flex flex-col h-[calc(100vh-12rem)]">{chart("flex-1 min-h-0")}</div>}
     >
-      <>
-        {noMetric ? (
-          <div className="flex items-center justify-center flex-1 min-h-0 text-sm text-fg-muted">
-            Select a metric in settings to create the bar chart.
-          </div>
-        ) : bars.length === 0 ? (
-          <div className="flex items-center justify-center flex-1 min-h-0 text-sm text-fg-muted">
-            No values for this metric across the runs.
-          </div>
-        ) : (
-          <BarChart {...plotProps} className="rounded bg-bg flex-1 min-h-0" />
-        )}
-      </>
+      {chart("rounded bg-bg flex-1 min-h-0")}
     </CardShell>
   );
 }

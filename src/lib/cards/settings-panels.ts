@@ -16,4 +16,10 @@ export const SETTINGS_PANELS: Partial<Record<CardType, () => Promise<{ default: 
   table: () => import("../../components/settings-panels/TableSettingsPanel"),
   text: () => import("../../components/settings-panels/TextSettingsPanel"),
   artifact: () => import("../../components/settings-panels/ArtifactSettingsPanel"),
+  histogram: () => import("../../components/settings-panels/HistogramSettingsPanel"),
+  scatter: () => import("../../components/settings-panels/ScatterSettingsPanel"),
+  bar: () => import("../../components/settings-panels/BarSettingsPanel"),
+  parallel: () => import("../../components/settings-panels/ParallelSettingsPanel"),
+  tile: () => import("../../components/settings-panels/TileSettingsPanel"),
+  importance: () => import("../../components/settings-panels/ImportanceSettingsPanel"),
 };

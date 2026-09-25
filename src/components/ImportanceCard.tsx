@@ -6,35 +6,29 @@
  * coloured by the sign of the correlation (grey where there is none), so the
  * importance view still says which direction helps.
  *
- * Params come from the run details; the target is the run list's resolved
- * `values[metric]` (last scalar point, summary wins), the same number the
- * runs table shows, so no per-run sequence fetches.
+ * Params come from the run details; the target is a scalar expression per
+ * run (`min(val.loss)`, `last(acc)`, …), answered from the runs' stats when
+ * it only reduces metrics, so usually no per-run sequence fetches.
  */
 
 import { useMemo, useRef, useState } from "react";
-import { useRuns, useRunsDetails } from "../api/hooks";
 import BarChart, { type BarDatum } from "../charts/BarChart";
 import { useCardSettings } from "../lib/card-settings";
-import type { ImportanceMethod as Method, ImportanceSettings } from "./cards-settings/importance";
+import type { ImportanceSettings } from "./cards-settings/importance";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import { parameterImportance, MIN_RUNS, type ImportanceRow } from "../lib/plot-utils/importance.ts";
 import { SERIES_COLORS, formatNum } from "../lib/plot-utils/types";
-import { useProjectId } from "../lib/project-context";
+import { useVisibleRuns } from "../lib/run-view";
+import { useScalarExprs } from "../lib/use-scalar-exprs";
+import { toNumber } from "../lib/scalar-exprs";
+import { useRunInfo } from "./card-kit/use-run-info";
 import CardShell from "./CardShell";
-import Select from "./settings/Select";
+import ImportanceSettingsPanel from "./settings-panels/ImportanceSettingsPanel";
 
 
 const POSITIVE = SERIES_COLORS[2]!;
 const NEGATIVE = SERIES_COLORS[3]!;
 const UNSIGNED = "#8b949e";
-
-function parseParam(raw: string): unknown {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
-  }
-}
 
 interface Props {
   runIds: string[];
@@ -43,57 +37,31 @@ interface Props {
   autoOpenSettings?: boolean;
 }
 
-export default function ImportanceCard({ runIds, settingsKey, onRemove, autoOpenSettings }: Props) {
+export default function ImportanceCard({ runIds: allRunIds, settingsKey, onRemove, autoOpenSettings }: Props) {
   const ctl = useCardSettings<ImportanceSettings>(settingsKey, "importance");
   const settings = ctl.value;
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
-  const projectId = useProjectId();
-
-  const details = useRunsDetails(runIds);
-  const detailsKey = details.map((q) => q.dataUpdatedAt).join("|");
-  const list = useRuns({ project: projectId ?? undefined, limit: 1000 });
-
-  const paramsByRun = useMemo(() => {
-    const out = new Map<string, Record<string, unknown>>();
-    details.forEach((q, i) => {
-      const rid = runIds[i];
-      if (!rid || !q.data) return;
-      const params: Record<string, unknown> = {};
-      for (const p of q.data.params) params[p.key] = parseParam(p.value);
-      out.set(rid, params);
-    });
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runIds, detailsKey]);
-
-  const valuesByRun = useMemo(() => {
-    const wanted = new Set(runIds);
-    const out = new Map<string, Record<string, unknown>>();
-    for (const r of list.data?.runs ?? []) if (wanted.has(r.id)) out.set(r.id, r.values ?? {});
-    return out;
-  }, [runIds, list.data]);
-
-  const metricOptions = useMemo(() => {
-    const keys = new Set<string>();
-    for (const values of valuesByRun.values()) {
-      for (const [k, v] of Object.entries(values)) if (typeof v === "number") keys.add(k);
-    }
-    return [...keys].sort((a, b) => a.localeCompare(b));
-  }, [valuesByRun]);
+  const runIds = useVisibleRuns(allRunIds);
 
   const metric = settings.metric;
+  const srcs = useMemo(() => [metric?.src ?? ""], [metric]);
+  const exprs = useScalarExprs(runIds, srcs);
+  const { paramsByRunId } = useRunInfo(runIds);
+
+  // The params are the inputs: offer metrics and summary keys as the target.
+  const targetOptions = useMemo(() => exprs.options.filter((o) => o.kind !== "param"), [exprs.options]);
 
   const rows = useMemo<ImportanceRow[]>(() => {
     if (!metric) return [];
     const out: ImportanceRow[] = [];
     for (const rid of runIds) {
-      const params = paramsByRun.get(rid);
-      const target = valuesByRun.get(rid)?.[metric];
-      if (!params || typeof target !== "number" || !Number.isFinite(target)) continue;
+      const params = paramsByRunId.get(rid);
+      const target = toNumber(exprs.values[0]!.get(rid));
+      if (!params || target == null) continue;
       out.push({ params, target });
     }
     return out;
-  }, [metric, runIds, paramsByRun, valuesByRun]);
+  }, [metric, runIds, paramsByRunId, exprs]);
 
   const scores = useMemo(() => parameterImportance(rows), [rows]);
 
@@ -111,54 +79,28 @@ export default function ImportanceCard({ runIds, settingsKey, onRemove, autoOpen
     }));
   }, [scores, method]);
 
+  const error = metric ? exprs.errors[0] ?? null : null;
   const settingsPanel = (
-    <>
-      <div className="mb-2">
-        <label className="block text-[10px] uppercase tracking-wide text-fg-muted mb-1">Metric</label>
-        <select
-          value={metric ?? ""}
-          onChange={(e) => ctl.set({ metric: e.target.value || null })}
-          className="input w-full text-xs"
-        >
-          <option value="">-- select metric --</option>
-          {metric && !metricOptions.includes(metric) && <option value={metric}>{metric}</option>}
-          {metricOptions.map((k) => (
-            <option key={k} value={k}>{k}</option>
-          ))}
-        </select>
-      </div>
-      <Select<Method>
-        label="Method"
-        value={method}
-        onChange={(v) => ctl.set({ method: v })}
-        options={[
-          { value: "importance", label: "Importance (random forest)" },
-          { value: "correlation", label: "Correlation (Pearson r)" },
-        ]}
-        description={
-          method === "importance"
-            ? "Out-of-bag permutation importance of a 50-tree forest, relative to the metric's variance. Colour: sign of the correlation."
-            : "Linear correlation with the metric; numeric params only."
-        }
-      />
-    </>
+    <ImportanceSettingsPanel ctl={ctl} mode="card" ctx={{ options: targetOptions, error }} />
   );
 
   const cardRef = useRef<HTMLDivElement>(null);
-  const loading = details.some((q) => q.isLoading) || list.isLoading;
+  const target = metric?.src;
   const message = !metric
-    ? "Select a metric in settings to rank the parameters."
-    : loading
-      ? "Loading…"
-      : rows.length < MIN_RUNS
-        ? `Needs at least ${MIN_RUNS} runs with params and a value for ${metric}.`
-        : bars.length === 0
-          ? "No parameter varies across these runs."
-          : null;
+    ? "Select a target in settings to rank the parameters."
+    : error
+      ? `Invalid target: ${error}`
+      : exprs.loading
+        ? "Loading…"
+        : rows.length < MIN_RUNS
+          ? `Needs at least ${MIN_RUNS} runs with params and a value for ${target}.`
+          : bars.length === 0
+            ? "No parameter varies across these runs."
+            : null;
 
   const plotProps = {
     bars,
-    valueLabel: method === "correlation" ? `r with ${metric}` : `importance for ${metric}`,
+    valueLabel: method === "correlation" ? `r with ${target}` : `importance for ${target}`,
     compareMode: "grouped" as const,
     runOrder: bars.map((b) => b.id),
   };
@@ -176,7 +118,7 @@ export default function ImportanceCard({ runIds, settingsKey, onRemove, autoOpen
       settings={settings}
       updateSettings={ctl.set}
       title="Parameter Importance"
-      subtitle={metric ? `${metric} · ${rows.length} runs` : `${runIds.length} runs`}
+      subtitle={target ? `${target} · ${rows.length} runs` : `${runIds.length} runs`}
       defaultHeight={350}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}

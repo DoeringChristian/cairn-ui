@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { safeJsonParse } from "../lib/format";
-import { formatNum } from "../lib/plot-utils/types";
 import {
   downloadArtifact,
   artifactFilename,
@@ -14,7 +13,6 @@ import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { HistogramSettings } from "./cards-settings/histogram";
 import type { SequenceMeta } from "../api/types";
 import type { HistogramData } from "../lib/plot-utils/histogram";
-import { COLORMAP_OPTIONS, type Colormap } from "../charts/colormaps";
 import {
   HistogramBars,
   StepHistogramHeatmap,
@@ -23,8 +21,7 @@ import { parseNpz } from "../lib/parse-npz";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
-import Select from "./settings/Select";
-import Toggle from "./settings/Toggle";
+import HistogramSettingsPanel from "./settings-panels/HistogramSettingsPanel";
 import { useStepSlider, resolveAtStep } from "./card-kit";
 
 interface Props {
@@ -200,51 +197,7 @@ export default function HistogramCard({
   };
 
   const settingsPanel = (
-    <>
-      <Select<HistogramSettings["viewMode"]>
-        label="View"
-        value={settings.viewMode}
-        onChange={(v) => ctl.set({ viewMode: v })}
-        options={
-          heatmapAvailable
-            ? [
-                { value: "bars", label: "Bars (per step)" },
-                { value: "heatmap", label: "Heatmap (over steps)" },
-              ]
-            : [{ value: "bars", label: "Bars (per step)" }]
-        }
-        description={
-          heatmapAvailable ? undefined : "Heatmap needs more than 3 logged steps."
-        }
-      />
-      <Toggle
-        label={settings.viewMode === "heatmap" ? "Log color scale" : "Log Y axis"}
-        checked={settings.logY}
-        onChange={(v) => ctl.set({ logY: v })}
-      />
-      {settings.viewMode === "heatmap" && (
-        <Select<Colormap>
-          label="Colormap"
-          value={settings.colormap}
-          onChange={(v) => ctl.set({ colormap: v })}
-          options={COLORMAP_OPTIONS}
-        />
-      )}
-      {meta && (
-        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-fg-muted">
-          <span>min</span>
-          <span className="mono num">{formatNum(meta.min)}</span>
-          <span>max</span>
-          <span className="mono num">{formatNum(meta.max)}</span>
-          <span>mean</span>
-          <span className="mono num">{formatNum(meta.mean)}</span>
-          <span>count</span>
-          <span className="mono num">{meta.count}</span>
-          <span>num_bins</span>
-          <span className="mono num">{meta.num_bins}</span>
-        </div>
-      )}
-    </>
+    <HistogramSettingsPanel ctl={ctl} mode="card" ctx={{ heatmapAvailable, meta: meta ?? null }} />
   );
 
   return (
