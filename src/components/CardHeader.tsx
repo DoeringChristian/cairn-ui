@@ -3,6 +3,7 @@ import { useDraggableCard } from "./DraggableCard";
 import { CardMutationContext } from "../lib/card-settings";
 import { useClickOutside } from "../lib/use-click-outside";
 import { useCoarsePointer, useCompactLayout } from "../lib/use-media-query";
+import { ICON_BTN } from "./card-header/icon-btn";
 
 interface Props {
   /** Metric name, e.g. "train.loss". */
@@ -46,9 +47,6 @@ interface Props {
   interact?: { on: boolean; onToggle: () => void };
 }
 
-/** Header icon button: 22px with a mouse, a 40px tap target on touch. */
-const ICON_BTN =
-  "h-[22px] min-w-[22px] touch:h-10 touch:min-w-[40px] inline-flex items-center justify-center rounded hover:bg-bg-hover text-fg-muted hover:text-fg";
 
 interface MenuItem {
   icon: string;

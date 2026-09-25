@@ -5,9 +5,11 @@
  * `lib/cards/settings-registry.ts` collects one per `CARD_TYPES` entry.
  */
 
-/** The fixed settings tabs, in display order. */
-export const SETTINGS_TABS = ["data", "grouping", "display", "expressions"] as const;
-export type SettingsTab = (typeof SETTINGS_TABS)[number];
+import { SETTINGS_TABS as TAB_DEFS, type SettingsTabId } from "../settings/palette/logic.ts";
+
+/** The fixed settings tabs, in display order (defined by the settings palette). */
+export type SettingsTab = SettingsTabId;
+export const SETTINGS_TABS: readonly SettingsTab[] = TAB_DEFS.map((t) => t.id);
 
 export interface CardSettingsMeta<T extends object = Record<string, unknown>> {
   /** Every key the type knows, at its built-in value. */
