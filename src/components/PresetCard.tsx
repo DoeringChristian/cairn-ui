@@ -4,11 +4,9 @@ import { useSequence } from "../api/hooks";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { safeJsonParse } from "../lib/format";
-import type { CardSettingsKey } from "../lib/card-settings";
+import { cardOverridesStorageKey, type CardSettingsKey } from "../lib/card-settings";
 import { useCardDrop } from "../lib/use-series-drop";
 import type { ComparisonSeriesRef } from "../lib/comparisons";
-import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
-import { seriesKey } from "../lib/series-utils";
 import type { SequenceMeta, SequenceResponse } from "../api/types";
 import {
   CONFUSION_LAYOUT,
@@ -25,14 +23,15 @@ import {
   useCardSeries,
   useStepSlider,
   resolveAtStep,
-  useRunInfo,
   MultiPaneGrid,
 } from "./card-kit";
+import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
+import { formatKeyValue } from "../lib/media/slider-key";
 import type { SeriesRef } from "./card-kit/use-card-series";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
-import Select from "./settings/Select";
+import PresetSettingsPanel from "./settings-panels/PresetSettingsPanel";
 import { instanceDefaults, type PresetSettings } from "./cards-settings/preset";
 import StepSlider from "./StepSlider";
 
@@ -60,12 +59,13 @@ const blobQuery = (hash: string | null | undefined) => ({
 function ConfusionPane({ runId, m, targetStep, normalize }: {
   runId: string;
   m: SeriesRef;
-  targetStep: number;
+  /** The pane's step (per run for a slider key); null: its first point. */
+  targetStep: number | null;
   normalize: Normalize;
 }) {
   const q = useSequence(m.runId ?? runId, m.name);
   const points = useMemo(() => (q.data?.points ?? []).filter((p) => p.artifact_hash), [q.data]);
-  const current = resolveAtStep(points, targetStep) ?? points[0];
+  const current = (targetStep == null ? null : resolveAtStep(points, targetStep)) ?? points[0];
   const blob = useQuery(blobQuery(current?.artifact_hash));
   if (q.isLoading || blob.isLoading) return <div className="h-full min-h-32 motion-safe:animate-pulse rounded bg-bg-hover" />;
   if (!blob.data || blob.data.kind !== "confusion_matrix") return <div className="text-sm text-fg-muted">no confusion matrix</div>;
@@ -94,7 +94,7 @@ export default function PresetCard({
   onRemove,
   autoOpenSettings,
 }: Props) {
-  const { ctl, effectiveMetrics, allRunIds, multipleRuns } =
+  const { ctl, effectiveMetrics: allMetrics, allRunIds } =
     useCardSeries<PresetSettings>({
       runId,
       metric,
@@ -105,7 +105,12 @@ export default function PresetCard({
       instanceDefaults,
     });
   const settings = ctl.value;
-  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, ctl.set);
+  const { highlight: dropHighlight, dropProps } = useCardDrop(allMetrics, ctl.set);
+  // The series shown: hidden runs dropped, pinned first, at most `maxRuns` runs.
+  const panes = useMediaPanes(allMetrics, runId, settings.maxRuns);
+  const effectiveMetrics = panes.shown;
+  const multipleRuns = panes.multiRun;
+  const scalarMetrics = useScalarMetricNames(runId);
 
   const seqQueries = useQueries({
     queries: effectiveMetrics.map((m) => {
@@ -123,17 +128,26 @@ export default function PresetCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [seqQueries.map((sq) => sq.dataUpdatedAt).join("|")],
   );
-  const seedPoints = seriesPoints[0] ?? [];
 
-  const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
+  const slider = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
     updateSettings: ctl.set,
+    sliderKey: settings.sliderKey,
+    seriesRunIds: panes.runIds,
+    sync: {
+      cardId: cardOverridesStorageKey(settingsKeyOverride ?? { runId, metricName: metric.name }),
+      follow: settings.followSection,
+    },
   });
+  const { values, safeIdx, currentValue, onSliderChange, stepFor, keyName } = slider;
 
   const currents = useMemo(
-    () => seriesPoints.map((pts) => resolveAtStep(pts, currentStep) ?? pts[0]),
-    [seriesPoints, currentStep],
+    () => seriesPoints.map((pts, i) => {
+      const step = stepFor(i, undefined, { nearest: true });
+      return (step == null ? null : resolveAtStep(pts, step)) ?? pts[0];
+    }),
+    [seriesPoints, stepFor],
   );
   const blobs = useQueries({ queries: currents.map((p) => blobQuery(p?.artifact_hash)) });
   const seedMeta = safeJsonParse<{ kind?: PresetBlob["kind"] }>(currents[0]?.artifact_metadata);
@@ -141,39 +155,33 @@ export default function PresetCard({
 
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
   const cardRef = useRef<HTMLDivElement>(null);
-  const runMetaVersion = useRunMetadataVersion();
-  useRunInfo(allRunIds);
-
   const labels = useMemo(
-    () => effectiveMetrics.map((m) => (multipleRuns ? shortRunLabel(m.runId ?? runId, allRunIds) : m.name)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [effectiveMetrics, multipleRuns, allRunIds, runId, runMetaVersion],
+    () => effectiveMetrics.map((m, i) => (multipleRuns ? (panes.labels.get(panes.keys[i]!) ?? m.name) : m.name)),
+    [effectiveMetrics, multipleRuns, panes],
   );
-  const normalize = settings.normalize ?? "none";
+  const normalize = settings.normalize;
 
   const curveData = useMemo(() => {
     if (kind !== "pr_curve" && kind !== "roc_curve") return null;
     const series = blobs.flatMap((b, i) =>
-      b.data && b.data.kind === kind ? [{ label: labels[i] ?? "", curves: b.data.data.curves }] : []);
+      b.data && b.data.kind === kind
+        ? [{ label: labels[i] ?? "", curves: b.data.data.curves, color: panes.colors.get(panes.runIds[i]!) }]
+        : []);
     return { traces: curveTraces(kind as CurveKind, series), layout: curveLayout(kind as CurveKind) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, labels, blobs.map((b) => b.dataUpdatedAt).join("|")]);
+  }, [kind, labels, panes, blobs.map((b) => b.dataUpdatedAt).join("|")]);
 
   const subtitle = [
     kind ? PRESET_KIND_LABELS[kind] : null,
-    globalSteps.length > 0 ? `step ${currentStep} (${safeIdx + 1}/${globalSteps.length})` : null,
+    values.length > 0 ? `${keyName} ${formatKeyValue(currentValue)} (${safeIdx + 1}/${values.length})` : null,
   ].filter(Boolean).join(" · ");
 
   const compSeries = useMemo(
     () => [{ runId, name: metric.name }],
     [runId, metric.name],
   );
-  const paneKeys = useMemo(() => effectiveMetrics.map(seriesKey), [effectiveMetrics]);
-  const paneLabels = useMemo(() => {
-    const map = new Map<string, string>();
-    if (multipleRuns) effectiveMetrics.forEach((m, i) => map.set(seriesKey(m), labels[i] ?? ""));
-    return map;
-  }, [multipleRuns, effectiveMetrics, labels]);
+  const paneKeys = panes.keys;
+  const paneLabels = panes.labels;
 
   const renderChart = (inModal: boolean) => {
     if (seqQueries[0]?.isLoading || blobs[0]?.isLoading) {
@@ -194,10 +202,11 @@ export default function PresetCard({
         paneKeys={paneKeys}
         labels={paneLabels}
         inModal={inModal}
+        columns={settings.columns}
         paneWidths={settings.paneWidths}
         onPaneWidthsChange={(w) => ctl.set({ paneWidths: w })}
         renderPane={(key, i) => (
-          <ConfusionPane key={key} runId={runId} m={effectiveMetrics[i]!} targetStep={currentStep} normalize={normalize} />
+          <ConfusionPane key={key} runId={runId} m={effectiveMetrics[i]!} targetStep={stepFor(i, undefined, { nearest: true })} normalize={normalize} />
         )}
       />
     );
@@ -207,16 +216,17 @@ export default function PresetCard({
     <>
       {renderChart(inModal)}
       <StepSlider
-        points={seedPoints}
+        points={slider.sliderPoints}
         currentIndex={safeIdx}
         onChange={onSliderChange}
+        keyName={keyName}
         xAxis={settings.xAxis}
         onXAxisChange={(m) => ctl.set({ xAxis: m })}
         className="mt-3"
       />
-      {effectiveMetrics.length > 1 && (
+      {allMetrics.length > 1 && (
         <SeriesChipStrip
-          metrics={effectiveMetrics}
+          metrics={allMetrics}
           controlledSeries={controlledSeries}
           runId={runId}
           allRunIds={allRunIds}
@@ -226,19 +236,17 @@ export default function PresetCard({
     </>
   );
 
-  const settingsPanel = kind === "confusion_matrix" ? (
-    <Select<Normalize>
-      label="Cells"
-      value={normalize}
-      onChange={(v) => ctl.set({ normalize: v })}
-      options={[
-        { value: "none", label: "Counts" },
-        { value: "true", label: "Normalized by true label (rows)" },
-        { value: "pred", label: "Normalized by predicted label (columns)" },
-      ]}
+  const settingsPanel = (
+    <PresetSettingsPanel
+      ctl={ctl}
+      mode="card"
+      ctx={{
+        confusion: kind === "confusion_matrix",
+        multi: effectiveMetrics.length > 1,
+        scalarMetrics,
+        following: slider.sync != null,
+      }}
     />
-  ) : (
-    <div className="py-1 text-sm text-fg-muted">No settings for curves.</div>
   );
 
   return (

@@ -5,7 +5,7 @@ import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { safeJsonParse } from "../lib/format";
 import { downloadArtifact, artifactFilename, exportPlotlyChart, safeName } from "../lib/download";
-import { resolveCardHeight, type CardSettingsKey } from "../lib/card-settings";
+import { cardOverridesStorageKey, resolveCardHeight, type CardSettingsKey } from "../lib/card-settings";
 import { cardMinSize } from "./card-kit/card-min-sizes";
 import { useCardDrop } from "../lib/use-series-drop";
 import type { ComparisonSeriesRef } from "../lib/comparisons";
@@ -15,10 +15,7 @@ import type { SequenceMeta, SequenceResponse } from "../api/types";
 import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid } from "./card-kit";
 import {
   instanceDefaults,
-  type DragMode,
-  type FigureCompareMode,
   type FigureSettings,
-  type HoverMode,
 } from "./cards-settings/figure";
 import { checkFigureMergeable, mergeFigures, type FigureMergeEntry } from "../lib/plot-utils/figure-merge";
 import {
@@ -33,9 +30,10 @@ import { readChartTheme, type ChartTheme } from "../charts/theme";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
-import Toggle from "./settings/Toggle";
-import Select from "./settings/Select";
+import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
+import FigureSettingsPanel from "./settings-panels/FigureSettingsPanel";
 import StepSlider from "./StepSlider";
+import { formatKeyValue } from "../lib/media/slider-key";
 import { plotCardPolicy } from "./card-kit/plot-card-policy";
 
 // The card's own minimum height — passed to every resolveCardHeight read so the
@@ -62,29 +60,7 @@ interface FigureMetadata {
 type PlotlyFigure = PlotlyFigureLike;
 
 
-const FIGURE_COMPARE_OPTIONS: Array<{ value: FigureCompareMode; label: string }> = [
-  { value: "panes", label: "Panes (side by side)" },
-  { value: "overlay", label: "Overlay (merged)" },
-];
-
-;
-
 const EMPTY_FIGURE: PlotlyFigure = { data: [], layout: {} };
-
-const HOVER_OPTIONS: Array<{ value: HoverMode; label: string }> = [
-  { value: "closest", label: "Closest" },
-  { value: "x unified", label: "X unified" },
-  { value: "y unified", label: "Y unified" },
-  { value: "none", label: "None" },
-];
-
-const DRAG_OPTIONS: Array<{ value: DragMode; label: string }> = [
-  { value: "zoom", label: "Zoom" },
-  { value: "pan", label: "Pan" },
-  { value: "select", label: "Select" },
-  { value: "lasso", label: "Lasso" },
-  { value: "none", label: "None" },
-];
 
 function usePlotlySource(sourceHash: string | null | undefined) {
   return useQuery({
@@ -254,7 +230,8 @@ function FigurePane({
 }: {
   runId: string;
   m: { runId?: string; name: string };
-  targetStep: number;
+  /** The pane's step (per run for a slider key); null shows the empty state. */
+  targetStep: number | null;
   settings: FigureSettings;
   viewOverrides?: SharedView;
   onRelayout?: (view: SharedView) => void;
@@ -267,7 +244,10 @@ function FigurePane({
     [q.data],
   );
   // Find the point at or closest below the target step.
-  const current = useMemo(() => resolveAtStep(points, targetStep), [points, targetStep]);
+  const current = useMemo(
+    () => (targetStep == null ? null : resolveAtStep(points, targetStep)),
+    [points, targetStep],
+  );
 
   const meta = useMemo(
     () => safeJsonParse<FigureMetadata>(current?.artifact_metadata ?? null),
@@ -315,7 +295,7 @@ function FigurePane({
 }
 
 export default function FigureInteractiveCard({ runId, metric, extraSeries, controlledSeries, settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
-  const { ctl, effectiveMetrics, allRunIds, multipleRuns } =
+  const { ctl, effectiveMetrics: allMetrics, allRunIds } =
     useCardSeries<FigureSettings>({
       runId,
       metric,
@@ -327,7 +307,13 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     });
   const settings = ctl.value;
 
-  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, ctl.set);
+  const { highlight: dropHighlight, dropProps } = useCardDrop(allMetrics, ctl.set);
+  // The series shown: hidden runs dropped, pinned first, at most `maxRuns` runs.
+  const panes = useMediaPanes(allMetrics, runId, settings.maxRuns);
+  const effectiveMetrics = panes.shown;
+  const multipleRuns = panes.multiRun;
+  const runColors = panes.colors;
+  const scalarMetrics = useScalarMetricNames(runId);
 
   // For the single-metric path, fetch points to drive the step slider.
   const q = useSequence(runId, metric.name);
@@ -365,11 +351,23 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     return arr;
   }, [effectiveMetrics.length, points, multiQueries]);
 
-  const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
+  // seriesPoints[0] is the card's own series; pane i is seriesPoints[i + 1].
+  const seriesRunIds = useMemo(
+    () => [runId, ...(effectiveMetrics.length > 1 ? effectiveMetrics.map((m) => m.runId ?? runId) : [])],
+    [runId, effectiveMetrics],
+  );
+  const slider = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
     updateSettings: ctl.set,
+    sliderKey: settings.sliderKey,
+    seriesRunIds,
+    sync: {
+      cardId: cardOverridesStorageKey(settingsKeyOverride ?? { runId, metricName: metric.name }),
+      follow: settings.followSection,
+    },
   });
+  const { values: sliderValues, safeIdx, currentStep, currentValue, onSliderChange, stepFor } = slider;
   // For the single-metric path, find the point at the current global step.
   // Falls back to the most recent point at-or-before the step (and, failing
   // that, the first point) instead of an exact-match `.find` — `currentStep`
@@ -399,7 +397,8 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       const rid = m.runId ?? runId;
       const pts = (multiQueries[idx]?.data as SequenceResponse | undefined)?.points ?? [];
       const filtered = pts.filter((p) => p.artifact_hash);
-      const paneCurrent = resolveAtStep(filtered, currentStep);
+      const paneStep = stepFor(idx + 1);
+      const paneCurrent = paneStep == null ? null : resolveAtStep(filtered, paneStep);
       const paneMeta = safeJsonParse<FigureMetadata>(paneCurrent?.artifact_metadata ?? null);
       const paneSourceHash =
         paneMeta?.has_source && paneMeta?.source_format === "plotly_json"
@@ -410,7 +409,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     effectiveMetrics,
-    currentStep,
+    stepFor,
     runId,
     multiQueries.map((q) => q.dataUpdatedAt).join("|"),
   ]);
@@ -442,7 +441,14 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     const entries: FigureMergeEntry[] = [];
     paneCurrents.forEach((p, idx) => {
       const fig = overlaySourceQueries[idx]?.data;
-      if (fig) entries.push({ runId: p.runId, runLabel: shortRunLabel(p.runId, allRunIds), figure: fig });
+      if (fig) {
+        entries.push({
+          runId: p.runId,
+          runLabel: shortRunLabel(p.runId, allRunIds),
+          figure: fig,
+          color: runColors.get(p.runId),
+        });
+      }
     });
     return entries;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -450,6 +456,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     overlaySourcesSettled,
     paneCurrents,
     allRunIds,
+    runColors,
     overlaySourceQueries.map((q) => q.dataUpdatedAt).join("|"),
   ]);
 
@@ -548,8 +555,8 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   const runMetaVersion = useRunMetadataVersion();
 
   const subtitle =
-    globalSteps.length > 0
-      ? `step ${currentStep} (${safeIdx + 1}/${globalSteps.length})`
+    sliderValues.length > 0
+      ? `${slider.keyName === "step" ? "step" : slider.keyName} ${formatKeyValue(currentValue)} (${safeIdx + 1}/${sliderValues.length})`
       : `${metric.count} pts`;
 
   const isMulti = effectiveMetrics.length > 1;
@@ -612,9 +619,10 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
           </div>
         )}
         <StepSlider
-          points={points}
+          points={slider.sliderPoints}
           currentIndex={safeIdx}
           onChange={onSliderChange}
+          keyName={slider.keyName}
           xAxis={settings.xAxis}
           onXAxisChange={(m) => ctl.set({ xAxis: m })}
           className="mt-3"
@@ -637,6 +645,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   const renderPaneGrid = (inModal: boolean) => (
     <MultiPaneGrid
       rowHeight={figRowHeight}
+      columns={settings.columns}
       paneKeys={paneKeys}
       labels={paneLabels}
       inModal={inModal}
@@ -649,7 +658,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
             key={key}
             runId={runId}
             m={m}
-            targetStep={currentStep}
+            targetStep={stepFor(i + 1)}
             settings={settings}
             viewOverrides={sharedView}
             onRelayout={handlePaneRelayout}
@@ -683,15 +692,16 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
         </div>
       )}
       <StepSlider
-        points={points}
+        points={slider.sliderPoints}
         currentIndex={safeIdx}
         onChange={onSliderChange}
+        keyName={slider.keyName}
         xAxis={settings.xAxis}
         onXAxisChange={(m) => ctl.set({ xAxis: m })}
         className="mt-3"
       />
       <SeriesChipStrip
-        metrics={effectiveMetrics}
+        metrics={allMetrics}
         controlledSeries={controlledSeries}
         runId={runId}
         allRunIds={allRunIds}
@@ -710,49 +720,16 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
 
 
   const settingsPanel = (
-    <>
-      {isMulti && (
-        <Select<FigureCompareMode>
-          label="Compare mode"
-          value={settings.figureCompare ?? "panes"}
-          onChange={(v) => ctl.set({ figureCompare: v })}
-          options={FIGURE_COMPARE_OPTIONS}
-          description={
-            (settings.figureCompare ?? "panes") === "overlay" && !figureMergeCheck.mergeable
-              ? `Overlay unavailable for this figure type${figureMergeCheck.reason ? ` (${figureMergeCheck.reason})` : ""} — showing panes.`
-              : "Overlay merges every run's figure into one plot; panes show them side by side."
-          }
-        />
-      )}
-      <Toggle
-        label="Show modebar"
-        checked={settings.displayModeBar}
-        onChange={(v) => ctl.set({ displayModeBar: v })}
-        description="Plotly's zoom/pan/camera/save toolbar"
-      />
-      <Toggle
-        label="Scroll to zoom"
-        checked={settings.scrollZoom}
-        onChange={(v) => ctl.set({ scrollZoom: v })}
-      />
-      <Select<HoverMode>
-        label="Hover mode"
-        value={settings.hoverMode}
-        onChange={(v) => ctl.set({ hoverMode: v })}
-        options={HOVER_OPTIONS}
-      />
-      <Select<DragMode>
-        label="Drag mode"
-        value={settings.dragMode}
-        onChange={(v) => ctl.set({ dragMode: v })}
-        options={DRAG_OPTIONS}
-      />
-      <Toggle
-        label="Show legend"
-        checked={settings.showLegend}
-        onChange={(v) => ctl.set({ showLegend: v })}
-      />
-    </>
+    <FigureSettingsPanel
+      ctl={ctl}
+      mode="card"
+      ctx={{
+        multi: isMulti,
+        merge: figureMergeCheck,
+        scalarMetrics,
+        following: slider.sync != null,
+      }}
+    />
   );
 
   return (

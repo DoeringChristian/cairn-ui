@@ -43,3 +43,14 @@ test("several runs: color per run, dash per class", () => {
   assert.notEqual(line(0).dash, line(1).dash);
   assert.equal(line(0).dash, line(2).dash);
 });
+
+test("several runs take their run colour when given", () => {
+  const traces = curveTraces("pr_curve", [
+    { label: "r1", curves, color: "#111111" },
+    { label: "r2", curves },
+  ]);
+  const colors = traces.map((t) => (t.line as { color: string }).color);
+  assert.equal(colors[0], "#111111");
+  assert.equal(colors[1], "#111111");
+  assert.equal(colors[2], seriesColor(1));
+});

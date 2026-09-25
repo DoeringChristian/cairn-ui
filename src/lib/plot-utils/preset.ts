@@ -83,11 +83,12 @@ export function formatAuc(kind: CurveKind, auc: number | null): string {
 
 /**
  * Line traces for one or more runs' curves. One run: a color per class.
- * Several runs: a color per run and a dash per class, legend "run · class".
+ * Several runs: a color per run (`color`, else by index) and a dash per class,
+ * legend "run · class".
  */
 export function curveTraces(
   kind: CurveKind,
-  series: Array<{ label: string; curves: PresetCurve[] }>,
+  series: Array<{ label: string; curves: PresetCurve[]; /** The run's colour when several runs overlay. */ color?: string }>,
 ): Trace[] {
   const multi = series.length > 1;
   const traces: Trace[] = [];
@@ -101,7 +102,7 @@ export function curveTraces(
         y: c.y,
         name,
         line: {
-          color: seriesColor(multi ? si : ci),
+          color: multi ? (s.color ?? seriesColor(si)) : seriesColor(ci),
           dash: multi ? CLASS_DASHES[ci % CLASS_DASHES.length] : "solid",
           width: 1.5,
         },

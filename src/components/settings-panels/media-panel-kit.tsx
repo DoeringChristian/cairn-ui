@@ -51,9 +51,12 @@ export type PanelSurface = "card" | "defaults";
 export function SliderSection<T extends MediaSliderSettings>({
   ctl,
   ctx,
+  children,
 }: {
   ctl: SettingsController<T>;
   ctx?: MediaPanelCtx;
+  /** More Axes settings after the slider's. */
+  children?: ReactNode;
 }) {
   const c = ctl as unknown as SettingsController<MediaSliderSettings>;
   const options: FieldOption[] = (ctx?.scalarMetrics ?? [])
@@ -82,6 +85,7 @@ export function SliderSection<T extends MediaSliderSettings>({
         label="Follow section slider"
         description="Where the section has a media slider, it drives this card."
       />
+      {children}
     </SettingsSection>
   );
 }
