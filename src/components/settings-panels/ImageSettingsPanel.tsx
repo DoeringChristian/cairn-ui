@@ -117,6 +117,7 @@ export default function ImageSettingsPanel({
         <Segmented<ImageRendering>
           {...bind(ctl, "rendering")}
           options={RENDERING_OPTIONS}
+          layout="stacked"
           label="Rendering"
           info="Auto switches to nearest-neighbour once a source pixel covers more than ~1.5 screen pixels. Smooth always interpolates; pixelated never does."
         />

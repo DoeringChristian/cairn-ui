@@ -62,6 +62,7 @@ export default function TensorSettingsPanel({
         <Segmented<TensorViewMode>
           {...bind(ctl, "viewMode")}
           options={VIEWS}
+          layout="stacked"
           label="View"
           description={card && ctx?.below2d && view === "heatmap" ? "Heatmap needs a 2D+ tensor; showing histogram." : undefined}
         />

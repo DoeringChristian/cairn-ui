@@ -31,7 +31,7 @@ export function bind<T extends object, K extends keyof T & string>(
     onChange: (v) => ctl.set({ [key]: v } as unknown as Partial<T>, opts?.mergeKey ? { mergeKey: key } : undefined),
     overridden: ctl.isOverridden(key),
     onReset: () => ctl.reset(key),
-    disabled: ctl.readOnly && ctl.level !== "card",
+    // Read-only viewers explore too: their writes land in the session layer.
   };
 }
 
@@ -133,6 +133,7 @@ export function LayoutSection<T extends MediaColumnsSettings>({
         <Segmented<PanelMode>
           {...bind(m, "panelMode")}
           options={MODE_OPTIONS}
+          layout="stacked"
           label="Mode"
           info="Gallery: every run at the slider's value. Grid: runs as rows, slider values as columns. Compare: 2–4 slots, each with its own run and value."
         />
@@ -141,7 +142,6 @@ export function LayoutSection<T extends MediaColumnsSettings>({
         <Stepper
           value={m.value.compareSlots?.length || 2}
           onChange={(n) => m.set({ compareSlots: normalizeSlots(m.value.compareSlots, paneKeys ?? [], clampSlots(n)) })}
-          disabled={m.readOnly && m.level !== "card"}
           min={2}
           max={4}
           label="Slots"
