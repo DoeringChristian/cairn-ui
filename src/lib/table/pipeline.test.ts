@@ -170,3 +170,9 @@ test("aggColumnName", () => {
   assert.equal(aggColumnName({ column: "*", fn: "count" }), "count");
   assert.equal(aggColumnName({ column: "x", fn: "mean" }), "mean(x)");
 });
+
+test("an aggregate without a column is skipped (count counts rows)", () => {
+  const r = applyTableOps(T, { groupBy: { keys: ["label"], aggs: [{ column: "", fn: "mean" }, { column: "", fn: "count" }] } });
+  assert.equal(r.groupByError, null);
+  assert.deepEqual(r.table.data, [["cat", 2], ["dog", 1], ["bird", 1]]);
+});

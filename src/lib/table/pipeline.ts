@@ -34,7 +34,7 @@ export const AGG_FNS = ["count", "sum", "mean", "min", "max", "first", "nunique"
 export type AggFn = (typeof AGG_FNS)[number];
 
 export interface TableAgg {
-  /** Source column; `count` also takes "" (or "*") for the number of rows. */
+  /** Source column; `count` also takes "" (or "*") for the number of rows. Others without one are skipped. */
   column: string;
   fn: AggFn;
 }
@@ -60,6 +60,8 @@ export interface TableOpsResult {
   queryError: string | null;
   /** An unknown group-by column; group-by is then not applied. */
   groupByError: string | null;
+  /** Rows left after the query (before group-by). */
+  queriedRows: number;
 }
 
 /** The output column name of an aggregate. */
@@ -237,7 +239,9 @@ function aggType(fn: AggFn, source: TableColumn | undefined, values: unknown[]):
   return inferColumnType(values);
 }
 
-function applyGroupBy(table: TableData, groupBy: TableGroupBy): { table: TableData; error: string | null } {
+function applyGroupBy(table: TableData, spec: TableGroupBy): { table: TableData; error: string | null } {
+  // An aggregate still being set up (no column yet) is left out.
+  const groupBy = { ...spec, aggs: spec.aggs.filter((a) => a.fn === "count" || (a.column !== "" && a.column !== "*")) };
   const colIndex = (name: string) => table.columns.findIndex((c) => c.name === name);
   const keyIdx = groupBy.keys.map(colIndex);
   const missing = groupBy.keys.filter((_, i) => keyIdx[i]! < 0);
@@ -298,6 +302,7 @@ export function applyTableOps(table: TableData, ops: TableOps | null | undefined
     out = q.table;
     queryError = q.error;
   }
+  const queriedRows = out.data.length;
   let groupByError: string | null = null;
   const gb = ops?.groupBy;
   if (gb && (gb.keys.length > 0 || gb.aggs.length > 0)) {
@@ -305,7 +310,7 @@ export function applyTableOps(table: TableData, ops: TableOps | null | undefined
     out = g.table;
     groupByError = g.error;
   }
-  return { table: out, derivedErrors, queryError, groupByError };
+  return { table: out, derivedErrors, queryError, groupByError, queriedRows };
 }
 
 /** Whether `ops` changes anything (for skipping the pipeline). */
