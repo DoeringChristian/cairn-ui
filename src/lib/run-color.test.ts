@@ -10,6 +10,12 @@ test("a run's colour depends only on its id", () => {
   assert.ok(RUN_PALETTE.includes(runColor("abc") as (typeof RUN_PALETTE)[number]));
 });
 
+test("the first 10 runs of a card get 10 different hues", () => {
+  const m = assignRunColors(ids.slice(0, 10), t);
+  const hue = (c: string) => RUN_PALETTE.indexOf(c as (typeof RUN_PALETTE)[number]) % 10;
+  assert.equal(new Set([...m.values()].map(hue)).size, 10);
+});
+
 test("up to 20 runs in one card are all distinct", () => {
   const m = assignRunColors(ids, t);
   assert.equal(new Set(m.values()).size, 20);
