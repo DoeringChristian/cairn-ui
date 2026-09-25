@@ -15,7 +15,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { RUN_SELECTOR_FETCH_LIMIT, useReport, useReportComments, useRuns, useSession, useUpdateReport } from "../api/hooks";
+import { RUN_SELECTOR_FETCH_LIMIT, useReport, useReportComments, useRuns, useSession } from "../api/hooks";
+import { api } from "../api/client";
+import { qk } from "../api/query-keys";
 import { formatRelative } from "../lib/format";
 import { loadCardOverrides } from "../lib/card-settings";
 import { templateCardOf, type ComparisonTemplateCard } from "../lib/comparisons";
@@ -31,6 +33,7 @@ import {
   type ReportPayload,
 } from "../lib/reports";
 import ReportNotebook, { makeEmptyBlock } from "../components/reports/ReportNotebook";
+import ShareDialog from "../components/reports/ShareDialog";
 import { usePushUndo } from "../lib/undo-context";
 import { downloadBlob, safeName } from "../lib/download";
 import { ReportExportContext } from "../lib/reports/export-context";
@@ -58,14 +61,13 @@ async function waitForSettledPage(qc: QueryClient): Promise<void> {
 }
 const DEFAULT_REPORT_NAME = "Untitled report";
 
-type SaveState = "idle" | "saving" | "saved" | "error";
+type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 
 export default function ReportEditorPage() {
   const { projectId, reportId } = useParams<{ projectId: string; reportId: string }>();
   const q = useReport(projectId ?? "", reportId ?? "");
   // A read-role session views the report: cards explore without saving.
   const readOnly = useSession().data?.role === "read";
-  const updateMut = useUpdateReport(projectId ?? "", reportId ?? "");
   const queryClient = useQueryClient();
   const [printing, setPrinting] = useState(false);
   // The comments panel (editable reports only) and its open-thread count.
@@ -83,6 +85,7 @@ export default function ReportEditorPage() {
   };
   // Export LaTeX: render every card (ReportExportContext), capture them, zip.
   const [exportingLatex, setExportingLatex] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const notebookRef = useRef<HTMLDivElement>(null);
   const handleExportLatex = async () => {
     if (!reportId || !notebookRef.current) return;
@@ -146,6 +149,9 @@ export default function ReportEditorPage() {
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>(undefined);
 
   const justHydratedRef = useRef(false);
+  // What the server held when this editor last loaded or saved: saves are
+  // conditional on it, so a change made elsewhere is never overwritten.
+  const baseRef = useRef<{ source: string; updatedAt: string } | null>(null);
   const saveTimerRef = useRef<number | null>(null);
 
   // Re-hydrate local editor state whenever the report id changes.
@@ -174,6 +180,7 @@ export default function ReportEditorPage() {
     rawCairnSourceRef.current = parsed.rawCairnSource;
     if (reportId) restoreReportCardSettings(reportId, parsed.blocks, parsed.settings);
     setLastSavedAt(q.data.updated_at);
+    baseRef.current = { source: payload.source, updatedAt: q.data.updated_at };
     justHydratedRef.current = true;
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -189,19 +196,42 @@ export default function ReportEditorPage() {
     setSaveState("saving");
 
     const payload = buildReportPayload(reportId, blocks, rawCairnSourceRef.current);
+    const base = baseRef.current;
+    if (!projectId || !base) return;
 
-    updateMut.mutate(
-      { name: effectiveName, payload: payload as unknown as Record<string, unknown> },
-      {
-        onSuccess: (res) => {
+    void (async () => {
+      try {
+        const res = await api.updateReportIfUnchanged(
+          projectId,
+          reportId,
+          { name: effectiveName, payload: payload as unknown as Record<string, unknown> },
+          base.updatedAt,
+        );
+        if (res.ok) {
+          baseRef.current = { source: payload.source, updatedAt: res.ok.updated_at };
           setSaveState("saved");
-          setLastSavedAt(res.updated_at);
-        },
-        onError: () => setSaveState("error"),
-      },
-    );
+          setLastSavedAt(res.ok.updated_at);
+          queryClient.invalidateQueries({ queryKey: qk.reports(projectId) });
+          return;
+        }
+        // Changed elsewhere. Cards appended from another page ("Add to
+        // report") only extend the saved source: take the appended cells
+        // in and save again. Anything else is a real conflict.
+        const serverSource = String((res.conflict.payload as { source?: unknown }).source ?? "");
+        if (serverSource.startsWith(base.source)) {
+          const tail = parseReportMarkdown(serverSource.slice(base.source.length), undefined, { allProjectRuns });
+          restoreReportCardSettings(reportId, tail.blocks, tail.settings);
+          baseRef.current = { source: serverSource, updatedAt: res.conflict.updated_at };
+          setBlocks((prev) => [...prev, ...tail.blocks]);
+          return;
+        }
+        setSaveState("conflict");
+      } catch {
+        setSaveState("error");
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, reportId, blocks, name]);
+  }, [hydrated, reportId, projectId, blocks, name]);
 
   // Debounced autosave — fires ~1.5s after the last local edit.
   useEffect(() => {
@@ -326,6 +356,8 @@ export default function ReportEditorPage() {
       ? "saving…"
       : saveState === "error"
         ? "save failed"
+        : saveState === "conflict"
+          ? "changed elsewhere — reload to see it (your edits are kept here)"
         : lastSavedAt
           ? `saved · updated ${formatRelative(lastSavedAt)}`
           : "";
@@ -448,8 +480,21 @@ export default function ReportEditorPage() {
           >
             {exportingLatex ? "Exporting…" : "Export LaTeX"}
           </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              className="btn text-xs"
+              title="Create or revoke view-only links to this report"
+            >
+              Share
+            </button>
+          )}
         </div>
       </div>
+      {!readOnly && (
+        <ShareDialog projectId={projectId} reportId={reportId} open={shareOpen} onClose={() => setShareOpen(false)} />
+      )}
 
       {showSource && (
         <pre className="mono mb-4 print:hidden max-h-[50vh] overflow-auto rounded border border-border-subtle bg-bg p-3 text-xs leading-relaxed text-fg-muted whitespace-pre-wrap">
