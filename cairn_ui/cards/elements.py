@@ -35,11 +35,12 @@ class Element:
 
 log = logging.getLogger(__name__)
 
-# Reuses the EXISTING `cairn:resize` postMessage protocol
-# (`src/components/card-kit/use-iframe-auto-height.ts`,
-# `PluginCard.tsx`) — the embed page posts `{type:"cairn:resize", height,
-# protocolVersion:1}` to `parent`; this ~15-line listener (design spec §4.4)
-# sets the outer iframe's height from it, clamped to sane bounds.
+# Reuses the viewer's `cairn:resize` postMessage protocol
+# (`src/lib/use-emit-auto-height.ts` sends it,
+# `src/components/card-kit/use-iframe-auto-height.ts` receives it in the app) —
+# the embed page posts `{type:"cairn:resize", height, protocolVersion:1}` to
+# `parent`; this small listener sets the outer iframe's height from it,
+# clamped to sane bounds.
 _MIN_HEIGHT = 120
 _MAX_HEIGHT = 2000
 _RESIZE_LISTENER_JS = """<script>
@@ -71,7 +72,7 @@ _log = logging.getLogger(__name__)
 class CardElement(Element):
     """A server-backed ``CardSpec`` — renders as a live ``/embed/card`` iframe.
 
-    Degradation contract (design spec §5): try the live iframe first (POST
+    Degradation: try the live iframe first (POST
     ``/api/embed/specs`` -> ``sid`` -> ``<iframe src=".../embed/card?sid=...">``);
     fall back to an inline text notice (still valid HTML, safe in
     ``_repr_html_``) when no cairn server is reachable — e.g. pure local
@@ -94,14 +95,14 @@ class CardElement(Element):
         self._reader_server = reader_server
         """The HTTP base the source `Reader` was connected to when it was
         opened in server mode (``Reader(repo="cairn://host:port")``), threaded
-        by ``cairn.plot``. Preferred over global config/discovery so a card
+        by the ``cairn.ui`` compare helpers. Preferred over global config/discovery so a card
         renders against the SAME server that served its data. `None` for
         local-repo readers (they use `repo_path` discovery instead)."""
         self._token_override = token
         self._height = height
         self._repo_path = str(repo_path) if repo_path is not None else None
         """The local ``.cairn`` dir this card's data came from (threaded by
-        ``cairn.plot``'s builders from the `Reader`/`Run` used to fetch it),
+        the ``cairn.ui`` compare helpers from the `Reader`/`Run` used to fetch it),
         for `servers.json` auto-discovery in `_resolve_server`. `None` for
         HTTP-backed readers or when built directly (`CardElement(spec)`)."""
 
@@ -136,8 +137,9 @@ class CardElement(Element):
 
         A plain local repo path has no *implied* HTTP URL, so steps 4-5
         never trust a candidate without a fast, short-timeout
-        ``GET /api/health`` first — this is the "is `cairn ui` actually
-        running" check the design spec's ``file://``-mode caveat calls for.
+        ``GET /api/health`` first — the "is `cairn ui` actually running"
+        check a local (``file://``-mode) reader needs, since reading a local
+        repo does not mean a viewer is serving it.
         """
         if self._server_override is not None:
             return self._server_override

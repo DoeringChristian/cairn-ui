@@ -1,10 +1,9 @@
 /**
  * Visual pill representing one plotted series in a card's chip strip.
  *
- * Chips are draggable (copy semantics) so they can be used with the
- * comparison system or future interactions. Cards do NOT have drop
- * targets for chips — series management within a card uses the ×
- * button (remove) and the settings popover MetricChips picker (add).
+ * Chips are draggable (copy semantics): dropping one on a card that accepts
+ * series (`useCardDrop`, lib/use-series-drop.ts) adds that series to it. The
+ * chip's × button removes its series from the card.
  */
 
 import { useState } from "react";

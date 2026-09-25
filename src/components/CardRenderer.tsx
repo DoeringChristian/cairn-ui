@@ -54,9 +54,11 @@ const PresetCard = lazy(() => import("./PresetCard"));
  *
  * Two shapes:
  * - `series` (default): a single metric's card, optionally overlaid with
- *   extra cross-run series. This covers all 9 per-metric card types.
- * - `multi-run`: the parallel-coordinates / scatter cards, which take a set of
- *   run IDs rather than a single metric.
+ *   extra cross-run series. This covers every per-metric card type.
+ * - `multi-run`: the workspace-level cards (`MULTI_RUN_CARD_TYPES` in
+ *   lib/comparisons/types.ts: parallel coordinates, scatter, bar, tile,
+ *   importance, run comparer, code diff), which take a set of run IDs rather
+ *   than a single metric.
  *
  * `kind` is optional on the series variant so the common call sites
  * (`<CardRenderer runId=… metric=… />`) stay terse; it defaults to "series".
@@ -91,7 +93,7 @@ export type CardDescriptor =
 /**
  * The per-metric ("series") card types: every canonical `CardType`
  * (lib/cards/card-spec.ts) that is not a multi-run card
- * (parallel/scatter/bar/tile), derived so `CARD_TYPES` stays the one list.
+ * (`MULTI_RUN_CARD_TYPES`), derived so `CARD_TYPES` stays the one list.
  *
  * The `switch` below casts `metric.object_type` to this union and its
  * `default` branch asserts the residual type is `never`, so a missing or

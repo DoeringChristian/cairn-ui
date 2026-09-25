@@ -1,4 +1,4 @@
-"""WS-SCHEMA: pydantic mirror of the card-spec single source of truth.
+"""Pydantic mirror of the card-spec single source of truth.
 
 The authoritative definition lives in TypeScript
 (``src/lib/cards/card-spec.ts``); ``npm run gen:card-schema``
@@ -8,11 +8,11 @@ a hand-written pydantic v2 mirror of that JSON Schema, kept honest by
 committed schema field-for-field, so the Python side can never silently
 drift from TS).
 
-Not wired into any runtime path yet — that is WS-PYAPI, where
-``cairn.card(...)`` / ``cairn.Report`` builders will return these models and
-``.model_dump()`` will yield the exact `````cairn`` YAML/JSON the TS
-``parseCairnSpec`` consumes. Python only ever *emits* validated specs; it
-never parses markdown and never re-implements ``cardFromSpec``.
+The ``cairn.ui`` compare helpers (``compare.py``) build a :class:`CardSpec`
+from these models and ``.model_dump()`` it into the spec a ``CardElement``
+posts to the server for ``/embed/card`` to render. Python only ever *emits*
+validated specs; it never parses markdown and never re-implements
+``cardFromSpec``.
 """
 
 from __future__ import annotations
