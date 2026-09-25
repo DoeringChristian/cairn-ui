@@ -32,6 +32,8 @@ import {
 } from "../lib/reports";
 import ReportNotebook, { makeEmptyBlock } from "../components/reports/ReportNotebook";
 import { usePushUndo } from "../lib/undo-context";
+import { downloadBlob, safeName } from "../lib/download";
+import { ReportExportContext } from "../lib/reports/export-context";
 
 const AUTOSAVE_DELAY_MS = 1500;
 const PRINT_WAIT_LIMIT_MS = 20000;
@@ -73,6 +75,29 @@ export default function ReportEditorPage() {
       window.print();
     } finally {
       setPrinting(false);
+    }
+  };
+  // Export LaTeX: render every card (ReportExportContext), capture them, zip.
+  const [exportingLatex, setExportingLatex] = useState(false);
+  const notebookRef = useRef<HTMLDivElement>(null);
+  const handleExportLatex = async () => {
+    if (!reportId || !notebookRef.current) return;
+    setExportingLatex(true);
+    try {
+      const { exportReportLatex } = await import("../lib/reports/export-latex");
+      const title = name.trim() || DEFAULT_REPORT_NAME;
+      const { zip, skipped } = await exportReportLatex({
+        root: notebookRef.current, blocks, reportId, title, queryClient,
+      });
+      downloadBlob(zip, `${safeName(title)}.zip`);
+      if (skipped.length > 0) {
+        setApplyBanner(`LaTeX export: ${skipped.length} card(s) had no chart to capture (${skipped.join(", ")}).`);
+      }
+    } catch (err) {
+      console.error("LaTeX export failed", err);
+      setApplyBanner(`LaTeX export failed: ${String(err)}`);
+    } finally {
+      setExportingLatex(false);
     }
   };
   // Same pool size a `RunSelector` query resolves against, so every resolved
@@ -399,6 +424,15 @@ export default function ReportEditorPage() {
           >
             {printing ? "Preparing…" : "Export PDF"}
           </button>
+          <button
+            type="button"
+            onClick={() => void handleExportLatex()}
+            disabled={exportingLatex}
+            className="btn text-xs disabled:opacity-60"
+            title="Download the report as a LaTeX project: report.tex plus a PNG per card, zipped"
+          >
+            {exportingLatex ? "Exporting…" : "Export LaTeX"}
+          </button>
         </div>
       </div>
 
@@ -408,6 +442,8 @@ export default function ReportEditorPage() {
         </pre>
       )}
 
+      <ReportExportContext.Provider value={exportingLatex}>
+      <div ref={notebookRef}>
       <ReportNotebook
         projectId={projectId}
         reportId={reportId}
@@ -419,6 +455,8 @@ export default function ReportEditorPage() {
         onInsertBlock={insertBlock}
         readOnly={readOnly}
       />
+      </div>
+      </ReportExportContext.Provider>
 
     </div>
   );
