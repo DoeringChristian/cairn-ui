@@ -6,6 +6,7 @@ import type { BaseCardSettings } from "./card-kit";
 import CardHeader from "./CardHeader";
 import CardResizeHandle from "./CardResizeHandle";
 import CardDetailModal from "./CardDetailModal";
+import { useCardNavEntry } from "../lib/card-nav";
 
 interface Props {
   cardRef: RefObject<HTMLDivElement>;
@@ -86,6 +87,14 @@ export default function CardShell({
   const interact = useInteractState(!!modalOpen);
   // Read-only cards (report viewers, embeds) keep their size.
   const mutable = useContext(CardMutationContext);
+  // ←/→ in the detail modal: close this card's modal, open the neighbour's.
+  const nav = useCardNavEntry(onSettings, modalContent !== undefined && !settings.collapsed, !!modalOpen);
+  const step = (go?: () => void) =>
+    go &&
+    (() => {
+      onModalClose?.();
+      go();
+    });
 
   return (
     <div
@@ -132,6 +141,8 @@ export default function CardShell({
                 onClose={onModalClose ?? (() => {})}
                 title={settings.title ?? title}
                 settingsContent={settingsPanel}
+                onPrev={step(nav.prev)}
+                onNext={step(nav.next)}
               >
                 {modalContent}
               </CardDetailModal>
