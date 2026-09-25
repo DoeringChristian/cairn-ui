@@ -5,11 +5,9 @@ import type { TextSettings } from "./cards-settings/text";
 import { downloadArtifact, artifactFilename } from "../lib/download";
 import { api } from "../api/client";
 import type { SequenceMeta } from "../api/types";
-import CardDetailModal from "./CardDetailModal";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
-import Select from "./settings/Select";
-import Toggle from "./settings/Toggle";
+import TextSettingsPanel from "./settings-panels/TextSettingsPanel";
 import StepSlider from "./StepSlider";
 
 interface Props {
@@ -75,27 +73,6 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
     ? "whitespace-pre-wrap break-all"
     : "whitespace-pre overflow-x-auto";
 
-  const settingsPanel = (
-    <>
-      <Select
-        label="Font size"
-        value={settings.fontSize}
-        onChange={(v) => ctl.set({ fontSize: v })}
-        options={[
-          { value: "xs", label: "Extra small" },
-          { value: "sm", label: "Small" },
-          { value: "base", label: "Base" },
-        ]}
-      />
-      <Toggle
-        label="Word wrap"
-        checked={settings.wordWrap}
-        onChange={(v) => ctl.set({ wordWrap: v })}
-        description="Wrap long lines to card width. Off = horizontal scroll."
-      />
-    </>
-  );
-
   const cardRef = useRef<HTMLDivElement>(null);
 
   const renderContent = () => (
@@ -128,20 +105,13 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
       onRemove={onRemove}
       onDownload={current?.artifact_hash ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), artifactFilename(metric.name, current?.step ?? 0, "text/plain")) : undefined}
       addToComparisonSlot={<AddToComparisonButton cardType="text" series={compSeries} />}
+      settingsPanel={<TextSettingsPanel ctl={ctl} mode="card" />}
+      modalOpen={expanded}
+      onModalClose={() => setExpanded(false)}
+      modalContent={<div className="flex h-full flex-col">{renderContent()}</div>}
       scrollIntoViewOnMount={autoOpenSettings}
     >
-      <>
-      {renderContent()}
-
-      <CardDetailModal
-        open={expanded}
-        onClose={() => setExpanded(false)}
-        title={settings.title ?? metric.name}
-        settingsContent={settingsPanel}
-      >
-        {renderContent()}
-      </CardDetailModal>
-      </>
+      <>{renderContent()}</>
     </CardShell>
   );
 }

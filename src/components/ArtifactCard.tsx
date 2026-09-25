@@ -3,7 +3,7 @@
  * Shows file metadata (name, size, MIME type) and a step slider.
  */
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { isBrowserDisplayable } from "../lib/artifact-format";
 import { useSequence, useArtifacts } from "../api/hooks";
 import { api } from "../api/client";
@@ -14,6 +14,7 @@ import type { ArtifactSettings } from "./cards-settings/artifact";
 import type { SequenceMeta } from "../api/types";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
+import ArtifactSettingsPanel from "./settings-panels/ArtifactSettingsPanel";
 import { useStepSlider, resolveAtStep } from "./card-kit";
 
 interface Props {
@@ -87,6 +88,82 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
     : `${metric.count} pts`;
 
   const cardRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
+
+  const renderContent = () => (
+    <>
+      {current?.artifact_hash ? (
+        <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-auto">
+          {/* Image preview for image MIME types */}
+          {isBrowserDisplayable(mime) && (
+            <div className="flex justify-center items-center rounded bg-bg p-2 min-h-[6rem]">
+              <img
+                src={api.artifactUrl(current.artifact_hash!)}
+                alt={`${metric.name} @ step ${current.step}`}
+                className="max-w-full max-h-full object-contain"
+                style={{ maxHeight: "320px" }}
+              />
+            </div>
+          )}
+          <div className="rounded border border-border bg-bg p-3 text-xs">
+            <div className="flex flex-col gap-1">
+              {meta.python_type && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-fg-subtle">Type:</span>
+                  <span className="mono text-fg">
+                    {meta.python_module && meta.python_module !== "builtins" ? `${meta.python_module}.` : ""}{meta.python_type}
+                  </span>
+                </div>
+              )}
+              {meta.size_bytes != null && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-fg-subtle">Size:</span>
+                  <span className="mono num text-fg">{formatBytes(meta.size_bytes)}</span>
+                </div>
+              )}
+              {(mime || ext) && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-fg-subtle">Format:</span>
+                  <span className="mono text-fg">{mime || `pickle (${ext})`}</span>
+                </div>
+              )}
+              <div className="flex items-baseline gap-2">
+                <span className="text-fg-subtle">Hash:</span>
+                <span className="mono text-fg-muted">{current.artifact_hash!.slice(0, 16)}...</span>
+              </div>
+              {/* Show any extra metadata keys */}
+              {Object.entries(meta).filter(([k]) => !["filename", "size_bytes", "mime_type", "python_type", "python_module"].includes(k)).map(([k, v]) => (
+                <div key={k} className="flex items-baseline gap-2">
+                  <span className="text-fg-subtle">{k}:</span>
+                  <span className="mono text-fg">{String(v)}</span>
+                </div>
+              ))}
+            </div>
+            <a
+              href={api.artifactUrl(current.artifact_hash!)}
+              download={downloadName}
+              className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded border border-accent text-accent hover:bg-accent/10 text-xs font-medium"
+            >
+              {"\u2913"} Download{ext ? ` ${ext}` : ""}
+            </a>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center text-sm text-fg-muted">
+          No artifact at this step
+        </div>
+      )}
+
+      <StepSlider
+        points={points}
+        currentIndex={safeIdx}
+        onChange={onSliderChange}
+        xAxis={settings.xAxis}
+        onXAxisChange={(m) => ctl.set({ xAxis: m })}
+        className="mt-3"
+      />
+    </>
+  );
 
   return (
     <CardShell cardKind="artifact"
@@ -102,80 +179,14 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
           artifact
         </span>
       }
+      onSettings={() => setExpanded(true)}
+      settingsPanel={<ArtifactSettingsPanel ctl={ctl} mode="card" />}
+      modalOpen={expanded}
+      onModalClose={() => setExpanded(false)}
+      modalContent={<div className="flex h-full flex-col">{renderContent()}</div>}
       scrollIntoViewOnMount={autoOpenSettings}
     >
-        <>
-          {current?.artifact_hash ? (
-            <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-auto">
-              {/* Image preview for image MIME types */}
-              {isBrowserDisplayable(mime) && (
-                <div className="flex justify-center items-center rounded bg-bg p-2 min-h-[6rem]">
-                  <img
-                    src={api.artifactUrl(current.artifact_hash!)}
-                    alt={`${metric.name} @ step ${current.step}`}
-                    className="max-w-full max-h-full object-contain"
-                    style={{ maxHeight: "320px" }}
-                  />
-                </div>
-              )}
-              <div className="rounded border border-border bg-bg p-3 text-xs">
-                <div className="flex flex-col gap-1">
-                  {meta.python_type && (
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-fg-subtle">Type:</span>
-                      <span className="mono text-fg">
-                        {meta.python_module && meta.python_module !== "builtins" ? `${meta.python_module}.` : ""}{meta.python_type}
-                      </span>
-                    </div>
-                  )}
-                  {meta.size_bytes != null && (
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-fg-subtle">Size:</span>
-                      <span className="mono num text-fg">{formatBytes(meta.size_bytes)}</span>
-                    </div>
-                  )}
-                  {(mime || ext) && (
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-fg-subtle">Format:</span>
-                      <span className="mono text-fg">{mime || `pickle (${ext})`}</span>
-                    </div>
-                  )}
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-fg-subtle">Hash:</span>
-                    <span className="mono text-fg-muted">{current.artifact_hash!.slice(0, 16)}...</span>
-                  </div>
-                  {/* Show any extra metadata keys */}
-                  {Object.entries(meta).filter(([k]) => !["filename", "size_bytes", "mime_type", "python_type", "python_module"].includes(k)).map(([k, v]) => (
-                    <div key={k} className="flex items-baseline gap-2">
-                      <span className="text-fg-subtle">{k}:</span>
-                      <span className="mono text-fg">{String(v)}</span>
-                    </div>
-                  ))}
-                </div>
-                <a
-                  href={api.artifactUrl(current.artifact_hash!)}
-                  download={downloadName}
-                  className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded border border-accent text-accent hover:bg-accent/10 text-xs font-medium"
-                >
-                  {"\u2913"} Download{ext ? ` ${ext}` : ""}
-                </a>
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-sm text-fg-muted">
-              No artifact at this step
-            </div>
-          )}
-
-          <StepSlider
-            points={points}
-            currentIndex={safeIdx}
-            onChange={onSliderChange}
-            xAxis={settings.xAxis}
-            onXAxisChange={(m) => ctl.set({ xAxis: m })}
-            className="mt-3"
-          />
-        </>
+      {renderContent()}
     </CardShell>
   );
 }
