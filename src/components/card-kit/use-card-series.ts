@@ -1,7 +1,8 @@
 import { useMemo, useRef } from "react";
 import type { SequenceMeta } from "../../api/types";
 import type { ComparisonSeriesRef } from "../../lib/comparisons";
-import { useCardSettings, type CardSettingsKey } from "../../lib/card-settings";
+import type { CardType } from "../../lib/cards/card-spec";
+import { useCardSettings, type CardSettingsKey, type SettingsController } from "../../lib/card-settings";
 import { seriesKey } from "../../lib/series-utils";
 
 export interface SeriesRef {
@@ -10,10 +11,8 @@ export interface SeriesRef {
 }
 
 export interface CardSeriesResult<TSettings> {
-  /** Current merged settings (defaults + persisted overrides). */
-  settings: TSettings;
-  /** Shallow-merge a patch over current settings and persist. */
-  updateSettings: (patch: Partial<TSettings>) => void;
+  /** The card's settings controller (`ctl.value`, `ctl.set`, …). */
+  ctl: SettingsController<TSettings>;
   /** Series to render, canonical order (sorted by seriesKey). */
   effectiveMetrics: SeriesRef[];
   /** Distinct run ids across effectiveMetrics (always includes runId). */
@@ -23,13 +22,13 @@ export interface CardSeriesResult<TSettings> {
 
 /**
  * Canonical series-merge logic shared by every series card, owning the card's
- * settings persistence (`useCardSettings`).
+ * settings controller (`useCardSettings`).
  *
  * This is the reference (ScalarPlotCard) implementation, moved verbatim:
  *
- *  - default metrics = dedupe(seed ∪ extraSeries) sorted by `seriesKey`;
- *    the full defaults object is produced by the card's `makeDefaults`
- *    factory (read via a ref, so an inline arrow at the call site is fine).
+ *  - default metrics = dedupe(seed ∪ extraSeries) sorted by `seriesKey`,
+ *    layered over the card's `instanceDefaults(seed)` (read via a ref, so an
+ *    inline arrow at the call site is fine) as its instance defaults.
  *  - settingsKey     = settingsKeyOverride ?? {runId, metricName}.
  *  - effective       (controlled)   = props series first, then persisted
  *                                     metrics whose *name* is not among the
@@ -46,15 +45,14 @@ export function useCardSeries<
   extraSeries?: ComparisonSeriesRef[];
   controlledSeries?: boolean;
   settingsKeyOverride?: CardSettingsKey;
+  /** The card type: its builtin defaults and cascade keys (lib/cards/settings-registry.ts). */
+  type: CardType;
   /**
-   * Card's defaults factory: given the seed metric and the merged+sorted
-   * default metrics list, produce the full defaults object. Read via a ref
-   * internally so an inline arrow at the call site is fine.
+   * The card's instance defaults for a seed metric (`metrics` is replaced by
+   * the merged+sorted default metrics list). Read via a ref internally so an
+   * inline arrow at the call site is fine.
    */
-  makeDefaults: (
-    seed: { name: string },
-    metrics: SeriesRef[],
-  ) => TSettings;
+  instanceDefaults?: (seed: { name: string }) => Partial<TSettings>;
 }): CardSeriesResult<TSettings> {
   const {
     runId,
@@ -62,7 +60,8 @@ export function useCardSeries<
     extraSeries,
     controlledSeries = false,
     settingsKeyOverride,
-    makeDefaults,
+    type,
+    instanceDefaults,
   } = args;
 
   const seed = useMemo(
@@ -101,12 +100,12 @@ export function useCardSeries<
   }, [seed, extraSeriesKey]);
 
   // Read the factory via a ref so callers can pass an inline arrow without
-  // invalidating the memo every render (mirrors useCardSettings' defaultsRef).
-  const makeDefaultsRef = useRef(makeDefaults);
-  makeDefaultsRef.current = makeDefaults;
+  // invalidating the memo every render.
+  const instanceDefaultsRef = useRef(instanceDefaults);
+  instanceDefaultsRef.current = instanceDefaults;
 
-  const defaults = useMemo<TSettings>(
-    () => makeDefaultsRef.current(seed, defaultMetrics),
+  const defaults = useMemo<Partial<TSettings>>(
+    () => ({ ...instanceDefaultsRef.current?.(seed), metrics: defaultMetrics }) as Partial<TSettings>,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [seed, extraSeriesKey],
   );
@@ -120,10 +119,8 @@ export function useCardSeries<
     [settingsKeyOverride, runId, metric.name],
   );
 
-  const [settings, updateSettings] = useCardSettings<TSettings>(
-    settingsKey,
-    defaults,
-  );
+  const ctl = useCardSettings<TSettings>(settingsKey, type, defaults);
+  const settings = ctl.value;
 
   const effectiveMetrics = useMemo<SeriesRef[]>(() => {
     if (!controlledSeries) return settings.metrics;
@@ -158,8 +155,7 @@ export function useCardSeries<
   const multipleRuns = allRunIds.length > 1;
 
   return {
-    settings,
-    updateSettings,
+    ctl,
     effectiveMetrics,
     allRunIds,
     multipleRuns,

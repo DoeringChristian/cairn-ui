@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { api } from "../../api/client";
-import { cardSettingsStorageKey, loadCardSettings, type CardSettingsKey } from "../card-settings";
+import { loadCardOverrides, saveCardOverrides, type CardOverrides, type CardSettingsKey } from "../card-settings";
 import { storageKeys } from "../storage";
 import type { RunSelector } from "../run-selector";
 import { isRunSelector } from "../run-selector";
@@ -21,13 +21,13 @@ export function cardSettingsKeyFor(comparisonId: string, card: ComparisonCard): 
   return cardSettingsKeyForScope(compareRunId(comparisonId), card);
 }
 
-/** Build the payload for server storage, including card settings. */
+/** Build the payload for server storage, including each card's settings overrides. */
 function buildPayload(cmp: Comparison): Record<string, unknown> {
-  // Gather card settings from localStorage.
+  // Gather card overrides from localStorage.
   const cardSettings: Record<string, unknown> = {};
   for (const card of cmp.cards) {
-    const settings = loadCardSettings(cardSettingsKeyFor(cmp.id, card));
-    if (settings) cardSettings[card.id] = settings;
+    const overrides = loadCardOverrides(cardSettingsKeyFor(cmp.id, card));
+    if (overrides) cardSettings[card.id] = overrides;
   }
   return {
     cards: cmp.cards,
@@ -95,17 +95,15 @@ export async function syncComparisonsFromServer(projectId: string): Promise<void
         local.push(cmp);
         changed = true;
 
-        // Restore card settings from payload.
+        // Restore card overrides from payload.
         const cardSettings = (payload.cardSettings ?? {}) as Record<string, unknown>;
-        for (const [cardId, settings] of Object.entries(cardSettings)) {
-          if (settings && typeof settings === "object") {
+        for (const [cardId, overrides] of Object.entries(cardSettings)) {
+          if (overrides && typeof overrides === "object") {
             const card = cmp.cards.find((k) => k.id === cardId);
             const key: CardSettingsKey = card
               ? cardSettingsKeyFor(cmp.id, card)
               : { runId: compareRunId(cmp.id), metricName: cardId };
-            try {
-              localStorage.setItem(cardSettingsStorageKey(key), JSON.stringify(settings));
-            } catch { /* ignore */ }
+            saveCardOverrides(key, overrides as CardOverrides);
           }
         }
       } catch { /* skip failed fetches */ }

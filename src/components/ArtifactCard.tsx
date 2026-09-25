@@ -10,10 +10,11 @@ import { api } from "../api/client";
 import { formatBytes, safeJsonParse } from "../lib/format";
 import { downloadArtifact, artifactFilename } from "../lib/download";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
+import type { ArtifactSettings } from "./cards-settings/artifact";
 import type { SequenceMeta } from "../api/types";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
-import { useStepSlider, resolveAtStep, type BaseCardSettings } from "./card-kit";
+import { useStepSlider, resolveAtStep } from "./card-kit";
 
 interface Props {
   runId: string;
@@ -31,13 +32,6 @@ interface ArtifactMeta {
   python_module?: string;
   [key: string]: unknown;
 }
-
-interface ArtifactSettings extends BaseCardSettings {
-  sliderStep?: number;
-  xAxis?: "step" | "relative_time" | "wall_time";
-}
-
-const DEFAULT_SETTINGS: ArtifactSettings = { version: 1 };
 
 export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
   const q = useSequence(runId, metric.name);
@@ -63,16 +57,17 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
     }));
   }, [q.data, artifactsQ.data, metric.name]);
 
-  const [settings, updateSettings] = useCardSettings(
+  const ctl = useCardSettings<ArtifactSettings>(
     settingsKeyOverride ?? { runId, metricName: metric.name },
-    DEFAULT_SETTINGS,
+    "artifact",
   );
+  const settings = ctl.value;
 
   const seriesPoints = useMemo(() => [points], [points]);
   const { safeIdx, currentStep, onSliderChange } = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
-    updateSettings,
+    updateSettings: ctl.set,
   });
   const current = useMemo(() => resolveAtStep<(typeof points)[number]>(points, currentStep), [points, currentStep]);
   const meta = useMemo(
@@ -97,7 +92,7 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
     <CardShell cardKind="artifact"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
       onRemove={onRemove}
@@ -177,7 +172,7 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
             currentIndex={safeIdx}
             onChange={onSliderChange}
             xAxis={settings.xAxis}
-            onXAxisChange={(m) => updateSettings({ xAxis: m })}
+            onXAxisChange={(m) => ctl.set({ xAxis: m })}
             className="mt-3"
           />
         </>

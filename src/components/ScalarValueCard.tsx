@@ -24,6 +24,8 @@ import type { SequenceMeta } from "../api/types";
 import { type BaseCardSettings } from "./card-kit";
 import CardShell from "./CardShell";
 
+const VALUE_INSTANCE_DEFAULTS: Partial<BaseCardSettings> = { colSpan: 1 };
+
 interface Props {
   runId: string;
   metric: SequenceMeta;
@@ -31,8 +33,6 @@ interface Props {
   onRemove?: () => void;
   autoOpenSettings?: boolean;
 }
-
-const DEFAULT_VALUE_SETTINGS: BaseCardSettings = { version: 1, colSpan: 1 };
 
 export default function ScalarValueCard({
   runId,
@@ -50,10 +50,9 @@ export default function ScalarValueCard({
       },
     [settingsKeyOverride, runId, metric.name],
   );
-  const [settings, updateSettings] = useCardSettings(
-    settingsKey,
-    DEFAULT_VALUE_SETTINGS,
-  );
+  // Shares the scalar plot's key: the card becomes a plot once the series grows.
+  const ctl = useCardSettings<BaseCardSettings>(settingsKey, "scalar", VALUE_INSTANCE_DEFAULTS);
+  const settings = ctl.value;
 
   const q = useSequence(runId, metric.name);
   const point = q.data?.points?.[0];
@@ -64,7 +63,7 @@ export default function ScalarValueCard({
       cardKind="scalar-value"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title={metric.name}
       subtitle={
         <span className="text-xs text-fg-subtle">

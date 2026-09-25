@@ -7,10 +7,15 @@ import {
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useSequences, useSequencesForRuns } from "../api/hooks";
 import { qk } from "../api/query-keys";
-import type { CardSettingsKey } from "../lib/card-settings";
+import type { CardSettingsKey, SetOptions } from "../lib/card-settings";
 import type { ComparisonSeriesRef } from "../lib/comparisons";
 import { useCardDrop } from "../lib/use-series-drop";
-import { useCardSeries, useRunInfo, type BaseCardSettings } from "./card-kit";
+import { useCardSeries, useRunInfo } from "./card-kit";
+import {
+  instanceDefaults as scalarInstanceDefaults,
+  type ScalarGroupBy as GroupBy,
+  type ScalarSettings,
+} from "./cards-settings/scalar";
 import type {
   RunDetailResponse,
   SequenceMeta,
@@ -33,71 +38,12 @@ import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import ScalarChart from "../charts/ScalarChart";
 import { mapToXAxis, type AxisSource, type XMetricRef } from "../lib/plot-utils/x-axis";
 import { xMetricFor } from "../lib/metric-defs";
-import { SERIES_COLORS, type AxisScale, type Series } from "../lib/plot-utils/types";
+import { SERIES_COLORS, type Series } from "../lib/plot-utils/types";
 import { SMOOTHING_KINDS, formatSmoothing, type SmoothingKind } from "../lib/plot-utils/smooth";
 import { groupSeries, type BandKind } from "../lib/plot-utils/aggregate";
 import type { Run } from "../api/types";
 
 const SCALAR_POLICY = plotCardPolicy("scalar");
-
-// -----------------------------------------------------------------------------
-// Settings shape
-// -----------------------------------------------------------------------------
-
-interface ScalarSettings extends BaseCardSettings {
-  metrics: Array<{ runId?: string; name: string }>;
-  xAxis: AxisSource;
-  /** The series an `xAxis: "metric"` card plots against (joined on step). */
-  xMetric?: XMetricRef;
-  xScale: AxisScale;
-  yScale: AxisScale;
-  xRange: [number | null, number | null];
-  yRange: [number | null, number | null];
-  smoothing: number;
-  smoothingKind: SmoothingKind;
-  outlierPct: [number, number];
-  lineType: "linear" | "monotone" | "step" | "stepBefore" | "stepAfter";
-  showLegend: boolean;
-  tooltip: { showWallTime: boolean };
-  /** Collapse runs sharing a group / job type / param value into mean ± band. */
-  groupBy: GroupBy | null;
-  band: BandKind;
-  /** Draw only each group's mean and band, not its runs. */
-  hideMembers: boolean;
-  viewport: {
-    xMin: number | null;
-    xMax: number | null;
-    yMin: number | null;
-    yMax: number | null;
-  };
-}
-
-interface GroupBy {
-  source: "group" | "job_type" | "param";
-  /** The param key (source "param" only). */
-  key: string;
-}
-
-const DEFAULT_SCALAR_SETTINGS = (seed: { name: string }): ScalarSettings => ({
-  version: 1,
-  colSpan: SCALAR_POLICY.colSpan,
-  metrics: [seed],
-  xAxis: "step",
-  xScale: "linear",
-  yScale: "linear",
-  xRange: [null, null],
-  yRange: [null, null],
-  smoothing: 0,
-  smoothingKind: "ema",
-  outlierPct: [0, 100],
-  lineType: "linear",
-  showLegend: true,
-  tooltip: { showWallTime: true },
-  groupBy: { source: "group", key: "" },
-  band: "std",
-  hideMembers: false,
-  viewport: { xMin: null, xMax: null, yMin: null, yMax: null },
-});
 
 /**
  * A card seeded for a metric tracked with `run.track(..., x=...)` starts on
@@ -176,8 +122,7 @@ export default function ScalarPlotCard({
 }: Props) {
   const qc = useQueryClient();
   const {
-    settings,
-    updateSettings: rawUpdateSettings,
+    ctl,
     effectiveMetrics,
     allRunIds,
     multipleRuns,
@@ -187,15 +132,17 @@ export default function ScalarPlotCard({
     extraSeries,
     controlledSeries,
     settingsKeyOverride,
-    makeDefaults: (seed, metrics) => ({
-      ...DEFAULT_SCALAR_SETTINGS(seed),
+    type: "scalar",
+    instanceDefaults: (seed) => ({
+      ...scalarInstanceDefaults(seed),
       ...seededXAxis(qc, runId, seed),
-      metrics,
     }),
   });
+  const settings = ctl.value;
+  const setSettings = ctl.set;
 
   const updateSettings = useCallback(
-    (patch: Partial<ScalarSettings>) => {
+    (patch: Partial<ScalarSettings>, opts?: SetOptions) => {
       if (patch.metrics) {
         patch = {
           ...patch,
@@ -204,9 +151,9 @@ export default function ScalarPlotCard({
           ),
         };
       }
-      rawUpdateSettings(patch);
+      setSettings(patch, opts);
     },
-    [rawUpdateSettings],
+    [setSettings],
   );
 
   // -------------------------------------------------------------------------
@@ -607,7 +554,7 @@ export default function ScalarPlotCard({
       <Slider
         label={SMOOTHING_KINDS[settings.smoothingKind].short}
         value={settings.smoothing}
-        onChange={(v) => updateSettings({ smoothing: v })}
+        onChange={(v) => updateSettings({ smoothing: v }, { mergeKey: "smoothing" })}
         min={SMOOTHING_KINDS[settings.smoothingKind].min}
         max={SMOOTHING_KINDS[settings.smoothingKind].max}
         step={SMOOTHING_KINDS[settings.smoothingKind].step}
@@ -620,7 +567,7 @@ export default function ScalarPlotCard({
         label="Low percentile"
         value={settings.outlierPct[0]}
         onChange={(v) =>
-          updateSettings({ outlierPct: [v, settings.outlierPct[1]] })
+          updateSettings({ outlierPct: [v, settings.outlierPct[1]] }, { mergeKey: "outlierPct" })
         }
         min={0}
         max={100}
@@ -631,7 +578,7 @@ export default function ScalarPlotCard({
         label="High percentile"
         value={settings.outlierPct[1]}
         onChange={(v) =>
-          updateSettings({ outlierPct: [settings.outlierPct[0], v] })
+          updateSettings({ outlierPct: [settings.outlierPct[0], v] }, { mergeKey: "outlierPct" })
         }
         min={0}
         max={100}
@@ -676,7 +623,7 @@ export default function ScalarPlotCard({
     yRange: settings.yRange,
     view: settings.viewport,
     onViewChange: (v: ScalarSettings["viewport"]) =>
-      updateSettings({ viewport: v }),
+      updateSettings({ viewport: v }, { mergeKey: "viewport", label: "Zoom" }),
     smoothing: settings.smoothing,
     smoothingKind: settings.smoothingKind,
     outlierPct: settings.outlierPct,

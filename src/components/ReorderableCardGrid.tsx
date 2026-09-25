@@ -6,8 +6,9 @@
  * move-up / move-down menu entries (touch screens have no HTML5 drag).
  */
 
-import { useCallback, useRef, type ReactNode } from "react";
+import { Fragment, useCallback, useContext, useRef, type ReactNode } from "react";
 import DraggableCard, { CAIRN_CARD_MIME } from "./DraggableCard";
+import { CardMutationContext } from "../lib/card-settings";
 
 interface CardEntry {
   key: string;
@@ -51,6 +52,8 @@ export default function ReorderableCardGrid({
   dataAttributes,
 }: Props) {
   const gridRef = useRef<HTMLDivElement | null>(null);
+  // Read-only grids (report viewers) have no drag grips or move entries.
+  const mutable = useContext(CardMutationContext);
 
   const clearHighlight = useCallback(() => {
     gridRef.current
@@ -107,7 +110,9 @@ export default function ReorderableCardGrid({
       onDrop={handleDrop}
       {...(dataAttributes ?? {})}
     >
-      {cards.map((card, i) => (
+      {cards.map((card, i) => !mutable ? (
+        <Fragment key={card.key}>{card.content}</Fragment>
+      ) : (
         <DraggableCard
           key={card.key}
           cardKey={card.key}

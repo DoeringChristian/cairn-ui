@@ -3,37 +3,16 @@ import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { useCardSettings } from "../lib/card-settings";
+import type { TileBestDir as BestDir, TileReduce as Reduce, TileSettings } from "./cards-settings/tile";
 import { formatNum } from "../lib/plot-utils/types";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import CardShell from "./CardShell";
 import Select from "./settings/Select";
-import { type BaseCardSettings } from "./card-kit";
 
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
 
-interface MetricDef {
-  key: string;
-  source: "param" | "metric";
-}
-
-type Reduce = "best" | "mean" | "latest";
-type BestDir = "max" | "min";
-
-interface TileSettings extends BaseCardSettings {
-  metric: MetricDef | null;
-  reduce: Reduce;
-  bestDir: BestDir;
-}
-
-const DEFAULT_SETTINGS: TileSettings = {
-  version: 1,
-  metric: null,
-  reduce: "best",
-  bestDir: "max",
-  colSpan: 1,
-};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -60,7 +39,8 @@ export default function ScalarTileCard({
   autoOpenSettings,
 }: Props) {
   const runMetaVersion = useRunMetadataVersion();
-  const [settings, updateSettings] = useCardSettings(settingsKey, DEFAULT_SETTINGS);
+  const ctl = useCardSettings<TileSettings>(settingsKey, "tile");
+  const settings = ctl.value;
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
   const runQueries = useQueries({
@@ -184,9 +164,9 @@ export default function ScalarTileCard({
           value={metric ? `${metric.source}:${metric.key}` : ""}
           onChange={(e) => {
             const v = e.target.value;
-            if (!v) { updateSettings({ metric: null }); return; }
+            if (!v) { ctl.set({ metric: null }); return; }
             const [source, ...rest] = v.split(":");
-            updateSettings({ metric: { key: rest.join(":"), source: source as "param" | "metric" } });
+            ctl.set({ metric: { key: rest.join(":"), source: source as "param" | "metric" } });
           }}
           className="input w-full text-xs"
         >
@@ -201,7 +181,7 @@ export default function ScalarTileCard({
       <Select<Reduce>
         label="Across runs"
         value={settings.reduce}
-        onChange={(v) => updateSettings({ reduce: v })}
+        onChange={(v) => ctl.set({ reduce: v })}
         options={[
           { value: "best", label: "Best" },
           { value: "mean", label: "Mean" },
@@ -212,7 +192,7 @@ export default function ScalarTileCard({
         <Select<BestDir>
           label="Best is"
           value={settings.bestDir}
-          onChange={(v) => updateSettings({ bestDir: v })}
+          onChange={(v) => ctl.set({ bestDir: v })}
           options={[
             { value: "max", label: "Maximum" },
             { value: "min", label: "Minimum" },
@@ -271,7 +251,7 @@ export default function ScalarTileCard({
     <CardShell cardKind="tile"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title="Scalar Tile"
       subtitle={metric?.key}
       defaultHeight={170}

@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { api } from "../../api/client";
-import { saveCardSettings } from "../card-settings";
+import { saveCardOverrides, type CardOverrides } from "../card-settings";
 import type { ComparisonCard } from "../comparisons";
 import { matchTemplateToRuns } from "../templates/apply";
 import type { ReportTemplate } from "./templates";
@@ -54,7 +54,7 @@ export async function applyReportTemplateToRuns(
   matched.forEach((m, i) => {
     if (m.tc.settings) {
       const card = cards[i];
-      if (card) saveCardSettings(cardSettingsKeyForReport(created.id, card), m.tc.settings);
+      if (card) saveCardOverrides(cardSettingsKeyForReport(created.id, card), m.tc.settings as CardOverrides);
     }
   });
   const fullPayload = buildReportPayload(created.id, blocks);

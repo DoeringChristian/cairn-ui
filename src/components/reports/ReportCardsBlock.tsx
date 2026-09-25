@@ -5,6 +5,11 @@
  * scoped under `reportRunId(reportId)`. The run set is edited with the same
  * `RunSetEditor` a comparison uses, folded into a "Runs" dialog opened from
  * the cell toolbar, so the report itself shows only its cards.
+ *
+ * Report cards resolve against built-in defaults only (no workspace or
+ * section defaults), so a report looks the same to everyone. `readOnly`
+ * (view mode) freezes the cell: no toolbar, reorder or remove, and card
+ * settings changes stay in the viewer's session (see lib/card-settings.ts).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -15,7 +20,8 @@ import Dialog, { DialogBody } from "../ui/Dialog";
 import { CELL_TOOLBAR_BTN } from "./cell-toolbar";
 import RunSelectorBadge from "../RunSelectorBadge";
 import RunSetEditor, { DEFAULT_QUERY_SELECTOR } from "../comparison/RunSetEditor";
-import { CardSettingsChangeContext } from "../../lib/card-settings";
+import { CardMutationContext, CardSettingsChangeContext } from "../../lib/card-settings";
+import { CascadeScopeContext } from "../../lib/settings-scope";
 import {
   rebindCardsToMetricIndex,
   rebindCardsToRuns,
@@ -34,9 +40,11 @@ interface Props {
   onChange: (next: CardsBlock) => void;
   /** Renders the cell toolbar with this cell's own actions (`extra`) in it. */
   toolbar: (extra: ReactNode) => ReactNode;
+  /** View mode: cards can be explored but nothing is saved. */
+  readOnly?: boolean;
 }
 
-export default function ReportCardsBlock({ projectId, reportId, block, allProjectRuns, onChange, toolbar }: Props) {
+export default function ReportCardsBlock({ projectId, reportId, block, allProjectRuns, onChange, toolbar, readOnly = false }: Props) {
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
@@ -123,7 +131,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
   const resolvedRunIdsKey = selector ? runIds.join("|") : "";
   const lastReboundKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!selector) return;
+    if (!selector || readOnly) return;
     if (block.cards.length === 0) return;
     const boundRunIds = new Set(block.cards.flatMap((c) => c.series.map((s) => s.runId)));
     const resolvedSet = new Set(runIds);
@@ -180,9 +188,11 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
 
   return (
     // A card's settings change (step, yScale, …) re-saves the report.
-    <CardSettingsChangeContext.Provider value={handleSettingsTouched}>
+    <CardMutationContext.Provider value={!readOnly}>
+    <CascadeScopeContext.Provider value="builtin-only">
+    <CardSettingsChangeContext.Provider value={readOnly ? undefined : handleSettingsTouched}>
     <div>
-      {toolbar(
+      {!readOnly && toolbar(
         <>
           <button
             type="button"
@@ -249,13 +259,13 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
       {displayCards.length === 0 ? (
         <div className="card flex flex-wrap items-center gap-3 p-4 text-sm text-fg-muted print:hidden">
           {runIds.length === 0 ? "No runs in this cell yet." : "No cards yet."}
-          <button
+          {!readOnly && <button
             type="button"
             onClick={() => (runIds.length === 0 ? setRunsOpen(true) : setAddCardOpen(true))}
             className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-xs font-medium text-fg-muted hover:border-accent hover:text-fg transition-colors"
           >
             {runIds.length === 0 ? "Choose runs" : "+ Add card"}
-          </button>
+          </button>}
         </div>
       ) : (
         <ReorderableCardGrid
@@ -265,14 +275,16 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
               <ComparisonCardView
                 card={card}
                 settingsKey={cardSettingsKeyForReport(reportId, card)}
-                onRemove={() => removeCard(card.id)}
+                onRemove={readOnly ? undefined : () => removeCard(card.id)}
               />
             ),
           }))}
-          onReorder={reorderCards}
+          onReorder={readOnly ? undefined : reorderCards}
         />
       )}
     </div>
     </CardSettingsChangeContext.Provider>
+    </CascadeScopeContext.Provider>
+    </CardMutationContext.Provider>
   );
 }

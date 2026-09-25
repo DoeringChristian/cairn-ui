@@ -17,8 +17,8 @@ import {
   resolveAtStep,
   useRunInfo,
   MultiPaneGrid,
-  type BaseCardSettings,
 } from "./card-kit";
+import { DEFAULT_ROWS_PER_PAGE, instanceDefaults, type TableSettings } from "./cards-settings/table";
 import type { SeriesRef } from "./card-kit/use-card-series";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
@@ -54,33 +54,7 @@ interface TableMeta {
   original_n_rows?: number;
 }
 
-interface TableSettings extends BaseCardSettings {
-  metrics: SeriesRef[];
-  paneWidths?: number[];
-  sliderStep?: number;
-  xAxis?: "step" | "relative_time" | "wall_time";
-  /** Rows shown per page in the client-side pager. */
-  rowsPerPage: number;
-  /** Column names hidden by the visibility toggles. */
-  hiddenColumns: string[];
-  /**
-   * Show red/green diff colors on numeric cells vs the other compared runs.
-   * Optional — defaults (computed at render time, not persisted until the
-   * user touches the toggle) to ON when exactly 2 runs are compared.
-   */
-  diffMode?: boolean;
-  /** Flip which direction (higher/lower) renders green vs red. */
-  invertDiffColors?: boolean;
-}
-
-const DEFAULT_ROWS_PER_PAGE = 100;
-
-const DEFAULT_TABLE_SETTINGS = (seed: { name: string }): TableSettings => ({
-  version: 1,
-  metrics: [seed],
-  rowsPerPage: DEFAULT_ROWS_PER_PAGE,
-  hiddenColumns: [],
-});
+;
 
 // ---------------------------------------------------------------------------
 // Blob fetching — parse the JSON table lazily, cached by artifact hash.
@@ -186,22 +160,21 @@ export default function TableCard({
   onRemove,
   autoOpenSettings,
 }: Props) {
-  const { settings, updateSettings, effectiveMetrics, allRunIds, multipleRuns } =
+  const { ctl, effectiveMetrics, allRunIds, multipleRuns } =
     useCardSeries<TableSettings>({
       runId,
       metric,
       extraSeries,
       controlledSeries,
       settingsKeyOverride,
-      makeDefaults: (seed, metrics) => ({
-        ...DEFAULT_TABLE_SETTINGS(seed),
-        metrics,
-      }),
+      type: "table",
+      instanceDefaults,
     });
+  const settings = ctl.value;
 
   const { highlight: dropHighlight, dropProps } = useCardDrop(
     effectiveMetrics,
-    updateSettings,
+    ctl.set,
   );
 
   // Seed sequence (drives the step slider + column list + CSV + subtitle).
@@ -242,7 +215,7 @@ export default function TableCard({
   const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
-    updateSettings,
+    updateSettings: ctl.set,
   });
 
   const current = useMemo(
@@ -372,7 +345,7 @@ export default function TableCard({
           currentIndex={safeIdx}
           onChange={onSliderChange}
           xAxis={settings.xAxis}
-          onXAxisChange={(m) => updateSettings({ xAxis: m })}
+          onXAxisChange={(m) => ctl.set({ xAxis: m })}
           className="mt-3"
         />
       </>
@@ -386,7 +359,7 @@ export default function TableCard({
         labels={paneLabels}
         inModal={inModal}
         paneWidths={settings.paneWidths}
-        onPaneWidthsChange={(w) => updateSettings({ paneWidths: w })}
+        onPaneWidthsChange={(w) => ctl.set({ paneWidths: w })}
         renderPane={(key, i) => {
           const m = effectiveMetrics[i]!;
           return (
@@ -408,7 +381,7 @@ export default function TableCard({
         currentIndex={safeIdx}
         onChange={onSliderChange}
         xAxis={settings.xAxis}
-        onXAxisChange={(m) => updateSettings({ xAxis: m })}
+        onXAxisChange={(m) => ctl.set({ xAxis: m })}
         className="mt-3"
       />
       <SeriesChipStrip
@@ -416,7 +389,7 @@ export default function TableCard({
         controlledSeries={controlledSeries}
         runId={runId}
         allRunIds={allRunIds}
-        onMetricsChange={(next) => updateSettings({ metrics: next })}
+        onMetricsChange={(next) => ctl.set({ metrics: next })}
       />
     </>
   );
@@ -430,7 +403,7 @@ export default function TableCard({
       <NumberInput
         label="Rows per page"
         value={settings.rowsPerPage}
-        onChange={(v) => updateSettings({ rowsPerPage: v ?? DEFAULT_ROWS_PER_PAGE })}
+        onChange={(v) => ctl.set({ rowsPerPage: v ?? DEFAULT_ROWS_PER_PAGE })}
         min={1}
         step={10}
         placeholder="100"
@@ -442,13 +415,13 @@ export default function TableCard({
           <Toggle
             label="Diff colors"
             checked={diffMode}
-            onChange={(v) => updateSettings({ diffMode: v })}
+            onChange={(v) => ctl.set({ diffMode: v })}
             description="Highlight numeric cells red/green vs the other compared runs. Defaults on for 2-run comparisons."
           />
           <Toggle
             label="Invert colors"
             checked={invertDiffColors}
-            onChange={(v) => updateSettings({ invertDiffColors: v })}
+            onChange={(v) => ctl.set({ invertDiffColors: v })}
             description="Flip which direction is green vs red (e.g. for lower-is-better metrics)."
           />
         </div>
@@ -466,7 +439,7 @@ export default function TableCard({
                   const set = new Set(settings.hiddenColumns);
                   if (visible) set.delete(name);
                   else set.add(name);
-                  updateSettings({ hiddenColumns: Array.from(set) });
+                  ctl.set({ hiddenColumns: Array.from(set) });
                 }}
               />
             ))}
@@ -480,7 +453,7 @@ export default function TableCard({
     <CardShell cardKind="table"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
       defaultHeight={320}

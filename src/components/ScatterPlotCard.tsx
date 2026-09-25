@@ -3,6 +3,7 @@ import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { useCardSettings } from "../lib/card-settings";
+import { instanceDefaults, type ScatterAxisDef as AxisDef, type ScatterSettings } from "./cards-settings/scatter";
 import ScatterChart, { type ScatterPoint } from "../charts/ScatterChart";
 import type { Better } from "../lib/plot-utils/pareto";
 import { summaryRuleFor } from "../lib/metric-defs";
@@ -11,35 +12,10 @@ import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import CardShell from "./CardShell";
 import Toggle from "./settings/Toggle";
 import Select from "./settings/Select";
-import type { BaseCardSettings } from "./card-kit";
 
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
-
-interface AxisDef {
-  key: string;
-  source: "param" | "metric";
-}
-
-interface ScatterSettings extends BaseCardSettings {
-  xAxis: AxisDef | null;
-  yAxis: AxisDef | null;
-  colorAxis: AxisDef | null;
-  xLog?: boolean;
-  yLog?: boolean;
-  showPareto?: boolean;
-  /** Which way is better on each axis; unset = from the metric's summary rule, else "min". */
-  paretoX?: Better;
-  paretoY?: Better;
-}
-
-const DEFAULT_SETTINGS: ScatterSettings = {
-  version: 1,
-  xAxis: null,
-  yAxis: null,
-  colorAxis: null,
-};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -63,7 +39,8 @@ export default function ScatterPlotCard({
 }: Props) {
   const runMetaVersion = useRunMetadataVersion();
 
-  const [settings, updateSettings] = useCardSettings(settingsKey, { ...DEFAULT_SETTINGS, ...defaults });
+  const ctl = useCardSettings<ScatterSettings>(settingsKey, "scatter", instanceDefaults(defaults));
+  const settings = ctl.value;
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
   // Fetch run details (params)
@@ -184,16 +161,16 @@ export default function ScatterPlotCard({
 
   const settingsPanel = (
     <>
-      <AxisSelect label="X Axis" value={settings.xAxis} onChange={(v) => updateSettings({ xAxis: v })} />
-      <AxisSelect label="Y Axis" value={settings.yAxis} onChange={(v) => updateSettings({ yAxis: v })} />
-      <AxisSelect label="Color" value={settings.colorAxis} onChange={(v) => updateSettings({ colorAxis: v })} />
+      <AxisSelect label="X Axis" value={settings.xAxis} onChange={(v) => ctl.set({ xAxis: v })} />
+      <AxisSelect label="Y Axis" value={settings.yAxis} onChange={(v) => ctl.set({ yAxis: v })} />
+      <AxisSelect label="Color" value={settings.colorAxis} onChange={(v) => ctl.set({ colorAxis: v })} />
       <div className="mt-2 flex flex-col gap-1">
         <label className="flex items-center gap-1.5 text-xs text-fg-muted">
-          <input type="checkbox" checked={!!settings.xLog} onChange={(e) => updateSettings({ xLog: e.target.checked })} />
+          <input type="checkbox" checked={!!settings.xLog} onChange={(e) => ctl.set({ xLog: e.target.checked })} />
           X log scale
         </label>
         <label className="flex items-center gap-1.5 text-xs text-fg-muted">
-          <input type="checkbox" checked={!!settings.yLog} onChange={(e) => updateSettings({ yLog: e.target.checked })} />
+          <input type="checkbox" checked={!!settings.yLog} onChange={(e) => ctl.set({ yLog: e.target.checked })} />
           Y log scale
         </label>
       </div>
@@ -201,14 +178,14 @@ export default function ScatterPlotCard({
         <Toggle
           label="Pareto front"
           checked={!!settings.showPareto}
-          onChange={(v) => updateSettings({ showPareto: v })}
+          onChange={(v) => ctl.set({ showPareto: v })}
         />
         {settings.showPareto && (
           <>
             <Select<Better>
               label="X: better is"
               value={paretoX}
-              onChange={(v) => updateSettings({ paretoX: v })}
+              onChange={(v) => ctl.set({ paretoX: v })}
               options={[
                 { value: "min", label: "Lower" },
                 { value: "max", label: "Higher" },
@@ -217,7 +194,7 @@ export default function ScatterPlotCard({
             <Select<Better>
               label="Y: better is"
               value={paretoY}
-              onChange={(v) => updateSettings({ paretoY: v })}
+              onChange={(v) => ctl.set({ paretoY: v })}
               options={[
                 { value: "min", label: "Lower" },
                 { value: "max", label: "Higher" },
@@ -251,7 +228,7 @@ export default function ScatterPlotCard({
     <CardShell cardKind="scatter"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title="Scatter Plot"
       subtitle={`${scatterPoints.length} points`}
       defaultHeight={350}

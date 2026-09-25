@@ -41,6 +41,8 @@ interface Props {
   onDeleteBlock: (id: string) => void;
   /** Insert a new cell of `type` at position `index` (0 = top, blocks.length = end). */
   onInsertBlock: (index: number, type: CellType) => void;
+  /** View mode: no structure edits, markdown renders only, cards explore without saving. */
+  readOnly?: boolean;
 }
 
 export default function ReportNotebook({
@@ -52,14 +54,20 @@ export default function ReportNotebook({
   onMoveBlock,
   onDeleteBlock,
   onInsertBlock,
+  readOnly = false,
 }: Props) {
   return (
     <div>
-      <InsertGap onInsert={(type) => onInsertBlock(0, type)} />
+      {!readOnly && <InsertGap onInsert={(type) => onInsertBlock(0, type)} />}
       {blocks.map((block, idx) => (
         <div key={block.id}>
           <div className="group/cell relative rounded-lg border border-transparent p-2 transition-colors hover:border-border-subtle focus-within:border-accent/40">
             {isMarkdownBlock(block) ? (
+              readOnly ? (
+                <div className="px-1 text-sm">
+                  {block.text.trim() ? <Markdown>{block.text}</Markdown> : null}
+                </div>
+              ) : (
               <>
                 <CellToolbar
                   label="Markdown"
@@ -70,6 +78,7 @@ export default function ReportNotebook({
                 />
                 <MarkdownCell block={block} onChange={(text) => onUpdateBlock(block.id, { ...block, text })} />
               </>
+              )
             ) : isCardsBlock(block) ? (
               <ReportCardsBlock
                 projectId={projectId}
@@ -77,6 +86,7 @@ export default function ReportNotebook({
                 block={block}
                 allProjectRuns={allProjectRuns}
                 onChange={(next) => onUpdateBlock(block.id, next)}
+                readOnly={readOnly}
                 toolbar={(extra) => (
                   <CellToolbar
                     label="Cards"
@@ -90,7 +100,9 @@ export default function ReportNotebook({
               />
             ) : null}
           </div>
-          <InsertGap onInsert={(type) => onInsertBlock(idx + 1, type)} persistent={idx === blocks.length - 1} />
+          {!readOnly && (
+            <InsertGap onInsert={(type) => onInsertBlock(idx + 1, type)} persistent={idx === blocks.length - 1} />
+          )}
         </div>
       ))}
       {blocks.length === 0 && (

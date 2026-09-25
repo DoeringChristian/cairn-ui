@@ -3,7 +3,8 @@ import { safeJsonParse } from "../lib/format";
 import { pointCaption } from "../lib/caption";
 import { artifactFilename } from "../lib/download";
 import UnsupportedArtifact from "./UnsupportedArtifact";
-import SteppedMediaCard, { type MediaView, type SteppedMediaCardProps, type SteppedMediaSettings } from "./media/SteppedMediaCard";
+import SteppedMediaCard, { type MediaView, type SteppedMediaCardProps } from "./media/SteppedMediaCard";
+import type { VideoSettings } from "./cards-settings/video";
 import Toggle from "./settings/Toggle";
 import Select from "./settings/Select";
 
@@ -19,13 +20,6 @@ interface VideoMetadata {
 
 /** Containers every current browser plays in a <video>. */
 const PLAYABLE = new Set(["video/mp4", "video/webm", "video/ogg"]);
-
-interface VideoSettings extends SteppedMediaSettings {
-  autoplay: boolean;
-  loop: boolean;
-  muted: boolean;
-  preload: "metadata" | "auto" | "none";
-}
 
 /**
  * Player and format line for one video artifact. The card's only pane grows
@@ -96,29 +90,28 @@ export default function VideoPlayerCard(props: SteppedMediaCardProps) {
       noun="video"
       defaultMime="video/mp4"
       defaultHeight={350}
-      defaults={{ autoplay: false, loop: false, muted: false, preload: "metadata" }}
       nearest={false}
-      settingsPanel={(settings, updateSettings) => (
+      settingsPanel={(ctl) => (
         <>
           <Toggle
             label="Autoplay"
-            checked={settings.autoplay}
-            onChange={(v) => updateSettings({ autoplay: v })}
+            checked={ctl.value.autoplay}
+            onChange={(v) => ctl.set({ autoplay: v })}
           />
           <Toggle
             label="Loop"
-            checked={settings.loop}
-            onChange={(v) => updateSettings({ loop: v })}
+            checked={ctl.value.loop}
+            onChange={(v) => ctl.set({ loop: v })}
           />
           <Toggle
             label="Muted"
-            checked={settings.muted}
-            onChange={(v) => updateSettings({ muted: v })}
+            checked={ctl.value.muted}
+            onChange={(v) => ctl.set({ muted: v })}
           />
           <Select<VideoSettings["preload"]>
             label="Preload"
-            value={settings.preload}
-            onChange={(v) => updateSettings({ preload: v })}
+            value={ctl.value.preload}
+            onChange={(v) => ctl.set({ preload: v })}
             options={[
               { value: "metadata", label: "Metadata" },
               { value: "auto", label: "Auto (full)" },

@@ -7,8 +7,8 @@ import { artifactFilename } from "../lib/download";
 import { useCardDrop } from "../lib/use-series-drop";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { seriesKey } from "../lib/series-utils";
-import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid, type BaseCardSettings } from "./card-kit";
-import type { SeriesRef } from "./card-kit/use-card-series";
+import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid } from "./card-kit";
+import { instanceDefaults, type VolumeSettings } from "./cards-settings/volume";
 import { plotCardPolicy } from "./card-kit/plot-card-policy";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
@@ -20,11 +20,6 @@ interface VolumeMeta {
   dtype: string;
   vmin: number;
   vmax: number;
-}
-
-interface VolumeSettings extends BaseCardSettings {
-  metrics: SeriesRef[];
-  sliderStep?: number;
 }
 
 function VolumePane({ name, points, targetStep }: { name: string; points: SequencePoint[]; targetStep: number }) {
@@ -55,16 +50,18 @@ export default function VolumeCard({
   settingsKeyOverride,
   onRemove,
 }: Scene3DCardProps) {
-  const { settings, updateSettings, effectiveMetrics, allRunIds, multipleRuns } =
+  const { ctl, effectiveMetrics, allRunIds, multipleRuns } =
     useCardSeries<VolumeSettings>({
       runId,
       metric,
       extraSeries,
       controlledSeries,
       settingsKeyOverride,
-      makeDefaults: (_seed, metrics) => ({ version: 1, metrics }),
+      type: "volume",
+      instanceDefaults,
     });
-  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, updateSettings);
+  const settings = ctl.value;
+  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, ctl.set);
 
   const queries = useSequencesForRuns(
     effectiveMetrics.map((m) => ({ runId: m.runId ?? runId, name: m.name })),
@@ -77,7 +74,7 @@ export default function VolumeCard({
   const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
-    updateSettings,
+    updateSettings: ctl.set,
   });
   const sliderPoints = useMemo(() => globalSteps.map((step) => ({ step })), [globalSteps]);
 
@@ -98,7 +95,7 @@ export default function VolumeCard({
       cardKind="volume"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title={metric.name}
       subtitle={globalSteps.length > 0 ? `step ${currentStep} (${safeIdx + 1}/${globalSteps.length})` : `${metric.count} pts`}
       defaultHeight={plotCardPolicy("volume").defaultHeight}

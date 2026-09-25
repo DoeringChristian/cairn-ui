@@ -27,7 +27,7 @@
  *   cards[].type (multi-run, no metric/series) → cardFromSpec({kind:"multi-run", ...})
  *   cards[].series       → cardFromSpec({kind:"manual-series", ...})
  *   cards[].settings     → returned `settings` map (cardId → settings), the
- *                          caller writes it via saveCardSettings/cardSettingsKeyForReport.
+ *                          caller writes it via saveCardOverrides/cardSettingsKeyForReport.
  */
 
 import { parse as parseYamlDoc, stringify as stringifyYamlDoc } from "yaml";
@@ -100,7 +100,7 @@ export interface CairnSpec {
 
 export interface CompiledCairnBlock {
   block: CardsBlock;
-  /** cardId → inline settings, to be written via saveCardSettings. */
+  /** cardId → inline settings overrides, to be written via saveCardOverrides. */
   settings: Record<string, unknown>;
 }
 

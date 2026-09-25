@@ -15,26 +15,14 @@ import { useMemo, useRef, useState } from "react";
 import { useRuns, useRunsDetails } from "../api/hooks";
 import BarChart, { type BarDatum } from "../charts/BarChart";
 import { useCardSettings } from "../lib/card-settings";
+import type { ImportanceMethod as Method, ImportanceSettings } from "./cards-settings/importance";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import { parameterImportance, MIN_RUNS, type ImportanceRow } from "../lib/plot-utils/importance.ts";
 import { SERIES_COLORS, formatNum } from "../lib/plot-utils/types";
 import { useProjectId } from "../lib/project-context";
 import CardShell from "./CardShell";
 import Select from "./settings/Select";
-import type { BaseCardSettings } from "./card-kit";
 
-type Method = "importance" | "correlation";
-
-interface ImportanceSettings extends BaseCardSettings {
-  metric: string | null;
-  method: Method;
-}
-
-const DEFAULT_SETTINGS: ImportanceSettings = {
-  version: 1,
-  metric: null,
-  method: "importance",
-};
 
 const POSITIVE = SERIES_COLORS[2]!;
 const NEGATIVE = SERIES_COLORS[3]!;
@@ -56,7 +44,8 @@ interface Props {
 }
 
 export default function ImportanceCard({ runIds, settingsKey, onRemove, autoOpenSettings }: Props) {
-  const [settings, updateSettings] = useCardSettings(settingsKey, DEFAULT_SETTINGS);
+  const ctl = useCardSettings<ImportanceSettings>(settingsKey, "importance");
+  const settings = ctl.value;
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
   const projectId = useProjectId();
 
@@ -128,7 +117,7 @@ export default function ImportanceCard({ runIds, settingsKey, onRemove, autoOpen
         <label className="block text-[10px] uppercase tracking-wide text-fg-muted mb-1">Metric</label>
         <select
           value={metric ?? ""}
-          onChange={(e) => updateSettings({ metric: e.target.value || null })}
+          onChange={(e) => ctl.set({ metric: e.target.value || null })}
           className="input w-full text-xs"
         >
           <option value="">-- select metric --</option>
@@ -141,7 +130,7 @@ export default function ImportanceCard({ runIds, settingsKey, onRemove, autoOpen
       <Select<Method>
         label="Method"
         value={method}
-        onChange={(v) => updateSettings({ method: v })}
+        onChange={(v) => ctl.set({ method: v })}
         options={[
           { value: "importance", label: "Importance (random forest)" },
           { value: "correlation", label: "Correlation (Pearson r)" },
@@ -185,7 +174,7 @@ export default function ImportanceCard({ runIds, settingsKey, onRemove, autoOpen
     <CardShell cardKind="importance"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title="Parameter Importance"
       subtitle={metric ? `${metric} · ${rows.length} runs` : `${runIds.length} runs`}
       defaultHeight={350}

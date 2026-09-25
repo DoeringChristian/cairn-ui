@@ -11,6 +11,7 @@ import {
 } from "../lib/download";
 import { api } from "../api/client";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
+import type { HistogramSettings } from "./cards-settings/histogram";
 import type { SequenceMeta } from "../api/types";
 import type { HistogramData } from "../lib/plot-utils/histogram";
 import { COLORMAP_OPTIONS, type Colormap } from "../charts/colormaps";
@@ -24,7 +25,7 @@ import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import Select from "./settings/Select";
 import Toggle from "./settings/Toggle";
-import { useStepSlider, resolveAtStep, type BaseCardSettings } from "./card-kit";
+import { useStepSlider, resolveAtStep } from "./card-kit";
 
 interface Props {
   runId: string;
@@ -41,21 +42,6 @@ interface HistogramMeta {
   count: number;
   mean: number;
 }
-
-interface HistogramSettings extends BaseCardSettings {
-  viewMode: "bars" | "heatmap";
-  logY: boolean;
-  colormap: Colormap;
-  sliderStep?: number;
-  xAxis?: "step" | "relative_time" | "wall_time";
-}
-
-const DEFAULT_HISTOGRAM_SETTINGS: HistogramSettings = {
-  version: 1,
-  viewMode: "bars",
-  logY: false,
-  colormap: "turbo",
-};
 
 async function fetchNpz(
   hash: string,
@@ -93,15 +79,13 @@ export default function HistogramCard({
       },
     [settingsKeyOverride, runId, metric.name],
   );
-  const [settings, updateSettings] = useCardSettings(
-    settingsKey,
-    DEFAULT_HISTOGRAM_SETTINGS,
-  );
+  const ctl = useCardSettings<HistogramSettings>(settingsKey, "histogram");
+  const settings = ctl.value;
 
   const { safeIdx, currentStep, onSliderChange } = useStepSlider({
     seriesPoints: [points],
     persistedIdx: settings.sliderStep,
-    updateSettings,
+    updateSettings: ctl.set,
   });
   const current = useMemo(
     () => resolveAtStep(points, currentStep) ?? points[0],
@@ -208,7 +192,7 @@ export default function HistogramCard({
           currentIndex={safeIdx}
           onChange={onSliderChange}
           xAxis={settings.xAxis}
-          onXAxisChange={(m) => updateSettings({ xAxis: m })}
+          onXAxisChange={(m) => ctl.set({ xAxis: m })}
           className="mt-3"
         />
       </>
@@ -220,7 +204,7 @@ export default function HistogramCard({
       <Select<HistogramSettings["viewMode"]>
         label="View"
         value={settings.viewMode}
-        onChange={(v) => updateSettings({ viewMode: v })}
+        onChange={(v) => ctl.set({ viewMode: v })}
         options={
           heatmapAvailable
             ? [
@@ -236,13 +220,13 @@ export default function HistogramCard({
       <Toggle
         label={settings.viewMode === "heatmap" ? "Log color scale" : "Log Y axis"}
         checked={settings.logY}
-        onChange={(v) => updateSettings({ logY: v })}
+        onChange={(v) => ctl.set({ logY: v })}
       />
       {settings.viewMode === "heatmap" && (
         <Select<Colormap>
           label="Colormap"
           value={settings.colormap}
-          onChange={(v) => updateSettings({ colormap: v })}
+          onChange={(v) => ctl.set({ colormap: v })}
           options={COLORMAP_OPTIONS}
         />
       )}
@@ -267,7 +251,7 @@ export default function HistogramCard({
     <CardShell cardKind="histogram"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
       defaultHeight={280}

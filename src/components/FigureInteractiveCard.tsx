@@ -12,7 +12,14 @@ import type { ComparisonSeriesRef } from "../lib/comparisons";
 import { useRunMetadataVersion, shortRunLabel } from "../lib/run-label";
 import { seriesKey, seriesLabel } from "../lib/series-utils";
 import type { SequenceMeta, SequenceResponse } from "../api/types";
-import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid, type BaseCardSettings } from "./card-kit";
+import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid } from "./card-kit";
+import {
+  instanceDefaults,
+  type DragMode,
+  type FigureCompareMode,
+  type FigureSettings,
+  type HoverMode,
+} from "./cards-settings/figure";
 import { checkFigureMergeable, mergeFigures, type FigureMergeEntry } from "../lib/plot-utils/figure-merge";
 import {
   applyViewOverrides,
@@ -54,46 +61,13 @@ interface FigureMetadata {
 
 type PlotlyFigure = PlotlyFigureLike;
 
-type HoverMode = "closest" | "x unified" | "y unified" | "none";
-type DragMode = "zoom" | "pan" | "select" | "lasso" | "none";
-
-/**
- * Multi-run figure display mode:
- * - "panes": one figure per (run, metric) side by side (default, unchanged).
- * - "overlay": every run's figure traces merged into a single plot — only
- *   available when `checkFigureMergeable` passes (see figure-merge.ts).
- */
-type FigureCompareMode = "panes" | "overlay";
 
 const FIGURE_COMPARE_OPTIONS: Array<{ value: FigureCompareMode; label: string }> = [
   { value: "panes", label: "Panes (side by side)" },
   { value: "overlay", label: "Overlay (merged)" },
 ];
 
-interface FigureSettings extends BaseCardSettings {
-  metrics: Array<{ runId?: string; name: string }>;
-  paneWidths?: number[];
-  sliderStep?: number;
-  displayModeBar: boolean;
-  scrollZoom: boolean;
-  hoverMode: HoverMode;
-  dragMode: DragMode;
-  showLegend: boolean;
-  xAxis?: "step" | "relative_time" | "wall_time";
-  /** Multi-run display mode. Defaults to "panes" — behavior-preserving. */
-  figureCompare?: FigureCompareMode;
-}
-
-const DEFAULT_FIGURE_SETTINGS = (seed: { name: string }): FigureSettings => ({
-  version: 1,
-  colSpan: FIGURE_POLICY.colSpan,
-  metrics: [seed],
-  displayModeBar: false,
-  scrollZoom: true,
-  hoverMode: "closest",
-  dragMode: "zoom",
-  showLegend: true,
-});
+;
 
 const EMPTY_FIGURE: PlotlyFigure = { data: [], layout: {} };
 
@@ -341,20 +315,19 @@ function FigurePane({
 }
 
 export default function FigureInteractiveCard({ runId, metric, extraSeries, controlledSeries, settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
-  const { settings, updateSettings, effectiveMetrics, allRunIds, multipleRuns } =
+  const { ctl, effectiveMetrics, allRunIds, multipleRuns } =
     useCardSeries<FigureSettings>({
       runId,
       metric,
       extraSeries,
       controlledSeries,
       settingsKeyOverride,
-      makeDefaults: (seed, metrics) => ({
-        ...DEFAULT_FIGURE_SETTINGS(seed),
-        metrics,
-      }),
+      type: "figure",
+      instanceDefaults,
     });
+  const settings = ctl.value;
 
-  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, updateSettings);
+  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, ctl.set);
 
   // For the single-metric path, fetch points to drive the step slider.
   const q = useSequence(runId, metric.name);
@@ -395,7 +368,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
-    updateSettings,
+    updateSettings: ctl.set,
   });
   // For the single-metric path, find the point at the current global step.
   // Falls back to the most recent point at-or-before the step (and, failing
@@ -643,7 +616,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
           currentIndex={safeIdx}
           onChange={onSliderChange}
           xAxis={settings.xAxis}
-          onXAxisChange={(m) => updateSettings({ xAxis: m })}
+          onXAxisChange={(m) => ctl.set({ xAxis: m })}
           className="mt-3"
         />
       </>
@@ -668,7 +641,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       labels={paneLabels}
       inModal={inModal}
       paneWidths={settings.paneWidths}
-      onPaneWidthsChange={(w) => updateSettings({ paneWidths: w })}
+      onPaneWidthsChange={(w) => ctl.set({ paneWidths: w })}
       renderPane={(key, i) => {
         const m = effectiveMetrics[i]!;
         return (
@@ -714,7 +687,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
         currentIndex={safeIdx}
         onChange={onSliderChange}
         xAxis={settings.xAxis}
-        onXAxisChange={(m) => updateSettings({ xAxis: m })}
+        onXAxisChange={(m) => ctl.set({ xAxis: m })}
         className="mt-3"
       />
       <SeriesChipStrip
@@ -722,7 +695,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
         controlledSeries={controlledSeries}
         runId={runId}
         allRunIds={allRunIds}
-        onMetricsChange={(next) => updateSettings({ metrics: next })}
+        onMetricsChange={(next) => ctl.set({ metrics: next })}
       />
     </>
   );
@@ -742,7 +715,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
         <Select<FigureCompareMode>
           label="Compare mode"
           value={settings.figureCompare ?? "panes"}
-          onChange={(v) => updateSettings({ figureCompare: v })}
+          onChange={(v) => ctl.set({ figureCompare: v })}
           options={FIGURE_COMPARE_OPTIONS}
           description={
             (settings.figureCompare ?? "panes") === "overlay" && !figureMergeCheck.mergeable
@@ -754,30 +727,30 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       <Toggle
         label="Show modebar"
         checked={settings.displayModeBar}
-        onChange={(v) => updateSettings({ displayModeBar: v })}
+        onChange={(v) => ctl.set({ displayModeBar: v })}
         description="Plotly's zoom/pan/camera/save toolbar"
       />
       <Toggle
         label="Scroll to zoom"
         checked={settings.scrollZoom}
-        onChange={(v) => updateSettings({ scrollZoom: v })}
+        onChange={(v) => ctl.set({ scrollZoom: v })}
       />
       <Select<HoverMode>
         label="Hover mode"
         value={settings.hoverMode}
-        onChange={(v) => updateSettings({ hoverMode: v })}
+        onChange={(v) => ctl.set({ hoverMode: v })}
         options={HOVER_OPTIONS}
       />
       <Select<DragMode>
         label="Drag mode"
         value={settings.dragMode}
-        onChange={(v) => updateSettings({ dragMode: v })}
+        onChange={(v) => ctl.set({ dragMode: v })}
         options={DRAG_OPTIONS}
       />
       <Toggle
         label="Show legend"
         checked={settings.showLegend}
-        onChange={(v) => updateSettings({ showLegend: v })}
+        onChange={(v) => ctl.set({ showLegend: v })}
       />
     </>
   );
@@ -786,7 +759,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     <CardShell cardKind="figure"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
       defaultHeight={FIGURE_POLICY.defaultHeight}
@@ -800,7 +773,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       headerActions={<>
         <button
           type="button"
-          onClick={() => updateSettings({ displayModeBar: !settings.displayModeBar })}
+          onClick={() => ctl.set({ displayModeBar: !settings.displayModeBar })}
           aria-label={settings.displayModeBar ? "Hide modebar" : "Show modebar"}
           aria-pressed={settings.displayModeBar}
           title={settings.displayModeBar ? "Hide modebar" : "Show modebar"}

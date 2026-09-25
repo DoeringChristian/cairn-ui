@@ -27,13 +27,13 @@ import {
   resolveAtStep,
   useRunInfo,
   MultiPaneGrid,
-  type BaseCardSettings,
 } from "./card-kit";
 import type { SeriesRef } from "./card-kit/use-card-series";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import Select from "./settings/Select";
+import { instanceDefaults, type PresetSettings } from "./cards-settings/preset";
 import StepSlider from "./StepSlider";
 
 interface Props {
@@ -44,15 +44,6 @@ interface Props {
   settingsKeyOverride?: CardSettingsKey;
   onRemove?: () => void;
   autoOpenSettings?: boolean;
-}
-
-interface PresetSettings extends BaseCardSettings {
-  metrics: SeriesRef[];
-  paneWidths?: number[];
-  sliderStep?: number;
-  xAxis?: "step" | "relative_time" | "wall_time";
-  /** Confusion matrix cells: raw counts, or rows/columns scaled to sum to 1. */
-  normalize?: Normalize;
 }
 
 const blobQuery = (hash: string | null | undefined) => ({
@@ -103,16 +94,18 @@ export default function PresetCard({
   onRemove,
   autoOpenSettings,
 }: Props) {
-  const { settings, updateSettings, effectiveMetrics, allRunIds, multipleRuns } =
+  const { ctl, effectiveMetrics, allRunIds, multipleRuns } =
     useCardSeries<PresetSettings>({
       runId,
       metric,
       extraSeries,
       controlledSeries,
       settingsKeyOverride,
-      makeDefaults: (_seed, metrics) => ({ version: 1, metrics }),
+      type: "preset",
+      instanceDefaults,
     });
-  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, updateSettings);
+  const settings = ctl.value;
+  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, ctl.set);
 
   const seqQueries = useQueries({
     queries: effectiveMetrics.map((m) => {
@@ -135,7 +128,7 @@ export default function PresetCard({
   const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
-    updateSettings,
+    updateSettings: ctl.set,
   });
 
   const currents = useMemo(
@@ -202,7 +195,7 @@ export default function PresetCard({
         labels={paneLabels}
         inModal={inModal}
         paneWidths={settings.paneWidths}
-        onPaneWidthsChange={(w) => updateSettings({ paneWidths: w })}
+        onPaneWidthsChange={(w) => ctl.set({ paneWidths: w })}
         renderPane={(key, i) => (
           <ConfusionPane key={key} runId={runId} m={effectiveMetrics[i]!} targetStep={currentStep} normalize={normalize} />
         )}
@@ -218,7 +211,7 @@ export default function PresetCard({
         currentIndex={safeIdx}
         onChange={onSliderChange}
         xAxis={settings.xAxis}
-        onXAxisChange={(m) => updateSettings({ xAxis: m })}
+        onXAxisChange={(m) => ctl.set({ xAxis: m })}
         className="mt-3"
       />
       {effectiveMetrics.length > 1 && (
@@ -227,7 +220,7 @@ export default function PresetCard({
           controlledSeries={controlledSeries}
           runId={runId}
           allRunIds={allRunIds}
-          onMetricsChange={(next) => updateSettings({ metrics: next })}
+          onMetricsChange={(next) => ctl.set({ metrics: next })}
         />
       )}
     </>
@@ -237,7 +230,7 @@ export default function PresetCard({
     <Select<Normalize>
       label="Cells"
       value={normalize}
-      onChange={(v) => updateSettings({ normalize: v })}
+      onChange={(v) => ctl.set({ normalize: v })}
       options={[
         { value: "none", label: "Counts" },
         { value: "true", label: "Normalized by true label (rows)" },
@@ -253,7 +246,7 @@ export default function PresetCard({
       cardKind="preset"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
       defaultHeight={340}

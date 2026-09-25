@@ -7,6 +7,7 @@
 
 import { Link, NavLink, Outlet, useParams } from "react-router-dom";
 import { ProjectProvider } from "../lib/project-context";
+import { UndoProvider } from "../lib/undo-context";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import CopyId from "../components/CopyId";
 import AlertBell from "../components/alerts/AlertBell";
@@ -96,6 +97,8 @@ export default function ProjectLayout() {
 
   return (
     <ProjectProvider value={projectId}>
+    {/* One undo stack per project: keyed so switching projects starts fresh. */}
+    <UndoProvider key={projectId}>
       <div className="flex min-h-0">
         {/* Left icon+label nav — desktop */}
         <nav className="hidden md:flex print:!hidden flex-col items-center gap-2 w-16 shrink-0 border-r border-border py-3 fixed top-[var(--header-h)] left-0 h-[calc(100vh-var(--header-h))] overflow-y-auto z-10">
@@ -163,6 +166,7 @@ export default function ProjectLayout() {
           </NavLink>
         ))}
       </nav>
+    </UndoProvider>
     </ProjectProvider>
   );
 }

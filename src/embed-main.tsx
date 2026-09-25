@@ -29,7 +29,8 @@ import { MemoryRouter } from "react-router-dom";
 import ComparisonCardView from "./components/comparison/ComparisonCardView";
 import { cardSettingsKeyForScope } from "./lib/comparisons";
 import type { CardSpec } from "./lib/cards/card-spec";
-import { saveCardSettings } from "./lib/card-settings";
+import { CardMutationContext, saveCardOverrides, type CardOverrides } from "./lib/card-settings";
+import { CascadeScopeContext } from "./lib/settings-scope";
 import { useEmitAutoHeight } from "./lib/use-emit-auto-height";
 import "./index.css";
 
@@ -78,25 +79,25 @@ class EmbedErrorBoundary extends Component<
 
 /** Render one card from its spec. */
 function EmbeddedCard({ card }: { card: CardSpec }) {
-  // Give the card a stable id for its settings key, and seed its persisted
-  // settings from `spec.settings` synchronously, here in the parent's render:
-  // a card reads its settings on first render (`useCardSettings`'s `useRef`
-  // initializer), so an effect would land one render too late.
+  // Give the card a stable id for its settings key, and seed its stored
+  // overrides from `spec.settings` synchronously, here in the parent's
+  // render, so the card's first render already reads them.
   // `cardSettingsKeyForScope(EMBED_SCOPE, ...)` is the embed's own scope and
   // never touches a user's comparison/report settings.
   const cardWithId = useMemo<CardSpec>(() => {
     const withId: CardSpec = card.id ? card : { ...card, id: `${EMBED_SCOPE}-card` };
-    if (card.settings) {
-      saveCardSettings(cardSettingsKeyForScope(EMBED_SCOPE, withId), {
-        version: 1,
-        ...card.settings,
-      });
-    }
+    saveCardOverrides(cardSettingsKeyForScope(EMBED_SCOPE, withId), (card.settings ?? null) as CardOverrides | null);
     return withId;
   }, [card]);
 
+  // Read-only, and built-in defaults only: an embed looks the same to every
+  // viewer, who can still explore it (session-only, see lib/card-settings.ts).
   return (
-    <ComparisonCardView card={cardWithId} settingsKey={cardSettingsKeyForScope(EMBED_SCOPE, cardWithId)} />
+    <CardMutationContext.Provider value={false}>
+      <CascadeScopeContext.Provider value="builtin-only">
+        <ComparisonCardView card={cardWithId} settingsKey={cardSettingsKeyForScope(EMBED_SCOPE, cardWithId)} />
+      </CascadeScopeContext.Provider>
+    </CardMutationContext.Provider>
   );
 }
 

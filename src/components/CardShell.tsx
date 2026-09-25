@@ -1,5 +1,5 @@
-import { useEffect, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { resolveCardHeight } from "../lib/card-settings";
+import { useContext, useEffect, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { CardMutationContext, resolveCardHeight, type SetOptions } from "../lib/card-settings";
 import { InteractContext, useInteractState } from "../lib/use-interact";
 import { cardMinSize } from "./card-kit/card-min-sizes";
 import type { BaseCardSettings } from "./card-kit";
@@ -10,7 +10,7 @@ import CardDetailModal from "./CardDetailModal";
 interface Props {
   cardRef: RefObject<HTMLDivElement>;
   settings: BaseCardSettings;
-  updateSettings: (patch: Record<string, unknown>) => void;
+  updateSettings: (patch: Record<string, unknown>, opts?: SetOptions) => void;
   title: string;
   subtitle?: ReactNode;
   defaultHeight?: number;
@@ -84,6 +84,8 @@ export default function CardShell({
   // Tap-to-interact (touch devices): content that captures gestures registers
   // through `useInteract`; the detail modal is always interactive.
   const interact = useInteractState(!!modalOpen);
+  // Read-only cards (report viewers, embeds) keep their size.
+  const mutable = useContext(CardMutationContext);
 
   return (
     <div
@@ -137,12 +139,14 @@ export default function CardShell({
           </>
         )}
       </InteractContext.Provider>
-      <CardResizeHandle
-        onHeightChange={(h) => updateSettings({ height: h })}
-        colSpan={settings.colSpan ?? 3}
-        onColSpanChange={(s) => updateSettings({ colSpan: s })}
-        minHeight={minSize.minHeight}
-      />
+      {mutable && (
+        <CardResizeHandle
+          onHeightChange={(h) => updateSettings({ height: h }, { mergeKey: "resize", label: "Resize card" })}
+          colSpan={settings.colSpan ?? 3}
+          onColSpanChange={(s) => updateSettings({ colSpan: s }, { mergeKey: "resize", label: "Resize card" })}
+          minHeight={minSize.minHeight}
+        />
+      )}
     </div>
   );
 }

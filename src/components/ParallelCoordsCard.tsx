@@ -9,25 +9,16 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
-import ParallelChart, { type ParallelColumn, type ParallelRow } from "../charts/ParallelChart";
+import ParallelChart, { type ParallelRow } from "../charts/ParallelChart";
 import { useCardSettings } from "../lib/card-settings";
+import { instanceDefaults, type ParallelSettings } from "./cards-settings/parallel";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import CardShell from "./CardShell";
 import SettingsSection from "./settings/SettingsSection";
-import type { BaseCardSettings } from "./card-kit";
 
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
-
-interface ParallelSettings extends BaseCardSettings {
-  columns: ParallelColumn[];
-}
-
-const DEFAULT_SETTINGS: ParallelSettings = {
-  version: 1,
-  columns: [],
-};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -49,7 +40,8 @@ export default function ParallelCoordsCard({
   autoOpenSettings,
   defaults,
 }: Props) {
-  const [settings, updateSettings] = useCardSettings(settingsKey, { ...DEFAULT_SETTINGS, ...defaults });
+  const ctl = useCardSettings<ParallelSettings>(settingsKey, "parallel", instanceDefaults(defaults));
+  const settings = ctl.value;
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
   // Fetch run details (params) for all runs
@@ -178,17 +170,17 @@ export default function ParallelCoordsCard({
 
   const addColumn = useCallback(
     (key: string, source: "param" | "metric") => {
-      updateSettings({ columns: [...settings.columns, { key, source }] });
+      ctl.set({ columns: [...settings.columns, { key, source }] });
     },
-    [settings.columns, updateSettings],
+    [settings.columns, ctl.set],
   );
 
   const removeColumn = useCallback(
     (idx: number) => {
       const next = settings.columns.filter((_, i) => i !== idx);
-      updateSettings({ columns: next });
+      ctl.set({ columns: next });
     },
-    [settings.columns, updateSettings],
+    [settings.columns, ctl.set],
   );
 
   const moveColumn = useCallback(
@@ -196,9 +188,9 @@ export default function ParallelCoordsCard({
       const cols = [...settings.columns];
       const [item] = cols.splice(from, 1);
       cols.splice(to, 0, item!);
-      updateSettings({ columns: cols });
+      ctl.set({ columns: cols });
     },
-    [settings.columns, updateSettings],
+    [settings.columns, ctl.set],
   );
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -209,9 +201,9 @@ export default function ParallelCoordsCard({
       const cols = settings.columns.map((c, i) =>
         i === idx ? { ...c, [flag]: !c[flag] } : c,
       );
-      updateSettings({ columns: cols });
+      ctl.set({ columns: cols });
     },
-    [settings.columns, updateSettings],
+    [settings.columns, ctl.set],
   );
 
 
@@ -317,7 +309,7 @@ export default function ParallelCoordsCard({
     <CardShell cardKind="parallel"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title="Parallel Coordinates"
       subtitle={`${runIds.length} runs · ${settings.columns.length} columns`}
       defaultHeight={350}
