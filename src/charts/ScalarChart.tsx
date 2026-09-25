@@ -2,15 +2,18 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
-import type { AxisSource } from "../lib/plot-utils/x-axis.ts";
 import { formatNum, type AxisScale, type Series, type SeriesPoint } from "../lib/plot-utils/types.ts";
 import { alignSeries, type DrawnSeries } from "./scalar-data.ts";
 import type { SmoothingKind } from "../lib/plot-utils/smooth.ts";
+import type { StackMode } from "../lib/plot-utils/stack.ts";
 import { onPrintLayout } from "../lib/print-layout.ts";
 import { readChartTheme, withAlpha } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
 
 export type LineType = "linear" | "monotone" | "step" | "stepBefore" | "stepAfter";
+
+/** How x values read: a step, a date (epoch ms), seconds, or a plain value. */
+export type XKind = "step" | "wall_time" | "relative_time" | "value";
 
 export interface ScalarView {
   xMin: number | null;
@@ -19,10 +22,16 @@ export interface ScalarView {
   yMax: number | null;
 }
 
+/** A line's look beyond its colour (which the series carries). */
+export interface LineStyle {
+  width?: number;
+  dash?: "solid" | "dashed" | "dotted";
+}
+
 export interface ScalarChartProps {
   series: Series[];
-  xAxis: AxisSource;
-  /** The x-metric's name for `xAxis: "metric"` (tooltip header). */
+  xKind: XKind;
+  /** The x expression (tooltip header for a value axis). */
   xLabel?: string;
   xScale: AxisScale;
   yScale: AxisScale;
@@ -36,8 +45,23 @@ export interface ScalarChartProps {
   smoothingKind: SmoothingKind;
   outlierPct: [number, number];
   lineType: LineType;
-  showLegend: boolean;
+  showOriginal: boolean;
+  stack: StackMode;
+  /** Min/max bucketing per pixel of the visible x range. */
+  fullFidelity: boolean;
+  legend: { show: boolean; position: "bottom" | "top" | "right" };
   tooltip: { showWallTime: boolean };
+  /** Tooltip label per line key (the tooltip template); else the line's label. */
+  tooltipLabels?: ReadonlyMap<string, string>;
+  axisTitles: { x: string; y: string };
+  /** Width / dash per line key. */
+  styles?: Readonly<Record<string, LineStyle>>;
+  /** The baseline run: drawn wider, dashed while hovered. */
+  baselineRunId?: string | null;
+  /** Share the hover cursor with other charts of this key (uPlot `cursor.sync`). */
+  cursorSyncKey?: string | null;
+  /** Cmd/Ctrl-click on a run's line. */
+  onOpenRun?: (runId: string) => void;
   className?: string;
 }
 
@@ -88,10 +112,10 @@ function pathsFor(lineType: LineType): uPlot.Series.PathBuilder {
   return linear!();
 }
 
-function formatX(x: number, xAxis: AxisSource, xLabel?: string): string {
-  if (xAxis === "wall_time") return new Date(x).toLocaleString();
-  if (xAxis === "relative_time") return `${formatNum(x)} s`;
-  if (xAxis === "metric") return xLabel ? `${xLabel} ${formatNum(x)}` : formatNum(x);
+function formatX(x: number, kind: XKind, xLabel?: string): string {
+  if (kind === "wall_time") return new Date(x).toLocaleString();
+  if (kind === "relative_time") return `${formatNum(x)} s`;
+  if (kind === "value") return xLabel ? `${xLabel} = ${formatNum(x)}` : formatNum(x);
   return String(x);
 }
 
@@ -108,61 +132,150 @@ function nearestPoint(points: Array<SeriesPoint | null>, idx: number): SeriesPoi
   return null;
 }
 
+const isEdge = (l: DrawnSeries) =>
+  l.role === "bandHi" || l.role === "bandLo" || l.role === "envHi" || l.role === "envLo";
+const isFaded = (l: DrawnSeries) => l.role === "raw" || l.role === "member";
+
+const DASHES = { solid: [] as number[], dashed: [6, 4], dotted: [2, 3] };
+
 interface Hover {
   idx: number;
   left: number;
   top: number;
 }
 
+/** What the draw-time stroke / fill functions read (updated without a rebuild). */
+interface LiveStyle {
+  strokes: string[];
+  bandFills: string[];
+  firstFill: string | null;
+}
+
 /**
  * Multi-series line chart on uPlot. Self-contained: sizes itself to its box,
- * owns hover/tooltip, and reports drag-zoom through `onViewChange` (the card
- * persists the viewport; double-click resets it). While not interactive (a
- * touch device with the card's interact toggle off, see lib/use-interact) the
- * cursor is off, so no listeners are installed and the page scrolls through.
+ * owns hover/tooltip and its interactive legend (click highlights a line,
+ * Alt-click isolates it), and reports drag-zoom through `onViewChange` (the
+ * card persists the viewport; double-click resets it). Cmd/Ctrl-click on a
+ * run's line calls `onOpenRun`. Colour, width, dash, highlight and hover
+ * changes restyle the uPlot series in place; only a change of the lines, the
+ * scales or the axes rebuilds it. While not interactive (a touch device with
+ * the card's interact toggle off, see lib/use-interact) the cursor is off.
  */
 export default function ScalarChart(props: ScalarChartProps) {
   const {
-    series, xAxis, xScale, yScale, xRange, yRange, view, smoothing, smoothingKind, outlierPct,
-    lineType, showLegend, tooltip, className,
+    series, xKind, xScale, yScale, xRange, yRange, view, smoothing, smoothingKind, outlierPct,
+    lineType, showOriginal, stack, fullFidelity, legend, tooltip, axisTitles, className,
   } = props;
-  const boxRef = useRef<HTMLDivElement>(null);
   const plotHostRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [focused, setFocused] = useState<number | null>(null);
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const [isolated, setIsolated] = useState<string | null>(null);
+  const [plotWidth, setPlotWidth] = useState(0);
   const interactive = useInteract();
 
   // Callbacks and bounds read at event time, so they never force a rebuild.
-  const live = useRef({ props });
-  live.current = { props };
+  const live = useRef({ props, focused });
+  live.current = { props, focused };
+
+  // Full fidelity buckets the visible x range, one bucket per pixel.
+  const bucketLo = view.xMin ?? xRange[0];
+  const bucketHi = view.xMax ?? xRange[1];
+  const bucket = useMemo(
+    () =>
+      fullFidelity && plotWidth > 0
+        ? { lo: bucketLo, hi: bucketHi, buckets: Math.max(16, Math.round(plotWidth)) }
+        : null,
+    [fullFidelity, plotWidth, bucketLo, bucketHi],
+  );
 
   const aligned = useMemo(
-    () => alignSeries(series, { smoothing, smoothingKind, outlierPct, xScale, yScale }),
-    [series, smoothing, smoothingKind, outlierPct, xScale, yScale],
+    () => alignSeries(series, { smoothing, smoothingKind, outlierPct, xScale, yScale, showOriginal, stack, bucket }),
+    [series, smoothing, smoothingKind, outlierPct, xScale, yScale, showOriginal, stack, bucket],
   );
   const lines = aligned.lines;
 
-  const data = useMemo<uPlot.AlignedData>(
-    () => [aligned.xs, ...lines.map((l) => l.points.map((p) => (p ? p.y : null)))],
-    [aligned, lines],
-  );
+  const data = useMemo<uPlot.AlignedData>(() => [aligned.xs, ...aligned.ys], [aligned]);
 
-  // Anything that changes the uPlot options (not just the data) rebuilds the chart.
+  // One legend entry per line: members and band edges belong to their group's centre.
+  const legendItems = useMemo(() => lines.filter((l) => l.role === "line"), [lines]);
+  // A highlight or isolation of a line that is gone lapses.
+  const keys = useMemo(() => new Set(legendItems.map((l) => l.key)), [legendItems]);
+  const hl = highlight && keys.has(highlight) ? highlight : null;
+  const iso = isolated && keys.has(isolated) ? isolated : null;
+
+  const focusedLine = focused != null && focused > 0 ? lines[focused - 1] : undefined;
+  const focusedKey = focusedLine?.key;
+  const baseline = props.baselineRunId ?? null;
+
+  /** Per line (uPlot series i + 1): stroke colour, width, dash, shown. */
+  const style = useMemo(() => {
+    const styles = props.styles ?? {};
+    return lines.map((l) => {
+      const own = styles[l.key] ?? {};
+      const isBaseline = baseline != null && l.runId === baseline && l.role === "line";
+      const dimmed = hl != null && l.key !== hl;
+      const edge = isEdge(l);
+      const faded = isFaded(l);
+      const alpha = edge ? 0 : (faded ? 0.25 : 1) * (dimmed ? 0.2 : 1);
+      const width = edge ? 0 : faded ? 1 : (own.width ?? (isBaseline ? 3 : 1.5)) + (l.key === hl ? 1 : 0);
+      const hoveredBaseline = isBaseline && l.key === focusedKey;
+      const dash = hoveredBaseline ? DASHES.dashed : !faded && own.dash ? DASHES[own.dash] : DASHES.solid;
+      const show = iso == null || l.key === iso;
+      return { stroke: withAlpha(l.color, alpha), width, dash, show };
+    });
+  }, [lines, props.styles, baseline, hl, iso, focusedKey]);
+
+  // Each band / envelope / stacked area fills between its two edges (1-based: 0 is x).
+  const bandPairs = useMemo(() => {
+    const pairs: Array<{ hi: number; lo: number; color: string; alpha: number }> = [];
+    if (stack !== "none") {
+      for (let i = 1; i < lines.length; i++) {
+        pairs.push({ hi: i + 1, lo: i, color: lines[i]!.color, alpha: 0.35 });
+      }
+      return pairs;
+    }
+    lines.forEach((l, i) => {
+      if (l.role !== "bandHi" && l.role !== "envHi") return;
+      const loRole = l.role === "bandHi" ? "bandLo" : "envLo";
+      const lo = lines.findIndex((o) => o.role === loRole && o.key === l.key);
+      if (lo >= 0) pairs.push({ hi: i + 1, lo: lo + 1, color: l.color, alpha: l.role === "bandHi" ? 0.18 : 0.12 });
+    });
+    return pairs;
+  }, [lines, stack]);
+
+  const liveStyle = useRef<LiveStyle>({ strokes: [], bandFills: [], firstFill: null });
+  liveStyle.current = {
+    strokes: style.map((s) => s.stroke),
+    bandFills: bandPairs.map((b) => {
+      const l = lines[b.hi - 1];
+      const dim = hl != null && l != null && l.key !== hl;
+      return withAlpha(b.color, b.alpha * (dim ? 0.3 : 1));
+    }),
+    firstFill:
+      stack !== "none" && lines[0]
+        ? withAlpha(lines[0].color, 0.35 * (hl != null && lines[0].key !== hl ? 0.3 : 1))
+        : null,
+  };
+
+  // Anything that changes the uPlot options (not just data or style) rebuilds the chart.
+  const syncKey = props.cursorSyncKey ?? null;
   const structureKey = [
-    xAxis, xScale, yScale, lineType, interactive,
-    lines.map((l) => `${l.key}:${l.role}:${l.color}`).join(","),
+    xKind, xScale, yScale, lineType, interactive, stack, syncKey, axisTitles.x, axisTitles.y,
+    lines.map((l) => `${l.key}:${l.role}`).join(","),
   ].join("|");
 
   useEffect(() => {
     const host = plotHostRef.current;
     if (!host) return;
     const theme = readChartTheme(host);
-    const axis = (): uPlot.Axis => ({
+    const axis = (label: string): uPlot.Axis => ({
       stroke: theme.fgMuted,
       grid: { stroke: theme.grid, width: 1 },
       ticks: { stroke: theme.grid, width: 1 },
       font: `10px ${theme.mono}`,
+      ...(label ? { label, labelSize: 16, labelFont: `11px ${theme.mono}` } : {}),
     });
 
     const autoRange = (
@@ -183,13 +296,10 @@ export default function ScalarChart(props: ScalarChartProps) {
       return [lo2, hi2];
     };
 
-    // Each group's band fills between its hi and lo edges (1-based: 0 is x).
-    const bands: uPlot.Band[] = [];
-    lines.forEach((l, i) => {
-      if (l.role !== "bandHi") return;
-      const lo = lines.findIndex((o) => o.role === "bandLo" && o.key === l.key);
-      if (lo >= 0) bands.push({ series: [i + 1, lo + 1], fill: withAlpha(l.color, 0.18) });
-    });
+    const bands: uPlot.Band[] = bandPairs.map((b, bi) => ({
+      series: [b.hi, b.lo],
+      fill: () => liveStyle.current.bandFills[bi] ?? "transparent",
+    }));
 
     const opts: uPlot.Options = {
       width: Math.max(host.clientWidth, 50),
@@ -201,12 +311,13 @@ export default function ScalarChart(props: ScalarChartProps) {
           drag: { x: true, y: true, uni: UNI_PX, setScale: false },
           focus: { prox: 16 },
           points: { size: 6 },
+          ...(syncKey ? { sync: { key: syncKey, setSeries: false } } : {}),
         }
         : { show: false },
       focus: { alpha: 1 },
       scales: {
         x: {
-          time: xAxis === "wall_time",
+          time: xKind === "wall_time",
           distr: xScale === "log" ? 3 : 1,
           range: (u, mn, mx) => {
             const { view: v, xRange: r, xScale: s } = live.current.props;
@@ -221,20 +332,25 @@ export default function ScalarChart(props: ScalarChartProps) {
           },
         },
       },
-      axes: [axis(), { ...axis(), size: 56 }],
+      axes: [axis(axisTitles.x), { ...axis(axisTitles.y), size: 56 }],
       bands,
       series: [
         {},
-        ...lines.map((l): uPlot.Series => {
-          const edge = l.role === "bandHi" || l.role === "bandLo";
-          const faded = l.role === "raw" || l.role === "member";
+        ...lines.map((l, i): uPlot.Series => {
+          const st = style[i]!;
           return {
             label: l.label,
-            stroke: withAlpha(l.color, edge ? 0 : faded ? 0.25 : 1),
-            width: edge ? 0 : faded ? 1 : 1.5,
+            stroke: (_u, si) => liveStyle.current.strokes[si - 1] ?? "transparent",
+            width: st.width,
+            dash: st.dash,
+            show: st.show,
             spanGaps: true,
             paths: pathsFor(lineType),
             points: { show: false },
+            // A stacked chart's bottom area fills down to zero.
+            ...(stack !== "none" && i === 0
+              ? { fill: () => liveStyle.current.firstFill ?? "transparent", fillTo: 0 }
+              : {}),
           };
         }),
       ],
@@ -257,7 +373,7 @@ export default function ScalarChart(props: ScalarChartProps) {
             setHover({ idx, left: left + u.over.offsetLeft, top: top + u.over.offsetTop });
           },
         ],
-        // A band edge focuses its group's mean line.
+        // A band edge focuses its group's line.
         setSeries: [(_u, seriesIdx) => setFocused(seriesIdx == null ? null : parentLine(lines, seriesIdx))],
       },
     };
@@ -266,7 +382,17 @@ export default function ScalarChart(props: ScalarChartProps) {
     plotRef.current = plot;
 
     const onDblClick = () => live.current.props.onViewChange?.(EMPTY_VIEW);
-    if (interactive) plot.over.addEventListener("dblclick", onDblClick);
+    // Cmd/Ctrl-click opens the run of the hovered line.
+    const onClick = (e: MouseEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const f = live.current.focused;
+      const l = f != null && f > 0 ? lines[f - 1] : undefined;
+      if (l?.runId) live.current.props.onOpenRun?.(l.runId);
+    };
+    if (interactive) {
+      plot.over.addEventListener("dblclick", onDblClick);
+      plot.over.addEventListener("click", onClick);
+    }
 
     // uPlot only listens to the mouse. On touch (while interactive): drag to
     // zoom (same x-only / y-only / box rule as the mouse), tap to show the
@@ -309,7 +435,9 @@ export default function ScalarChart(props: ScalarChartProps) {
 
     const resize = () => {
       plot.setSize({ width: Math.max(host.clientWidth, 50), height: Math.max(host.clientHeight, 50) });
+      setPlotWidth(plot.over.clientWidth);
     };
+    setPlotWidth(plot.over.clientWidth);
     const ro = new ResizeObserver(resize);
     ro.observe(host);
     const offPrint = onPrintLayout(resize);
@@ -321,24 +449,49 @@ export default function ScalarChart(props: ScalarChartProps) {
       plotRef.current = null;
       setHover(null);
     };
-    // `data` is pushed by the effect below; rebuilding on it would drop hover state.
+    // `data` is pushed and the style applied by the effects below; rebuilding
+    // on them would drop hover state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureKey]);
+
+  // Style, highlight, isolation and hover: restyle the series in place.
+  // Colours and fills are read at draw time from `liveStyle`.
+  useEffect(() => {
+    const u = plotRef.current;
+    if (!u) return;
+    style.forEach((st, i) => {
+      const s = u.series[i + 1];
+      if (!s) return;
+      if (s.show !== st.show) u.setSeries(i + 1, { show: st.show }, false);
+      s.width = st.width;
+      s.dash = st.dash;
+    });
+    u.redraw(false, false);
+  }, [style, bandPairs]);
 
   // New data, zoom or fixed bounds: re-run the range functions against fresh data.
   useEffect(() => {
     plotRef.current?.setData(data, true);
   }, [data, view.xMin, view.xMax, view.yMin, view.yMax, xRange[0], xRange[1], yRange[0], yRange[1]]);
 
-  const rows = hover ? tooltipRows(lines, hover.idx) : [];
-  // One entry per line: members and band edges belong to their group's mean.
-  const legend = series.filter((s) => (s.role ?? "line") === "line");
-  const focusedKey = focused != null && focused > 0 ? lines[focused - 1]?.key : undefined;
+  const rows = hover ? tooltipRows(lines, hover.idx, props.tooltipLabels, iso) : [];
+
+  const legendEl = legend.show && legendItems.length > 1 && (
+    <ChartLegend
+      items={legendItems}
+      vertical={legend.position === "right"}
+      highlight={hl}
+      isolated={iso}
+      onHighlight={(k) => setHighlight((cur) => (cur === k ? null : k))}
+      onIsolate={(k) => setIsolated((cur) => (cur === k ? null : k))}
+    />
+  );
 
   return (
-    <div ref={boxRef} className={`flex flex-col min-h-0 ${className ?? ""}`}>
+    <div className={`flex min-h-0 ${legend.position === "right" ? "flex-row" : "flex-col"} ${className ?? ""}`}>
+      {legend.position === "top" && legendEl}
       <div
-        className="relative flex-1 min-h-0"
+        className="relative flex-1 min-h-0 min-w-0"
         style={{ touchAction: interactive ? "none" : "pan-y" }}
         onMouseLeave={() => setHover(null)}
       >
@@ -348,23 +501,59 @@ export default function ScalarChart(props: ScalarChartProps) {
             hover={hover}
             boxWidth={plotHostRef.current?.clientWidth ?? 0}
             boxHeight={plotHostRef.current?.clientHeight ?? 0}
-            header={formatX(aligned.xs[hover.idx]!, xAxis, props.xLabel)}
+            header={formatX(aligned.xs[hover.idx]!, xKind, props.xLabel)}
             rows={rows}
             focusedKey={focusedKey}
             tooltip={tooltip}
           />
         )}
       </div>
-      {showLegend && legend.length > 1 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 px-1 pt-1 text-[10px] text-fg-muted">
-          {legend.map((s) => (
-            <span key={s.key} className="inline-flex items-center gap-1">
-              <span className="inline-block h-0.5 w-3 rounded" style={{ background: s.color }} />
-              <span className="truncate max-w-[16rem]">{s.label}</span>
-            </span>
-          ))}
-        </div>
-      )}
+      {legend.position !== "top" && legendEl}
+    </div>
+  );
+}
+
+/**
+ * The chart's legend: click a line to highlight it (again to clear),
+ * Alt-click to show only that line (again to show all).
+ */
+function ChartLegend({
+  items, vertical, highlight, isolated, onHighlight, onIsolate,
+}: {
+  items: DrawnSeries[];
+  vertical: boolean;
+  highlight: string | null;
+  isolated: string | null;
+  onHighlight: (key: string) => void;
+  onIsolate: (key: string) => void;
+}) {
+  return (
+    <div
+      className={
+        vertical
+          ? "flex w-40 shrink-0 flex-col gap-0.5 overflow-y-auto pl-2 text-[10px] text-fg-muted"
+          : "flex flex-wrap gap-x-3 gap-y-0.5 px-1 pt-1 text-[10px] text-fg-muted"
+      }
+    >
+      {items.map((s) => {
+        const active = s.key === highlight || s.key === isolated;
+        const off = (isolated != null && s.key !== isolated) || (highlight != null && s.key !== highlight);
+        return (
+          <button
+            key={s.key}
+            type="button"
+            aria-pressed={active}
+            title="Click to highlight · Alt-click to show only this line"
+            onClick={(e) => (e.altKey ? onIsolate(s.key) : onHighlight(s.key))}
+            className={`inline-flex min-w-0 items-center gap-1 rounded px-0.5 text-left hover:text-fg ${
+              off ? "opacity-40" : ""
+            } ${active ? "font-semibold text-fg" : ""}`}
+          >
+            <span className="inline-block h-0.5 w-3 shrink-0 rounded" style={{ background: s.color }} />
+            <span className="truncate max-w-[16rem]">{s.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -374,19 +563,24 @@ interface TooltipRow {
   label: string;
   color: string;
   point: SeriesPoint;
-  /** A group's band edges at this x, shown after the mean. */
+  /** A group's band edges at this x, shown after the centre. */
   band?: [number, number];
 }
 
 /** uPlot series index (1-based) → the index of the line it belongs to. */
 function parentLine(lines: DrawnSeries[], seriesIdx: number): number {
   const l = lines[seriesIdx - 1];
-  if (!l || (l.role !== "bandHi" && l.role !== "bandLo")) return seriesIdx;
+  if (!l || !isEdge(l)) return seriesIdx;
   const parent = lines.findIndex((o) => o.role === "line" && o.key === l.key);
   return parent >= 0 ? parent + 1 : seriesIdx;
 }
 
-function tooltipRows(lines: DrawnSeries[], idx: number): TooltipRow[] {
+function tooltipRows(
+  lines: DrawnSeries[],
+  idx: number,
+  labels: ReadonlyMap<string, string> | undefined,
+  isolated: string | null,
+): TooltipRow[] {
   const rows: TooltipRow[] = [];
   const edges = new Map<string, { lo?: number; hi?: number }>();
   for (const l of lines) {
@@ -399,11 +593,12 @@ function tooltipRows(lines: DrawnSeries[], idx: number): TooltipRow[] {
   }
   for (const l of lines) {
     if (l.role !== "line") continue;
+    if (isolated != null && l.key !== isolated) continue;
     const point = nearestPoint(l.points, idx);
     if (!point) continue;
     const e = edges.get(l.key);
     const band = e?.lo != null && e.hi != null ? ([e.lo, e.hi] as [number, number]) : undefined;
-    rows.push({ key: l.key, label: l.label, color: l.color, point, band });
+    rows.push({ key: l.key, label: labels?.get(l.key) ?? l.label, color: l.color, point, band });
   }
   rows.sort((a, b) => b.point.y - a.point.y);
   return rows;
