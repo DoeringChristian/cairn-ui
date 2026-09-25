@@ -4,6 +4,7 @@ import { useSweep, useSweepAction } from "../api/hooks";
 import type { SweepAction, SweepDetail } from "../api/types";
 import { formatRelative } from "../lib/format";
 import { formatParamValue, isLogParam, rankTrials, searchedParams, trialParamKeys } from "../lib/sweeps";
+import { metricExpr, paramExpr } from "../lib/scalar-exprs";
 import SweepStatusBadge from "../components/SweepStatusBadge";
 import CopyId from "../components/CopyId";
 
@@ -48,7 +49,8 @@ export default function SweepDetailPage() {
   if (q.isError || !sweep) return <p className="text-status-failed">Error: {String(q.error)}</p>;
 
   const settingsKey = (card: string) => ({ runId: `sweep:${sweep.id}`, metricName: card });
-  const metricColumn = sweep.metric ? [{ key: sweep.metric, source: "metric" as const }] : [];
+  const metricSrc = sweep.metric ? metricExpr(sweep.metric, "last") : null;
+  const metricColumn = metricSrc ? [{ src: metricSrc }] : [];
   const firstParam = searched[0] ?? paramKeys[0];
 
   return (
@@ -114,7 +116,7 @@ export default function SweepDetailPage() {
                 colSpan: 4,
                 title: "Params → metric",
                 columns: [
-                  ...searched.map((key) => ({ key, source: "param" as const, log: isLogParam(sweep.space, key) })),
+                  ...searched.map((key) => ({ src: paramExpr(key), log: isLogParam(sweep.space, key) })),
                   ...metricColumn,
                 ],
               }}
@@ -124,9 +126,9 @@ export default function SweepDetailPage() {
               settingsKey={settingsKey("__sweep_scatter")}
               defaults={{
                 colSpan: 2,
-                xAxis: firstParam ? { key: firstParam, source: "param" } : null,
-                xLog: firstParam ? isLogParam(sweep.space, firstParam) : false,
-                yAxis: sweep.metric ? { key: sweep.metric, source: "metric" } : null,
+                x: firstParam ? { src: paramExpr(firstParam) } : null,
+                xRange: { min: null, max: null, log: firstParam ? isLogParam(sweep.space, firstParam) : false },
+                y: metricSrc ? { src: metricSrc } : null,
               }}
             />
           </div>

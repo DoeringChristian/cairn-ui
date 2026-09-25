@@ -1,25 +1,18 @@
 import { useMemo, useRef, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { qk } from "../api/query-keys";
+import { useNavigate } from "react-router-dom";
 import { useCardSettings } from "../lib/card-settings";
-import { instanceDefaults, type ScatterAxisDef as AxisDef, type ScatterSettings } from "./cards-settings/scatter";
+import { instanceDefaults, type ScatterSettings } from "./cards-settings/scatter";
 import ScatterChart, { type ScatterPoint } from "../charts/ScatterChart";
-import type { Better } from "../lib/plot-utils/pareto";
+import type { Better, ParetoDirection } from "../lib/plot-utils/pareto";
 import { summaryRuleFor } from "../lib/metric-defs";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
+import { useRunColors, useVisibleRuns } from "../lib/run-view";
+import { useScalarExprs } from "../lib/use-scalar-exprs";
+import { ruleDirection, templateSrcs, toNumber, toText } from "../lib/scalar-exprs";
+import { formatValue, renderTemplate } from "../lib/expr";
 import CardShell from "./CardShell";
-import Toggle from "./settings/Toggle";
-import Select from "./settings/Select";
-
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+import ScatterSettingsPanel from "./settings-panels/ScatterSettingsPanel";
 
 interface Props {
   runIds: string[];
@@ -31,198 +24,131 @@ interface Props {
 }
 
 export default function ScatterPlotCard({
-  runIds,
+  runIds: allRunIds,
   settingsKey,
   onRemove,
   autoOpenSettings,
   defaults,
 }: Props) {
   const runMetaVersion = useRunMetadataVersion();
+  const navigate = useNavigate();
 
   const ctl = useCardSettings<ScatterSettings>(settingsKey, "scatter", instanceDefaults(defaults));
   const settings = ctl.value;
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
-  // Fetch run details (params)
-  const runQueries = useQueries({
-    queries: runIds.map((rid) => ({
-      queryKey: qk.run(rid),
-      queryFn: () => api.run(rid),
-      staleTime: 30_000,
-    })),
-  });
+  const runIds = useVisibleRuns(allRunIds);
+  const runColors = useRunColors(runIds);
 
-  // Build scatter data
-  const scatterPoints = useMemo(() => {
-    const resolve = (rid: string, axis: AxisDef | null): number | null => {
-      if (!axis) return null;
-      if (axis.source === "param") {
-        const rq = runQueries[runIds.indexOf(rid)];
-        const params = rq?.data?.params ?? [];
-        const p = params.find((pp) => pp.key === axis.key);
-        if (!p) return null;
-        const n = Number(p.value);
-        return Number.isFinite(n) ? n : null;
-      }
-      // A metric's final value, as the runs table shows it (last point,
-      // its summary rule, or an explicit summary key).
-      const v = runQueries[runIds.indexOf(rid)]?.data?.run.values?.[axis.key];
-      return typeof v === "number" && Number.isFinite(v) ? v : null;
-    };
+  // Axes and colour, then the tooltip fields, then the label template's holes.
+  const labelSrcs = useMemo(() => templateSrcs(settings.labelTemplate), [settings.labelTemplate]);
+  const srcs = useMemo(
+    () => [
+      settings.x?.src ?? "",
+      settings.y?.src ?? "",
+      settings.color?.src ?? "",
+      ...settings.tooltipFields,
+      ...labelSrcs,
+    ],
+    [settings.x, settings.y, settings.color, settings.tooltipFields, labelSrcs],
+  );
+  const exprs = useScalarExprs(runIds, srcs);
 
+  const points = useMemo(() => {
+    const [xs, ys, cs] = exprs.values as [Map<string, unknown>, Map<string, unknown>, Map<string, unknown>];
     const pts: ScatterPoint[] = [];
     for (const rid of runIds) {
-      const x = resolve(rid, settings.xAxis);
-      const y = resolve(rid, settings.yAxis);
+      const x = toNumber(xs.get(rid));
+      const y = toNumber(ys.get(rid));
       if (x == null || y == null) continue;
-      const c = resolve(rid, settings.colorAxis);
-      pts.push({ id: rid, x, y, color: c, label: shortRunLabel(rid, runIds) });
+      let label = shortRunLabel(rid, runIds);
+      const ctx = exprs.contexts.get(rid);
+      if (settings.labelTemplate.trim() && ctx) {
+        try {
+          label = renderTemplate(settings.labelTemplate, ctx) || label;
+        } catch {
+          // An invalid template (the settings show why) keeps the run label.
+        }
+      }
+      pts.push({
+        id: rid,
+        x,
+        y,
+        color: settings.color ? toNumber(cs.get(rid)) : null,
+        runColor: runColors.get(rid) ?? "#8b949e",
+        label,
+        extra: settings.tooltipFields.map((src, i) => [src, formatValue(exprs.values[3 + i]?.get(rid) ?? null)]),
+      });
     }
     return pts;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    settings.xAxis, settings.yAxis, settings.colorAxis,
-    runIds,
-    runQueries.map((q) => q.dataUpdatedAt).join("|"),
-    runMetaVersion,
-  ]);
+  }, [exprs, runIds, runColors, settings.color, settings.labelTemplate, settings.tooltipFields, runMetaVersion]);
 
   // Pareto direction per axis: the setting, else the metric's summary rule
   // ("max" = higher is better), else lower is better.
-  const ruleDirection = (axis: AxisDef | null): Better => {
-    if (axis?.source !== "metric") return "min";
-    for (const q of runQueries) {
-      const rule = summaryRuleFor(axis.key, q.data?.metric_defs);
-      if (rule === "min" || rule === "max") return rule;
+  const ruleOf = (metric: string) => {
+    for (const d of exprs.details.values()) {
+      const rule = summaryRuleFor(metric, d.metric_defs);
+      if (rule) return rule;
     }
-    return "min";
+    return null;
   };
-  const paretoX = settings.paretoX ?? ruleDirection(settings.xAxis);
-  const paretoY = settings.paretoY ?? ruleDirection(settings.yAxis);
-
-  // Available options
-  const availableParams = useMemo(() => {
-    const keys = new Set<string>();
-    for (const q of runQueries) for (const p of q.data?.params ?? []) keys.add(p.key);
-    return Array.from(keys).sort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runQueries.map((q) => q.dataUpdatedAt).join("|")]);
-
-  const seqQueries = useQueries({
-    queries: runIds.map((rid) => ({
-      queryKey: qk.sequences(rid),
-      queryFn: () => api.sequences(rid),
-      staleTime: 30_000,
-    })),
-  });
-
-  const availableMetrics = useMemo(() => {
-    const names = new Set<string>();
-    for (const q of seqQueries) for (const seq of q.data?.sequences ?? []) {
-      if (seq.object_type === "scalar") names.add(seq.name);
-    }
-    return Array.from(names).sort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seqQueries.map((q) => q.dataUpdatedAt).join("|")]);
-
-
-  // ---------------------------------------------------------------------------
-  // Settings panel
-  // ---------------------------------------------------------------------------
-  const axisOptions = useMemo(() => {
-    const opts: Array<{ key: string; source: "param" | "metric"; label: string }> = [];
-    for (const k of availableParams) opts.push({ key: k, source: "param", label: `[P] ${k}` });
-    for (const k of availableMetrics) opts.push({ key: k, source: "metric", label: `[M] ${k}` });
-    return opts;
-  }, [availableParams, availableMetrics]);
-
-  const AxisSelect = ({ label, value, onChange }: { label: string; value: AxisDef | null; onChange: (v: AxisDef | null) => void }) => (
-    <div className="mb-2">
-      <label className="block text-[10px] uppercase tracking-wide text-fg-muted mb-1">{label}</label>
-      <select
-        value={value ? `${value.source}:${value.key}` : ""}
-        onChange={(e) => {
-          const v = e.target.value;
-          if (!v) { onChange(null); return; }
-          const [source, ...rest] = v.split(":");
-          onChange({ key: rest.join(":"), source: source as "param" | "metric" });
-        }}
-        className="input w-full text-xs"
-      >
-        <option value="">-- none --</option>
-        {axisOptions.map((o) => (
-          <option key={`${o.source}:${o.key}`} value={`${o.source}:${o.key}`}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </div>
+  const paretoAuto: { x: Better; y: Better } = {
+    x: (settings.x && ruleDirection(settings.x.src, ruleOf)) || "min",
+    y: (settings.y && ruleDirection(settings.y.src, ruleOf)) || "min",
+  };
+  const paretoX = settings.paretoX ?? paretoAuto.x;
+  const paretoY = settings.paretoY ?? paretoAuto.y;
+  const pareto = useMemo<ParetoDirection | undefined>(
+    () => (settings.showPareto ? { x: paretoX, y: paretoY } : undefined),
+    [settings.showPareto, paretoX, paretoY],
   );
+
+  const errors = {
+    x: settings.x ? exprs.errors[0] ?? null : null,
+    y: settings.y ? exprs.errors[1] ?? null : null,
+    color: settings.color ? exprs.errors[2] ?? null : null,
+  };
+  const asof = exprs.asofJoin.slice(0, 3).some(Boolean);
 
   const settingsPanel = (
-    <>
-      <AxisSelect label="X Axis" value={settings.xAxis} onChange={(v) => ctl.set({ xAxis: v })} />
-      <AxisSelect label="Y Axis" value={settings.yAxis} onChange={(v) => ctl.set({ yAxis: v })} />
-      <AxisSelect label="Color" value={settings.colorAxis} onChange={(v) => ctl.set({ colorAxis: v })} />
-      <div className="mt-2 flex flex-col gap-1">
-        <label className="flex items-center gap-1.5 text-xs text-fg-muted">
-          <input type="checkbox" checked={!!settings.xLog} onChange={(e) => ctl.set({ xLog: e.target.checked })} />
-          X log scale
-        </label>
-        <label className="flex items-center gap-1.5 text-xs text-fg-muted">
-          <input type="checkbox" checked={!!settings.yLog} onChange={(e) => ctl.set({ yLog: e.target.checked })} />
-          Y log scale
-        </label>
-      </div>
-      <div className="mt-3 border-t border-border-subtle pt-3">
-        <Toggle
-          label="Pareto front"
-          checked={!!settings.showPareto}
-          onChange={(v) => ctl.set({ showPareto: v })}
-        />
-        {settings.showPareto && (
-          <>
-            <Select<Better>
-              label="X: better is"
-              value={paretoX}
-              onChange={(v) => ctl.set({ paretoX: v })}
-              options={[
-                { value: "min", label: "Lower" },
-                { value: "max", label: "Higher" },
-              ]}
-            />
-            <Select<Better>
-              label="Y: better is"
-              value={paretoY}
-              onChange={(v) => ctl.set({ paretoY: v })}
-              options={[
-                { value: "min", label: "Lower" },
-                { value: "max", label: "Higher" },
-              ]}
-            />
-          </>
-        )}
-      </div>
-    </>
+    <ScatterSettingsPanel ctl={ctl} mode="card" ctx={{ options: exprs.options, paretoAuto, errors }} />
   );
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  const noAxes = !settings.xAxis || !settings.yAxis;
-
-  const plotProps = {
-    points: scatterPoints,
-    xLabel: settings.xAxis?.key,
-    yLabel: settings.yAxis?.key,
-    colorLabel: settings.colorAxis?.key,
-    xLog: settings.xLog,
-    yLog: settings.yLog,
-    pareto: settings.showPareto ? { x: paretoX, y: paretoY } : undefined,
+  const openRun = (rid: string) => {
+    const pid = exprs.details.get(rid)?.run.project_id;
+    if (pid) navigate(`/p/${pid}/r/${rid}`);
   };
 
+  const cardRef = useRef<HTMLDivElement>(null);
+  const noAxes = !settings.x || !settings.y;
+
+  const plotProps = {
+    points,
+    xLabel: settings.x?.src,
+    yLabel: settings.y?.src,
+    colorLabel: settings.color?.src,
+    xRange: settings.xRange,
+    yRange: settings.yRange,
+    pareto,
+    dimNonFrontier: settings.dimNonFrontier,
+    running: settings.running,
+    regression: settings.regression,
+    refLines: settings.refLines,
+    onPointClick: openRun,
+  };
+
+  const empty = (className: string) => (
+    <div className={`flex items-center justify-center text-sm text-fg-muted ${className}`}>
+      {noAxes
+        ? "Select X and Y axes in settings to create the scatter plot."
+        : errors.x || errors.y
+          ? `Invalid axis: ${errors.x ?? errors.y}`
+          : exprs.loading
+            ? "Loading…"
+            : "No run has a value on both axes."}
+    </div>
+  );
 
   return (
     <CardShell cardKind="scatter"
@@ -230,16 +156,23 @@ export default function ScatterPlotCard({
       settings={settings}
       updateSettings={ctl.set}
       title="Scatter Plot"
-      subtitle={`${scatterPoints.length} points`}
+      subtitle={
+        <span title={asof ? "An axis joins series logged at different steps (as-of join)" : undefined}>
+          {`${points.length} points`}
+          {asof && <span className="ml-1 text-status-running">· as-of join</span>}
+        </span>
+      }
       defaultHeight={350}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
       onDownload={() => {
-        const headers = ["run_id", settings.xAxis?.key ?? "x", settings.yAxis?.key ?? "y"];
-        if (settings.colorAxis) headers.push(settings.colorAxis.key);
-        const rows: (string | number)[][] = scatterPoints.map((pt) => {
-          const row: (string | number)[] = [pt.id, pt.x, pt.y];
-          if (settings.colorAxis) row.push(pt.color ?? "");
+        const headers = ["run_id", "label", settings.x?.src ?? "x", settings.y?.src ?? "y"];
+        if (settings.color) headers.push(settings.color.src);
+        headers.push(...settings.tooltipFields);
+        const rows: (string | number)[][] = points.map((pt) => {
+          const row: (string | number)[] = [pt.id, pt.label, pt.x, pt.y];
+          if (settings.color) row.push(pt.color ?? "");
+          settings.tooltipFields.forEach((_, i) => row.push(toText(exprs.values[3 + i]?.get(pt.id)) ?? ""));
           return row;
         });
         downloadCsv(headers, rows, safeName(settings.title ?? "scatter_plot") + ".csv");
@@ -251,25 +184,11 @@ export default function ScatterPlotCard({
       scrollIntoViewOnMount={autoOpenSettings}
       modalContent={
         <div className="flex flex-col h-[calc(100vh-12rem)]">
-          {noAxes ? (
-            <div className="flex items-center justify-center flex-1 text-sm text-fg-muted">
-              Select X and Y axes in settings to create the scatter plot.
-            </div>
-          ) : (
-            <ScatterChart {...plotProps} className="flex-1 min-h-0" />
-          )}
+          {points.length === 0 ? empty("flex-1") : <ScatterChart {...plotProps} className="flex-1 min-h-0" />}
         </div>
       }
     >
-      <>
-        {noAxes ? (
-          <div className="flex items-center justify-center flex-1 min-h-0 text-sm text-fg-muted">
-            Select X and Y axes in settings to create the scatter plot.
-          </div>
-        ) : (
-          <ScatterChart {...plotProps} className="rounded bg-bg flex-1 min-h-0" />
-        )}
-      </>
+      {points.length === 0 ? empty("flex-1 min-h-0") : <ScatterChart {...plotProps} className="rounded bg-bg flex-1 min-h-0" />}
     </CardShell>
   );
 }

@@ -5,8 +5,8 @@ import PlotlyChart, { type PlotlyData } from "./PlotlyChart.tsx";
 import { formatNum } from "../lib/plot-utils/types.ts";
 
 export interface ParallelColumn {
-  key: string;
-  source: "param" | "metric";
+  /** A scalar expression per run (`config.lr`, `min(val.loss)`, …); also the axis label. */
+  src: string;
   log?: boolean;
   invert?: boolean;
 }
@@ -55,7 +55,7 @@ function dimension(col: ParallelColumn, ci: number, rows: ParallelRow[]): Dimens
     const cats = Array.from(new Set(rows.map((r) => r.raw[ci]).filter((v): v is string => v != null))).sort();
     const index = new Map(cats.map((c, i) => [c, i]));
     dim = {
-      label: col.key,
+      label: col.src,
       values: rows.map((r) => (r.raw[ci] != null ? index.get(r.raw[ci]!)! : NaN)),
       range: cats.length > 1 ? [0, cats.length - 1] : [-0.5, 0.5],
       tickvals: cats.map((_, i) => i),
@@ -72,7 +72,7 @@ function dimension(col: ParallelColumn, ci: number, rows: ParallelRow[]): Dimens
     let lo = finite.length ? Math.min(...finite) : 0;
     let hi = finite.length ? Math.max(...finite) : 1;
     if (lo === hi) { lo -= 0.5; hi += 0.5; }
-    dim = { label: col.log ? `${col.key} (log)` : col.key, values, range: [lo, hi], ...(col.log ? logTicks(lo, hi) : {}) };
+    dim = { label: col.log ? `${col.src} (log)` : col.src, values, range: [lo, hi], ...(col.log ? logTicks(lo, hi) : {}) };
   }
   if (col.invert && dim.range) dim.range = [dim.range[1], dim.range[0]];
   return dim;
