@@ -42,7 +42,7 @@ export function isOperator(s: unknown): s is Operator {
 // ---------------------------------------------------------------------------
 
 /** What Python raises for an unsupported operand; evaluate() maps it to false. */
-class PyTypeError extends Error {}
+export class PyTypeError extends Error {}
 
 type Obj = Record<string, unknown>;
 
@@ -82,7 +82,7 @@ function cmpCodePoints(a: string, b: string): number {
 }
 
 /** Python ordering (-1/0/1); throws PyTypeError where Python raises. */
-function pyCmp(a: unknown, b: unknown): number {
+export function pyCmp(a: unknown, b: unknown): number {
   if (isNum(a) && isNum(b)) {
     const x = Number(a);
     const y = Number(b);
@@ -100,7 +100,7 @@ function pyCmp(a: unknown, b: unknown): number {
 }
 
 /** Python `bool(v)`. */
-function pyTruthy(v: unknown): boolean {
+export function pyTruthy(v: unknown): boolean {
   if (v === null || v === undefined || v === false || v === 0 || v === "") return false;
   if (Array.isArray(v)) return v.length > 0;
   if (isObj(v)) return Object.keys(v).length > 0;
@@ -108,7 +108,7 @@ function pyTruthy(v: unknown): boolean {
 }
 
 /** Python `a in b`. */
-function pyIn(a: unknown, b: unknown): boolean {
+export function pyIn(a: unknown, b: unknown): boolean {
   if (typeof b === "string") {
     if (typeof a !== "string") throw new PyTypeError("'in <string>' requires string");
     return b.includes(a);
