@@ -343,3 +343,29 @@ export interface SweepDetail extends Sweep {
 }
 
 export type SweepAction = "pause" | "resume" | "cancel";
+
+// ── Project workspace + saved views (server: routes/project_docs.py) ────
+
+export interface WorkspaceGet {
+  /** 0 (with a null payload) before the first save. */
+  rev: number;
+  updated_at: string | null;
+  payload: Record<string, unknown> | null;
+}
+
+export type WorkspacePutResult =
+  | { ok: { rev: number; updated_at: string }; conflict?: undefined }
+  | { ok?: undefined; conflict: { rev: number; payload: Record<string, unknown> | null } };
+
+export interface SavedViewSummary {
+  id: string;
+  name: string;
+  rev: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedView extends SavedViewSummary {
+  project_id: string;
+  payload: Record<string, unknown>;
+}

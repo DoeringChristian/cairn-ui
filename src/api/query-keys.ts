@@ -36,4 +36,6 @@ export const qk = {
   report: (projectId: string, reportId: string) => ["report", projectId, reportId] as const,
   sweeps: (projectId: string) => ["sweeps", projectId] as const,
   sweep: (sweepId: string) => ["sweep", sweepId] as const,
+  // Saved workspace views (lib/workspace/views.ts).
+  views: (projectId: string) => ["views", projectId] as const,
 } as const;
