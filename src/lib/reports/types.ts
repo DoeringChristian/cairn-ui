@@ -24,6 +24,14 @@ export interface CardsBlock {
   /** Runs hidden from this cell's charts, pinned first, and its baseline (```cairn `runs.hidden/pinned/baseline`). */
   runView?: RunView;
   cards: ComparisonCard[];
+  /**
+   * Set when this cell's ```cairn fence failed to compile (the
+   * `CairnBlockError` message); the cell shows it instead of its cards.
+   * In-memory only: the fence itself round-trips verbatim (rawCairnSource).
+   */
+  error?: string;
+  /** The failed fence's body, re-compiled once the cell's metric index loads (lib/reports/recompile.ts). */
+  errorSource?: string;
 }
 
 export type ReportBlock = MarkdownBlock | CardsBlock;

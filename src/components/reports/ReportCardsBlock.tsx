@@ -29,7 +29,8 @@ import {
   rebindCardsToRuns,
   rebuildCardsFromRuns,
 } from "../../lib/comparisons";
-import { cardFromSpec, cardSettingsKeyForReport, useMetricIndex, type CardsBlock } from "../../lib/reports";
+import { cardFromSpec, cardSettingsKeyForReport, restoreReportCardSettings, useMetricIndex, type CardsBlock } from "../../lib/reports";
+import { recompileDecision, recompileFailedBlock } from "../../lib/reports/recompile";
 import { describeRunSelector, type QueryRunSelector } from "../../lib/run-selector";
 import { useRunSelectorResolution } from "../../api/hooks";
 import type { Run } from "../../api/types";
@@ -49,7 +50,7 @@ interface Props {
   readOnly?: boolean;
 }
 
-export default function ReportCardsBlock({ projectId, reportId, block, allProjectRuns, onChange, toolbar, readOnly = false }: Props) {
+export default function ReportCardsBlock({ projectId, reportId, block: parsedBlock, allProjectRuns, onChange, toolbar, readOnly = false }: Props) {
   // Each card's comment count and popover (editable reports only).
   const comments = useContext(ReportCommentsContext);
   const [addCardOpen, setAddCardOpen] = useState(false);
@@ -57,17 +58,47 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
   const [rebuilding, setRebuilding] = useState(false);
   const [resetting, setResetting] = useState(false);
 
-  const staticRunIds = block.runIds ?? [];
+  const staticRunIds = parsedBlock.runIds ?? [];
   // A CardsBlock's runSelector, when present, is always a query selector in
   // this UI (the "static" case is expressed via `runIds` with no
   // runSelector at all) — narrow so the form below can read/patch
   // query-only fields without a union check at every access.
   const selector: QueryRunSelector | undefined =
-    block.runSelector?.kind === "query" ? block.runSelector : undefined;
+    parsedBlock.runSelector?.kind === "query" ? parsedBlock.runSelector : undefined;
 
   const resolution = useRunSelectorResolution(projectId, selector);
   const runIds = selector ? resolution.runIds : staticRunIds;
 
+  const failed = parsedBlock.error !== undefined;
+  const { index: liveMetricIndex, isLoading: indexLoading } = useMetricIndex(selector || failed ? runIds : []);
+
+  // A fence that failed to compile at hydrate time (typically a `metric:`
+  // card with no `type:`, parsed before any sequence list was fetched) is
+  // compiled again once this cell's metric index has loaded. The result is
+  // display-only: `block` below is what every edit builds on, so it reaches
+  // the saved report only through a user edit (see lib/reports/recompile.ts).
+  const decision = recompileDecision({
+    block: parsedBlock,
+    runIds,
+    runsResolved: !selector || resolution.resolved,
+    indexLoading,
+  });
+  const restoredRef = useRef<string | null>(null);
+  const recompiled = useMemo(() => {
+    if (decision !== "recompile") return null;
+    const r = recompileFailedBlock(parsedBlock, liveMetricIndex, selector ? runIds : undefined);
+    // The fence's inline settings, once per fence (they'd otherwise clobber
+    // a setting changed since).
+    const restoreKey = `${parsedBlock.id}\n${parsedBlock.errorSource}`;
+    if (r.ok && restoredRef.current !== restoreKey) {
+      restoredRef.current = restoreKey;
+      restoreReportCardSettings(reportId, [r.block], r.settings);
+    }
+    return r;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [decision, parsedBlock, liveMetricIndex, selector ? runIds.join("|") : "", reportId]);
+  const block = recompiled?.ok ? recompiled.block : parsedBlock;
+  const error = recompiled ? (recompiled.ok ? undefined : recompiled.error) : parsedBlock.error;
   // Render-only rebind (never persisted/autosaved — see handleRefresh's and
   // the auto-rebind effect's doc below for the persisting counterpart): a
   // selector block's *persisted* `cards` can be stale relative to `runIds`
@@ -77,7 +108,6 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
   // to the currently-resolved runs rather than a frozen/stale snapshot —
   // this mirrors the ```cairn fence preview's own `opts.resolvedRunIds`
   // handling (cairn-block.ts), just without ever calling `onChange`.
-  const { index: liveMetricIndex } = useMetricIndex(selector ? runIds : []);
   const displayCards = useMemo(
     () =>
       selector && resolution.resolved ? rebindCardsToMetricIndex(block.cards, runIds, liveMetricIndex) : block.cards,
@@ -140,6 +170,8 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
   const lastReboundKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!selector || readOnly) return;
+    // A fence that failed to compile is never rewritten on its own.
+    if (parsedBlock.error !== undefined) return;
     // Not while the selector is still resolving: its run set reads as empty
     // then, and rebinding would save every card with `series: []`.
     if (!shouldAutoRebind({ resolved: resolution.resolved, cards: block.cards, resolvedRunIds: runIds })) return;
@@ -204,6 +236,21 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
     onChange({ ...block });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [block]);
+
+  if (error !== undefined) {
+    return (
+      <div>
+        {/* Only the notebook's own cell actions (move, delete): editing a
+            cell that never compiled would replace its fence. */}
+        {!readOnly && toolbar(null)}
+        {decision === "wait" ? (
+          <div className="card p-4 text-sm text-fg-muted">Loading…</div>
+        ) : (
+          <CellError message={error} />
+        )}
+      </div>
+    );
+  }
 
   return (
     // A card's settings change (step, yScale, …) re-saves the report.
@@ -323,5 +370,23 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
     </CardSettingsChangeContext.Provider>
     </CascadeScopeContext.Provider>
     </CardMutationContext.Provider>
+  );
+}
+
+/** A ```cairn fence that failed to compile: its error and how to fix it. */
+function CellError({ message }: { message: string }) {
+  return (
+    <div role="alert" className="card border-status-failed/50 p-4 text-sm">
+      <div className="mb-1 flex items-center gap-2 font-medium text-status-failed">
+        <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
+        This cell's <code className="mono">```cairn</code> block has an error
+      </div>
+      <p className="mono whitespace-pre-wrap break-words text-xs text-fg">{message}</p>
+      <p className="mt-2 text-xs text-fg-muted">
+        The block is saved exactly as written. Fix it in the report's markdown source, or delete the cell. A{" "}
+        <code className="mono">metric:</code> card needs that metric logged on the cell's runs, or an explicit{" "}
+        <code className="mono">type:</code>.
+      </p>
+    </div>
   );
 }

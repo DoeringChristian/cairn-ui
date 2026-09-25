@@ -19,8 +19,10 @@
  *
  * A malformed ```cairn block never aborts the parse: `parseReportMarkdown`
  * catches `CairnBlockError` per-fence and still emits a `CardsBlock` (empty
- * `cards`), recording the failure in `errors` — the caller (the block
- * editor) shows it as an inline error.
+ * `cards`) carrying the message in `error` and the fence body in
+ * `errorSource` (also recorded in `errors`). The cell shows the error; when
+ * the fence's runs parsed, the block keeps them so the cell can re-compile
+ * once their metric index loads (lib/reports/recompile.ts).
  *
  * Byte-preservation vs. regeneration: `parseReportMarkdown` returns the
  * exact original fence text (delimiters included) per block id in
@@ -210,9 +212,16 @@ export function parseReportMarkdown(
     }
 
     let specId: string | undefined;
+    let runs: Pick<CardsBlock, "runIds" | "runSelector"> = { runIds: [] };
     try {
       const spec = parseCairnSpec(seg.body);
       specId = spec.id;
+      try {
+        const r = resolveRuns(spec);
+        runs = r.runSelector ? { runSelector: r.runSelector } : { runIds: r.runIds ?? [] };
+      } catch {
+        // Reported by compileCairnBlock below.
+      }
       let resolvedRunIds: string[] | undefined;
       if (opts?.allProjectRuns) {
         const { runSelector } = resolveRuns(spec);
@@ -225,7 +234,7 @@ export function parseReportMarkdown(
     } catch (e) {
       const id = specId ?? newId();
       const message = e instanceof CairnBlockError ? e.message : `Unexpected error: ${(e as Error).message}`;
-      const errBlock: CardsBlock = { id, type: "cards", runIds: [], cards: [] };
+      const errBlock: CardsBlock = { id, type: "cards", ...runs, cards: [], error: message, errorSource: seg.body };
       blocks.push(errBlock);
       errors[id] = message;
       rawCairnSource[id] = seg.raw;
@@ -264,6 +273,10 @@ export function serializeReportToMarkdown(
       if (isCardsBlock(b)) {
         const raw = rawCairnSource[b.id];
         if (raw !== undefined) return raw;
+        // A fence that never compiled is kept as written, even without its cached raw text.
+        if (b.error !== undefined && b.errorSource !== undefined) {
+          return `\`\`\`${CAIRN_FENCE_LANG}\n${b.errorSource}\n\`\`\``;
+        }
         const body = stringifyCairnSpec(serializeCairnSpec(b, settingsByCardId));
         return `\`\`\`${CAIRN_FENCE_LANG}\n${body}\n\`\`\``;
       }
