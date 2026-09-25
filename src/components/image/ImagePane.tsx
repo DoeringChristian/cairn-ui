@@ -1,18 +1,16 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   TransformComponent,
   TransformWrapper,
+  getTransformStyles,
   type ReactZoomPanPinchRef,
 } from "react-zoom-pan-pinch";
 import { useInteract } from "../../lib/use-interact";
 import type { ImageOverlays, OverlayView } from "../../lib/overlays";
 import ImageOverlay from "./ImageOverlay";
+import { splitBarLeft, splitClipPath, type PaneTransform } from "./split-geometry";
 
-export interface PaneTransform {
-  scale: number;
-  x: number;
-  y: number;
-}
+export type { PaneTransform } from "./split-geometry";
 
 export interface ImageSource {
   src: string;
@@ -50,9 +48,12 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /**
  * One zoomable image, optionally split against a reference by a vertical
- * divider. Both images live inside ONE transform, so they zoom and pan
- * together by construction; the divider is a screen-space overlay, and the
- * foreground's clip is recomputed in content space on every transform.
+ * divider. The zoom library transforms the reference; the foreground (image
+ * + overlay) is a layer above it that receives the very same transform string
+ * in the same call (`customTransform`), so both zoom and pan together. The
+ * foreground's clip sits on that layer OUTSIDE the transform, in the pane's
+ * screen space, from the same `split` as the divider bar (see
+ * split-geometry.ts): the bar is always exactly on the clip edge.
  * While not interactive (a touch device with the card's interact toggle off,
  * see lib/use-interact) zoom, pan and the divider ignore input, so a finger
  * scrolls the page.
@@ -61,8 +62,10 @@ export default function ImagePane({
   image, reference, split, onSplitChange, transform, onTransformChange, overlays, overlayView, rendering = "auto",
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null);
-  /** The foreground layer: the image plus its overlay, clipped together. */
+  /** The foreground layer: the image plus its overlay, clipped together (screen space). */
   const fgRef = useRef<HTMLDivElement>(null);
+  /** Inside `fgRef`: carries the zoom library's transform. */
+  const fgContentRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   // Keyed by src: a new image's overlay waits for that image's size.
   const [natural, setNatural] = useState<{ src: string; w: number; h: number } | null>(null);
@@ -73,21 +76,16 @@ export default function ImagePane({
   const interactiveRef = useRef(interactive);
   interactiveRef.current = interactive;
 
-  // Keep the foreground's clip in content coordinates: X = (dividerX − panX) / scale.
-  const updateClip = useCallback(() => {
-    const fg = fgRef.current;
-    const box = boxRef.current;
-    if (!fg) return;
-    if (!reference || !box) {
-      fg.style.clipPath = "";
-      return;
-    }
-    const { scale, x } = own.current;
-    const contentWidth = box.clientWidth;
-    const dividerX = split * box.clientWidth;
-    const clipLeft = (dividerX - x) / scale;
-    fg.style.clipPath = `inset(0 ${Math.max(0, contentWidth - clipLeft)}px 0 0)`;
-  }, [reference, split]);
+  /**
+   * Every transform the zoom library applies to the reference goes through
+   * here: the foreground gets the identical string, and `own` the applied state.
+   */
+  const applyTransform = useCallback((x: number, y: number, scale: number) => {
+    const t = getTransformStyles(x, y, scale);
+    own.current = { scale, x, y };
+    if (fgContentRef.current) fgContentRef.current.style.transform = t;
+    return t;
+  }, []);
 
   // Nearest-neighbour once a source pixel covers more than ~1.5 screen pixels;
   // the overlay's strokes and labels scale by the inverse (see ImageOverlay).
@@ -100,8 +98,6 @@ export default function ImagePane({
     setPixelated(screenPerImagePx > 1.5);
     if (screenPerImagePx > 0) fgRef.current?.style.setProperty("--overlay-px", String(1 / screenPerImagePx));
   }, []);
-
-  useLayoutEffect(updateClip, [updateClip]);
 
   // Apply the shared transform from sibling panes.
   useEffect(() => {
@@ -117,13 +113,10 @@ export default function ImagePane({
   useEffect(() => {
     const box = boxRef.current;
     if (!box) return;
-    const ro = new ResizeObserver(() => {
-      updateClip();
-      updatePixelated();
-    });
+    const ro = new ResizeObserver(updatePixelated);
     ro.observe(box);
     return () => ro.disconnect();
-  }, [updateClip, updatePixelated]);
+  }, [updatePixelated]);
 
   // Non-passive, so the page doesn't scroll while zooming.
   useEffect(() => {
@@ -209,9 +202,8 @@ export default function ImagePane({
         centerZoomedOut
         // Double-click is ours (onDoubleClick below): reset to the fitted view.
         doubleClick={{ disabled: true }}
-        onTransform={(_ref, state) => {
-          own.current = { scale: state.scale, x: state.positionX, y: state.positionY };
-          updateClip();
+        customTransform={applyTransform}
+        onTransform={() => {
           updatePixelated();
           onTransformChange(own.current);
         }}
@@ -221,28 +213,40 @@ export default function ImagePane({
             {reference && (
               <img src={reference.src} alt={reference.label ?? "reference"} draggable={false} className={imgClass} style={imgStyle} />
             )}
-            <div ref={fgRef} className="absolute inset-0">
-              <img
-                ref={imgRef}
-                src={image.src}
-                alt={image.label ?? "image"}
-                draggable={false}
-                className={imgClass}
-                style={imgStyle}
-                onLoad={(e) => {
-                  const img = e.currentTarget;
-                  setNatural({ src: image.src, w: img.naturalWidth, h: img.naturalHeight });
-                  updatePixelated();
-                  updateClip();
-                }}
-              />
-              {overlays && overlayView && natural?.src === image.src && (
-                <ImageOverlay overlays={overlays} view={overlayView} width={natural.w} height={natural.h} />
-              )}
-            </div>
           </div>
         </TransformComponent>
       </TransformWrapper>
+
+      {/* The foreground: above the reference, clipped in screen space, transformed like it.
+          It never takes input; pans and pinches reach the zoom wrapper below. */}
+      <div
+        ref={fgRef}
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+        style={{ clipPath: reference ? splitClipPath(split) : undefined }}
+      >
+        <div
+          ref={fgContentRef}
+          className="absolute left-0 top-0 h-full w-full"
+          style={{ transformOrigin: "0 0", transform: getTransformStyles(own.current.x, own.current.y, own.current.scale) }}
+        >
+          <img
+            ref={imgRef}
+            src={image.src}
+            alt={image.label ?? "image"}
+            draggable={false}
+            className={imgClass}
+            style={imgStyle}
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              setNatural({ src: image.src, w: img.naturalWidth, h: img.naturalHeight });
+              updatePixelated();
+            }}
+          />
+          {overlays && overlayView && natural?.src === image.src && (
+            <ImageOverlay overlays={overlays} view={overlayView} width={natural.w} height={natural.h} />
+          )}
+        </div>
+      </div>
 
       {reference && (
         <>
@@ -251,7 +255,7 @@ export default function ImagePane({
             className={`absolute inset-y-0 z-10 w-4 touch:w-8 -translate-x-1/2 ${
               interactive ? "cursor-ew-resize touch-none" : "pointer-events-none"
             }`}
-            style={{ left: `${split * 100}%` }}
+            style={{ left: splitBarLeft(split) }}
             onPointerDown={interactive ? dragDivider : undefined}
           >
             <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white shadow-[0_0_2px_rgba(0,0,0,0.8)]" />
