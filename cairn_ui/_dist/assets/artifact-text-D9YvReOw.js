@@ -1,1 +1,0 @@
-import{a as r,q as e}from"./index-BU9Mdmdf.js";const i=a=>({queryKey:e.artifactText(a),queryFn:async()=>{const t=await fetch(r.artifactUrl(a));if(!t.ok)throw new Error(`${t.status} ${t.statusText}`);return t.text()},staleTime:1/0});export{i as a};

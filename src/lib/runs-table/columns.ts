@@ -37,9 +37,40 @@ export interface ColumnsState {
   pinned: string[];
   /** Per-column "better" override, beating the metric's summary rule. */
   better: Record<string, Better>;
+  /** Widths (px) the user dragged columns to; a column not listed has its default width. */
+  widths: Record<string, number>;
 }
 
-export const EMPTY_COLUMNS: ColumnsState = { order: [], hidden: [], pinned: [], better: {} };
+export const EMPTY_COLUMNS: ColumnsState = { order: [], hidden: [], pinned: [], better: {}, widths: {} };
+
+/** Default widths (px): Name and pinned columns are fixed; scrolling columns size to their content. */
+export const NAME_WIDTH = 360;
+export const PINNED_WIDTH = 150;
+export const MIN_COLUMN_WIDTH = 60;
+export const MAX_COLUMN_WIDTH = 1200;
+
+export const clampColumnWidth = (w: number) =>
+  Math.round(Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, w)));
+
+/**
+ * A column's width: the user's, else Name's and a pinned column's default.
+ * Undefined for an unresized scrolling column (it sizes to its content).
+ */
+export function columnWidth(state: ColumnsState, col: string): number | undefined {
+  const w = state.widths[col];
+  if (w !== undefined) return w;
+  if (col === "name") return NAME_WIDTH;
+  if (state.pinned.includes(col)) return PINNED_WIDTH;
+  return undefined;
+}
+
+/** Set a column's width (clamped), or reset it to its default with null. */
+export function setWidth(state: ColumnsState, col: string, width: number | null): ColumnsState {
+  const widths = { ...state.widths };
+  if (width === null) delete widths[col];
+  else widths[col] = clampColumnWidth(width);
+  return { ...state, widths };
+}
 
 export const valueColumn = (key: string) => `value:${key}`;
 export const paramColumn = (key: string) => `param:${key}`;

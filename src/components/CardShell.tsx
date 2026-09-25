@@ -6,6 +6,7 @@ import type { BaseCardSettings } from "./card-kit";
 import CardHeader from "./CardHeader";
 import CardResizeHandle from "./CardResizeHandle";
 import CardDetailModal from "./CardDetailModal";
+import CardErrorBoundary from "./card-kit/CardErrorBoundary";
 import { useCardNavEntry } from "../lib/card-nav";
 import { useReportExporting } from "../lib/reports/export-context";
 
@@ -142,7 +143,7 @@ export default function CardShell({
         />
         {!collapsed && (
           <>
-            {children}
+            <CardErrorBoundary label={settings.title ?? title}>{children}</CardErrorBoundary>
             {modalContent !== undefined && (
               <CardDetailModal
                 open={!!modalOpen}
@@ -152,7 +153,7 @@ export default function CardShell({
                 onPrev={step(nav.prev)}
                 onNext={step(nav.next)}
               >
-                {modalContent}
+                <CardErrorBoundary label={settings.title ?? title}>{modalContent}</CardErrorBoundary>
               </CardDetailModal>
             )}
           </>

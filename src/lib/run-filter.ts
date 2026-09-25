@@ -21,7 +21,7 @@ import { loadJson, saveJson, storageKeys } from "./storage.ts";
 // lib/expr imports this module's Python semantics back (a cycle): nothing
 // below may use these imports at module top level, only inside functions.
 import { evaluate as evaluate_, matches } from "./expr/index.ts";
-import { compileScalarExpr, type Better, type ColumnsState, type ComputedColumn } from "./runs-table/columns.ts";
+import { clampColumnWidth, compileScalarExpr, type Better, type ColumnsState, type ComputedColumn } from "./runs-table/columns.ts";
 import { parseTags, runContextOf } from "./runs-table/context.ts";
 import { isGroupBy, type GroupBy } from "./runs-table/group.ts";
 import { DEFAULT_SORT, type SortKey } from "./runs-table/sort.ts";
@@ -413,7 +413,7 @@ export const EMPTY_RUNS_FILTER: RunsFilterState = {
   groupBy: [],
   sort: DEFAULT_SORT,
   // Not `EMPTY_COLUMNS`: see the import cycle note at the top.
-  columns: { order: [], hidden: [], pinned: [], better: {} },
+  columns: { order: [], hidden: [], pinned: [], better: {}, widths: {} },
   computed: [],
 };
 
@@ -425,7 +425,11 @@ function parseColumns(v: unknown): ColumnsState {
   if (isObj(v.better)) {
     for (const [k, b] of Object.entries(v.better)) if (b === "lower" || b === "higher") better[k] = b;
   }
-  return { order: strings(v.order), hidden: strings(v.hidden), pinned: strings(v.pinned), better };
+  const widths: Record<string, number> = {};
+  if (isObj(v.widths)) {
+    for (const [k, w] of Object.entries(v.widths)) if (typeof w === "number" && Number.isFinite(w)) widths[k] = clampColumnWidth(w);
+  }
+  return { order: strings(v.order), hidden: strings(v.hidden), pinned: strings(v.pinned), better, widths };
 }
 
 function parseSort(v: unknown): SortKey[] {

@@ -10,6 +10,7 @@
  */
 
 import { useState } from "react";
+import { copyText } from "../../lib/clipboard";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useSession } from "../../api/hooks";
@@ -78,10 +79,7 @@ export default function ShareDialog({ projectId, reportId, open, onClose }: Prop
 
   const link = created ? `${window.location.origin}${created.url}` : "";
   const copy = () => {
-    navigator.clipboard.writeText(link).then(
-      () => setCopied(true),
-      () => setCopied(false),
-    );
+    void copyText(link).then(setCopied);
   };
   const close = () => {
     // The secret is shown once; closing forgets it.

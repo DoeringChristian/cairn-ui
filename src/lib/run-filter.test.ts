@@ -184,7 +184,7 @@ test("parseRunsFilterState: v2 only, malformed parts dropped", () => {
     },
     groupBy: [{ source: "param", key: "lr" }, { source: "param" }, { source: "expr", expr: "config.a" }],
     sort: [{ column: "value:acc", direction: "desc" }, { column: "x", direction: "sideways" }],
-    columns: { order: ["a", 1], hidden: ["b"], pinned: ["value:acc"], better: { "value:acc": "higher", x: "bad" } },
+    columns: { order: ["a", 1], hidden: ["b"], pinned: ["value:acc"], better: { "value:acc": "higher", x: "bad" }, widths: { name: 420, "value:acc": 10, y: "wide" } },
     computed: [{ id: "c1", expr: "min(val.loss)", better: "lower" }, { id: 3 }],
   });
   assert.deepEqual(parsed, {
@@ -200,7 +200,7 @@ test("parseRunsFilterState: v2 only, malformed parts dropped", () => {
     },
     groupBy: [{ source: "param", key: "lr" }, { source: "expr", expr: "config.a" }],
     sort: [{ column: "value:acc", direction: "desc" }],
-    columns: { order: ["a"], hidden: ["b"], pinned: ["value:acc"], better: { "value:acc": "higher" } },
+    columns: { order: ["a"], hidden: ["b"], pinned: ["value:acc"], better: { "value:acc": "higher" }, widths: { name: 420, "value:acc": 60 } },
     computed: [{ id: "c1", expr: "min(val.loss)", better: "lower" }],
   });
 });

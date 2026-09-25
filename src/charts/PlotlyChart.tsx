@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 // @ts-expect-error - plotly.js-dist-min ships no types; the runtime API is plotly.js.
 import Plotly from "plotly.js-dist-min";
 
@@ -71,12 +71,87 @@ export default function PlotlyChart({
   const handlers = useRef({ onRelayout, onClick, onHover, onUnhover });
   handlers.current = { onRelayout, onClick, onHover, onUnhover };
   const interactive = useInteract();
+  // Plotly throws ("Something went wrong with axis scaling") when a colour
+  // bar or 3D scene gets a box too small to lay out. Such a draw is dropped
+  // (the plot is purged and a note shown) and retried on the next resize.
+  const [failed, setFailed] = useState(false);
+  const failedRef = useRef(false);
+  const draw = useRef<() => void>(() => {});
+  // Only the latest draw's outcome counts: an older draw failing late must
+  // not purge a newer successful one.
+  const drawSeq = useRef(0);
+
+  const fail = (el: PlotlyDiv, err: unknown) => {
+    console.warn("PlotlyChart: draw failed; retrying on resize", err);
+    try {
+      Plotly.purge(el);
+    } catch {
+      // Already torn down.
+    }
+    failedRef.current = true;
+    setFailed(true);
+  };
+
+  draw.current = () => {
+    const el = ref.current;
+    if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
+    const finalLayout = {
+      ...(themed ? themedLayout(layout, readChartTheme(el)) : layout),
+      autosize: true,
+      // Keep zoom/pan across data updates unless the caller changes this.
+      uirevision: layout.uirevision ?? "keep",
+    };
+    const finalConfig = {
+      displaylogo: false, responsive: false, displayModeBar: false, ...config,
+      ...(interactive ? {} : { staticPlot: true, scrollZoom: false }),
+    };
+    const seq = ++drawSeq.current;
+    let drawn: Promise<unknown>;
+    try {
+      drawn = Promise.resolve(Plotly.react(el, data, finalLayout, finalConfig));
+    } catch (err) {
+      fail(el, err);
+      return;
+    }
+    drawn
+      .then(() => {
+        if (seq !== drawSeq.current) return;
+        if (failedRef.current) {
+          failedRef.current = false;
+          setFailed(false);
+        }
+        if (!el.removeAllListeners || !el.on) return;
+        for (const event of ["plotly_relayout", "plotly_click", "plotly_hover", "plotly_unhover"]) {
+          el.removeAllListeners(event);
+        }
+        el.on("plotly_relayout", (e: never) => handlers.current.onRelayout?.(e));
+        el.on("plotly_click", (e: never) => handlers.current.onClick?.(e));
+        el.on("plotly_hover", (e: never) => handlers.current.onHover?.(e));
+        el.on("plotly_unhover", () => handlers.current.onUnhover?.());
+      })
+      .catch((err: unknown) => {
+        if (seq === drawSeq.current) fail(el, err);
+      });
+  };
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const resize = () => {
-      if (el.clientWidth > 0 && el.clientHeight > 0 && el.on) Plotly.Plots.resize(el);
+      if (el.clientWidth === 0 || el.clientHeight === 0) return;
+      // Not drawn yet (hidden at mount) or the last draw failed: draw afresh.
+      if (failedRef.current || !el.on) {
+        draw.current();
+        return;
+      }
+      const seq = drawSeq.current;
+      try {
+        Promise.resolve(Plotly.Plots.resize(el)).catch((err: unknown) => {
+          if (seq === drawSeq.current) fail(el, err);
+        });
+      } catch (err) {
+        fail(el, err);
+      }
     };
     const ro = new ResizeObserver(resize);
     ro.observe(el);
@@ -89,38 +164,18 @@ export default function PlotlyChart({
   }, []);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const finalLayout = {
-      ...(themed ? themedLayout(layout, readChartTheme(el)) : layout),
-      autosize: true,
-      // Keep zoom/pan across data updates unless the caller changes this.
-      uirevision: layout.uirevision ?? "keep",
-    };
-    const finalConfig = {
-      displaylogo: false, responsive: false, displayModeBar: false, ...config,
-      ...(interactive ? {} : { staticPlot: true, scrollZoom: false }),
-    };
-    Promise.resolve(Plotly.react(el, data, finalLayout, finalConfig))
-      .then(() => {
-        if (!el.removeAllListeners || !el.on) return;
-        for (const event of ["plotly_relayout", "plotly_click", "plotly_hover", "plotly_unhover"]) {
-          el.removeAllListeners(event);
-        }
-        el.on("plotly_relayout", (e: never) => handlers.current.onRelayout?.(e));
-        el.on("plotly_click", (e: never) => handlers.current.onClick?.(e));
-        el.on("plotly_hover", (e: never) => handlers.current.onHover?.(e));
-        el.on("plotly_unhover", () => handlers.current.onUnhover?.());
-      })
-      .catch((err: unknown) => console.warn("PlotlyChart: render error (recovered)", err));
+    draw.current();
   }, [data, layout, config, themed, interactive]);
 
   return (
-    <div
-      ref={ref}
-      className={className ?? "h-full w-full"}
-      style={{ touchAction: interactive ? undefined : "pan-y" }}
-    />
+    <div className={`relative ${className ?? "h-full w-full"}`}>
+      <div ref={ref} className="h-full w-full" style={{ touchAction: interactive ? undefined : "pan-y" }} />
+      {failed && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-fg-subtle">
+          Too small to draw; make the card larger.
+        </div>
+      )}
+    </div>
   );
 }
 

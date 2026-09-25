@@ -52,6 +52,9 @@ import {
   type Better,
   type ColumnsState,
   type ComputedColumn,
+  clampColumnWidth,
+  columnWidth,
+  setWidth,
 } from "../lib/runs-table/columns.ts";
 import { removeSortKey, sortBy, toggleSort, type SortKey } from "../lib/runs-table/sort.ts";
 import { flattenGroups, groupByLabel, groupRunsNested, type RunGroupNode, type TableRow } from "../lib/runs-table/group.ts";
@@ -71,10 +74,8 @@ const STATUS_OPTIONS: Array<{ value: "all" | RunStatus; label: string }> = [
   { value: "archived", label: "archived" },
 ];
 
-/** Widths of the frozen left block (px): the checkbox, Name, each pinned column. */
+/** Width of the checkbox column (px); Name and pinned widths come from `columnWidth`. */
 const CHECK_W = 40;
-const NAME_W = 260;
-const PIN_W = 150;
 
 const TONE_CLASS: Record<Tone, string> = {
   better: "text-status-completed",
@@ -315,6 +316,9 @@ export default function RunsTablePage() {
 
   const { sort, columns, computed, groupBy } = filterState;
   const setColumns = (next: ColumnsState) => setFilterState({ ...filterState, columns: next });
+  // The width of the column being dragged, live; persisted once on release.
+  const [dragWidth, setDragWidth] = useState<{ column: string; width: number } | null>(null);
+  const widthOf = (col: string) => (dragWidth?.column === col ? dragWidth.width : columnWidth(columns, col));
   const setSort = (next: SortKey[]) => setFilterState({ ...filterState, sort: next });
   const setComputed = (next: ComputedColumn[]) => setFilterState({ ...filterState, computed: next });
 
@@ -605,9 +609,18 @@ export default function RunsTablePage() {
   };
 
   // The frozen block: checkbox at 0, Name after it, pinned columns after Name.
-  const frozenLeft = (i: number) => CHECK_W + (i === 0 ? 0 : NAME_W + (i - 1) * PIN_W);
-  const frozenWidth = (i: number) => (i === 0 ? NAME_W : PIN_W);
-  const frozenTotal = CHECK_W + NAME_W + (layout.frozen.length - 1) * PIN_W;
+  const frozenWidth = (i: number) => widthOf(layout.frozen[i]!)!;
+  const frozenLeft = (i: number) => {
+    let left = CHECK_W;
+    for (let j = 0; j < i; j++) left += frozenWidth(j);
+    return left;
+  };
+  const frozenTotal = frozenLeft(layout.frozen.length);
+  /** A resized scrolling column: fixed width, overflow ellipsized. */
+  const scrollCellStyle = (col: string): React.CSSProperties | undefined => {
+    const w = widthOf(col);
+    return w === undefined ? undefined : { width: w, minWidth: w, maxWidth: w, overflow: "hidden", textOverflow: "ellipsis" };
+  };
   const lastFrozen = layout.frozen.length - 1;
   const frozenProps = (i: number, extra = "") => {
     const w = frozenWidth(i);
@@ -727,10 +740,11 @@ export default function RunsTablePage() {
           </td>
         ))}
         {layout.scroll.map((col) => (
-          <td key={col} className={`px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`}>
+          <td key={col} className={`px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`} style={scrollCellStyle(col)}>
             {renderCell(r, col, depth)}
           </td>
         ))}
+        <td aria-hidden="true" />
       </tr>
     );
   };
@@ -1022,6 +1036,15 @@ export default function RunsTablePage() {
                         numeric={isNumericColumn(col)}
                         pinned={fi > 0}
                         frozen={fi >= 0 ? frozenProps(fi) : null}
+                        style={fi >= 0 ? undefined : scrollCellStyle(col)}
+                        onResize={(width, final) => {
+                          if (!final) setDragWidth({ column: col, width: clampColumnWidth(width) });
+                          else {
+                            setDragWidth(null);
+                            setColumns(setWidth(columns, col, width));
+                          }
+                        }}
+                        onResetWidth={() => setColumns(setWidth(columns, col, null))}
                         onSort={(additive) => setSort(toggleSort(sort, col, additive))}
                         onMenu={(anchor) => {
                           menuAnchorRef.current = anchor;
@@ -1036,6 +1059,8 @@ export default function RunsTablePage() {
                       />
                     );
                   })}
+                  {/* Filler: takes the table's spare width, so sized columns keep their widths. */}
+                  <th aria-hidden="true" />
                 </tr>
               </thead>
               <tbody>
@@ -1054,6 +1079,7 @@ export default function RunsTablePage() {
                       {layout.scroll.length > 0 && (
                         <td colSpan={layout.scroll.length} className="border-t border-border-subtle bg-bg-elevated" />
                       )}
+                      <td className="border-t border-border-subtle bg-bg-elevated" aria-hidden="true" />
                     </tr>
                   ) : (
                     renderDesktopRun(row.run, row.key, row.depth)
@@ -1275,9 +1301,12 @@ function ColumnTh({
   numeric,
   pinned,
   frozen,
+  style,
   onSort,
   onMenu,
   onDropColumn,
+  onResize,
+  onResetWidth,
 }: {
   column: string;
   label: string;
@@ -1287,23 +1316,57 @@ function ColumnTh({
   numeric: boolean;
   pinned: boolean;
   frozen: { className: string; style: React.CSSProperties } | null;
+  style?: React.CSSProperties;
   onSort: (additive: boolean) => void;
   onMenu: (anchor: HTMLElement) => void;
   onDropColumn: (dragged: string) => void;
+  /** A width dragged to (`final` on release). */
+  onResize: (width: number, final: boolean) => void;
+  onResetWidth: () => void;
 }) {
   const [over, setOver] = useState(false);
+  const thRef = useRef<HTMLTableCellElement>(null);
+  const resizing = useRef(false);
+  const startResize = (e: React.PointerEvent<HTMLSpanElement>) => {
+    const th = thRef.current;
+    if (!th || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resizing.current = true;
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const x0 = e.clientX;
+    const w0 = th.getBoundingClientRect().width;
+    const at = (ev: PointerEvent) => w0 + ev.clientX - x0;
+    const move = (ev: PointerEvent) => onResize(at(ev), false);
+    const up = (ev: PointerEvent) => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      resizing.current = false;
+      onResize(at(ev), true);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  };
   const arrow = sortKey ? (sortKey.direction === "asc" ? "↑" : "↓") : "";
   return (
     <th
-      className={`group/th cursor-pointer select-none whitespace-nowrap px-3 py-2 hover:text-fg ${numeric ? "mono" : ""} ${
+      className={`group/th relative cursor-pointer select-none whitespace-nowrap px-3 py-2 hover:text-fg ${numeric ? "mono" : ""} ${
         frozen?.className ?? ""
       } ${over ? "outline outline-1 -outline-offset-1 outline-accent" : ""}`}
-      style={frozen?.style}
-      title={`${title}\nClick to sort, shift-click to add a sort key, drag to reorder`}
+      ref={thRef}
+      style={frozen?.style ?? style}
+      title={`${title}\nClick to sort, shift-click to add a sort key, drag to reorder, drag the right edge to resize`}
       onClick={(e) => onSort(e.shiftKey)}
       aria-sort={sortKey ? (sortKey.direction === "asc" ? "ascending" : "descending") : "none"}
       draggable={column !== "name"}
       onDragStart={(e) => {
+        if (resizing.current) {
+          e.preventDefault();
+          return;
+        }
         e.dataTransfer.setData(COLUMN_DRAG_TYPE, column);
         e.dataTransfer.effectAllowed = "move";
       }}
@@ -1340,6 +1403,25 @@ function ColumnTh({
           <i className="fa-solid fa-ellipsis-vertical text-[10px]" aria-hidden="true" />
         </button>
       </span>
+      {/* Resize handle on the right edge; double-click resets the width. */}
+      <span
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={`Resize ${label}`}
+        title="Drag to resize, double-click to reset"
+        className="col-resize absolute inset-y-0 -right-1 z-[3] w-2 cursor-col-resize touch-none touch:-right-2 touch:w-4"
+        draggable={false}
+        onPointerDown={startResize}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          onResetWidth();
+        }}
+      />
     </th>
   );
 }

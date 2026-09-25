@@ -3,6 +3,7 @@
  * and the Comparison view (ComparePage). One code path for all card types.
  */
 
+import CardErrorBoundary from "./card-kit/CardErrorBoundary";
 import { Suspense, lazy, useMemo } from "react";
 import type { SequenceMeta } from "../api/types";
 import type { ComparisonSeriesRef, MultiRunCardType } from "../lib/comparisons";
@@ -144,7 +145,16 @@ function UnknownTypeCard({ runId, metric }: { runId: string; metric: SequenceMet
   );
 }
 
+/** One card, its render errors kept to itself (see CardErrorBoundary). */
 export default function CardRenderer(props: CardDescriptor) {
+  return (
+    <CardErrorBoundary variant="card">
+      <CardRendererInner {...props} />
+    </CardErrorBoundary>
+  );
+}
+
+function CardRendererInner(props: CardDescriptor) {
   if (props.kind === "multi-run") {
     const { cardType, runIds, settingsKey, onRemove, autoOpenSettings } = props;
     if (cardType === "parallel") {

@@ -4,6 +4,7 @@
  */
 
 import { useState } from "react";
+import { copyText } from "../lib/clipboard";
 
 interface Props {
   id: string;
@@ -14,17 +15,7 @@ export default function CopyId({ id, className }: Props) {
   const [copied, setCopied] = useState(false);
 
   const copy = () => {
-    navigator.clipboard.writeText(id).catch(() => {
-      // Fallback for non-HTTPS contexts
-      const ta = document.createElement("textarea");
-      ta.value = id;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-    });
+    void copyText(id);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

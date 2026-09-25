@@ -3,14 +3,20 @@ import assert from "node:assert/strict";
 import {
   EMPTY_COLUMNS,
   availableColumns,
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
+  NAME_WIDTH,
+  PINNED_WIDTH,
   cellValue,
   columnLabel,
+  columnWidth,
   compileScalarExpr,
   computeColumns,
   layoutColumns,
   moveColumn,
   setBetter,
   setHidden,
+  setWidth,
   togglePinned,
   type ColumnsState,
 } from "./columns.ts";
@@ -102,4 +108,19 @@ test("cellValue: built-ins, metrics, params", () => {
   assert.equal(cellValue(runs[1]!, "param:opt"), "sgd");
   assert.equal(cellValue(runs[0]!, "param:opt"), null);
   assert.equal(columnLabel("created_at", []), "Created");
+});
+
+test("column widths: defaults for Name and pinned, content-sized otherwise, clamped and resettable", () => {
+  const pinned = togglePinned(EMPTY_COLUMNS, "param:lr");
+  assert.equal(columnWidth(pinned, "name"), NAME_WIDTH);
+  assert.equal(columnWidth(pinned, "param:lr"), PINNED_WIDTH);
+  assert.equal(columnWidth(pinned, "value:acc"), undefined);
+  let s = setWidth(pinned, "value:acc", 212.6);
+  assert.equal(columnWidth(s, "value:acc"), 213);
+  s = setWidth(s, "name", 5);
+  assert.equal(columnWidth(s, "name"), MIN_COLUMN_WIDTH);
+  s = setWidth(s, "param:lr", 1e6);
+  assert.equal(columnWidth(s, "param:lr"), MAX_COLUMN_WIDTH);
+  s = setWidth(s, "name", null);
+  assert.equal(columnWidth(s, "name"), NAME_WIDTH);
 });
