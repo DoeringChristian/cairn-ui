@@ -45,8 +45,9 @@ export default {
       // `can-hover:` — only devices with a real hover (mouse/trackpad). Reveal-on-
       // hover controls use it so touch screens keep them visible.
       addVariant("can-hover", "@media (hover: hover)");
-      // `touch:` — coarse pointers (phones, tablets).
-      addVariant("touch", "@media (pointer: coarse)");
+      // `touch:` — coarse pointers (phones, tablets), or anything inside a
+      // `.force-touch` ancestor (the /_ui gallery's touch toggle).
+      addVariant("touch", ["@media (pointer: coarse)", ".force-touch &"]);
     }),
   ],
 } satisfies Config;
