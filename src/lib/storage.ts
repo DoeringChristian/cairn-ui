@@ -3,7 +3,7 @@
  *
  * Centralizing key construction here means renaming or adding a storage key
  * only ever touches this file, and prevents typo drift between call sites
- * that must agree on the same key (e.g. card-settings keys are built both
+ * that must agree on the same key (e.g. card-overrides keys are built both
  * in `card-settings.ts` and, for `compare:`/`report:`-scoped pseudo runs, in
  * `comparisons.ts`/`reports.ts`).
  *
@@ -11,8 +11,9 @@
  */
 
 export const storageKeys = {
-  cardSettings: (runId: string, metricName: string) =>
-    `cairn:card-settings:${runId}:${metricName}`,
+  /** A card's settings overrides (see lib/card-settings.ts). */
+  cardOverrides: (runId: string, metricName: string) =>
+    `cairn:card-overrides:${runId}:${metricName}`,
   runLayout: (runId: string) => `cairn:run-layout:${runId}`,
   collapsedSections: (scope: string) => `cairn:collapsed-sections:${scope}`,
   comparisons: (projectId: string) => `cairn:comparisons:${projectId}`,
@@ -55,7 +56,7 @@ export function saveJson(storage: Storage, key: string, value: unknown): void {
 
 /** Prefixes of localStorage keys that are scoped to a runId. */
 const RUN_SCOPED_PREFIXES = [
-  "cairn:card-settings:",
+  "cairn:card-overrides:",
   "cairn:run-layout:",
   "cairn:collapsed-sections:",
 ] as const;
@@ -97,7 +98,7 @@ function gcByPredicate(shouldRemove: (runId: string) => boolean): void {
 }
 
 /**
- * Remove per-run keys (card-settings/run-layout/collapsed-sections) for runs
+ * Remove per-run keys (card-overrides/run-layout/collapsed-sections) for runs
  * in `deletedRunIds`. `compare:`/`report:`-scoped pseudo-run ids are never
  * touched.
  *

@@ -10,14 +10,9 @@
 import { useEffect, useState } from "react";
 import Markdown from "../lib/markdown";
 import { api } from "../api/client";
-import SteppedMediaCard, { type SteppedMediaCardProps, type SteppedMediaSettings } from "./media/SteppedMediaCard";
+import SteppedMediaCard, { type SteppedMediaCardProps } from "./media/SteppedMediaCard";
+import type { MarkdownFontSize as FontSize, MarkdownSettings } from "./cards-settings/markdown";
 import Select from "./settings/Select";
-
-type FontSize = "xs" | "sm" | "base";
-
-interface MarkdownSettings extends SteppedMediaSettings {
-  fontSize: FontSize;
-}
 
 const FONT_SIZE_CLASS: Record<FontSize, string> = {
   xs: "text-xs",
@@ -53,13 +48,12 @@ export default function MarkdownCard(props: SteppedMediaCardProps) {
       noun="markdown"
       defaultMime="text/markdown"
       defaultHeight={300}
-      defaults={{ fontSize: "sm" }}
       nearest
-      settingsPanel={(settings, updateSettings) => (
+      settingsPanel={(ctl) => (
         <Select
           label="Font size"
-          value={settings.fontSize}
-          onChange={(v) => updateSettings({ fontSize: v as FontSize })}
+          value={ctl.value.fontSize}
+          onChange={(v) => ctl.set({ fontSize: v as FontSize })}
           options={[
             { value: "xs", label: "Extra small" },
             { value: "sm", label: "Small" },

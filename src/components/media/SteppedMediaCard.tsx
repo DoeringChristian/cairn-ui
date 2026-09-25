@@ -12,18 +12,19 @@ import { useSequence } from "../../api/hooks";
 import { api } from "../../api/client";
 import { qk } from "../../api/query-keys";
 import { downloadArtifact, artifactFilename } from "../../lib/download";
-import { type CardSettingsKey } from "../../lib/card-settings";
+import { type CardSettingsKey, type SettingsController } from "../../lib/card-settings";
 import { useCardDrop } from "../../lib/use-series-drop";
 import type { ComparisonSeriesRef } from "../../lib/comparisons";
 import { shortRunLabel, useRunMetadataVersion } from "../../lib/run-label";
 import { seriesKey } from "../../lib/series-utils";
 import type { SequenceMeta, SequencePoint, SequenceResponse } from "../../api/types";
-import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid, type BaseCardSettings } from "../card-kit";
+import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid } from "../card-kit";
+import { steppedMediaInstanceDefaults, type SteppedMediaSettings } from "../cards-settings/stepped-media";
 import type { SeriesRef } from "../card-kit/use-card-series";
 import AddToComparisonButton from "../AddToComparisonButton";
 import CardShell from "../CardShell";
 import SeriesChipStrip from "../SeriesChipStrip";
-import StepSlider, { type XAxisMode } from "../StepSlider";
+import StepSlider from "../StepSlider";
 
 /** Props every stepped media card receives from CardRenderer. */
 export interface SteppedMediaCardProps {
@@ -34,14 +35,6 @@ export interface SteppedMediaCardProps {
   settingsKeyOverride?: CardSettingsKey;
   onRemove?: () => void;
   autoOpenSettings?: boolean;
-}
-
-/** Settings fields the shell owns; each card's settings extend these. */
-export interface SteppedMediaSettings extends BaseCardSettings {
-  metrics: SeriesRef[];
-  paneWidths?: number[];
-  sliderStep?: number;
-  xAxis?: XAxisMode;
 }
 
 /** One resolved artifact handed to the card's renderer. */
@@ -65,15 +58,13 @@ interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
   /** MIME type for the download filename when the point carries none. */
   defaultMime: string;
   defaultHeight?: number;
-  /** The card's own settings defaults (everything beyond SteppedMediaSettings). */
-  defaults: Omit<S, keyof SteppedMediaSettings>;
   /**
    * How a grid pane whose series starts logging after the current step
    * resolves: true shows that series' first artifact, false shows the empty
    * state (see resolveAtStep's `nearest`).
    */
   nearest: boolean;
-  settingsPanel: (settings: S, updateSettings: (patch: Partial<S>) => void) => ReactNode;
+  settingsPanel: (ctl: SettingsController<S>) => ReactNode;
   renderArtifact: (view: MediaView<S>) => ReactNode;
 }
 
@@ -132,23 +123,24 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   noun,
   defaultMime,
   defaultHeight,
-  defaults,
   nearest,
   settingsPanel,
   renderArtifact,
 }: Props<S>) {
-  const { settings, updateSettings, effectiveMetrics, allRunIds, multipleRuns } =
+  const { ctl, effectiveMetrics, allRunIds, multipleRuns } =
     useCardSeries<S>({
       runId,
       metric,
       extraSeries,
       controlledSeries,
       settingsKeyOverride,
-      makeDefaults: (_seed, metrics) => ({ version: 1, metrics, ...defaults }) as S,
+      type: kind,
+      instanceDefaults: steppedMediaInstanceDefaults as (seed: { name: string }) => Partial<S>,
     });
+  const settings = ctl.value;
 
   // Patches of the shell-owned fields; generic S can't prove they are Partial<S>.
-  const updateShared = updateSettings as unknown as (patch: Record<string, unknown>) => void;
+  const updateShared = ctl.set as unknown as (patch: Record<string, unknown>) => void;
 
   const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, updateShared);
 
@@ -289,7 +281,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       addToComparisonSlot={<AddToComparisonButton cardType={kind} series={compSeries} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
-      settingsPanel={settingsPanel(settings, updateSettings)}
+      settingsPanel={settingsPanel(ctl)}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}
       modalContent={<div className="flex flex-col h-full">{renderContent(true)}</div>}

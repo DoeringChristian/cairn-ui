@@ -3,6 +3,7 @@ import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { useCardSettings } from "../lib/card-settings";
+import type { BarAggregation as Aggregation, BarSettings, BarSortBy as SortBy } from "./cards-settings/bar";
 import BarChart, { type BarDatum, type BarCompareMode } from "../charts/BarChart";
 import { seriesColor } from "../lib/plot-utils/types";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
@@ -10,42 +11,11 @@ import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import CardShell from "./CardShell";
 import Toggle from "./settings/Toggle";
 import Select from "./settings/Select";
-import type { BaseCardSettings } from "./card-kit";
 
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
 
-interface MetricDef {
-  key: string;
-  source: "param" | "metric";
-}
-
-type Aggregation = "last" | "min" | "max" | "mean";
-type SortBy = "value" | "name";
-
-interface BarSettings extends BaseCardSettings {
-  metric: MetricDef | null;
-  aggregation: Aggregation;
-  sortBy: SortBy;
-  sortDesc?: boolean;
-  logX?: boolean;
-  /**
-   * How to compose multiple runs' bars against each other. Only surfaced in
-   * settings (and only affects rendering) when the card has more than one
-   * run; single-run cards always render a single bar regardless of this
-   * setting. Undefined == "grouped" (one row per run).
-   */
-  compareMode?: BarCompareMode;
-}
-
-const DEFAULT_SETTINGS: BarSettings = {
-  version: 1,
-  metric: null,
-  aggregation: "last",
-  sortBy: "value",
-  sortDesc: true,
-};
 
 function aggregate(values: number[], mode: Aggregation): number | null {
   const vals = values.filter((v) => Number.isFinite(v));
@@ -81,7 +51,8 @@ export default function BarChartCard({
   autoOpenSettings,
 }: Props) {
   const runMetaVersion = useRunMetadataVersion();
-  const [settings, updateSettings] = useCardSettings(settingsKey, DEFAULT_SETTINGS);
+  const ctl = useCardSettings<BarSettings>(settingsKey, "bar");
+  const settings = ctl.value;
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
   // Run details (for params + labels).
@@ -225,9 +196,9 @@ export default function BarChartCard({
           value={metric ? `${metric.source}:${metric.key}` : ""}
           onChange={(e) => {
             const v = e.target.value;
-            if (!v) { updateSettings({ metric: null }); return; }
+            if (!v) { ctl.set({ metric: null }); return; }
             const [source, ...rest] = v.split(":");
-            updateSettings({ metric: { key: rest.join(":"), source: source as "param" | "metric" } });
+            ctl.set({ metric: { key: rest.join(":"), source: source as "param" | "metric" } });
           }}
           className="input w-full text-xs"
         >
@@ -242,7 +213,7 @@ export default function BarChartCard({
       <Select<Aggregation>
         label="Aggregation"
         value={settings.aggregation}
-        onChange={(v) => updateSettings({ aggregation: v })}
+        onChange={(v) => ctl.set({ aggregation: v })}
         options={[
           { value: "last", label: "Last" },
           { value: "min", label: "Min" },
@@ -253,7 +224,7 @@ export default function BarChartCard({
       <Select<SortBy>
         label="Sort by"
         value={settings.sortBy}
-        onChange={(v) => updateSettings({ sortBy: v })}
+        onChange={(v) => ctl.set({ sortBy: v })}
         options={[
           { value: "value", label: "Value" },
           { value: "name", label: "Name" },
@@ -263,12 +234,12 @@ export default function BarChartCard({
         <Toggle
           label="Descending"
           checked={settings.sortDesc ?? true}
-          onChange={(v) => updateSettings({ sortDesc: v })}
+          onChange={(v) => ctl.set({ sortDesc: v })}
         />
         <Toggle
           label="Log value axis"
           checked={!!settings.logX}
-          onChange={(v) => updateSettings({ logX: v })}
+          onChange={(v) => ctl.set({ logX: v })}
         />
       </div>
       {/* Comparison mode only makes sense with more than one run — a
@@ -277,7 +248,7 @@ export default function BarChartCard({
         <Select<BarCompareMode>
           label="Compare runs"
           value={settings.compareMode ?? "grouped"}
-          onChange={(v) => updateSettings({ compareMode: v })}
+          onChange={(v) => ctl.set({ compareMode: v })}
           options={[
             { value: "grouped", label: "Grouped (one row per run)" },
             {
@@ -320,7 +291,7 @@ export default function BarChartCard({
     <CardShell cardKind="bar"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title="Bar Chart"
       subtitle={`${bars.length} run${bars.length === 1 ? "" : "s"}`}
       defaultHeight={350}

@@ -21,7 +21,7 @@ import {
 } from "../../lib/comparisons";
 import { buildReportPayload, cardSettingsKeyForReport, newId } from "../../lib/reports";
 import { describeRunSelector } from "../../lib/run-selector";
-import { loadCardSettings, saveCardSettings } from "../../lib/card-settings";
+import { loadCardOverrides, saveCardOverrides } from "../../lib/card-settings";
 import { groupComparisonCardsIntoSections } from "../../lib/sections";
 import { useCollapsedSections } from "../../lib/use-collapsed-sections";
 import { disambiguateRunLabels, useRunMetadataVersion } from "../../lib/run-label";
@@ -152,8 +152,8 @@ export default function ComparisonView({
       const created = await api.createReport(projectId, comparison.name, { source: "" });
 
       comparison.cards.forEach((card, i) => {
-        const settings = loadCardSettings<Record<string, unknown>>(cardSettingsKeyFor(comparison.id, card));
-        if (settings) saveCardSettings(cardSettingsKeyForReport(created.id, newCards[i]!), settings);
+        const overrides = loadCardOverrides(cardSettingsKeyFor(comparison.id, card));
+        if (overrides) saveCardOverrides(cardSettingsKeyForReport(created.id, newCards[i]!), overrides);
       });
       const fullPayload = buildReportPayload(created.id, blocks);
       await api.updateReport(projectId, created.id, { payload: fullPayload as unknown as Record<string, unknown> });
@@ -255,9 +255,7 @@ export default function ComparisonView({
               const templateCards: ComparisonTemplateCard[] = comparison.cards.map((card) =>
                 templateCardOf(
                   card,
-                  loadCardSettings<Record<string, unknown>>(
-                    cardSettingsKeyFor(comparison.id, card),
-                  ) ?? undefined,
+                  loadCardOverrides(cardSettingsKeyFor(comparison.id, card)) ?? undefined,
                 ),
               );
               createTemplate(projectId, name, templateCards);

@@ -6,6 +6,7 @@ import { formatNum } from "../lib/plot-utils/types";
 import { downloadArtifact, artifactFilename } from "../lib/download";
 import { api } from "../api/client";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
+import type { TensorSettings, TensorViewMode as ViewMode } from "./cards-settings/tensor";
 import type { SequenceMeta } from "../api/types";
 import { computeHistogram } from "../lib/plot-utils/histogram";
 import { COLORMAP_OPTIONS, type Colormap } from "../charts/colormaps";
@@ -20,7 +21,7 @@ import StepSlider from "./StepSlider";
 import Select from "./settings/Select";
 import Slider from "./settings/Slider";
 import Toggle from "./settings/Toggle";
-import { useStepSlider, resolveAtStep, type BaseCardSettings } from "./card-kit";
+import { useStepSlider, resolveAtStep } from "./card-kit";
 
 interface Props {
   runId: string;
@@ -39,26 +40,6 @@ interface TensorMeta {
   size_bytes: number;
 }
 
-type ViewMode = "stats" | "histogram" | "heatmap";
-
-interface TensorSettings extends BaseCardSettings {
-  viewMode: ViewMode;
-  colormap: Colormap;
-  logY: boolean;
-  bins: number;
-  /** Indices for all-but-last-two dimensions when slicing an ND tensor. */
-  sliceIndices?: number[];
-  sliderStep?: number;
-  xAxis?: "step" | "relative_time" | "wall_time";
-}
-
-const DEFAULT_TENSOR_SETTINGS: TensorSettings = {
-  version: 1,
-  viewMode: "heatmap",
-  colormap: "turbo",
-  logY: false,
-  bins: 64,
-};
 
 const SIZE_CAP = 10 * 1024 * 1024;
 
@@ -128,15 +109,13 @@ export default function TensorCard({
       },
     [settingsKeyOverride, runId, metric.name],
   );
-  const [settings, updateSettings] = useCardSettings(
-    settingsKey,
-    DEFAULT_TENSOR_SETTINGS,
-  );
+  const ctl = useCardSettings<TensorSettings>(settingsKey, "tensor");
+  const settings = ctl.value;
 
   const { safeIdx, currentStep, onSliderChange } = useStepSlider({
     seriesPoints: [points],
     persistedIdx: settings.sliderStep,
-    updateSettings,
+    updateSettings: ctl.set,
   });
   const current = useMemo(
     () => resolveAtStep(points, currentStep) ?? points[0],
@@ -289,7 +268,7 @@ export default function TensorCard({
           currentIndex={safeIdx}
           onChange={onSliderChange}
           xAxis={settings.xAxis}
-          onXAxisChange={(m) => updateSettings({ xAxis: m })}
+          onXAxisChange={(m) => ctl.set({ xAxis: m })}
           className="mt-3"
         />
       )}
@@ -301,7 +280,7 @@ export default function TensorCard({
       <Select<ViewMode>
         label="View"
         value={settings.viewMode}
-        onChange={(v) => updateSettings({ viewMode: v })}
+        onChange={(v) => ctl.set({ viewMode: v })}
         options={[
           { value: "stats", label: "Stats" },
           { value: "histogram", label: "Histogram" },
@@ -317,7 +296,7 @@ export default function TensorCard({
         <Slider
           label="Bins"
           value={settings.bins}
-          onChange={(v) => updateSettings({ bins: Math.round(v) })}
+          onChange={(v) => ctl.set({ bins: Math.round(v) })}
           min={8}
           max={256}
           step={8}
@@ -327,14 +306,14 @@ export default function TensorCard({
         <Toggle
           label={settings.viewMode === "heatmap" ? "Log color scale" : "Log Y axis"}
           checked={settings.logY}
-          onChange={(v) => updateSettings({ logY: v })}
+          onChange={(v) => ctl.set({ logY: v })}
         />
       )}
       {settings.viewMode === "heatmap" && (
         <Select<Colormap>
           label="Colormap"
           value={settings.colormap}
-          onChange={(v) => updateSettings({ colormap: v })}
+          onChange={(v) => ctl.set({ colormap: v })}
           options={COLORMAP_OPTIONS}
         />
       )}
@@ -347,7 +326,7 @@ export default function TensorCard({
             onChange={(v) => {
               const next = [...(settings.sliceIndices ?? leadingDims.map(() => 0))];
               next[k] = Math.round(v);
-              updateSettings({ sliceIndices: next });
+              ctl.set({ sliceIndices: next });
             }}
             min={0}
             max={dim - 1}
@@ -362,7 +341,7 @@ export default function TensorCard({
     <CardShell cardKind="tensor"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
       defaultHeight={300}

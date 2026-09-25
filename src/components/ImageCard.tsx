@@ -3,6 +3,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useSequencesForRuns } from "../api/hooks";
 import type { SequenceMeta } from "../api/types";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
+import type { ImageCardSettings } from "./cards-settings/image";
 import type { ComparisonSeriesRef } from "../lib/comparisons";
 import {
   classColor,
@@ -13,7 +14,6 @@ import {
 } from "../lib/overlays";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
-import type { BaseCardSettings } from "./card-kit";
 import { ExternalBaselinePicker } from "./card-kit/ExternalBaselinePicker";
 import MultiPaneGrid from "./card-kit/MultiPaneGrid";
 import { plotCardPolicy } from "./card-kit/plot-card-policy";
@@ -36,34 +36,6 @@ interface Props {
   autoOpenSettings?: boolean;
 }
 
-interface ImageCardSettings extends BaseCardSettings {
-  showLabels: boolean;
-  /** Index into the union of logged steps. */
-  sliderStep?: number;
-  /** Reference tag; every pane compares against this tag from its own run. */
-  reference?: { name: string };
-  /** Fixed reference step; absent follows the slider. */
-  referenceStep?: number;
-  /** Divider position (fraction of pane width), shared by all panes. */
-  split: number;
-  /** Overlay annotations (boxes/masks logged with the image). */
-  showBoxes: boolean;
-  showMasks: boolean;
-  maskOpacity: number;
-  minScore: number;
-  hiddenClasses: number[];
-}
-
-const DEFAULTS: ImageCardSettings = {
-  version: 1,
-  showLabels: true,
-  split: 0.5,
-  showBoxes: true,
-  showMasks: true,
-  maskOpacity: 0.5,
-  minScore: 0,
-  hiddenClasses: [],
-};
 const IDENTITY: PaneTransform = { scale: 1, x: 0, y: 0 };
 
 type Series = { runId: string; name: string };
@@ -77,10 +49,8 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     () => settingsKeyOverride ?? { runId, metricName: metric.name },
     [settingsKeyOverride, runId, metric.name],
   );
-  const [settings, updateSettings] = useCardSettings<ImageCardSettings>(
-    settingsKey,
-    useMemo(() => ({ ...DEFAULTS, colSpan: policy.colSpan }), [policy.colSpan]),
-  );
+  const ctl = useCardSettings<ImageCardSettings>(settingsKey, "image");
+  const settings = ctl.value;
 
   const series = useMemo<Series[]>(() => {
     const seen = new Set<string>();
@@ -122,7 +92,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
   const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
     seriesPoints: points,
     persistedIdx: settings.sliderStep,
-    updateSettings,
+    updateSettings: ctl.set,
   });
   const stepPoints = useMemo(() => globalSteps.map((step) => ({ step, wall_time: null })), [globalSteps]);
 
@@ -136,11 +106,11 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
   const onSplitChange = useCallback((value: number, final: boolean) => {
     if (final) {
       setDragSplit(null);
-      updateSettings({ split: value });
+      ctl.set({ split: value }, { mergeKey: "split" });
     } else {
       setDragSplit(value);
     }
-  }, [updateSettings]);
+  }, [ctl.set]);
 
   const overlayView = useMemo<OverlayView>(() => ({
     showBoxes: settings.showBoxes,
@@ -169,7 +139,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     const hidden = new Set(settings.hiddenClasses);
     if (visible) hidden.delete(id);
     else hidden.add(id);
-    updateSettings({ hiddenClasses: [...hidden].sort((a, b) => a - b) });
+    ctl.set({ hiddenClasses: [...hidden].sort((a, b) => a - b) });
   };
 
   const renderPane = (key: string, index: number) => (
@@ -202,7 +172,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
             <span className="mono min-w-0 flex-1 truncate">{reference.name}</span>
             <button
               type="button"
-              onClick={() => updateSettings({ reference: undefined, referenceStep: undefined })}
+              onClick={() => ctl.set({ reference: undefined, referenceStep: undefined })}
               className="shrink-0 text-fg-subtle hover:text-fg"
               aria-label="Remove reference"
             >
@@ -215,21 +185,21 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
           objectType="image"
           currentMetricName={metric.name}
           selected={reference?.name}
-          onSelect={(name) => updateSettings({ reference: { name } })}
+          onSelect={(name) => ctl.set({ reference: { name } })}
         />
         {reference && (
           <>
             <Toggle
               label="Pin reference step"
               checked={settings.referenceStep != null}
-              onChange={(pinned) => updateSettings({ referenceStep: pinned ? currentStep : undefined })}
+              onChange={(pinned) => ctl.set({ referenceStep: pinned ? currentStep : undefined })}
               description="Off follows the slider; on keeps the reference fixed."
             />
             {settings.referenceStep != null && (
               <Slider
                 label="Reference step"
                 value={settings.referenceStep}
-                onChange={(v) => updateSettings({ referenceStep: Math.round(v) })}
+                onChange={(v) => ctl.set({ referenceStep: Math.round(v) })}
                 min={globalSteps[0] ?? 0}
                 max={globalSteps[globalSteps.length - 1] ?? 1}
                 step={1}
@@ -242,13 +212,13 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       {(overlaySummary.hasBoxes || overlaySummary.hasMasks) && (
         <SettingsSection title="Overlays">
           {overlaySummary.hasBoxes && (
-            <Toggle label="Show boxes" checked={settings.showBoxes} onChange={(showBoxes) => updateSettings({ showBoxes })} />
+            <Toggle label="Show boxes" checked={settings.showBoxes} onChange={(showBoxes) => ctl.set({ showBoxes })} />
           )}
           {overlaySummary.hasBoxes && overlaySummary.hasScores && (
             <Slider
               label="Min box score"
               value={settings.minScore}
-              onChange={(minScore) => updateSettings({ minScore })}
+              onChange={(minScore) => ctl.set({ minScore })}
               min={0}
               max={1}
               step={0.01}
@@ -258,11 +228,11 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
           )}
           {overlaySummary.hasMasks && (
             <>
-              <Toggle label="Show masks" checked={settings.showMasks} onChange={(showMasks) => updateSettings({ showMasks })} />
+              <Toggle label="Show masks" checked={settings.showMasks} onChange={(showMasks) => ctl.set({ showMasks })} />
               <Slider
                 label="Mask opacity"
                 value={settings.maskOpacity}
-                onChange={(maskOpacity) => updateSettings({ maskOpacity })}
+                onChange={(maskOpacity) => ctl.set({ maskOpacity }, { mergeKey: "maskOpacity" })}
                 min={0}
                 max={1}
                 step={0.05}
@@ -295,7 +265,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
         </SettingsSection>
       )}
       <SettingsSection title="Display">
-        <Toggle label="Show pane labels" checked={settings.showLabels} onChange={(showLabels) => updateSettings({ showLabels })} />
+        <Toggle label="Show pane labels" checked={settings.showLabels} onChange={(showLabels) => ctl.set({ showLabels })} />
       </SettingsSection>
     </>
   );
@@ -319,7 +289,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     <CardShell
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title={metric.name}
       subtitle={globalSteps.length > 0 ? `step ${currentStep}` : undefined}
       cardKind="image"

@@ -3,7 +3,7 @@
 // Used by RunsTablePage's "From template" and ComparePage's template sidebar.
 // ---------------------------------------------------------------------------
 
-import { saveCardSettings } from "../card-settings";
+import { saveCardOverrides, type CardOverrides } from "../card-settings";
 import { matchTemplateToRuns } from "../templates/apply";
 import { addCardsToComparison, createComparison, loadComparisons } from "./store";
 import { cardSettingsKeyFor } from "./sync";
@@ -18,7 +18,7 @@ export interface ApplyTemplateResult {
 
 /**
  * Apply `template` to `runIds`. Only matched cards are added, with their
- * saved settings; nothing is created when no card matches.
+ * saved settings overrides; nothing is created when no card matches.
  */
 export async function applyTemplateToRuns(
   projectId: string,
@@ -41,7 +41,7 @@ export async function applyTemplateToRuns(
   const cards = loadComparisons(projectId).find((c) => c.id === cmp.id)?.cards ?? [];
   matched.forEach((m, i) => {
     const card = cards[i];
-    if (m.tc.settings && card) saveCardSettings(cardSettingsKeyFor(cmp.id, card), m.tc.settings);
+    if (m.tc.settings && card) saveCardOverrides(cardSettingsKeyFor(cmp.id, card), m.tc.settings as CardOverrides);
   });
 
   return { comparisonId: cmp.id, matchedCount: matched.length, totalCount };

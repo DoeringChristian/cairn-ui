@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useSequence } from "../api/hooks";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
+import type { TextSettings } from "./cards-settings/text";
 import { downloadArtifact, artifactFilename } from "../lib/download";
 import { api } from "../api/client";
 import type { SequenceMeta } from "../api/types";
@@ -10,7 +11,6 @@ import CardShell from "./CardShell";
 import Select from "./settings/Select";
 import Toggle from "./settings/Toggle";
 import StepSlider from "./StepSlider";
-import type { BaseCardSettings } from "./card-kit";
 
 interface Props {
   runId: string;
@@ -19,18 +19,6 @@ interface Props {
   onRemove?: () => void;
   autoOpenSettings?: boolean;
 }
-
-interface TextSettings extends BaseCardSettings {
-  fontSize: "xs" | "sm" | "base";
-  wordWrap: boolean;
-  xAxis?: "step" | "relative_time" | "wall_time";
-}
-
-const DEFAULT_TEXT_SETTINGS: TextSettings = {
-  version: 1,
-  fontSize: "xs",
-  wordWrap: true,
-};
 
 const FONT_SIZE_CLASS: Record<TextSettings["fontSize"], string> = {
   xs: "text-xs",
@@ -67,10 +55,8 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
     },
     [settingsKeyOverride, runId, metric.name],
   );
-  const [settings, updateSettings] = useCardSettings(
-    settingsKey,
-    DEFAULT_TEXT_SETTINGS,
-  );
+  const ctl = useCardSettings<TextSettings>(settingsKey, "text");
+  const settings = ctl.value;
 
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
@@ -94,7 +80,7 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
       <Select
         label="Font size"
         value={settings.fontSize}
-        onChange={(v) => updateSettings({ fontSize: v })}
+        onChange={(v) => ctl.set({ fontSize: v })}
         options={[
           { value: "xs", label: "Extra small" },
           { value: "sm", label: "Small" },
@@ -104,7 +90,7 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
       <Toggle
         label="Word wrap"
         checked={settings.wordWrap}
-        onChange={(v) => updateSettings({ wordWrap: v })}
+        onChange={(v) => ctl.set({ wordWrap: v })}
         description="Wrap long lines to card width. Off = horizontal scroll."
       />
     </>
@@ -124,7 +110,7 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
         currentIndex={safeIdx}
         onChange={setIdx}
         xAxis={settings.xAxis}
-        onXAxisChange={(m) => updateSettings({ xAxis: m })}
+        onXAxisChange={(m) => ctl.set({ xAxis: m })}
         className="mt-3"
       />
     </>
@@ -134,7 +120,7 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
     <CardShell cardKind="text"
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
       defaultHeight={250}

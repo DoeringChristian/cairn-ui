@@ -10,8 +10,8 @@ import type { ComparisonSeriesRef } from "../../lib/comparisons";
 import { useCardDrop } from "../../lib/use-series-drop";
 import { shortRunLabel, useRunMetadataVersion } from "../../lib/run-label";
 import { seriesKey } from "../../lib/series-utils";
-import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid, type BaseCardSettings } from "../card-kit";
-import type { SeriesRef } from "../card-kit/use-card-series";
+import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid } from "../card-kit";
+import { scene3dInstanceDefaults, type Scene3DSettings } from "../cards-settings/scene3d";
 import { useOverlaySlot } from "../card-kit/use-overlay-slot";
 import { plotCardPolicy } from "../card-kit/plot-card-policy";
 import AddToComparisonButton from "../AddToComparisonButton";
@@ -49,13 +49,6 @@ export interface Scene3DKind<V extends object, M extends Scene3DMeta> {
     meta: M | null;
     properties: string[];
   }) => ReactNode;
-}
-
-interface Scene3DSettings<V> extends BaseCardSettings {
-  metrics: SeriesRef[];
-  sliderStep?: number;
-  syncCameras: boolean;
-  view: Partial<V>;
 }
 
 function ScenePane<V extends object, M extends Scene3DMeta>({
@@ -120,16 +113,18 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   onRemove,
   autoOpenSettings,
 }: Scene3DCardProps & { spec: Scene3DKind<V, M> }) {
-  const { settings, updateSettings, effectiveMetrics, allRunIds, multipleRuns } =
+  const { ctl, effectiveMetrics, allRunIds, multipleRuns } =
     useCardSeries<Scene3DSettings<V>>({
       runId,
       metric,
       extraSeries,
       controlledSeries,
       settingsKeyOverride,
-      makeDefaults: (_seed, metrics) => ({ version: 1, metrics, syncCameras: true, view: {} }),
+      type: spec.kind,
+      instanceDefaults: scene3dInstanceDefaults as (seed: { name: string }) => Partial<Scene3DSettings<V>>,
     });
-  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, updateSettings);
+  const settings = ctl.value;
+  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, ctl.set);
 
   const queries = useSequencesForRuns(
     effectiveMetrics.map((m) => ({ runId: m.runId ?? runId, name: m.name })),
@@ -143,14 +138,14 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
-    updateSettings,
+    updateSettings: ctl.set,
   });
   const sliderPoints = useMemo(() => globalSteps.map((step) => ({ step })), [globalSteps]);
 
   const viewJson = JSON.stringify(settings.view ?? {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const view = useMemo<V>(() => ({ ...spec.defaultView, ...settings.view }), [spec, viewJson]);
-  const setView = (patch: Partial<V>) => updateSettings({ view: { ...settings.view, ...patch } });
+  const setView = (patch: Partial<V>) => ctl.set({ view: { ...settings.view, ...patch } });
 
   const link = useMemo(() => (settings.syncCameras ? new CameraLink() : null), [settings.syncCameras]);
   const [resetKey, setResetKey] = useState(0);
@@ -189,7 +184,7 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
       cardKind={spec.kind}
       cardRef={cardRef}
       settings={settings}
-      updateSettings={updateSettings}
+      updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
       defaultHeight={plotCardPolicy(spec.kind).defaultHeight}
@@ -212,7 +207,7 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
             <Toggle
               label="Sync cameras"
               checked={settings.syncCameras}
-              onChange={(syncCameras) => updateSettings({ syncCameras })}
+              onChange={(syncCameras) => ctl.set({ syncCameras })}
             />
           )}
           <button
@@ -265,7 +260,7 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
               controlledSeries={controlledSeries}
               runId={runId}
               allRunIds={allRunIds}
-              onMetricsChange={(next) => updateSettings({ metrics: next })}
+              onMetricsChange={(next) => ctl.set({ metrics: next })}
             />
           )}
         </div>

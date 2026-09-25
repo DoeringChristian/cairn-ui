@@ -3,7 +3,8 @@ import { api } from "../api/client";
 import { safeJsonParse } from "../lib/format";
 import { pointCaption } from "../lib/caption";
 import type { SequencePoint } from "../api/types";
-import SteppedMediaCard, { type SteppedMediaCardProps, type SteppedMediaSettings } from "./media/SteppedMediaCard";
+import SteppedMediaCard, { type SteppedMediaCardProps } from "./media/SteppedMediaCard";
+import type { AudioSettings } from "./cards-settings/audio";
 import Toggle from "./settings/Toggle";
 
 interface AudioMeta {
@@ -12,10 +13,6 @@ interface AudioMeta {
   channels: number;
   peaks: number[];
   num_samples: number;
-}
-
-interface AudioSettings extends SteppedMediaSettings {
-  autoplay: boolean;
 }
 
 /** Peak bars in the theme accent color. */
@@ -76,13 +73,12 @@ export default function AudioPlayerCard(props: SteppedMediaCardProps) {
       kind="audio"
       noun="audio"
       defaultMime="audio/wav"
-      defaults={{ autoplay: false }}
       nearest
-      settingsPanel={(settings, updateSettings) => (
+      settingsPanel={(ctl) => (
         <Toggle
           label="Autoplay"
-          checked={settings.autoplay}
-          onChange={(v) => updateSettings({ autoplay: v })}
+          checked={ctl.value.autoplay}
+          onChange={(v) => ctl.set({ autoplay: v })}
           description="Play the clip automatically when the card loads"
         />
       )}

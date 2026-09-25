@@ -17,16 +17,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useIframeAutoHeight } from "./card-kit";
-import SteppedMediaCard, { type SteppedMediaCardProps, type SteppedMediaSettings } from "./media/SteppedMediaCard";
+import SteppedMediaCard, { type SteppedMediaCardProps } from "./media/SteppedMediaCard";
+import type { HtmlSettings } from "./cards-settings/html";
 import Toggle from "./settings/Toggle";
 import Slider from "./settings/Slider";
-
-interface HtmlSettings extends SteppedMediaSettings {
-  /** Auto-size the iframe to its content height via the resize shim. */
-  autoHeight: boolean;
-  /** Used when autoHeight is off, or before the first resize message. */
-  fixedHeight: number;
-}
 
 const MIN_HEIGHT = 80;
 const MAX_HEIGHT = 2000;
@@ -129,20 +123,19 @@ export default function HtmlCard(props: SteppedMediaCardProps) {
       noun="HTML"
       defaultMime="text/html"
       defaultHeight={360}
-      defaults={{ autoHeight: true, fixedHeight: 300 }}
       nearest
-      settingsPanel={(settings, updateSettings) => (
+      settingsPanel={(ctl) => (
         <>
           <Toggle
             label="Auto-height"
-            checked={settings.autoHeight}
-            onChange={(v) => updateSettings({ autoHeight: v })}
+            checked={ctl.value.autoHeight}
+            onChange={(v) => ctl.set({ autoHeight: v })}
             description={'Resize to the document’s content height via the "cairn:resize" postMessage shim. Falls back to a fixed height if the document never posts a size.'}
           />
           <Slider
             label="Fixed height"
-            value={settings.fixedHeight}
-            onChange={(v) => updateSettings({ fixedHeight: v })}
+            value={ctl.value.fixedHeight}
+            onChange={(v) => ctl.set({ fixedHeight: v })}
             min={MIN_HEIGHT}
             max={MAX_HEIGHT}
             step={20}
