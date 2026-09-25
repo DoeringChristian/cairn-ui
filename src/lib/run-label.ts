@@ -32,6 +32,11 @@ function _subscribe(cb: () => void) {
 
 function _getVersion() { return _version; }
 
+/** The cached run row, if any (see `useRunMetadataVersion`). */
+export function getRunMetadata(runId: string): Run | undefined {
+  return runMetadataCache.get(runId);
+}
+
 /**
  * React hook: returns a version number that increments whenever the run
  * metadata cache changes. Include this in useMemo deps to recompute labels.
