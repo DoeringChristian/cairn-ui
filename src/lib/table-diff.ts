@@ -138,10 +138,11 @@ const ID_LIKE_NAME = /^(id|key|.*_id)$/i;
 
 /**
  * Row alignment key for one table: if all tables share the same id-like
- * first column name, rows are aligned by that column's value; otherwise
- * rows are aligned by position (row index).
+ * first column name (`id`, `key`, `*_id`), rows are aligned by that column's
+ * value (its index, always 0); otherwise (null) rows are aligned by position
+ * (row index). Also the default join key of `lib/table/combine.ts`.
  */
-function detectKeyColumn(tables: DiffTable[]): number | null {
+export function detectKeyColumn(tables: DiffTable[]): number | null {
   if (tables.length < 2) return null;
   const firstNames = tables.map((t) => t.columns[0]?.name);
   if (firstNames.some((n) => !n)) return null;
