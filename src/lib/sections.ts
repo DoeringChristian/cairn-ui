@@ -97,3 +97,34 @@ export function groupComparisonCardsIntoSections(
   }
   return sortBuckets(buckets).map(([name, cards]) => ({ name, cards }));
 }
+
+/** The workspace's section arrangement (see lib/workspace/doc.ts). */
+export interface SectionPrefs {
+  /** Sections shown first, in this order. */
+  pinned: readonly string[];
+  /** Sections whose items are sorted A–Z. */
+  sort: readonly string[];
+}
+
+/**
+ * Apply the workspace's section prefs to already-grouped sections: pinned
+ * sections move to the front in pin order (the rest keep their order), and
+ * a section marked for sorting has its items sorted A–Z by `labelOf`
+ * (overriding any manual order).
+ */
+export function orderSections<S extends { name: string; items: readonly unknown[] }>(
+  sections: readonly S[],
+  prefs: SectionPrefs,
+  labelOf: (item: S["items"][number]) => string,
+): S[] {
+  const byName = new Map(sections.map((s) => [s.name, s]));
+  const pinned = prefs.pinned.filter((n) => byName.has(n));
+  const pinnedSet = new Set(pinned);
+  const ordered = [...pinned.map((n) => byName.get(n)!), ...sections.filter((s) => !pinnedSet.has(s.name))];
+  const sorted = new Set(prefs.sort);
+  return ordered.map((s) =>
+    sorted.has(s.name)
+      ? { ...s, items: [...s.items].sort((a, b) => labelOf(a).localeCompare(labelOf(b), undefined, { numeric: true })) }
+      : s,
+  );
+}
