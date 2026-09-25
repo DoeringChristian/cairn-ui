@@ -1,22 +1,13 @@
 import { useMemo, useRef, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { qk } from "../api/query-keys";
 import { useCardSettings } from "../lib/card-settings";
-import type { TileBestDir as BestDir, TileReduce as Reduce, TileSettings } from "./cards-settings/tile";
+import type { TileSettings } from "./cards-settings/tile";
 import { formatNum } from "../lib/plot-utils/types";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
+import { useVisibleRuns } from "../lib/run-view";
+import { useScalarExprs } from "../lib/use-scalar-exprs";
+import { toNumber } from "../lib/scalar-exprs";
 import CardShell from "./CardShell";
-import Select from "./settings/Select";
-
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
-
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+import TileSettingsPanel from "./settings-panels/TileSettingsPanel";
 
 interface Props {
   runIds: string[];
@@ -28,12 +19,11 @@ interface Props {
 interface PerRun {
   runId: string;
   value: number;
-  prev: number | null;
   createdAt: number;
 }
 
 export default function ScalarTileCard({
-  runIds,
+  runIds: allRunIds,
   settingsKey,
   onRemove,
   autoOpenSettings,
@@ -42,169 +32,45 @@ export default function ScalarTileCard({
   const ctl = useCardSettings<TileSettings>(settingsKey, "tile");
   const settings = ctl.value;
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
-
-  const runQueries = useQueries({
-    queries: runIds.map((rid) => ({
-      queryKey: qk.run(rid),
-      queryFn: () => api.run(rid),
-      staleTime: 30_000,
-    })),
-  });
+  const runIds = useVisibleRuns(allRunIds);
 
   const metric = settings.metric;
-  const needsMetricFetch = metric?.source === "metric";
+  const srcs = useMemo(() => [metric?.src ?? ""], [metric]);
+  const exprs = useScalarExprs(runIds, srcs);
 
-  const metricQueries = useQueries({
-    queries: needsMetricFetch
-      ? runIds.map((rid) => ({
-          queryKey: qk.sequence(rid, metric!.key),
-          queryFn: () => api.sequence(rid, metric!.key),
-          staleTime: 30_000,
-        }))
-      : [],
-  });
-
-  // Per-run last value (+ previous step for the delta) and creation time.
+  // Per-run value and creation time.
   const perRun = useMemo<PerRun[]>(() => {
     if (!metric) return [];
     const out: PerRun[] = [];
-    runIds.forEach((rid, i) => {
-      const createdRaw = runQueries[i]?.data?.run.created_at;
-      const createdAt = createdRaw ? new Date(createdRaw).getTime() : 0;
-      let value: number | null = null;
-      let prev: number | null = null;
-      if (metric.source === "param") {
-        const p = (runQueries[i]?.data?.params ?? []).find((pp) => pp.key === metric.key);
-        const n = p ? Number(p.value) : NaN;
-        value = Number.isFinite(n) ? n : null;
-      } else {
-        const pts = (metricQueries[i]?.data?.points ?? [])
-          .map((pt) => pt.scalar_value)
-          .filter((v): v is number => v != null);
-        if (pts.length) {
-          value = pts[pts.length - 1]!;
-          prev = pts.length >= 2 ? pts[pts.length - 2]! : null;
-        }
-      }
-      if (value != null) out.push({ runId: rid, value, prev, createdAt });
-    });
+    for (const rid of runIds) {
+      const value = toNumber(exprs.values[0]!.get(rid));
+      if (value == null) continue;
+      const created = exprs.details.get(rid)?.run.created_at;
+      out.push({ runId: rid, value, createdAt: created ? new Date(created).getTime() : 0 });
+    }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    metric,
-    runIds,
-    runQueries.map((q) => q.dataUpdatedAt).join("|"),
-    metricQueries.map((q) => q.dataUpdatedAt).join("|"),
-    runMetaVersion,
-  ]);
+  }, [metric, runIds, exprs, runMetaVersion]);
 
   // Reduce across runs to the single displayed tile value.
   const tile = useMemo(() => {
     if (!perRun.length) return null;
     if (settings.reduce === "mean") {
       const mean = perRun.reduce((a, b) => a + b.value, 0) / perRun.length;
-      return { value: mean, runId: null as string | null, prev: null as number | null, count: perRun.length };
+      return { value: mean, runId: null as string | null, count: perRun.length };
     }
-    let chosen: PerRun;
-    if (settings.reduce === "latest") {
-      chosen = perRun.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
-    } else {
-      // best
-      chosen = perRun.reduce((a, b) => {
-        if (settings.bestDir === "min") return b.value < a.value ? b : a;
-        return b.value > a.value ? b : a;
-      });
-    }
-    return { value: chosen.value, runId: chosen.runId, prev: chosen.prev, count: perRun.length };
+    const chosen = settings.reduce === "latest"
+      ? perRun.reduce((a, b) => (b.createdAt > a.createdAt ? b : a))
+      : perRun.reduce((a, b) => {
+          if (settings.bestDir === "min") return b.value < a.value ? b : a;
+          return b.value > a.value ? b : a;
+        });
+    return { value: chosen.value, runId: chosen.runId, count: perRun.length };
   }, [perRun, settings.reduce, settings.bestDir]);
 
-  const delta = tile && tile.prev != null ? tile.value - tile.prev : null;
+  const error = metric ? exprs.errors[0] ?? null : null;
+  const settingsPanel = <TileSettingsPanel ctl={ctl} mode="card" ctx={{ options: exprs.options, error }} />;
 
-  // ---------------------------------------------------------------------------
-  // Settings options
-  // ---------------------------------------------------------------------------
-  const seqQueries = useQueries({
-    queries: runIds.map((rid) => ({
-      queryKey: qk.sequences(rid),
-      queryFn: () => api.sequences(rid),
-      staleTime: 30_000,
-    })),
-  });
-
-  const availableMetrics = useMemo(() => {
-    const names = new Set<string>();
-    for (const q of seqQueries) for (const seq of q.data?.sequences ?? []) {
-      if (seq.object_type === "scalar") names.add(seq.name);
-    }
-    return Array.from(names).sort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seqQueries.map((q) => q.dataUpdatedAt).join("|")]);
-
-  const availableParams = useMemo(() => {
-    const keys = new Set<string>();
-    for (const q of runQueries) for (const p of q.data?.params ?? []) keys.add(p.key);
-    return Array.from(keys).sort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runQueries.map((q) => q.dataUpdatedAt).join("|")]);
-
-  const axisOptions = useMemo(() => {
-    const opts: Array<{ key: string; source: "param" | "metric"; label: string }> = [];
-    for (const k of availableMetrics) opts.push({ key: k, source: "metric", label: `[M] ${k}` });
-    for (const k of availableParams) opts.push({ key: k, source: "param", label: `[P] ${k}` });
-    return opts;
-  }, [availableParams, availableMetrics]);
-
-  const settingsPanel = (
-    <>
-      <div className="mb-2">
-        <label className="block text-[10px] uppercase tracking-wide text-fg-muted mb-1">
-          Metric
-        </label>
-        <select
-          value={metric ? `${metric.source}:${metric.key}` : ""}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (!v) { ctl.set({ metric: null }); return; }
-            const [source, ...rest] = v.split(":");
-            ctl.set({ metric: { key: rest.join(":"), source: source as "param" | "metric" } });
-          }}
-          className="input w-full text-xs"
-        >
-          <option value="">-- select metric --</option>
-          {axisOptions.map((o) => (
-            <option key={`${o.source}:${o.key}`} value={`${o.source}:${o.key}`}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <Select<Reduce>
-        label="Across runs"
-        value={settings.reduce}
-        onChange={(v) => ctl.set({ reduce: v })}
-        options={[
-          { value: "best", label: "Best" },
-          { value: "mean", label: "Mean" },
-          { value: "latest", label: "Latest run" },
-        ]}
-      />
-      {settings.reduce === "best" && (
-        <Select<BestDir>
-          label="Best is"
-          value={settings.bestDir}
-          onChange={(v) => ctl.set({ bestDir: v })}
-          options={[
-            { value: "max", label: "Maximum" },
-            { value: "min", label: "Minimum" },
-          ]}
-        />
-      )}
-    </>
-  );
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
   const cardRef = useRef<HTMLDivElement>(null);
 
   const runLabel = tile?.runId
@@ -216,31 +82,19 @@ export default function ScalarTileCard({
   const body = (
     <div className="flex flex-1 min-h-0 flex-col justify-center gap-1 py-1">
       {!metric ? (
-        <div className="text-sm text-fg-muted">Select a metric in settings.</div>
+        <div className="text-sm text-fg-muted">Select a value in settings.</div>
+      ) : error ? (
+        <div className="text-sm text-status-failed">{error}</div>
       ) : !tile ? (
-        <div className="text-sm text-fg-muted">No values for this metric.</div>
+        <div className="text-sm text-fg-muted">{exprs.loading ? "Loading…" : "No values for this metric."}</div>
       ) : (
         <>
           <div className="mono text-3xl font-semibold leading-tight text-fg tabular-nums">
             {formatNum(tile.value)}
           </div>
-          <div className="text-xs text-fg-muted truncate">{metric.key}</div>
+          <div className="mono text-xs text-fg-muted truncate">{metric.src}</div>
           {runLabel && (
             <div className="mono text-[11px] text-fg-subtle truncate">{runLabel}</div>
-          )}
-          {delta != null && (
-            <div
-              className={`mono text-[11px] ${
-                delta > 0
-                  ? "text-status-completed"
-                  : delta < 0
-                    ? "text-status-failed"
-                    : "text-fg-subtle"
-              }`}
-              title="Change vs previous step"
-            >
-              {delta > 0 ? "▲" : delta < 0 ? "▼" : "="} {formatNum(Math.abs(delta))}
-            </div>
           )}
         </>
       )}
@@ -253,7 +107,7 @@ export default function ScalarTileCard({
       settings={settings}
       updateSettings={ctl.set}
       title="Scalar Tile"
-      subtitle={metric?.key}
+      subtitle={metric?.src}
       defaultHeight={170}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}

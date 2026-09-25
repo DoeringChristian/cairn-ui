@@ -1,15 +1,13 @@
 import type { BaseCardSettings } from "../card-kit/base-settings";
+import type { ScalarExprDef } from "../../lib/scalar-exprs";
 import type { CardSettingsMeta } from "./meta";
 
-export interface TileMetricDef {
-  key: string;
-  source: "param" | "metric";
-}
 export type TileReduce = "best" | "mean" | "latest";
 export type TileBestDir = "max" | "min";
 
 export interface TileSettings extends BaseCardSettings {
-  metric: TileMetricDef | null;
+  /** One scalar per run (`last(acc)`, `config.lr`, …), reduced across runs. */
+  metric: ScalarExprDef | null;
   reduce: TileReduce;
   bestDir: TileBestDir;
 }

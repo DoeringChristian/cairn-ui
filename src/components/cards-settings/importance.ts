@@ -1,10 +1,12 @@
 import type { BaseCardSettings } from "../card-kit/base-settings";
+import type { ScalarExprDef } from "../../lib/scalar-exprs";
 import type { CardSettingsMeta } from "./meta";
 
 export type ImportanceMethod = "importance" | "correlation";
 
 export interface ImportanceSettings extends BaseCardSettings {
-  metric: string | null;
+  /** The target: one scalar per run (`min(val.loss)`, …). */
+  metric: ScalarExprDef | null;
   method: ImportanceMethod;
 }
 
