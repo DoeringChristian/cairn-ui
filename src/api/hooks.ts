@@ -357,6 +357,40 @@ export function useUpdateReport(projectId: string, reportId: string) {
   });
 }
 
+// --- report comments (wave 3, agent H) ---
+export function useReportComments(projectId: string, reportId: string, enabled = true) {
+  return useQuery({
+    queryKey: qk.reportComments(projectId, reportId),
+    queryFn: () => api.reportComments(projectId, reportId),
+    enabled: enabled && !!projectId && !!reportId,
+  });
+}
+
+/** Every comment write, each refreshing the report's comment list. */
+export function useReportCommentMutations(projectId: string, reportId: string) {
+  const qc = useQueryClient();
+  const onSuccess = () => qc.invalidateQueries({ queryKey: qk.reportComments(projectId, reportId) });
+  return {
+    create: useMutation({
+      mutationFn: (body: import("./types").ReportCommentCreate) => api.createReportComment(projectId, reportId, body),
+      onSuccess,
+    }),
+    update: useMutation({
+      mutationFn: (v: { id: string; body: string }) => api.updateReportComment(projectId, reportId, v.id, v.body),
+      onSuccess,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => api.deleteReportComment(projectId, reportId, id),
+      onSuccess,
+    }),
+    resolve: useMutation({
+      mutationFn: (v: { id: string; resolved: boolean }) => api.resolveReportComment(projectId, reportId, v.id, v.resolved),
+      onSuccess,
+    }),
+  };
+}
+// --- end report comments ---
+
 export function useDeleteReport(projectId: string) {
   const qc = useQueryClient();
   return useMutation({

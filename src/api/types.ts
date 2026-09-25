@@ -387,3 +387,46 @@ export interface SavedView extends SavedViewSummary {
   project_id: string;
   payload: Record<string, unknown>;
 }
+
+// ── Report editing: conflicts, assets, comments (wave 3, agent H) ────────
+// Server: routes/reports.py (expected_updated_at), report_assets.py, report_comments.py.
+
+export type ReportPutResult =
+  | { ok: { id: string; updated_at: string }; conflict?: undefined }
+  | { ok?: undefined; conflict: { name: string; updated_at: string; payload: Record<string, unknown> } };
+
+export interface ReportAsset {
+  hash: string;
+  mime_type: string;
+  size_bytes: number;
+  /** `cairn-asset:<hash>`, what the markdown references. */
+  ref: string;
+  url: string;
+}
+
+export interface ReportComment {
+  id: string;
+  report_id: string;
+  /** The thread root's id on a reply; null on a root. */
+  parent_id: string | null;
+  anchor_kind: "report" | "block" | "card" | "quote";
+  anchor_id: string | null;
+  quote: string | null;
+  body: string;
+  author_id: string | null;
+  author: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  /** The caller may edit or delete it. */
+  can_edit: boolean;
+}
+
+export interface ReportCommentCreate {
+  body: string;
+  anchor_kind?: ReportComment["anchor_kind"];
+  anchor_id?: string | null;
+  quote?: string | null;
+  parent_id?: string | null;
+}

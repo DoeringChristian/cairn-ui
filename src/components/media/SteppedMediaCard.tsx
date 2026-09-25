@@ -23,6 +23,7 @@ import { useMediaPanes, useScalarMetricNames } from "../card-kit/use-media-panes
 import { steppedMediaInstanceDefaults, type SteppedMediaSettings } from "../cards-settings/stepped-media";
 import type { MediaPanelCtx } from "../settings-panels/media-panel-kit";
 import AddToComparisonButton from "../AddToComparisonButton";
+import AddToReportButton from "../AddToReportButton";
 import CardShell from "../CardShell";
 import SeriesChipStrip from "../SeriesChipStrip";
 import StepSlider from "../StepSlider";
@@ -288,6 +289,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       onRemove={onRemove}
       onDownload={current?.artifact_hash ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), artifactFilename(metric.name, current.step, current.artifact_mime ?? defaultMime)) : undefined}
       addToComparisonSlot={<AddToComparisonButton cardType={kind} series={compSeries} />}
+      addToReportSlot={<AddToReportButton cardType={kind} series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
       settingsPanel={settingsPanel(ctl, {

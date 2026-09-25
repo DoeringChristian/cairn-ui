@@ -29,6 +29,7 @@ import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes"
 import { formatKeyValue } from "../lib/media/slider-key";
 import type { SeriesRef } from "./card-kit/use-card-series";
 import AddToComparisonButton from "./AddToComparisonButton";
+import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import PresetSettingsPanel from "./settings-panels/PresetSettingsPanel";
@@ -261,6 +262,7 @@ export default function PresetCard({
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
       addToComparisonSlot={<AddToComparisonButton cardType="preset" series={compSeries} />}
+      addToReportSlot={<AddToReportButton cardType="preset" series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
       settingsPanel={settingsPanel}

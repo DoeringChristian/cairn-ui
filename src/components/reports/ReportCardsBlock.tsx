@@ -12,12 +12,13 @@
  * settings changes stay in the viewer's session (see lib/card-settings.ts).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import AddCardModal, { type AddCardSelection } from "../AddCardModal";
 import ComparisonCardView from "../comparison/ComparisonCardView";
 import ReorderableCardGrid from "../ReorderableCardGrid";
 import Dialog, { DialogBody } from "../ui/Dialog";
 import { CELL_TOOLBAR_BTN } from "./cell-toolbar";
+import { CardCommentsContext, ReportCommentsContext } from "./comments-context";
 import RunSelectorBadge from "../RunSelectorBadge";
 import RunSetEditor, { DEFAULT_QUERY_SELECTOR } from "../comparison/RunSetEditor";
 import { CardMutationContext, CardSettingsChangeContext } from "../../lib/card-settings";
@@ -48,6 +49,8 @@ interface Props {
 }
 
 export default function ReportCardsBlock({ projectId, reportId, block, allProjectRuns, onChange, toolbar, readOnly = false }: Props) {
+  // Each card's comment count and popover (editable reports only).
+  const comments = useContext(ReportCommentsContext);
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
@@ -292,14 +295,27 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
           cards={displayCards.map((card) => ({
             key: card.id,
             content: (
-              <ComparisonCardView
-                card={card}
-                settingsKey={cardSettingsKeyForReport(reportId, card)}
-                onRemove={readOnly ? undefined : () => removeCard(card.id)}
-              />
+              <CardCommentsContext.Provider
+                value={
+                  comments
+                    ? {
+                        cardId: card.id,
+                        count: comments.openCountByCard.get(card.id) ?? 0,
+                        open: (el) => comments.open({ kind: "card", cardId: card.id }, el),
+                      }
+                    : null
+                }
+              >
+                <ComparisonCardView
+                  card={card}
+                  settingsKey={cardSettingsKeyForReport(reportId, card)}
+                  onRemove={readOnly ? undefined : () => removeCard(card.id)}
+                />
+              </CardCommentsContext.Provider>
             ),
           }))}
           onReorder={readOnly ? undefined : reorderCards}
+          dataAttributes={{ "data-report-block": block.id }}
         />
         </MediaSyncProvider>
       )}

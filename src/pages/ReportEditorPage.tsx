@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { RUN_SELECTOR_FETCH_LIMIT, useReport, useRuns, useSession, useUpdateReport } from "../api/hooks";
+import { RUN_SELECTOR_FETCH_LIMIT, useReport, useReportComments, useRuns, useSession, useUpdateReport } from "../api/hooks";
 import { formatRelative } from "../lib/format";
 import { loadCardOverrides } from "../lib/card-settings";
 import { templateCardOf, type ComparisonTemplateCard } from "../lib/comparisons";
@@ -68,6 +68,10 @@ export default function ReportEditorPage() {
   const updateMut = useUpdateReport(projectId ?? "", reportId ?? "");
   const queryClient = useQueryClient();
   const [printing, setPrinting] = useState(false);
+  // The comments panel (editable reports only) and its open-thread count.
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const commentsQ = useReportComments(projectId ?? "", reportId ?? "", !readOnly);
+  const openThreads = (commentsQ.data?.comments ?? []).filter((c) => c.parent_id == null && c.resolved_at == null).length;
   const handleExportPdf = async () => {
     setPrinting(true);
     try {
@@ -399,6 +403,17 @@ export default function ReportEditorPage() {
           <span className="text-xs text-fg-subtle" title={statusText}>
             {statusText}
           </span>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => setCommentsOpen((v) => !v)}
+              aria-pressed={commentsOpen}
+              className="btn text-xs"
+              title="Comment threads on this report"
+            >
+              <i className="fa-regular fa-comment" aria-hidden="true" /> Comments{openThreads > 0 ? ` (${openThreads})` : ""}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleSaveAsTemplate}
@@ -454,6 +469,8 @@ export default function ReportEditorPage() {
         onDeleteBlock={deleteBlock}
         onInsertBlock={insertBlock}
         readOnly={readOnly}
+        commentsOpen={commentsOpen}
+        onCommentsOpenChange={setCommentsOpen}
       />
       </div>
       </ReportExportContext.Provider>

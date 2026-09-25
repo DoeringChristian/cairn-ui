@@ -4,6 +4,7 @@ import { CardMutationContext } from "../lib/card-settings";
 import { useClickOutside } from "../lib/use-click-outside";
 import { useCoarsePointer, useCompactLayout } from "../lib/use-media-query";
 import { ICON_BTN } from "./card-header/icon-btn";
+import { CardCommentsContext } from "./reports/comments-context";
 
 interface Props {
   /** Metric name, e.g. "train.loss". */
@@ -38,6 +39,8 @@ interface Props {
   onScreenshot?: () => void;
   /** Slot for AddToComparisonButton in the standard cluster. */
   addToComparisonSlot?: ReactNode;
+  /** Slot for AddToReportButton, next to the comparison slot. */
+  addToReportSlot?: ReactNode;
   /** Remove the card. Renders close button in upper-right. */
   onRemove?: () => void;
   /**
@@ -67,6 +70,7 @@ export default function CardHeader({
   onDownload,
   onScreenshot,
   addToComparisonSlot: addToComparisonSlotProp,
+  addToReportSlot: addToReportSlotProp,
   onRemove: onRemoveProp,
   interact,
 }: Props) {
@@ -75,6 +79,9 @@ export default function CardHeader({
   const mutable = useContext(CardMutationContext);
   const onTitleChange = mutable ? onTitleChangeProp : undefined;
   const addToComparisonSlot = mutable ? addToComparisonSlotProp : undefined;
+  const addToReportSlot = mutable ? addToReportSlotProp : undefined;
+  // A report card's comment threads (provided in editable reports only).
+  const comments = useContext(CardCommentsContext);
   const onRemove = mutable ? onRemoveProp : undefined;
   const dragCtx = useDraggableCard();
   const drag = mutable ? dragCtx : null;
@@ -121,7 +128,9 @@ export default function CardHeader({
   );
 
   const showResetView = !!(onResetView && viewModified);
-  const hasStandardActions = !!(showResetView || onDownload || onScreenshot || addToComparisonSlot || onSettings || onRemove);
+  const hasStandardActions = !!(
+    showResetView || onDownload || onScreenshot || addToComparisonSlot || addToReportSlot || comments || onSettings || onRemove
+  );
 
   const menuItems: MenuItem[] = [];
   if (compact) {
@@ -243,6 +252,20 @@ export default function CardHeader({
               </button>
             )}
             {addToComparisonSlot}
+            {addToReportSlot}
+            {comments && (
+              <button
+                type="button"
+                data-comment-card={comments.cardId}
+                onClick={(e) => comments.open(e.currentTarget)}
+                className={comments.count > 0 ? `${ICON_BTN.replace("text-fg-muted", "text-accent")} gap-0.5 px-1` : ICON_BTN}
+                aria-label={comments.count > 0 ? `${comments.count} open comment threads` : "Comment on this card"}
+                title={comments.count > 0 ? `${comments.count} open comment thread${comments.count === 1 ? "" : "s"}` : "Comment"}
+              >
+                <i className={`${comments.count > 0 ? "fa-solid" : "fa-regular"} fa-comment`} aria-hidden="true" />
+                {comments.count > 0 && <span className="text-[10px] leading-none">{comments.count}</span>}
+              </button>
+            )}
             {!compact && onSettings && (
               <button type="button" onClick={onSettings} className={ICON_BTN} aria-label="Settings" title="Settings">
                 <i className="fa-solid fa-gear" aria-hidden="true" />

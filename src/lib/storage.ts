@@ -33,6 +33,9 @@ export const storageKeys = {
   // --- media (wave 2, agent C) ---
   /** A section's media sync value and key — see components/card-kit/media-sync.tsx. */
   mediaSync: (scopeKey: string) => `cairn:media-sync:${scopeKey}`,
+  // --- reports (wave 3, agent H) ---
+  /** A report's collapsed headings (slugs), per browser — see components/reports/ReportNotebook.tsx. */
+  reportCollapsed: (reportId: string) => `cairn:report-collapsed:${reportId}`,
 } as const;
 
 /** Parse JSON from a `Storage` (localStorage/sessionStorage), swallowing errors. */
