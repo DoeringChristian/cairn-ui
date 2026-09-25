@@ -7,6 +7,7 @@ import CardHeader from "./CardHeader";
 import CardResizeHandle from "./CardResizeHandle";
 import CardDetailModal from "./CardDetailModal";
 import { useCardNavEntry } from "../lib/card-nav";
+import { useReportExporting } from "../lib/reports/export-context";
 
 interface Props {
   cardRef: RefObject<HTMLDivElement>;
@@ -81,6 +82,9 @@ export default function CardShell({
   // pass the same minHeight anywhere inner content re-reads this height so
   // the outer box and inner content never disagree.
   const clampedHeight = resolveCardHeight(settings, defaultHeight, minSize.minHeight);
+  // A report export shows every card, collapsed or not (nothing is saved).
+  const exporting = useReportExporting();
+  const collapsed = !!settings.collapsed && !exporting;
 
   // Tap-to-interact (touch devices): content that captures gestures registers
   // through `useInteract`; the detail modal is always interactive.
@@ -88,7 +92,7 @@ export default function CardShell({
   // Read-only cards (report viewers, embeds) keep their size.
   const mutable = useContext(CardMutationContext);
   // ←/→ in the detail modal: close this card's modal, open the neighbour's.
-  const nav = useCardNavEntry(onSettings, modalContent !== undefined && !settings.collapsed, !!modalOpen);
+  const nav = useCardNavEntry(onSettings, modalContent !== undefined && !collapsed, !!modalOpen);
   const step = (go?: () => void) =>
     go &&
     (() => {
@@ -118,7 +122,7 @@ export default function CardShell({
           title={settings.title ?? title}
           onTitleChange={(t) => updateSettings({ title: t || undefined })}
           subtitle={subtitle}
-          collapsed={settings.collapsed}
+          collapsed={collapsed}
           onToggleCollapse={() => updateSettings({ collapsed: !settings.collapsed })}
           onSettings={onSettings}
           onResetView={onResetView}
@@ -128,11 +132,11 @@ export default function CardShell({
           onScreenshot={onScreenshot}
           addToComparisonSlot={addToComparisonSlot}
           cardActions={headerActions}
-          interact={interact.available && !settings.collapsed
+          interact={interact.available && !collapsed
             ? { on: interact.on, onToggle: interact.toggle }
             : undefined}
         />
-        {!settings.collapsed && (
+        {!collapsed && (
           <>
             {children}
             {modalContent !== undefined && (
