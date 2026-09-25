@@ -1,1 +1,0 @@
-import{j as s,bY as i,d4 as n,d6 as o}from"./index-DEb15Rii.js";function d({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{data:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{d as default};
