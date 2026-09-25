@@ -22,11 +22,27 @@ export interface CustomPanel {
   metrics: string[];
 }
 
+/** The palettes a colour-by samples (charts/colormaps.ts). */
+export const COLOR_BY_PALETTES = ["turbo", "viridis", "magma"] as const;
+export type ColorByPalette = (typeof COLOR_BY_PALETTES)[number];
+export const COLOR_BY_BUCKETS = { min: 2, max: 8 } as const;
+
+/** Colour runs by a value (lib/run-color-by.ts): `expr` per run, bucketed into `buckets` colours of `palette`. */
+export interface ColorBy {
+  /** A scalar expression (`config.lr`, `min(val.loss)`, `run.group`). */
+  expr: string;
+  /** 2–8. */
+  buckets: number;
+  palette: ColorByPalette;
+}
+
 export interface WorkspacePrefs {
   /** Charts sharing an x-axis zoom together (lib/chart-sync.tsx). */
   syncZoom: boolean;
   /** Charts sharing an x-axis show the hover cursor together. */
   syncCursor: boolean;
+  /** Colour every run in charts by a value instead of its id; null: by id. */
+  colorBy: ColorBy | null;
 }
 
 export interface WorkspaceDoc {
@@ -59,7 +75,7 @@ export const EMPTY_WORKSPACE: WorkspaceDoc = Object.freeze({
   hidePatterns: [],
   sections: { pinned: [], sort: [] },
   customPanels: [],
-  prefs: { syncZoom: false, syncCursor: true },
+  prefs: { syncZoom: false, syncCursor: true, colorBy: null },
 }) as WorkspaceDoc;
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -72,6 +88,16 @@ function defaultsOf(v: unknown): CardDefaults {
   const out: Record<string, Record<string, unknown>> = {};
   for (const [k, d] of Object.entries(v)) if (isObj(d)) out[k] = d;
   return out as CardDefaults;
+}
+
+function colorByOf(v: unknown): ColorBy | null {
+  if (!isObj(v) || typeof v.expr !== "string" || v.expr.trim() === "") return null;
+  const n = typeof v.buckets === "number" && Number.isFinite(v.buckets) ? Math.round(v.buckets) : 4;
+  return {
+    expr: v.expr,
+    buckets: Math.min(COLOR_BY_BUCKETS.max, Math.max(COLOR_BY_BUCKETS.min, n)),
+    palette: (COLOR_BY_PALETTES as readonly unknown[]).includes(v.palette) ? (v.palette as ColorByPalette) : "turbo",
+  };
 }
 
 function isCustomPanel(v: unknown): v is CustomPanel {
@@ -105,6 +131,7 @@ export function normalizeWorkspace(raw: unknown): WorkspaceDoc {
     prefs: {
       syncZoom: typeof prefs.syncZoom === "boolean" ? prefs.syncZoom : EMPTY_WORKSPACE.prefs.syncZoom,
       syncCursor: typeof prefs.syncCursor === "boolean" ? prefs.syncCursor : EMPTY_WORKSPACE.prefs.syncCursor,
+      colorBy: colorByOf(prefs.colorBy),
     },
   };
 }

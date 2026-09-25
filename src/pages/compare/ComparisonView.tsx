@@ -42,6 +42,7 @@ import { disambiguateRunLabels, useRunMetadataVersion } from "../../lib/run-labe
 import { useRunSelectorResolution } from "../../api/hooks";
 import type { Run } from "../../api/types";
 import { ChartSyncProvider } from "../../lib/chart-sync";
+import RunColorByProvider from "../../components/RunColorByProvider";
 
 /** The name a comparison card is searched and sorted by. */
 function comparisonCardLabel(card: ComparisonCard): string {
@@ -371,6 +372,7 @@ export default function ComparisonView({
 
       {tab === "metrics" && (
         <RunViewContext.Provider value={runView}>
+        <RunColorByProvider colorBy={doc.prefs.colorBy} runIds={compRunIds}>
           <RunSetEditor
             title="Runs in comparison"
             runIds={compRunIds}
@@ -465,6 +467,7 @@ export default function ComparisonView({
             </ChartSyncProvider>
             </WorkspaceDefaultsProvider>
           )}
+        </RunColorByProvider>
         </RunViewContext.Provider>
       )}
 

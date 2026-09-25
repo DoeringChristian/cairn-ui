@@ -14,7 +14,7 @@ test("normalize fills a null or partial payload", () => {
   const d = normalizeWorkspace({ hiddenCards: ["a", 3], sections: { pinned: ["x"] }, prefs: { syncZoom: true } });
   assert.deepEqual(d.hiddenCards, ["a"]);
   assert.deepEqual(d.sections, { pinned: ["x"], sort: [] });
-  assert.deepEqual(d.prefs, { syncZoom: true, syncCursor: true });
+  assert.deepEqual(d.prefs, { syncZoom: true, syncCursor: true, colorBy: null });
 });
 
 test("normalize drops malformed custom panels and defaults", () => {
@@ -78,4 +78,19 @@ test("saved views round-trip the doc and the run layout", async () => {
   assert.deepEqual(back.workspace, doc);
   assert.deepEqual(back.runLayout, layout);
   assert.equal(parseViewPayload({ workspace: doc }).runLayout, null);
+});
+
+test("prefs.colorBy: null by default, clamped and defaulted when set", () => {
+  assert.equal(normalizeWorkspace({}).prefs.colorBy, null);
+  assert.equal(normalizeWorkspace({ prefs: { colorBy: { expr: "  " } } }).prefs.colorBy, null);
+  assert.deepEqual(normalizeWorkspace({ prefs: { colorBy: { expr: "config.lr", buckets: 20, palette: "nope" } } }).prefs.colorBy, {
+    expr: "config.lr",
+    buckets: 8,
+    palette: "turbo",
+  });
+  assert.deepEqual(normalizeWorkspace({ prefs: { colorBy: { expr: "run.group", buckets: 1, palette: "magma" } } }).prefs.colorBy, {
+    expr: "run.group",
+    buckets: 2,
+    palette: "magma",
+  });
 });

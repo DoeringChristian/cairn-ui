@@ -34,6 +34,7 @@ import type { BuiltPanel } from "../lib/workspace/panel-builder";
 import { sendCardsToReport } from "../lib/workspace/send-to-report";
 import { useWorkspace } from "../lib/workspace/use-workspace";
 import { ChartSyncProvider } from "../lib/chart-sync";
+import RunColorByProvider from "./RunColorByProvider";
 
 interface Props {
   runId: string;
@@ -193,6 +194,7 @@ export default function CardGrid({ runId, sequences }: Props) {
   return (
     <WorkspaceDefaultsProvider defaults={doc.defaults}>
       <ChartSyncProvider enabled={doc.prefs.syncZoom}>
+      <RunColorByProvider colorBy={doc.prefs.colorBy} runIds={[runId]}>
       <CardNavProvider>
       <div className="space-y-8">
         {projectId && (
@@ -305,6 +307,7 @@ export default function CardGrid({ runId, sequences }: Props) {
         })}
       </div>
       </CardNavProvider>
+      </RunColorByProvider>
       </ChartSyncProvider>
     </WorkspaceDefaultsProvider>
   );

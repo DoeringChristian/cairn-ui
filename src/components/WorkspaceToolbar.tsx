@@ -1,8 +1,8 @@
 /**
  * The workspace toolbar above the run page's cards and a comparison's cards:
  * search (⌘K, a regex over card names), "hide matching" (a sticky hide
- * pattern in the workspace), the quick panel builder, the sync-zoom toggle
- * and saved views. Everything but search edits the project workspace, so a
+ * pattern in the workspace), the quick panel builder, the sync-zoom toggle,
+ * colour-by (with its legend) and saved views. Everything but search edits the project workspace, so a
  * read-only surface shows only the search box.
  */
 
@@ -14,7 +14,11 @@ import { CardMutationContext } from "../lib/card-settings";
 import { formatShortcut } from "../lib/shortcuts";
 import { IS_MAC, useShortcut } from "../lib/use-shortcut";
 import type { RunLayout } from "../lib/run-layout";
-import { ops } from "../lib/workspace/doc";
+import { COLOR_BY_BUCKETS, ops, type ColorBy, type ColorByPalette } from "../lib/workspace/doc";
+import { useRunColorBy, type RunColorByValue } from "../lib/run-color-by-context";
+import { useScalarExprs } from "../lib/use-scalar-exprs";
+import { Select, Stepper } from "./settings/palette";
+import ExprField from "./settings-panels/ExprField";
 import { compilePanelFilter } from "../lib/workspace/panel-filter";
 import { buildPanels, type BuiltPanel } from "../lib/workspace/panel-builder";
 import { useWorkspace } from "../lib/workspace/use-workspace";
@@ -123,11 +127,14 @@ export default function WorkspaceToolbar({
         </span>
       ))}
 
+      <ColorByLegend />
+
       {mutable && (
         <div className="ml-auto flex items-center gap-2">
           {builderMetrics && onBuildPanels && (
             <PanelBuilder metrics={builderMetrics} onBuild={onBuildPanels} />
           )}
+          <ColorByControl projectId={projectId} />
           <HeaderToggle
             icon="fa-link"
             label={doc.prefs.syncZoom ? "Zoom synced across charts (click to unlink)" : "Sync zoom across charts"}
@@ -224,6 +231,134 @@ function PanelBuilder({ metrics, onBuild }: { metrics: readonly string[]; onBuil
           </button>
         </div>
       </Popover>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Colour by (lib/run-color-by.ts)
+// ---------------------------------------------------------------------------
+
+const COLOR_BY_PALETTE_OPTIONS: Array<{ value: ColorByPalette; label: string }> = [
+  { value: "turbo", label: "Turbo" },
+  { value: "viridis", label: "Viridis" },
+  { value: "magma", label: "Magma" },
+];
+
+/** The active colour-by's key: its expression and each bucket's swatch. */
+function ColorByLegend() {
+  const cb = useRunColorBy();
+  if (!cb?.colorBy) return null;
+  return (
+    <div
+      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-muted"
+      aria-label={`Runs coloured by ${cb.colorBy.expr}`}
+      data-testid="color-by-legend"
+    >
+      <span className="mono text-fg" title="Runs coloured by">
+        <i className="fa-solid fa-palette mr-1 text-fg-subtle" aria-hidden="true" />
+        {cb.colorBy.expr}
+      </span>
+      {cb.error ? (
+        <span className="text-status-failed">{cb.error}</span>
+      ) : cb.loading ? (
+        <span>…</span>
+      ) : (
+        cb.legend.map((l) => (
+          <span key={l.label} className="inline-flex items-center gap-1">
+            <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: l.color }} />
+            <span className="mono">{l.label}</span>
+          </span>
+        ))
+      )}
+    </div>
+  );
+}
+
+function ColorByControl({ projectId }: { projectId: string }) {
+  const cb = useRunColorBy();
+  const anchor = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const { doc, update } = useWorkspace(projectId);
+  if (!cb) return null;
+  const current = doc.prefs.colorBy;
+  const set = (next: ColorBy | null, label: string) => update(ops.setPrefs({ colorBy: next }), { label });
+  return (
+    <>
+      <button
+        ref={anchor}
+        type="button"
+        className={`${TOOL_BTN} ${current ? "!border-accent !text-fg" : ""}`}
+        onClick={() => setOpen((v) => !v)}
+        title="Colour runs by a value"
+        aria-pressed={current != null}
+      >
+        <i className="fa-solid fa-palette" aria-hidden="true" /> Colour by
+      </button>
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={anchor}
+        title="Colour runs by"
+        titleAnchored
+        width={320}
+        align="end"
+        bodyClassName="flex flex-col gap-3 p-4"
+      >
+        {open && <ColorByForm cb={cb} current={current} set={set} />}
+      </Popover>
+    </>
+  );
+}
+
+function ColorByForm({
+  cb,
+  current,
+  set,
+}: {
+  cb: RunColorByValue;
+  current: ColorBy | null;
+  set: (next: ColorBy | null, label: string) => void;
+}) {
+  const runIds = useMemo(() => [...cb.runIds], [cb.runIds]);
+  const { options } = useScalarExprs(runIds, []);
+  const base: ColorBy = current ?? { expr: "", buckets: 4, palette: "turbo" };
+  return (
+    <>
+      <ExprField
+        label="Value"
+        info="Each run's value of this expression picks its colour: numbers go into evenly spaced buckets between the lowest and highest run, text gets one colour per value."
+        value={current?.expr ?? null}
+        onChange={(expr) => (expr == null ? set(null, "Colour by run") : set({ ...base, expr }, `Colour by ${expr}`))}
+        options={options}
+        placeholder="config.lr, min(val.loss), run.group"
+        clearable
+      />
+      <Stepper
+        label="Buckets"
+        value={base.buckets}
+        min={COLOR_BY_BUCKETS.min}
+        max={COLOR_BY_BUCKETS.max}
+        disabled={!current}
+        onChange={(buckets) => current && set({ ...current, buckets }, `Colour buckets ${buckets}`)}
+      />
+      <Select
+        label="Palette"
+        value={base.palette}
+        options={COLOR_BY_PALETTE_OPTIONS}
+        disabled={!current}
+        onChange={(palette) => current && set({ ...current, palette }, `Colour palette ${palette}`)}
+      />
+      <div className="flex justify-end">
+        <button
+          type="button"
+          className="btn text-xs disabled:opacity-50"
+          disabled={!current}
+          onClick={() => set(null, "Colour by run")}
+        >
+          Clear
+        </button>
+      </div>
     </>
   );
 }
