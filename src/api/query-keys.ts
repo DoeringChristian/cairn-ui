@@ -25,6 +25,8 @@ export const qk = {
   highlight: (selected: string | null, content: string | undefined) => ["highlight", selected, content] as const,
   plotlySource: (sourceHash: string | null | undefined) => ["plotly-source", sourceHash] as const,
   imageGallery: (hash: string | null | undefined) => ["image-gallery", hash] as const,
+  /** An artifact's bytes as text (markdown, HTML); content addressed, so never stale. */
+  artifactText: (hash: string | null | undefined) => ["artifact-text", hash] as const,
   artifactFamilies: (projectId: string) => ["artifact-families", projectId] as const,
   artifactFamily: (projectId: string, familyId: string) => ["artifact-family", projectId, familyId] as const,
   runInputArtifacts: (runId: string) => ["run-input-artifacts", runId] as const,

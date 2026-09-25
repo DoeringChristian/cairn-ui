@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueries } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { safeJsonParse } from "../lib/format";
 import {
@@ -103,6 +103,8 @@ export default function HistogramCard({
     queryFn: () => fetchNpz(current!.artifact_hash!),
     enabled: !!current?.artifact_hash && !heatmapActive,
     staleTime: Infinity,
+    // The previous step stays on screen while the next one loads (no placeholder flash).
+    placeholderData: keepPreviousData,
   });
   const barsData = useMemo(() => toHistogram(barsQuery.data), [barsQuery.data]);
 

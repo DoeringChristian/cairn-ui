@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueries } from "@tanstack/react-query";
+import SettledImg from "./media/SettledImg";
 import { useSequence } from "../api/hooks";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
@@ -74,7 +75,10 @@ function usePlotlySource(sourceHash: string | null | undefined) {
       return (await res.json()) as PlotlyFigure;
     },
     enabled: !!sourceHash,
-    staleTime: 60_000,
+    // Content addressed: never stale. The previous step's figure stays on
+    // screen while the next one loads (no placeholder flash).
+    staleTime: Infinity,
+    placeholderData: keepPreviousData,
     retry: false,
   });
 }
@@ -286,7 +290,7 @@ function FigurePane({
   }
   return (
     <div className="flex h-full justify-center items-center rounded bg-bg p-2 overflow-hidden">
-      <img
+      <SettledImg
         src={api.artifactUrl(current.artifact_hash)}
         alt={`${m.name} @ step ${current.step}`}
         className="max-h-full max-w-full object-contain"
@@ -612,7 +616,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
           <div className="h-48 motion-safe:animate-pulse rounded bg-bg-hover" />
         ) : (
           <div className={`flex justify-center items-center rounded bg-bg p-2 ${heightClass}`}>
-            <img
+            <SettledImg
               src={api.artifactUrl(current.artifact_hash)}
               alt={`${metric.name} @ step ${current.step}`}
               className="max-w-full max-h-full object-contain"

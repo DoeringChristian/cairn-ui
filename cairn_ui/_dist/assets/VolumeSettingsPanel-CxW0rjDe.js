@@ -1,0 +1,1 @@
+import{j as s,c2 as i,db as n,dd as o}from"./index-BU9Mdmdf.js";function r({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{data:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{r as default};

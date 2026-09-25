@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   TransformComponent,
   TransformWrapper,
@@ -20,6 +20,12 @@ export interface ImageSource {
 interface Props {
   /** The pane's own image (right of the divider when comparing; the reference is on the left). */
   image: ImageSource;
+  /**
+   * The image's natural size, known up front when the caller decoded it
+   * before handing it over (see image-frame.ts): the overlay then draws in
+   * the same commit as the image. Without it the overlay waits for `load`.
+   */
+  imageSize?: { w: number; h: number };
   /** Reference image; when present the pane shows an A/B divider. */
   reference?: ImageSource | null;
   /** Divider position as a fraction of the pane width. */
@@ -59,7 +65,7 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
  * scrolls the page.
  */
 export default function ImagePane({
-  image, reference, split, onSplitChange, transform, onTransformChange, overlays, overlayView, rendering = "auto",
+  image, imageSize, reference, split, onSplitChange, transform, onTransformChange, overlays, overlayView, rendering = "auto",
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null);
   /** The foreground layer: the image plus its overlay, clipped together (screen space). */
@@ -68,7 +74,10 @@ export default function ImagePane({
   const fgContentRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   // Keyed by src: a new image's overlay waits for that image's size.
-  const [natural, setNatural] = useState<{ src: string; w: number; h: number } | null>(null);
+  const [loaded, setLoaded] = useState<{ src: string; w: number; h: number } | null>(null);
+  const natural = imageSize && imageSize.w > 0
+    ? { src: image.src, ...imageSize }
+    : loaded;
   const zoomRef = useRef<ReactZoomPanPinchRef | null>(null);
   const own = useRef<PaneTransform>({ scale: 1, x: 0, y: 0 });
   const [pixelated, setPixelated] = useState(false);
@@ -98,6 +107,9 @@ export default function ImagePane({
     setPixelated(screenPerImagePx > 1.5);
     if (screenPerImagePx > 0) fgRef.current?.style.setProperty("--overlay-px", String(1 / screenPerImagePx));
   }, []);
+
+  // A new image of a different size changes the screen-per-image-pixel ratio.
+  useLayoutEffect(updatePixelated, [image.src, updatePixelated]);
 
   // Apply the shared transform from sibling panes.
   useEffect(() => {
@@ -212,7 +224,7 @@ export default function ImagePane({
         <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%" }}>
           <div className="relative h-full w-full">
             {reference && (
-              <img src={reference.src} alt={reference.label ?? "reference"} draggable={false} className={imgClass} style={imgStyle} />
+              <img src={reference.src} alt={reference.label ?? "reference"} draggable={false} decoding="sync" className={imgClass} style={imgStyle} />
             )}
           </div>
         </TransformComponent>
@@ -237,9 +249,11 @@ export default function ImagePane({
             draggable={false}
             className={imgClass}
             style={imgStyle}
+            // A decoded frame paints in the commit that shows it (never a blank frame).
+            decoding="sync"
             onLoad={(e) => {
               const img = e.currentTarget;
-              setNatural({ src: image.src, w: img.naturalWidth, h: img.naturalHeight });
+              if (!imageSize) setLoaded({ src: image.src, w: img.naturalWidth, h: img.naturalHeight });
               updatePixelated();
             }}
           />

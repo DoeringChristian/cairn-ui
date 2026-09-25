@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../../api/client";
-import { qk } from "../../api/query-keys";
-import type { SequencePoint } from "../../api/types";
-import { describeEncoding, GALLERY_MIME, isBrowserDisplayable } from "../../lib/artifact-format";
+import { describeEncoding, isBrowserDisplayable } from "../../lib/artifact-format";
 import { artifactFilename } from "../../lib/download";
 import { pointCaption } from "../../lib/caption";
 import UnsupportedArtifact from "../UnsupportedArtifact";
@@ -18,63 +15,18 @@ import {
 } from "../../lib/overlays";
 import ImagePane, { type ImageRendering, type PaneTransform } from "./ImagePane";
 import { decodeMask } from "./decode-mask";
+import type { ImageFrame, ImageItem } from "./image-frame";
 
-/** One stored image: a single point's artifact, or one entry of a gallery. */
-interface ImageItem {
-  hash: string;
-  mime: string | null | undefined;
-  metadata: Record<string, unknown> | null;
-  /** The point's caption, or — in a gallery — the entry's own. */
-  caption: string | null;
-}
-
-function parseMetadata(raw: string | null | undefined): Record<string, unknown> | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-/** A point's images: itself, or — for a gallery — the entries of its manifest. */
-function useImageItems(point: SequencePoint | null): { items: ImageItem[]; loading: boolean } {
-  const isGallery = point?.artifact_mime === GALLERY_MIME;
-  const manifest = useQuery({
-    queryKey: qk.imageGallery(point?.artifact_hash),
-    queryFn: async () => {
-      const res = await fetch(api.artifactUrl(point!.artifact_hash!));
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      return (await res.json()) as {
-        images: Array<{ hash: string; mime_type: string; metadata: Record<string, unknown>; caption?: string }>;
-      };
-    },
-    enabled: isGallery && !!point?.artifact_hash,
-    staleTime: Infinity,
-  });
-  if (!point?.artifact_hash) return { items: [], loading: false };
-  if (!isGallery) {
-    return {
-      items: [{
-        hash: point.artifact_hash,
-        mime: point.artifact_mime,
-        metadata: parseMetadata(point.artifact_metadata),
-        caption: pointCaption(point.metadata),
-      }],
-      loading: false,
-    };
-  }
-  const items = (manifest.data?.images ?? []).map((i) => ({
-    hash: i.hash, mime: i.mime_type, metadata: i.metadata, caption: i.caption || null,
-  }));
-  return { items, loading: manifest.isLoading };
-}
+const EMPTY_ITEMS: ImageItem[] = [];
 
 interface Props {
   metricName: string;
-  point: SequencePoint | null;
-  /** Reference point; a gallery reference pairs with this point's images by index. */
-  refPoint?: SequencePoint | null;
+  /**
+   * What the pane paints, decoded and complete (see image-frame.ts; a gallery
+   * reference pairs with the point's images by index): `null` when the run has
+   * no image here, `undefined` before the card's first frame is ready.
+   */
+  frame: ImageFrame | null | undefined;
   refLabel?: string;
   split: number;
   onSplitChange: (split: number, final: boolean) => void;
@@ -123,52 +75,55 @@ function useItemOverlays(items: ImageItem[], onOverlays?: (summary: OverlaySumma
 
 /**
  * Everything one run shows at the current step: an image, or a gallery of
- * images in a grid. Every image shares the card's zoom and divider.
+ * images in a grid. Every image shares the card's zoom and divider. It only
+ * renders the frame it is handed; the card decides when frames swap.
  */
 export default function ImagePointView({
-  metricName, point, refPoint, refLabel, split, onSplitChange, transform, onTransformChange, loadingHint,
+  metricName, frame, refLabel, split, onSplitChange, transform, onTransformChange, loadingHint,
   overlayView, onOverlays, rendering,
 }: Props) {
-  const { items, loading } = useImageItems(point);
-  const refs = useImageItems(refPoint ?? null);
+  const items = frame?.items ?? EMPTY_ITEMS;
   const overlays = useItemOverlays(items, onOverlays);
 
-  if (!point || (items.length === 0 && !loading)) {
+  // Before the card's first frame is decoded (afterwards it holds its last one).
+  if (frame === undefined) return <div className="h-full motion-safe:animate-pulse bg-bg-hover" />;
+  if (!frame?.point || items.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-fg-subtle">
         {loadingHint ? "Loading…" : "No image logged"}
       </div>
     );
   }
-  if (loading) return <div className="h-full motion-safe:animate-pulse bg-bg-hover" />;
+  const shown = frame.point;
+  const refs = { items: frame.refItems };
 
   const gallery = items.length > 1;
   // A gallery's own caption heads the grid; each image shows its entry's.
-  const galleryCaption = gallery ? pointCaption(point.metadata) : null;
+  const galleryCaption = gallery ? pointCaption(shown.metadata) : null;
   const cell = (item: ImageItem, i: number) => {
     const url = api.artifactUrl(item.hash);
-    const base = gallery ? `${metricName} · ${point.step} · #${i}` : `${metricName} · ${point.step}`;
+    const base = gallery ? `${metricName} · ${shown.step} · #${i}` : `${metricName} · ${shown.step}`;
     const label = item.caption ? `${base} · ${item.caption}` : base;
     if (!isBrowserDisplayable(item.mime)) {
       return (
         <UnsupportedArtifact
-          key={item.hash + i}
+          key={i}
           label={`${describeEncoding(item.mime, item.metadata)} — not viewable in the browser`}
-          detail={gallery ? `step ${point.step} · #${i}` : `step ${point.step}`}
+          detail={gallery ? `step ${shown.step} · #${i}` : `step ${shown.step}`}
           previewSrc={typeof item.metadata?.preview === "string" ? item.metadata.preview : undefined}
           downloadUrl={url}
-          filename={artifactFilename(gallery ? `${metricName}_${i}` : metricName, point.step, item.mime)}
+          filename={artifactFilename(gallery ? `${metricName}_${i}` : metricName, shown.step, item.mime)}
         />
       );
     }
-    const ref = refs.items.length > 1 ? refs.items[i] : refs.items[0];
-    const refShown = ref && isBrowserDisplayable(ref.mime)
-      ? { src: api.artifactUrl(ref.hash), label: `${refLabel ?? "reference"}${refs.items.length > 1 ? ` · #${i}` : ""}` }
+    const refItem = refs.items.length > 1 ? refs.items[i] : refs.items[0];
+    const refShown = refItem && isBrowserDisplayable(refItem.mime)
+      ? { src: api.artifactUrl(refItem.hash), label: `${refLabel ?? "reference"}${refs.items.length > 1 ? ` · #${i}` : ""}` }
       : null;
     const pane = (
       <ImagePane
-        key={item.hash + i}
         image={{ src: url, label }}
+        imageSize={frame.sizes[url]}
         reference={refShown}
         split={split}
         onSplitChange={onSplitChange}
@@ -179,11 +134,12 @@ export default function ImagePointView({
         rendering={rendering}
       />
     );
-    if (!item.caption) return pane;
+    // Keyed by position with one tree shape, so a step change reuses the
+    // pane (and its zoom state) instead of remounting it.
     return (
-      <div key={item.hash + i} className="relative h-full w-full">
+      <div key={i} className="relative h-full w-full">
         {pane}
-        <Caption text={item.caption} />
+        {item.caption && <Caption text={item.caption} />}
       </div>
     );
   };
@@ -197,7 +153,7 @@ export default function ImagePointView({
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: "minmax(0, 1fr)" }}
     >
       {items.map((item, i) => (
-        <div key={item.hash + i} className="relative min-h-0 min-w-0 overflow-hidden">
+        <div key={i} className="relative min-h-0 min-w-0 overflow-hidden">
           {cell(item, i)}
         </div>
       ))}

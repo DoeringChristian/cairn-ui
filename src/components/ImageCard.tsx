@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useSequencesForRuns } from "../api/hooks";
 import type { SequenceMeta, SequencePoint } from "../api/types";
@@ -13,6 +14,7 @@ import {
 } from "../lib/overlays";
 import { gridValues, normalizeSlots, slotValue } from "../lib/media/panel-layout";
 import { STEP_KEY, formatKeyValue } from "../lib/media/slider-key";
+import { useNeighbourPrefetch, useSettledFrame } from "../lib/media/use-settled-frame";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import ComparePanes from "./card-kit/ComparePanes";
@@ -24,6 +26,7 @@ import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes"
 import { useStepSlider } from "./card-kit/use-step-slider";
 import { type PaneTransform } from "./image/ImagePane";
 import ImagePointView from "./image/ImagePointView";
+import { imageFrameKey, peekImageFrame, resolveImageFrame, type ImageFrame } from "./image/image-frame";
 import ImageSettingsPanel from "./settings-panels/ImageSettingsPanel";
 
 interface Props {
@@ -149,21 +152,16 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     return step == null ? null : resolveAtStep(refPoints[index] ?? [], step, { nearest: true });
   };
 
-  const renderView = (index: number, point: SequencePoint | null, overlayKey: string) => (
-    <ImagePointView
-      metricName={series[index]?.name ?? metric.name}
-      point={point}
-      refPoint={refAt(index, point)}
-      refLabel={reference?.name}
-      split={split}
-      onSplitChange={onSplitChange}
-      transform={transform}
-      onTransformChange={setTransform}
-      loadingHint={anyLoading}
-      overlayView={overlayView}
-      onOverlays={reporterFor(overlayKey)}
-      rendering={settings.rendering}
-    />
+  // Warm the frames around the slider (every pane's image + reference), so
+  // stepping finds them decoded. Grid columns sit at fixed values: nothing to warm.
+  const qc = useQueryClient();
+  useNeighbourPrefetch(settings.panelMode === "grid" ? 0 : values.length, safeIdx, (j) =>
+    series.flatMap((_, index) => {
+      const point = pointAt(index, values[j]!, true);
+      const ref = refAt(index, point);
+      const key = imageFrameKey(point, ref);
+      return key ? [{ key, run: (signal: AbortSignal) => resolveImageFrame(qc, point, ref, signal) }] : [];
+    }),
   );
 
   const mode = settings.panelMode;
@@ -171,6 +169,62 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     () => normalizeSlots(settings.compareSlots, paneKeys),
     [settings.compareSlots, paneKeys],
   );
+  const gridCols = mode === "grid" ? gridValues(values, settings.columns) : [];
+
+  /** Every pane the card shows right now: its id, series and point (mirrors renderPanes). */
+  const paneRequests = (): Array<{ id: string; index: number; point: SequencePoint | null }> => {
+    if (mode === "grid") {
+      return series.flatMap((_, row) =>
+        gridCols.map((v, col) => ({ id: `grid:${row}:${col}`, index: row, point: pointAt(row, v, false) })));
+    }
+    if (mode === "compare") {
+      return compareSlots.flatMap((slot, i) => {
+        const index = paneKeys.indexOf(slot.pane);
+        const v = slotValue(slot, settings.compareLinked, currentValue);
+        return index < 0 ? [] : [{ id: `compare:${i}`, index, point: pointAt(index, v, true) }];
+      });
+    }
+    return paneKeys.map((key, index) => ({ id: key, index, point: pointAt(index, currentValue, true) }));
+  };
+
+  // The card swaps ALL its panes in one commit, once every pane's frame
+  // (image, reference, gallery entries, masks) is decoded: runs compared
+  // side by side never show different steps, an image never shows its
+  // reference's step, and until then the previous frame stays on screen.
+  const requests = paneRequests().map((r) => ({ ...r, ref: refAt(r.index, r.point) }));
+  const cardKey = requests.map((r) => `${r.id}=${imageFrameKey(r.point, r.ref) ?? "-"}`).join(" ");
+  const frames = useSettledFrame<Map<string, ImageFrame | null>>(
+    cardKey,
+    () => {
+      const out = new Map<string, ImageFrame | null>();
+      for (const r of requests) {
+        if (!r.point) { out.set(r.id, null); continue; }
+        const f = peekImageFrame(qc, r.point, r.ref);
+        if (!f) return undefined;
+        out.set(r.id, f);
+      }
+      return out;
+    },
+    async (signal) => new Map(await Promise.all(requests.map(async (r) =>
+      [r.id, r.point ? await resolveImageFrame(qc, r.point, r.ref, signal) : null] as const))),
+  ).frame;
+
+  const renderView = (index: number, id: string) => (
+    <ImagePointView
+      metricName={series[index]?.name ?? metric.name}
+      frame={frames ? frames.get(id) ?? null : undefined}
+      refLabel={reference?.name}
+      split={split}
+      onSplitChange={onSplitChange}
+      transform={transform}
+      onTransformChange={setTransform}
+      loadingHint={anyLoading}
+      overlayView={overlayView}
+      onOverlays={reporterFor(id)}
+      rendering={settings.rendering}
+    />
+  );
+
   const paneOptions = useMemo(
     () => paneKeys.map((k, i) => ({
       key: k,
@@ -182,14 +236,13 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
 
   const renderPanes = () => {
     if (mode === "grid") {
-      const cols = gridValues(values, settings.columns);
       return (
         <GridPanes
           rows={paneOptions}
-          columns={cols.map((v) => ({ value: v, label: `${keyName} ${formatKeyValue(v)}` }))}
+          columns={gridCols.map((v) => ({ value: v, label: `${keyName} ${formatKeyValue(v)}` }))}
           current={currentValue}
           onColumnClick={slider.setValue}
-          renderCell={(row, col) => renderView(row, pointAt(row, cols[col]!, false), `grid:${row}:${col}`)}
+          renderCell={(row, col) => renderView(row, `grid:${row}:${col}`)}
         />
       );
     }
@@ -207,8 +260,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
           columns={settings.columns}
           renderSlot={(slot, _value, i) => {
             const index = paneKeys.indexOf(slot.pane);
-            const v = slotValue(slot, settings.compareLinked, currentValue);
-            return index < 0 ? null : renderView(index, pointAt(index, v, true), `compare:${i}`);
+            return index < 0 ? null : renderView(index, `compare:${i}`);
           }}
         />
       );
@@ -220,7 +272,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
         inModal={false}
         columns={settings.columns}
         onPaneWidthsChange={() => {}}
-        renderPane={(key, index) => renderView(index, pointAt(index, currentValue, true), key)}
+        renderPane={(key, index) => renderView(index, key)}
       />
     );
   };

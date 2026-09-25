@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { safeJsonParse } from "../lib/format";
 import { formatNum } from "../lib/plot-utils/types";
@@ -148,6 +148,8 @@ export default function TensorCard({
     queryFn: () => fetchNpy(current!.artifact_hash!),
     enabled: !!current?.artifact_hash && needsBlob,
     staleTime: Infinity,
+    // The previous step stays on screen while the next one loads (no placeholder flash).
+    placeholderData: keepPreviousData,
   });
   const arr = npyQuery.data;
 

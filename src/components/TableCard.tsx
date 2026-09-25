@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { keepPreviousData, useQueries } from "@tanstack/react-query";
 import { useSequencesForRuns } from "../api/hooks";
 import { api } from "../api/client";
 import { downloadCsv, safeName } from "../lib/download";
@@ -54,6 +54,8 @@ function useTableBlobs(hashes: Array<string | null | undefined>) {
       queryKey: ["table-blob", hash],
       enabled: !!hash,
       staleTime: Infinity,
+      // The previous step stays on screen while the next one loads (no placeholder flash).
+      placeholderData: keepPreviousData,
       queryFn: async () => {
         const r = await fetch(api.artifactUrl(hash!));
         if (!r.ok) throw new Error(`fetch failed (${r.status})`);

@@ -7,6 +7,7 @@
  */
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useSequencesForRuns } from "../../api/hooks";
 import { api } from "../../api/client";
 import { downloadArtifact, artifactFilename } from "../../lib/download";
@@ -15,6 +16,7 @@ import { useCardDrop } from "../../lib/use-series-drop";
 import type { ComparisonSeriesRef } from "../../lib/comparisons";
 import { gridValues, normalizeSlots, slotValue } from "../../lib/media/panel-layout";
 import { STEP_KEY, formatKeyValue } from "../../lib/media/slider-key";
+import { useNeighbourPrefetch } from "../../lib/media/use-settled-frame";
 import type { SequenceMeta, SequencePoint } from "../../api/types";
 import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid } from "../card-kit";
 import ComparePanes from "../card-kit/ComparePanes";
@@ -79,6 +81,12 @@ interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
   nearest: boolean;
   settingsPanel: (ctl: SettingsController<S>, ctx: SteppedMediaPanelCtx) => ReactNode;
   renderArtifact: (view: MediaView<S>) => ReactNode;
+  /**
+   * Warm what `renderArtifact` needs for one point (fetched text, a decoded
+   * poster), so the slider's neighbours render without waiting. Omitted: no
+   * prefetch (audio streams on demand).
+   */
+  prefetch?: (qc: QueryClient, point: SequencePoint, signal: AbortSignal) => Promise<unknown>;
   /** Extra controls between the panes and the slider (the video transport). */
   footer?: (args: { settings: S; paneCount: number; following: boolean }) => ReactNode;
 }
@@ -103,6 +111,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   nearest,
   settingsPanel,
   renderArtifact,
+  prefetch,
   footer,
 }: Props<S>) {
   const { ctl, effectiveMetrics, allRunIds } =
@@ -151,6 +160,14 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
     const step = stepFor(i, value, { nearest: near });
     return step == null ? null : resolveAtStep(seriesPoints[i] ?? [], step, { nearest: near });
   };
+  const qc = useQueryClient();
+  useNeighbourPrefetch(prefetch && settings.panelMode !== "grid" ? values.length : 0, safeIdx, (j) =>
+    shown.flatMap((_, i) => {
+      const p = pointAt(i, values[j]!, nearest);
+      return p?.artifact_hash ? [{ key: `${kind}:${p.artifact_hash}`, run: (signal: AbortSignal) => prefetch!(qc, p, signal) }] : [];
+    }),
+  );
+
   // The first pane's artifact drives the header download.
   const current = pointAt(0, currentValue, false);
 

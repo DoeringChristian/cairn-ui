@@ -14,8 +14,9 @@
  * fixed height from settings.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { api } from "../api/client";
+import { useMemo, useRef } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { artifactTextQuery } from "../lib/media/artifact-text";
 import { useIframeAutoHeight } from "./card-kit";
 import SteppedMediaCard, { type SteppedMediaCardProps } from "./media/SteppedMediaCard";
 import type { HtmlSettings } from "./cards-settings/html";
@@ -62,7 +63,13 @@ function injectResizeShim(html: string): string {
   return html + RESIZE_SHIM;
 }
 
-/** One HTML artifact in a sandboxed iframe, sized by the resize shim or `fixedHeight`. */
+/**
+ * One HTML artifact in a sandboxed iframe, sized by the resize shim or
+ * `fixedHeight`. The text comes through the query cache (prefetched around
+ * the slider), and the previous step's document stays until the next one's
+ * text is in; the browser then holds the old paint until the new document
+ * renders, so a step change never flashes an empty frame.
+ */
 function HtmlFrame({
   hash,
   name,
@@ -75,19 +82,8 @@ function HtmlFrame({
   fixedHeight: number;
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    let cancelled = false;
-    setError(null);
-    fetch(api.artifactUrl(hash))
-      .then((r) => r.text())
-      .then((html) => { if (!cancelled) iframe.srcdoc = injectResizeShim(html); })
-      .catch((e) => { if (!cancelled) setError(String(e)); });
-    return () => { cancelled = true; };
-  }, [hash]);
+  const q = useQuery({ ...artifactTextQuery(hash), placeholderData: keepPreviousData });
+  const doc = useMemo(() => (q.data != null ? injectResizeShim(q.data) : undefined), [q.data]);
 
   // Until the first resize message arrives this is undefined and the frame
   // keeps `fixedHeight`.
@@ -97,13 +93,14 @@ function HtmlFrame({
     enabled: autoHeight,
   });
 
-  if (error) {
-    return <div className="rounded bg-bg p-2 text-xs text-status-failed overflow-auto"><pre>{error}</pre></div>;
+  if (q.isError && !q.isPlaceholderData) {
+    return <div className="rounded bg-bg p-2 text-xs text-status-failed overflow-auto"><pre>{String(q.error)}</pre></div>;
   }
   return (
     <iframe
       ref={iframeRef}
       sandbox="allow-scripts"
+      srcDoc={doc}
       className="w-full rounded border-0 bg-bg"
       style={{ height: autoHeight ? (measuredHeight ?? fixedHeight) : fixedHeight }}
       title={`HTML: ${name}`}
@@ -121,6 +118,7 @@ export default function HtmlCard(props: SteppedMediaCardProps) {
       defaultHeight={360}
       nearest
       settingsPanel={(ctl, ctx) => <HtmlSettingsPanel ctl={ctl} ctx={ctx} mode="card" />}
+      prefetch={(qc, point) => qc.prefetchQuery(artifactTextQuery(point.artifact_hash!))}
       renderArtifact={({ hash, name, settings, single }) => {
         const frame = <HtmlFrame hash={hash} name={name} autoHeight={settings.autoHeight} fixedHeight={settings.fixedHeight} />;
         return single ? <div className="flex-1 min-h-0 overflow-auto">{frame}</div> : frame;

@@ -16,6 +16,7 @@ import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import ArtifactSettingsPanel from "./settings-panels/ArtifactSettingsPanel";
 import { useStepSlider, resolveAtStep } from "./card-kit";
+import SettledImg from "./media/SettledImg";
 
 interface Props {
   runId: string;
@@ -97,7 +98,7 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
           {/* Image preview for image MIME types */}
           {isBrowserDisplayable(mime) && (
             <div className="flex justify-center items-center rounded bg-bg p-2 min-h-[6rem]">
-              <img
+              <SettledImg
                 src={api.artifactUrl(current.artifact_hash!)}
                 alt={`${metric.name} @ step ${current.step}`}
                 className="max-w-full max-h-full object-contain"

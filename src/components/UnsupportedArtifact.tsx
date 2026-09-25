@@ -1,4 +1,5 @@
 import { downloadArtifact } from "../lib/download";
+import SettledImg from "./media/SettledImg";
 
 interface Props {
   /** What this is and why it isn't shown, e.g. "Volume — not viewable in the browser". */
@@ -16,7 +17,7 @@ export default function UnsupportedArtifact({ label, detail, previewSrc, downloa
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-2 overflow-hidden rounded bg-bg p-4 text-center">
       {previewSrc && (
-        <img
+        <SettledImg
           src={previewSrc}
           alt=""
           className="min-h-0 max-w-full flex-shrink object-contain"

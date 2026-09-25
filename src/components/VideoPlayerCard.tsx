@@ -4,6 +4,9 @@ import { safeJsonParse } from "../lib/format";
 import { pointCaption } from "../lib/caption";
 import { artifactFilename } from "../lib/download";
 import UnsupportedArtifact from "./UnsupportedArtifact";
+import type { SequencePoint } from "../api/types";
+import { decodeImage, peekDecoded } from "../lib/media/decoded-image";
+import { useSettledFrame } from "../lib/media/use-settled-frame";
 import SteppedMediaCard, { type MediaView, type SteppedMediaCardProps } from "./media/SteppedMediaCard";
 import type { VideoSettings } from "./cards-settings/video";
 import { SharedClock, driftCorrection, mediaTargetTime } from "../lib/media/shared-clock";
@@ -39,7 +42,7 @@ export function useClockedVideo(ref: RefObject<HTMLVideoElement | null>, clock: 
     const duration = () => (Number.isFinite(el.duration) && el.duration > 0 ? el.duration : null);
     const onMeta = () => clock.setDuration(id, duration());
     el.addEventListener("loadedmetadata", onMeta);
-    onMeta();
+    if (duration() != null) onMeta();
     let frame = 0;
     const steer = () => {
       const d = duration();
@@ -66,24 +69,50 @@ export function useClockedVideo(ref: RefObject<HTMLVideoElement | null>, clock: 
       unsubscribe();
       if (frame) cancelAnimationFrame(frame);
       el.removeEventListener("loadedmetadata", onMeta);
-      clock.setDuration(id, null);
     };
   }, [ref, clock, id, source]);
+  // The duration outlives a source change (the next clip reports its own once
+  // loaded): dropping it in between would hide a section's transport bar for
+  // a moment and shift the whole section on every step.
+  useEffect(() => {
+    if (!clock) return;
+    return () => clock.setDuration(id, null);
+  }, [clock, id]);
+}
+
+const posterOf = (point: SequencePoint) => safeJsonParse<VideoMetadata>(point.artifact_metadata)?.preview ?? null;
+
+/**
+ * Warm a video step: its poster decoded, so the swap to it paints the poster
+ * at once. (The stream itself loads per the card's `preload` setting.)
+ */
+function prefetchVideo(point: SequencePoint, signal: AbortSignal): Promise<unknown> {
+  const poster = posterOf(point);
+  return poster ? decodeImage(poster, signal) : Promise.resolve();
 }
 
 /**
  * Player and format line for one video artifact. The card's only pane grows
  * with the card (taller in the modal); a grid pane keeps a fixed max height.
+ *
+ * A step change swaps the clip once its poster is decoded (the previous clip
+ * stays until then), and the player's box takes the video's logged size from
+ * the start, so stepping neither blanks the pane nor reflows the card.
  */
-function VideoClip({
-  point,
-  hash,
-  name,
-  settings,
-  single,
-  inModal,
-  clock,
-}: MediaView<VideoSettings> & { clock: SharedClock | null }) {
+function VideoClip(props: MediaView<VideoSettings> & { clock: SharedClock | null }) {
+  const { settings, single, inModal, clock, name } = props;
+  const settled = useSettledFrame<{ point: SequencePoint; hash: string }>(
+    props.hash,
+    () => {
+      const poster = posterOf(props.point);
+      return !poster || peekDecoded(poster) ? { point: props.point, hash: props.hash } : undefined;
+    },
+    async (signal) => {
+      await prefetchVideo(props.point, signal);
+      return { point: props.point, hash: props.hash };
+    },
+  ).frame ?? { point: props.point, hash: props.hash };
+  const { point, hash } = settled;
   const meta = safeJsonParse<VideoMetadata>(point.artifact_metadata);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   useClockedVideo(videoRef, clock, hash);
@@ -110,7 +139,10 @@ function VideoClip({
       preload={settings.preload}
       src={api.artifactUrl(hash)}
       poster={meta?.preview}
-      className={`${single && inModal ? "max-h-[70vh]" : "max-h-64"} object-contain`}
+      // The logged size gives the box its aspect ratio before any data arrives.
+      width={meta?.width}
+      height={meta?.height}
+      className={`${single && inModal ? "max-h-[70vh]" : "max-h-64"} h-auto max-w-full object-contain`}
     />
   );
   const facts = meta
@@ -163,6 +195,7 @@ export default function VideoPlayerCard(props: SteppedMediaCardProps) {
       defaultHeight={350}
       nearest={false}
       settingsPanel={(ctl, ctx) => <VideoSettingsPanel ctl={ctl} ctx={ctx} mode="card" />}
+      prefetch={(_qc, point, signal) => prefetchVideo(point, signal)}
       renderArtifact={(view) => <VideoClip {...view} clock={clockFor(view.settings, view.paneCount, view.following)} />}
       footer={({ settings, paneCount, following }) => {
         const clock = clockFor(settings, paneCount, following);

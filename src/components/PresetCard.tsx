@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
@@ -50,6 +50,8 @@ const blobQuery = (hash: string | null | undefined) => ({
   queryKey: ["preset-blob", hash],
   enabled: !!hash,
   staleTime: Infinity,
+  // The previous step stays on screen while the next one loads (no placeholder flash).
+  placeholderData: keepPreviousData,
   queryFn: async () => {
     const r = await fetch(api.artifactUrl(hash!));
     if (!r.ok) throw new Error(`fetch failed (${r.status})`);
