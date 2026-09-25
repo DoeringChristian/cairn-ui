@@ -33,10 +33,9 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Run-integration extras — the server-backed media-compare card helpers.
 #
-# Each `cairn.plot.*_compare(...)` resolves `run[tag]` sources to a validated
+# Each `cairn.ui.*_compare(...)` resolves `run[tag]` sources to a validated
 # `CardSpec` and returns a `CardElement` (a live `/embed/card` iframe). These
-# stay cairn-only (they need the server); `cp.Compare` (the pure composable) is
-# re-exported above for the pure/self-contained composable path.
+# stay cairn-only: they need the server.
 # ---------------------------------------------------------------------------
 
 def _resolve_series(data: Any, *, builder: str) -> tuple[SeriesRef, int | None]:
@@ -44,24 +43,21 @@ def _resolve_series(data: Any, *, builder: str) -> tuple[SeriesRef, int | None]:
 
     Raw (non-`DataRef`) data has no card-spec representation today — a
     `SeriesRef` is inherently `(runId, name)`, a pointer into
-    server-tracked data, and the schema has no inline-data variant yet. This
-    is the WS-INLINE inline-data render path (design spec §6.3), explicitly
-    deferred: raise a clear, actionable error rather than doing something
-    silently wrong.
+    server-tracked data, and the schema has no inline-data variant yet.
+    Rendering inline data through a card is not supported: raise a clear,
+    actionable error rather than doing something silently wrong.
     """
     if isinstance(data, DataRef):
         ref = SeriesRef(runId=data.run_id, name=data.tag)
         return ref, data.step
     raise NotImplementedError(
-        f"cairn.plot.{builder}(...): raw array/image/bytes data has no "
-        "card-spec representation yet (a card `series` entry is a pointer "
+        f"cairn.ui.{builder}(...): raw array/image/bytes data has no "
+        "card-spec representation (a card `series` entry is a pointer "
         "into server-tracked data — `(runId, name)` — and the "
-        "schema has no inline-data variant). This is the WS-INLINE "
-        "inline-data render path, deferred — see "
-        "docs/superpowers/specs/2026-07-07-notebook-python-and-embed.md "
-        "§6.3. Track the data to a run first (`run.track(data, name=...)`) "
-        "and pass `run[tag]` instead, e.g. "
-        f"`cairn.plot.{builder}(run[\"{{tag}}\"])`."
+        "schema has no inline-data variant), so comparison cards cannot "
+        "render inline data. Track the data to a run first "
+        "(`run.track(data, name=...)`) and pass `run[tag]` instead, e.g. "
+        f"`cairn.ui.{builder}(run[\"{{tag}}\"])`."
     )
 
 

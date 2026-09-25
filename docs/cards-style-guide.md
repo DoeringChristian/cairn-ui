@@ -20,20 +20,28 @@ and the code disagree, follow the newest code.
 
 - Props: the series-card contract — `{ runId, metric: SequenceMeta,
   extraSeries?, controlledSeries?, settingsKeyOverride?, onRemove?,
-  autoOpenSettings? }`. Multi-run cards instead extend the `CardDescriptor`
-  `kind: "multi-run"` union in `CardRenderer.tsx`; mirror how
-  `parallel`/`scatter` are wired (CardRenderer → ComparePage descriptor →
-  AddCardModal `AddCardSelection`).
+  autoOpenSettings? }`. Multi-run cards (a set of runs, not one metric)
+  instead take `{ runIds, settingsKey, onRemove?, autoOpenSettings? }` through
+  the `CardDescriptor` `kind: "multi-run"` branch in `CardRenderer.tsx`;
+  `components/comparison/ComparisonCardView.tsx` builds that descriptor for
+  every `MULTI_RUN_CARD_TYPES` entry. Mirror how `parallel`/`scatter` are
+  wired.
 - Settings: one interface extending `BaseCardSettings` (card-kit) with
-  `version: 1`, persisted only through `useCardSeries` (series cards) or
-  `useCardSettings`. Never build storage keys by hand; new non-card keys go
-  through `lib/storage.ts`.
+  `version: 1`, in `components/cards-settings/<type>.ts` next to the type's
+  settings metadata (see §4), persisted only through `useCardSeries` (series
+  cards) or `useCardSettings`. Never build storage keys by hand; new non-card
+  keys go through `lib/storage.ts`.
 - Plumbing hooks — use, don't reimplement: `useCardSeries`, `useStepSlider` +
   `resolveAtStep` (stepped media), `useRunInfo`, `MultiPaneGrid` (one pane per
   run), `useSequencesForRuns`, `useOverlaySlot` (keep an expensive viewport
   mounted while the settings modal is open).
-- Chrome: render through `CardShell` (`settingsPanel` / `modalContent` /
-  `selectionPanel` slots, `headerActions`, `dropProps` from `useCardDrop`).
+- Chrome: render through `CardShell`: `settingsPanel` and `modalContent`
+  fill the settings modal; `addToComparisonSlot`, `addToReportSlot` and
+  `headerActions` fill the header; `dropProps` come from `useCardDrop`
+  (`lib/use-series-drop.ts`).
+- Stepped media cards (audio, video, HTML, markdown) render through the
+  shared `components/media/SteppedMediaCard.tsx` shell and supply only their
+  settings, settings panel and how one artifact renders.
 - Heavy cards are lazy in `CardRenderer.tsx`
   (`const XCard = lazy(() => import("./XCard"))` + the Suspense fallback).
 - Run labels via `shortRunLabel` / `seriesLabel`, and subscribe
@@ -61,25 +69,47 @@ Use the established libraries; don't write a renderer.
   via `readChartTheme` (`src/charts/theme.ts`). UI chrome uses the Tailwind
   tokens (`text-fg-muted`, `bg-bg-elevated`, `border-border`, `text-accent`) —
   no hardcoded hex. Identifiers and values render in the `mono` class.
+- Media cards that show one artifact per pane (image, and the stepped media
+  cards) lay their panes out in one of three panel modes
+  (`lib/media/panel-layout.ts`): `gallery` (one pane per run, all at the
+  slider's value, in `columns` columns), `grid` (runs as rows × slider values
+  as columns) and `compare` (2–4 slots, each picking its own run and, unless
+  linked to the slider, its own value). The shared settings fragments
+  (`panelMode`, `columns`, `maxRuns`, `compareSlots`, `compareLinked`) live
+  in `components/cards-settings/media.ts`; the panes in card-kit's
+  `MultiPaneGrid`, `GridPanes` and `ComparePanes`.
 - Images: only browser-native encodings are drawn (`isBrowserDisplayable`,
-  `lib/artifact-format.ts`); the only comparison is the A/B divider against a
-  reference tag.
+  `lib/artifact-format.ts`). Besides the panel modes, an image card can set a
+  reference tag, shown against each image in a draggable split view.
 
 ## 4. Registration checklist
 
-1. `CardRenderer.tsx` switch case (lazy if heavy).
-2. `AddCardModal.tsx`: `TYPE_ORDER` + `TYPE_LABELS` (series types) or the
-   `AddCardSelection` union (multi-run types).
-3. `CARD_TYPES` in `src/lib/cards/card-spec.ts`, then
+1. `CARD_TYPES` in `src/lib/cards/card-spec.ts`, then
    `npm run gen:card-schema` (writes `docs/schemas/cairn-card-spec.schema.json`)
    and the Python mirror in `cairn_ui/cards/spec.py`.
-4. If the type can appear in comparisons, check it through ComparePage's
-   CardRenderer path with `controlledSeries`.
+2. `src/components/cards-settings/<type>.ts`: the settings interface and its
+   `meta` (`CardSettingsMeta`, `cards-settings/meta.ts`): `builtin` (every key
+   at its built-in value), `cascadeKeys` (keys that inherit workspace and
+   section defaults, see `lib/settings-cascade.ts`) and `tabs` (the settings
+   tabs its panel fills). Register it in `src/lib/cards/settings-registry.ts`.
+3. The settings panel `src/components/settings-panels/<Type>SettingsPanel.tsx`
+   (default export taking `{ ctl, ctx?, mode: "card" | "defaults" }`; in
+   `"defaults"` mode it shows only the cascade keys), registered in
+   `src/lib/cards/settings-panels.ts` (`SETTINGS_PANELS`).
+4. `CardRenderer.tsx`: a switch case (series types) or a branch of the
+   `multi-run` block (lazy if heavy).
+5. `AddCardModal.tsx`: `TYPE_ORDER` + `TYPE_LABELS`. Multi-run types also go
+   in `MULTI_RUN_CARD_TYPES` + `MULTI_RUN_CARD_LABELS`
+   (`src/lib/comparisons/types.ts`) and AddCardModal's `multiRunDefaults`
+   list.
+6. If the type can appear in comparisons, check it through the comparison
+   page's CardRenderer path with `controlledSeries`.
 
 ## 5. Dependencies
 
 Current drawing stack: `uplot`, `plotly.js-dist-min`, `react-zoom-pan-pinch`,
-`three`; `react-markdown` + `remark-gfm` for markdown. Anything new needs a
+`three`; `react-markdown` + `remark-gfm` for markdown (`remark-math`,
+`rehype-katex` + `katex` for math); `shiki` for code highlighting. Anything new needs a
 reason in the change description. No second chart library.
 
 ## 6. Verification

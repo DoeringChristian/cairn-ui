@@ -7,10 +7,11 @@ React application, its prebuilt bundle, and the Python surface that drives it.
 pip install 'cairn-track[ui]'
 ```
 
-You do not install this directly and there is nothing to import. It exists so that
-`pip install cairn-track` — on a compute node that will only ever log metrics —
-downloads no browser application. Tracking, the CLI and the HTTP API all work
-without it; only `cairn ui` and `cairn server --ui` need it.
+You do not install or import this directly: its Python surface is reached as
+`cairn.ui`. It exists so that `pip install cairn-track` — on a compute node that
+will only ever log metrics — downloads no browser application. Tracking, the CLI
+and the HTTP API all work without it; only the viewer (`cairn ui`,
+`cairn server --ui`) and `cairn.ui` (cards and notebook embeds) need it.
 
 ## What is in here
 
