@@ -3,7 +3,7 @@ import { colorscale } from "./colormaps.ts";
 
 import PlotlyChart, { type PlotlyData } from "./PlotlyChart.tsx";
 import { readChartTheme } from "./theme.ts";
-import { computeParetoFront, type ParetoDirection } from "../lib/plot-utils/pareto.ts";
+import { computeParetoFront, paretoLineShape, type ParetoDirection } from "../lib/plot-utils/pareto.ts";
 import { formatNum } from "../lib/plot-utils/types.ts";
 
 export interface ScatterPoint {
@@ -21,7 +21,7 @@ interface Props {
   colorLabel?: string;
   xLog?: boolean;
   yLog?: boolean;
-  /** Draw the Pareto front for this direction; omitted = no front. */
+  /** Draw the Pareto front for these per-axis directions; omitted = no front. */
   pareto?: ParetoDirection;
   className?: string;
 }
@@ -80,14 +80,14 @@ export default function ScatterChart({
           x: front.map((p) => p.x),
           y: front.map((p) => p.y),
           // Step between front points: the dominated region's staircase.
-          line: { color: theme.accent, width: 1.5, dash: "dash", shape: pareto.endsWith("min") ? "hv" : "vh" },
+          line: { color: theme.accent, width: 1.5, dash: "dash", shape: paretoLineShape(pareto) },
           hoverinfo: "skip",
           showlegend: false,
         });
       }
     }
     return traces;
-  }, [points, xLabel, yLabel, colorLabel, pareto]);
+  }, [points, xLabel, yLabel, colorLabel, pareto?.x, pareto?.y]);
 
   const layout = useMemo(() => ({
     hovermode: "closest",

@@ -4,7 +4,8 @@ import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { useCardSettings } from "../lib/card-settings";
 import ScatterChart, { type ScatterPoint } from "../charts/ScatterChart";
-import type { ParetoDirection } from "../lib/plot-utils/pareto";
+import type { Better } from "../lib/plot-utils/pareto";
+import { summaryRuleFor } from "../lib/metric-defs";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import CardShell from "./CardShell";
@@ -28,7 +29,9 @@ interface ScatterSettings extends BaseCardSettings {
   xLog?: boolean;
   yLog?: boolean;
   showPareto?: boolean;
-  paretoDirection?: ParetoDirection;
+  /** Which way is better on each axis; unset = from the metric's summary rule, else "min". */
+  paretoX?: Better;
+  paretoY?: Better;
 }
 
 const DEFAULT_SETTINGS: ScatterSettings = {
@@ -72,29 +75,6 @@ export default function ScatterPlotCard({
     })),
   });
 
-  // Collect all axes that need metric fetches
-  const metricAxes = useMemo(() => {
-    const axes: AxisDef[] = [];
-    const seen = new Set<string>();
-    for (const a of [settings.xAxis, settings.yAxis, settings.colorAxis]) {
-      if (a && a.source === "metric" && !seen.has(a.key)) {
-        axes.push(a);
-        seen.add(a.key);
-      }
-    }
-    return axes;
-  }, [settings.xAxis, settings.yAxis, settings.colorAxis]);
-
-  const metricQueries = useQueries({
-    queries: runIds.flatMap((rid) =>
-      metricAxes.map((ax) => ({
-        queryKey: qk.sequence(rid, ax.key),
-        queryFn: () => api.sequence(rid, ax.key),
-        staleTime: 30_000,
-      })),
-    ),
-  });
-
   // Build scatter data
   const scatterPoints = useMemo(() => {
     const resolve = (rid: string, axis: AxisDef | null): number | null => {
@@ -107,13 +87,10 @@ export default function ScatterPlotCard({
         const n = Number(p.value);
         return Number.isFinite(n) ? n : null;
       }
-      const axIdx = metricAxes.findIndex((a) => a.key === axis.key);
-      if (axIdx < 0) return null;
-      const qIdx = runIds.indexOf(rid) * metricAxes.length + axIdx;
-      const mq = metricQueries[qIdx];
-      const pts = mq?.data?.points;
-      if (!pts?.length) return null;
-      return pts[pts.length - 1]?.scalar_value ?? null;
+      // A metric's final value, as the runs table shows it (last point,
+      // its summary rule, or an explicit summary key).
+      const v = runQueries[runIds.indexOf(rid)]?.data?.run.values?.[axis.key];
+      return typeof v === "number" && Number.isFinite(v) ? v : null;
     };
 
     const pts: ScatterPoint[] = [];
@@ -129,11 +106,22 @@ export default function ScatterPlotCard({
   }, [
     settings.xAxis, settings.yAxis, settings.colorAxis,
     runIds,
-    metricAxes,
     runQueries.map((q) => q.dataUpdatedAt).join("|"),
-    metricQueries.map((q) => q.dataUpdatedAt).join("|"),
     runMetaVersion,
   ]);
+
+  // Pareto direction per axis: the setting, else the metric's summary rule
+  // ("max" = higher is better), else lower is better.
+  const ruleDirection = (axis: AxisDef | null): Better => {
+    if (axis?.source !== "metric") return "min";
+    for (const q of runQueries) {
+      const rule = summaryRuleFor(axis.key, q.data?.metric_defs);
+      if (rule === "min" || rule === "max") return rule;
+    }
+    return "min";
+  };
+  const paretoX = settings.paretoX ?? ruleDirection(settings.xAxis);
+  const paretoY = settings.paretoY ?? ruleDirection(settings.yAxis);
 
   // Available options
   const availableParams = useMemo(() => {
@@ -216,17 +204,26 @@ export default function ScatterPlotCard({
           onChange={(v) => updateSettings({ showPareto: v })}
         />
         {settings.showPareto && (
-          <Select<ParetoDirection>
-            label="Direction"
-            value={settings.paretoDirection ?? "min-min"}
-            onChange={(v) => updateSettings({ paretoDirection: v })}
-            options={[
-              { value: "min-min", label: "Min X, Min Y" },
-              { value: "min-max", label: "Min X, Max Y" },
-              { value: "max-min", label: "Max X, Min Y" },
-              { value: "max-max", label: "Max X, Max Y" },
-            ]}
-          />
+          <>
+            <Select<Better>
+              label="X: better is"
+              value={paretoX}
+              onChange={(v) => updateSettings({ paretoX: v })}
+              options={[
+                { value: "min", label: "Lower" },
+                { value: "max", label: "Higher" },
+              ]}
+            />
+            <Select<Better>
+              label="Y: better is"
+              value={paretoY}
+              onChange={(v) => updateSettings({ paretoY: v })}
+              options={[
+                { value: "min", label: "Lower" },
+                { value: "max", label: "Higher" },
+              ]}
+            />
+          </>
         )}
       </div>
     </>
@@ -246,7 +243,7 @@ export default function ScatterPlotCard({
     colorLabel: settings.colorAxis?.key,
     xLog: settings.xLog,
     yLog: settings.yLog,
-    pareto: settings.showPareto ? (settings.paretoDirection ?? "min-min") : undefined,
+    pareto: settings.showPareto ? { x: paretoX, y: paretoY } : undefined,
   };
 
 
