@@ -15,11 +15,11 @@ export type XMetricRef = {
  * logged once per epoch applies to every step until the next one). Steps
  * before the x-metric's first point have no value.
  */
-export function asOfLookup(
-  xPoints: ReadonlyArray<{ step: number; scalar_value: number | null }>,
-): (step: number) => number | null {
+export function asOfLookup<T = number>(
+  xPoints: ReadonlyArray<{ step: number; scalar_value: T | null }>,
+): (step: number) => T | null {
   const steps: number[] = [];
-  const values: number[] = [];
+  const values: T[] = [];
   for (const p of [...xPoints].sort((a, b) => a.step - b.step)) {
     if (p.scalar_value == null) continue;
     steps.push(p.step);

@@ -73,7 +73,7 @@ export function smoothSeries(points: SeriesPoint[], kind: SmoothingKind, value: 
 }
 
 /** y[i] = alpha * y[i-1] + (1 - alpha) * raw[i], seeded with raw[0]. */
-function emaSmooth(points: SeriesPoint[], alpha: number): Smoothed {
+export function emaSmooth(points: SeriesPoint[], alpha: number): Smoothed {
   const a = Math.min(alpha, 0.999);
   let prev = points[0]!.y;
   const smoothed = points.map((p) => {
