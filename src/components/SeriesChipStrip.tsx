@@ -16,6 +16,8 @@ interface Props {
     multipleRuns: boolean,
     allRunIds: string[],
   ) => string;
+  /** A chip's colour (the card's line colour); default by index. */
+  colorOf?: (m: MetricEntry, index: number) => string;
   className?: string;
 }
 
@@ -35,6 +37,7 @@ export default function SeriesChipStrip({
   allRunIds,
   onMetricsChange,
   labelFn = defaultLabel,
+  colorOf,
   className,
 }: Props) {
   const multipleRuns = allRunIds.length > 1;
@@ -86,7 +89,7 @@ export default function SeriesChipStrip({
               <SeriesChip
                 key={seriesKey(m)}
                 series={ref}
-                color={SERIES_COLORS[i % SERIES_COLORS.length]!}
+                color={colorOf?.(m, i) ?? SERIES_COLORS[i % SERIES_COLORS.length]!}
                 label={labelFn(m, runId, multipleRuns, allRunIds)}
                 runId={runId}
                 onRemove={

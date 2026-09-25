@@ -1,6 +1,7 @@
 /**
- * Grouped runs: collapse each group's member series into a mean line and a
- * band (± std, min–max, or ± standard error). Pure, so it is unit-tested.
+ * Grouped runs: collapse each group's member series into a centre line (the
+ * mean, median, min or max of the members) and a band (± std, min–max, or ±
+ * standard error around the centre). Pure, so it is unit-tested.
  *
  * Members rarely log at the same x, so every member is sampled "as of" each x
  * of the GLOBAL union grid (all members of all groups): its last point at or
@@ -12,6 +13,21 @@
 import { seriesColor, type Series, type SeriesPoint } from "./types.ts";
 
 export type BandKind = "std" | "minmax" | "sem";
+
+/** The statistic a group's centre line draws. */
+export type AggKind = "mean" | "median" | "min" | "max";
+
+/** The `agg` statistic of `vals` (non-empty). */
+export function centre(vals: readonly number[], agg: AggKind): number {
+  if (agg === "min") return Math.min(...vals);
+  if (agg === "max") return Math.max(...vals);
+  if (agg === "median") {
+    const s = [...vals].sort((a, b) => a - b);
+    const mid = s.length >> 1;
+    return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
+  }
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
 
 export interface GroupInput<M> {
   /** Stable group identity (the line key). */
@@ -72,11 +88,15 @@ export function asOf(points: SeriesPoint[], grid: number[]): Array<number | null
   return out;
 }
 
-/** Mean and band of the values present at each grid column. */
+/**
+ * Centre line (`agg`, default the mean) and band of the values present at
+ * each grid column. The std / sem band spreads around the centre.
+ */
 export function aggregate(
   members: SeriesPoint[][],
   grid: number[],
   band: BandKind,
+  agg: AggKind = "mean",
 ): { mean: SeriesPoint[]; lo: SeriesPoint[]; hi: SeriesPoint[] } {
   const sampled = members.map((m) => asOf(m, grid));
   const mean: SeriesPoint[] = [];
@@ -89,6 +109,7 @@ export function aggregate(
     const x = grid[i]!;
     const n = vals.length;
     const m = vals.reduce((a, b) => a + b, 0) / n;
+    const c = centre(vals, agg);
     let l: number;
     let h: number;
     if (band === "minmax") {
@@ -98,10 +119,10 @@ export function aggregate(
       // Sample standard deviation (n - 1); a single member has no spread.
       const sd = n > 1 ? Math.sqrt(vals.reduce((a, v) => a + (v - m) ** 2, 0) / (n - 1)) : 0;
       const d = band === "sem" ? sd / Math.sqrt(n) : sd;
-      l = m - d;
-      h = m + d;
+      l = c - d;
+      h = c + d;
     }
-    mean.push({ x, y: m });
+    mean.push({ x, y: c });
     lo.push({ x, y: l });
     hi.push({ x, y: h });
   }
@@ -113,9 +134,10 @@ export function aggregateGroups<M>(
   groups: GroupInput<M>[],
   pointsOf: (member: M) => SeriesPoint[],
   band: BandKind,
+  agg: AggKind = "mean",
 ): AggregatedGroup<M>[] {
   const grid = unionGrid(groups.flatMap((g) => g.members.map(pointsOf)));
-  return groups.map((g) => ({ key: g.key, members: g.members, ...aggregate(g.members.map(pointsOf), grid, band) }));
+  return groups.map((g) => ({ key: g.key, members: g.members, ...aggregate(g.members.map(pointsOf), grid, band, agg) }));
 }
 
 /** One run's series and the group it falls in (null = not grouped). */
@@ -129,13 +151,20 @@ export interface GroupableSeries {
 
 /**
  * Replace grouped runs' series by, per (metric, group): the members (faded,
- * unless `hideMembers`), the band edges, and the mean line. Everything a group
- * draws takes the group's colour; a one-run group is just that run's line.
- * Ungrouped series pass through with the next colours.
+ * unless `hideMembers`), the band edges, and the centre line (`agg`).
+ * Everything a group draws takes the group's colour (`groupColor`, default a
+ * palette slot per group in first-seen order); a one-run group is just that
+ * run's line. Ungrouped series pass through with their own colour.
  */
 export function groupSeries(
   items: GroupableSeries[],
-  opts: { band: BandKind; hideMembers: boolean; labelMetric: boolean },
+  opts: {
+    band: BandKind;
+    hideMembers: boolean;
+    labelMetric: boolean;
+    agg?: AggKind;
+    groupColor?: (group: string) => string;
+  },
 ): { series: Series[]; groups: number } {
   const { groups, ungrouped } = groupBy(items, (i) => (i.group == null ? null : `${i.metricKey}\u0000${i.group}`));
   const colourIndex = new Map<string, number>();
@@ -143,11 +172,12 @@ export function groupSeries(
     const value = g.members[0]!.group!;
     if (!colourIndex.has(value)) colourIndex.set(value, colourIndex.size);
   }
-  const aggregated = aggregateGroups(groups, (m) => m.series.points, opts.band);
+  const colorOf = opts.groupColor ?? ((group: string) => seriesColor(colourIndex.get(group)!));
+  const aggregated = aggregateGroups(groups, (m) => m.series.points, opts.band, opts.agg ?? "mean");
   const out: Series[] = [];
   for (const g of aggregated) {
     const first = g.members[0]!;
-    const color = seriesColor(colourIndex.get(first.group!)!);
+    const color = colorOf(first.group!);
     const label = `${opts.labelMetric ? `${first.metricName} · ` : ""}${first.group} (n=${g.members.length})`;
     if (g.members.length === 1) {
       out.push({ ...first.series, key: g.key, label, color, role: "line" });
@@ -160,6 +190,6 @@ export function groupSeries(
     out.push({ key: g.key, label, color, points: g.lo, role: "bandLo" });
     out.push({ key: g.key, label, color, points: g.mean, role: "line" });
   }
-  ungrouped.forEach((u, i) => out.push({ ...u.series, color: seriesColor(colourIndex.size + i) }));
+  for (const u of ungrouped) out.push(u.series);
   return { series: out, groups: groups.length };
 }

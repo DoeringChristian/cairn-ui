@@ -41,6 +41,7 @@ import { useCollapsedSections } from "../../lib/use-collapsed-sections";
 import { disambiguateRunLabels, useRunMetadataVersion } from "../../lib/run-label";
 import { useRunSelectorResolution } from "../../api/hooks";
 import type { Run } from "../../api/types";
+import { ChartSyncProvider } from "../../lib/chart-sync";
 
 /** The name a comparison card is searched and sorted by. */
 function comparisonCardLabel(card: ComparisonCard): string {
@@ -427,7 +428,7 @@ export default function ComparisonView({
             </div>
           ) : (
             <WorkspaceDefaultsProvider defaults={doc.defaults}>
-            {/* MERGER: ChartSyncProvider (lib/chart-sync.tsx) wraps from here, driven by doc.prefs.syncZoom / doc.prefs.syncCursor. */}
+            <ChartSyncProvider enabled={doc.prefs.syncZoom}>
             <CardNavProvider>
             <div className="space-y-8">
               {sections.length === 0 && <p className="text-sm text-fg-muted">No cards match.</p>}
@@ -460,6 +461,7 @@ export default function ComparisonView({
               ))}
             </div>
             </CardNavProvider>
+            </ChartSyncProvider>
             </WorkspaceDefaultsProvider>
           )}
         </RunViewContext.Provider>

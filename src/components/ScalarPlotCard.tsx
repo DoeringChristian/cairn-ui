@@ -1,9 +1,5 @@
-import {
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useSequences, useSequencesForRuns } from "../api/hooks";
 import { qk } from "../api/query-keys";
@@ -16,31 +12,39 @@ import {
   type ScalarGroupBy as GroupBy,
   type ScalarSettings,
 } from "./cards-settings/scalar";
-import type {
-  RunDetailResponse,
-  SequenceMeta,
-  SequencePoint,
-  SequenceResponse,
-} from "../api/types";
+import type { RunDetailResponse, SequenceMeta, SequenceResponse } from "../api/types";
 import SeriesChipStrip from "./SeriesChipStrip";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
-import MetricChips from "./settings/MetricChips";
-import NumberInput from "./settings/NumberInput";
-import Select from "./settings/Select";
-import Slider from "./settings/Slider";
-import Toggle from "./settings/Toggle";
-import SettingsSection from "./settings/SettingsSection";
+import { HeaderBadge, HeaderToggle } from "./card-header";
+import ScalarSettingsPanel, { type ScalarPanelCtx } from "./settings-panels/ScalarSettingsPanel";
 import { plotCardPolicy } from "./card-kit/plot-card-policy";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { seriesKey, seriesLabel } from "../lib/series-utils";
 import { downloadCsv, exportChartPng, safeName } from "../lib/download";
-import ScalarChart from "../charts/ScalarChart";
-import { mapToXAxis, type AxisSource, type XMetricRef } from "../lib/plot-utils/x-axis";
+import ScalarChart, { type LineStyle, type ScalarView } from "../charts/ScalarChart";
+import {
+  compileSeriesExpr,
+  compileTemplate,
+  derivedLine,
+  exprMetrics,
+  limitRuns,
+  makeRunContext,
+  metricLine,
+  metricRef,
+  renderLabel,
+  sequenceData,
+  xAxisKind,
+  type LineResult,
+} from "../charts/scalar-data";
 import { xMetricFor } from "../lib/metric-defs";
 import { SERIES_COLORS, type Series } from "../lib/plot-utils/types";
-import { SMOOTHING_KINDS, formatSmoothing, type SmoothingKind } from "../lib/plot-utils/smooth";
-import { groupSeries, type BandKind } from "../lib/plot-utils/aggregate";
+import { SMOOTHING_KINDS, formatSmoothing } from "../lib/plot-utils/smooth";
+import { groupSeries } from "../lib/plot-utils/aggregate";
+import { RUN_PALETTE } from "../lib/run-color";
+import { useRunColors, useRunView, useVisibleRuns } from "../lib/run-view";
+import { cursorSyncKey, useChartSyncEnabled, useSyncedView } from "../lib/chart-sync";
+import type { RunContext, SeriesData } from "../lib/expr";
 import type { Run } from "../api/types";
 
 const SCALAR_POLICY = plotCardPolicy("scalar");
@@ -50,33 +54,11 @@ const SCALAR_POLICY = plotCardPolicy("scalar");
  * that x-axis. Read from the query cache: the run page loads the run detail
  * before any card mounts.
  */
-function seededXAxis(
-  qc: QueryClient,
-  runId: string,
-  seed: { name: string },
-): Pick<ScalarSettings, "xAxis" | "xMetric"> | null {
+function seededX(qc: QueryClient, runId: string, seed: { name: string }): Pick<ScalarSettings, "x"> | null {
   const defs = qc.getQueryData<RunDetailResponse>(qk.run(runId))?.metric_defs;
   const name = xMetricFor(seed.name, defs);
-  if (!name) return null;
-  return { xAxis: "metric", xMetric: { name } };
+  return name ? { x: metricRef(name) } : null;
 }
-
-/** `<Select>` value for a metric x-axis; the plain sources keep their own. */
-const METRIC_AXIS_PREFIX = "metric:";
-
-function xAxisSelectValue(xAxis: AxisSource, xMetric: XMetricRef | undefined): string {
-  if (xAxis !== "metric" || !xMetric) return xAxis;
-  return `${METRIC_AXIS_PREFIX}${xMetric.name}`;
-}
-
-function parseXAxisSelectValue(v: string): Pick<ScalarSettings, "xAxis" | "xMetric"> {
-  if (!v.startsWith(METRIC_AXIS_PREFIX)) return { xAxis: v as AxisSource };
-  return { xAxis: "metric", xMetric: { name: v.slice(METRIC_AXIS_PREFIX.length) } };
-}
-
-// -----------------------------------------------------------------------------
-// Palette & helpers
-// -----------------------------------------------------------------------------
 
 /** A run's value for the grouping; null leaves the run ungrouped. */
 function groupValue(
@@ -92,10 +74,12 @@ function groupValue(
 }
 
 function viewportIsAuto(v: ScalarSettings["viewport"]): boolean {
-  return (
-    v.xMin === null && v.xMax === null && v.yMin === null && v.yMax === null
-  );
+  return v.xMin === null && v.xMax === null && v.yMin === null && v.yMax === null;
 }
+
+/** A derived series' line key: `expr:<i>`, per run when the card shows several. */
+const derivedKey = (i: number, runId: string, multipleRuns: boolean) =>
+  multipleRuns ? `expr:${i}::${runId}` : `expr:${i}`;
 
 // -----------------------------------------------------------------------------
 // Component
@@ -121,12 +105,8 @@ export default function ScalarPlotCard({
   autoOpenSettings,
 }: Props) {
   const qc = useQueryClient();
-  const {
-    ctl,
-    effectiveMetrics,
-    allRunIds,
-    multipleRuns,
-  } = useCardSeries<ScalarSettings>({
+  const navigate = useNavigate();
+  const { ctl, effectiveMetrics, allRunIds, multipleRuns } = useCardSeries<ScalarSettings>({
     runId,
     metric,
     extraSeries,
@@ -135,7 +115,7 @@ export default function ScalarPlotCard({
     type: "scalar",
     instanceDefaults: (seed) => ({
       ...scalarInstanceDefaults(seed),
-      ...seededXAxis(qc, runId, seed),
+      ...seededX(qc, runId, seed),
     }),
   });
   const settings = ctl.value;
@@ -146,9 +126,7 @@ export default function ScalarPlotCard({
       if (patch.metrics) {
         patch = {
           ...patch,
-          metrics: [...patch.metrics].sort((a, b) =>
-            seriesKey(a).localeCompare(seriesKey(b)),
-          ),
+          metrics: [...patch.metrics].sort((a, b) => seriesKey(a).localeCompare(seriesKey(b))),
         };
       }
       setSettings(patch, opts);
@@ -157,137 +135,237 @@ export default function ScalarPlotCard({
   );
 
   // -------------------------------------------------------------------------
-  // Run meta
+  // Runs: hidden / pinned (run view), latest per group, the cap; colours
   // -------------------------------------------------------------------------
-  const { runCreatedAtByRunId, runById, paramsByRunId } = useRunInfo(allRunIds);
+  const { runCreatedAtByRunId, runById, paramsByRunId, summaryByRunId } = useRunInfo(allRunIds);
   const paramKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const p of paramsByRunId.values()) for (const k of Object.keys(p)) keys.add(k);
     return [...keys].sort();
   }, [paramsByRunId]);
 
-  // -------------------------------------------------------------------------
-  // Data fetch
-  // -------------------------------------------------------------------------
-  const sequenceSpecs = useMemo(
-    () =>
-      effectiveMetrics.map((m) => ({
-        runId: m.runId ?? runId,
-        name: m.name,
-      })),
-    [effectiveMetrics, runId],
-  );
-  const queries = useSequencesForRuns(sequenceSpecs);
-
-  // A metric x-axis: the x series of every run the card shows.
-  const xMetric = settings.xAxis === "metric" ? settings.xMetric : undefined;
-  const xMetricSpecs = useMemo(
-    () =>
-      xMetric
-        ? allRunIds.map((rid) => ({
-            runId: rid,
-            name: xMetric.name,
-          }))
-        : [],
-    [xMetric, allRunIds],
-  );
-  const xQueries = useSequencesForRuns(xMetricSpecs);
-  const xPointsByRun = useMemo(() => {
-    const out = new Map<string, SequencePoint[]>();
-    xMetricSpecs.forEach((spec, i) => {
-      const data = xQueries[i]?.data as SequenceResponse | undefined;
-      if (data) out.set(spec.runId, data.points);
+  const visibleRuns = useVisibleRuns(allRunIds);
+  const drawnRuns = useMemo(() => {
+    const by = settings.groupBy;
+    return limitRuns(visibleRuns, {
+      latestPerGroup: settings.latestPerGroup,
+      maxRuns: settings.maxRuns,
+      groupOf: (id) =>
+        by ? groupValue(by, runById.get(id), paramsByRunId.get(id)) : (runById.get(id)?.group ?? null),
+      createdAt: (id) => runCreatedAtByRunId.get(id),
     });
+  }, [visibleRuns, settings.latestPerGroup, settings.maxRuns, settings.groupBy, runById, paramsByRunId, runCreatedAtByRunId]);
+  const drawnSet = useMemo(() => new Set(drawnRuns), [drawnRuns]);
+  const drawnMetrics = useMemo(
+    () => effectiveMetrics.filter((m) => drawnSet.has(m.runId ?? runId)),
+    [effectiveMetrics, drawnSet, runId],
+  );
+  const runColors = useRunColors(drawnRuns);
+  const { view: runView } = useRunView();
+
+  // -------------------------------------------------------------------------
+  // Expressions: x, derived series, templates
+  // -------------------------------------------------------------------------
+  const xSrc = settings.x || "step";
+  const xCompiled = useMemo(() => compileSeriesExpr(xSrc), [xSrc]);
+  const derivedCompiled = useMemo(() => settings.derived.map((d) => compileSeriesExpr(d.src)), [settings.derived]);
+  const legendTpl = useMemo(() => compileTemplate(settings.legend.template).value, [settings.legend.template]);
+  const tooltipTpl = useMemo(() => compileTemplate(settings.tooltip.template).value, [settings.tooltip.template]);
+
+  // -------------------------------------------------------------------------
+  // Data fetch: each run's metrics, plus whatever x and derived series read
+  // -------------------------------------------------------------------------
+  const sequenceSpecs = useMemo(() => {
+    const extra = [
+      ...exprMetrics(xCompiled.value),
+      ...derivedCompiled.flatMap((c) => exprMetrics(c.value)),
+    ];
+    const seen = new Set<string>();
+    const specs: Array<{ runId: string; name: string }> = [];
+    const add = (rid: string, name: string) => {
+      const k = `${rid}\u0000${name}`;
+      if (seen.has(k)) return;
+      seen.add(k);
+      specs.push({ runId: rid, name });
+    };
+    for (const m of drawnMetrics) add(m.runId ?? runId, m.name);
+    for (const rid of drawnRuns) for (const name of extra) add(rid, name);
+    return specs;
+  }, [drawnMetrics, drawnRuns, xCompiled, derivedCompiled, runId]);
+  const queries = useSequencesForRuns(sequenceSpecs);
+  const dataKey = queries.map((q) => q.dataUpdatedAt).join("|");
+  const isLoading = queries.some((q) => q.isLoading);
+
+  /** One expression context per drawn run. */
+  const contexts = useMemo(() => {
+    const seriesByRun = new Map<string, Map<string, SeriesData>>();
+    sequenceSpecs.forEach((spec, i) => {
+      const data = queries[i]?.data as SequenceResponse | undefined;
+      if (!data) return;
+      let m = seriesByRun.get(spec.runId);
+      if (!m) seriesByRun.set(spec.runId, (m = new Map()));
+      m.set(spec.name, sequenceData(data.points));
+    });
+    const out = new Map<string, RunContext>();
+    for (const rid of drawnRuns) {
+      out.set(
+        rid,
+        makeRunContext({
+          series: seriesByRun.get(rid) ?? new Map(),
+          run: runById.get(rid),
+          config: paramsByRunId.get(rid),
+          summary: summaryByRunId.get(rid),
+        }),
+      );
+    }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [xMetricSpecs, xQueries.map((q) => q.dataUpdatedAt).join("|")]);
-
-  // The run's scalars, offered as x-axes.
-  const runSequences = useSequences(runId);
-  const xMetricOptions = useMemo(() => {
-    const metas = (runSequences.data?.sequences ?? []).filter(
-      (m) => m.object_type === "scalar",
-    );
-    const refs: XMetricRef[] = metas.map((m) => ({ name: m.name }));
-    // Keep the current choice listed even when this run lacks it.
-    if (xMetric && !refs.some((r) => r.name === xMetric.name)) refs.push(xMetric);
-    return refs.map((r) => ({
-      value: xAxisSelectValue("metric", r),
-      label: `metric: ${r.name}`,
-    }));
-  }, [runSequences.data, xMetric]);
+  }, [sequenceSpecs, dataKey, drawnRuns, runById, paramsByRunId, summaryByRunId]);
 
   // -------------------------------------------------------------------------
   // Build series
   // -------------------------------------------------------------------------
   const runMetaVersion = useRunMetadataVersion();
 
-  const { series, groups, isLoading } = useMemo(() => {
-    const anyLoading =
-      queries.some((q) => q.isLoading) || xQueries.some((q) => q.isLoading);
+  const built = useMemo(() => {
+    const xNode = xCompiled.value;
+    let lines: Series[] = [];
+    const styles: Record<string, LineStyle> = {};
+    const tooltipLabels = new Map<string, string>();
+    let asOf = false;
+    const note = (r: LineResult) => {
+      if (r.warnings.some((w) => w.kind === "asof-join")) asOf = true;
+      return r.points;
+    };
+    const runLabel = (rid: string, ctx: RunContext | undefined) =>
+      renderLabel(legendTpl, ctx, shortRunLabel(rid, drawnRuns));
+    if (!xNode) return { lines, styles, tooltipLabels, asOf, groups: 0 };
 
-    const built: Series[] = effectiveMetrics.map((m, idx) => {
-      const k = seriesKey(m);
-      const resp = queries[idx]?.data as SequenceResponse | undefined;
-      const raw: SequencePoint[] = resp?.points ?? [];
+    const metricNames = new Set(drawnMetrics.map((m) => m.name));
+    drawnMetrics.forEach((m, idx) => {
       const rid = m.runId ?? runId;
+      const ctx = contexts.get(rid)!;
+      const key = seriesKey(m);
+      const auto = multipleRuns ? runColors.get(rid)! : SERIES_COLORS[idx % SERIES_COLORS.length]!;
+      const label = multipleRuns
+        ? `${metricNames.size > 1 ? `${m.name} · ` : ""}${runLabel(rid, ctx)}`
+        : renderLabel(legendTpl, ctx, seriesLabel(m.name, rid, false, allRunIds));
+      lines.push({ key, label, color: auto, points: note(metricLine(m.name, xNode, ctx)), runId: rid });
+      if (tooltipTpl) tooltipLabels.set(key, renderLabel(tooltipTpl, ctx, label));
+    });
 
-      const mapped = mapToXAxis(
-        raw,
-        settings.xAxis,
-        runCreatedAtByRunId.get(rid),
-        xPointsByRun.get(rid),
-      );
-
-      return {
-        key: k,
-        label: seriesLabel(m.name, rid, multipleRuns, allRunIds),
-        color: SERIES_COLORS[idx % SERIES_COLORS.length]!,
-        points: mapped,
-        runId: rid,
-      };
+    settings.derived.forEach((d, i) => {
+      const node = derivedCompiled[i]?.value;
+      if (!node) return;
+      const name = d.label || d.src;
+      drawnRuns.forEach((rid) => {
+        const ctx = contexts.get(rid)!;
+        const key = derivedKey(i, rid, multipleRuns);
+        const label = multipleRuns ? `${name} · ${runLabel(rid, ctx)}` : name;
+        const auto = multipleRuns
+          ? runColors.get(rid)!
+          : SERIES_COLORS[(drawnMetrics.length + i) % SERIES_COLORS.length]!;
+        lines.push({
+          key,
+          label,
+          color: d.style?.color ?? auto,
+          points: note(derivedLine(node, xNode, ctx)),
+          runId: rid,
+        });
+        if (d.style) styles[key] = d.style;
+        if (tooltipTpl) tooltipLabels.set(key, `${name} · ${renderLabel(tooltipTpl, ctx, label)}`);
+      });
     });
 
     // Grouping needs several runs; a run without a value for it stays its own line.
+    let groups = 0;
     const by = settings.groupBy;
-    if (!by || !multipleRuns) return { series: built, groups: 0, isLoading: anyLoading };
-    const metricKeys = new Set(effectiveMetrics.map((m) => m.name));
-    const grouped = groupSeries(
-      built.map((s, idx) => {
-        const m = effectiveMetrics[idx]!;
+    if (by && multipleRuns) {
+      const metricOf = (s: Series): { key: string; name: string } => {
+        if (s.key.startsWith("expr:")) {
+          const i = Number(s.key.slice(5, s.key.indexOf("::")));
+          const d = settings.derived[i]!;
+          return { key: `expr:${i}`, name: d.label || d.src };
+        }
+        const name = s.key.slice(s.key.indexOf("::") + 2);
+        return { key: name, name };
+      };
+      const metricKeys = new Set<string>();
+      const items = lines.map((s) => {
+        const mk = metricOf(s);
+        metricKeys.add(mk.key);
         return {
           series: s,
-          metricKey: m.name,
-          metricName: m.name,
+          metricKey: mk.key,
+          metricName: mk.name,
           group: groupValue(by, runById.get(s.runId!), paramsByRunId.get(s.runId!)),
         };
-      }),
-      { band: settings.band, hideMembers: settings.hideMembers, labelMetric: metricKeys.size > 1 },
-    );
-    if (grouped.groups === 0) return { series: built, groups: 0, isLoading: anyLoading };
-    return { series: grouped.series, groups: grouped.groups, isLoading: anyLoading };
+      });
+      // Groups take palette slots in sorted order (distinct, stable for a set of groups).
+      const groupValues = [...new Set(items.map((i) => i.group).filter((g): g is string => g != null))].sort();
+      const grouped = groupSeries(items, {
+        band: settings.band,
+        hideMembers: settings.hideMembers,
+        labelMetric: metricKeys.size > 1,
+        agg: settings.agg,
+        groupColor: (g) => RUN_PALETTE[groupValues.indexOf(g) % RUN_PALETTE.length]!,
+      });
+      if (grouped.groups > 0) {
+        lines = grouped.series;
+        groups = grouped.groups;
+      }
+    }
+
+    // Per-series styles (metric and group lines): colour for the line and its
+    // band, width and dash for the line.
+    lines = lines.map((s) => {
+      const own = settings.styles[s.key];
+      if (!own || s.role === "member") return s;
+      if ((s.role ?? "line") === "line") styles[s.key] = own;
+      return own.color ? { ...s, color: own.color } : s;
+    });
+    return { lines, styles, tooltipLabels, asOf, groups };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    effectiveMetrics,
-    settings.xAxis,
-    xPointsByRun,
+    xCompiled,
+    derivedCompiled,
+    contexts,
+    drawnMetrics,
+    drawnRuns,
+    runColors,
+    legendTpl,
+    tooltipTpl,
+    settings.styles,
+    settings.derived,
     settings.groupBy,
     settings.band,
+    settings.agg,
     settings.hideMembers,
     multipleRuns,
     runId,
-    runCreatedAtByRunId,
+    allRunIds,
     runById,
     paramsByRunId,
     runMetaVersion,
-    queries.map((q) => q.dataUpdatedAt).join("|"),
   ]);
+  const series = built.lines;
+  const groups = built.groups;
 
   // -------------------------------------------------------------------------
-  // Viewport state flags
+  // Zoom: the card's own viewport, or the view another synced card zoomed to
   // -------------------------------------------------------------------------
+  const cardId = useId();
+  const syncGroup = xSrc.trim();
+  const synced = useSyncedView(syncGroup, cardId);
+  const syncOn = useChartSyncEnabled();
+  const view: ScalarView = synced.view ?? settings.viewport;
+  const onViewChange = (v: ScalarView) => {
+    updateSettings({ viewport: v }, { mergeKey: "viewport", label: "Zoom" });
+    synced.publish(v);
+  };
+
   const viewportModified =
-    !viewportIsAuto(settings.viewport) ||
+    !viewportIsAuto(view) ||
     settings.xRange[0] != null ||
     settings.xRange[1] != null ||
     settings.yRange[0] != null ||
@@ -295,345 +373,118 @@ export default function ScalarPlotCard({
 
   const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, updateSettings);
 
-  // -------------------------------------------------------------------------
-  // Selection / run info
-  // -------------------------------------------------------------------------
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
-  const compSeries = useMemo((): ComparisonSeriesRef[] => {
-    return effectiveMetrics.map((m) => ({
-      runId: m.runId ?? runId,
-      name: m.name,
-    }));
-  }, [runId, effectiveMetrics]);
+  const compSeries = useMemo(
+    (): ComparisonSeriesRef[] => effectiveMetrics.map((m) => ({ runId: m.runId ?? runId, name: m.name })),
+    [runId, effectiveMetrics],
+  );
 
-  const flipYScale = () =>
-    updateSettings({ yScale: settings.yScale === "log" ? "linear" : "log" });
+  const flipYScale = () => updateSettings({ yScale: settings.yScale === "log" ? "linear" : "log" });
 
-  const resetViewport = () =>
+  const resetViewport = () => {
     updateSettings({
       viewport: { xMin: null, xMax: null, yMin: null, yMax: null },
       xRange: [null, null],
       yRange: [null, null],
     });
+    synced.publish({ xMin: null, xMax: null, yMin: null, yMax: null });
+  };
 
   const totalPoints = useMemo(() => {
     let n = 0;
-    for (const q of queries) n += q.data?.points.length ?? 0;
+    for (const s of series) if ((s.role ?? "line") === "line") n += s.points.length;
     return n;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queries.map((q) => q.dataUpdatedAt).join("|")]);
+  }, [series]);
 
   const subtitle = `${groups > 0 ? `${groups} group${groups === 1 ? "" : "s"}` : `${series.length} series`}${
     totalPoints > 0 ? ` · ${totalPoints} pts` : ""
-  }`;
-
-  const tagPickerRunIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const m of effectiveMetrics) ids.add(m.runId ?? runId);
-    return Array.from(ids);
-  }, [effectiveMetrics, runId]);
+  }${drawnRuns.length < allRunIds.length ? ` · ${drawnRuns.length}/${allRunIds.length} runs` : ""}`;
 
   // -------------------------------------------------------------------------
   // Settings panel
   // -------------------------------------------------------------------------
-  const settingsPanel = (
-    <>
-      <SettingsSection title={controlledSeries ? "Tags" : "Content"} first />
-      {controlledSeries ? (
-        <div className="mb-2">
-          <MetricChips
-            runId={runId}
-            runIds={tagPickerRunIds}
-            tagMode
-            objectType="scalar"
-            value={effectiveMetrics.map((m) => ({ name: m.name }))}
-            onChange={(v) => {
-              const keepNames = new Set(v.map((c) => c.name));
-              const next = effectiveMetrics.filter((m) => keepNames.has(m.name));
-              updateSettings({ metrics: next });
-            }}
-            onAddTag={(_tagName, runs) => {
-              const newEntries = runs.map((r) => ({
-                runId: r.runId,
-                name: _tagName,
-              }));
-              updateSettings({ metrics: [...effectiveMetrics, ...newEntries] });
-            }}
-          />
-          <p className="text-[10px] text-fg-subtle mt-1">
-            Each tag shows one line per visible run.
-          </p>
-        </div>
-      ) : multipleRuns ? (
-        <div className="flex flex-col gap-1 mb-2">
-          {effectiveMetrics.map((m) => {
-            const rid = m.runId ?? runId;
-            const key = seriesKey(m);
-            return (
-              <div
-                key={key}
-                className="mono flex items-center justify-between gap-2 rounded border border-border-subtle bg-bg px-2 py-1 text-xs text-fg-muted"
-              >
-                <span className="truncate">
-                  {m.name}
-                  {` · ${shortRunLabel(rid, allRunIds)}`}
-                </span>
-                <button
-                  type="button"
-                  aria-label={`Remove ${m.name}`}
-                  className="text-fg-subtle hover:text-fg"
-                  onClick={() =>
-                    updateSettings({
-                      metrics: effectiveMetrics.filter(
-                        (x) => seriesKey(x) !== key,
-                      ),
-                    })
-                  }
-                >
-                  <i className="fa-solid fa-xmark" aria-hidden="true" />
-                </button>
-              </div>
-            );
-          })}
-          <p className="text-[10px] text-fg-subtle">
-            Multi-run overlay — use the Runs list or the comparison page to
-            add series from other runs.
-          </p>
-        </div>
-      ) : (
-        <MetricChips
-          runId={runId}
-          value={effectiveMetrics.map((m) => ({ name: m.name }))}
-          onChange={(v) => updateSettings({ metrics: v.map((m) => ({ name: m.name })) })}
-        />
-      )}
-
-      <SettingsSection title="Axes" />
-      <Select
-        label="X axis"
-        value={xAxisSelectValue(settings.xAxis, settings.xMetric)}
-        onChange={(v) => updateSettings(parseXAxisSelectValue(v))}
-        options={[
-          { value: "step", label: "Step" },
-          { value: "relative_time", label: "Relative time (s)" },
-          { value: "wall_time", label: "Wall time" },
-          ...xMetricOptions,
-        ]}
-      />
-      <Select
-        label="X scale"
-        value={settings.xScale}
-        onChange={(v) => updateSettings({ xScale: v })}
-        options={[
-          { value: "linear", label: "Linear" },
-          { value: "log", label: "Log" },
-        ]}
-      />
-      <Select
-        label="Y scale"
-        value={settings.yScale}
-        onChange={(v) => updateSettings({ yScale: v })}
-        options={[
-          { value: "linear", label: "Linear" },
-          { value: "log", label: "Log" },
-        ]}
-      />
-      <div className="grid grid-cols-2 gap-2">
-        <NumberInput
-          label="X min"
-          value={settings.viewport.xMin ?? settings.xRange[0]}
-          onChange={(v) =>
-            updateSettings({ xRange: [v, settings.xRange[1]] })
-          }
-        />
-        <NumberInput
-          label="X max"
-          value={settings.viewport.xMax ?? settings.xRange[1]}
-          onChange={(v) =>
-            updateSettings({ xRange: [settings.xRange[0], v] })
-          }
-        />
-        <NumberInput
-          label="Y min"
-          value={settings.viewport.yMin ?? settings.yRange[0]}
-          onChange={(v) =>
-            updateSettings({ yRange: [v, settings.yRange[1]] })
-          }
-        />
-        <NumberInput
-          label="Y max"
-          value={settings.viewport.yMax ?? settings.yRange[1]}
-          onChange={(v) =>
-            updateSettings({ yRange: [settings.yRange[0], v] })
-          }
-        />
-      </div>
-
-      <Select
-        label="Line type"
-        value={settings.lineType ?? "linear"}
-        onChange={(v) => updateSettings({ lineType: v })}
-        options={[
-          { value: "linear" as const, label: "Linear" },
-          { value: "monotone" as const, label: "Monotone (smooth)" },
-          { value: "step" as const, label: "Step" },
-          { value: "stepBefore" as const, label: "Step before" },
-          { value: "stepAfter" as const, label: "Step after" },
-        ]}
-      />
-
-      {multipleRuns && (
-        <>
-          <SettingsSection title="Grouping" />
-          <Select
-            label="Group runs by"
-            value={settings.groupBy?.source ?? "none"}
-            onChange={(v) =>
-              updateSettings({
-                groupBy: v === "none" ? null : { source: v, key: settings.groupBy?.key || (paramKeys[0] ?? "") },
-              })
-            }
-            options={[
-              { value: "none" as const, label: "None" },
-              { value: "group" as const, label: "Group" },
-              { value: "job_type" as const, label: "Job type" },
-              { value: "param" as const, label: "Param", disabled: paramKeys.length === 0 },
-            ]}
-            description="Runs sharing a value draw as their mean with a band; runs without one stay single lines"
-          />
-          {settings.groupBy?.source === "param" && (
-            <Select
-              label="Param"
-              value={settings.groupBy.key}
-              onChange={(key) => updateSettings({ groupBy: { source: "param", key } })}
-              options={paramKeys.map((k) => ({ value: k, label: k }))}
-            />
-          )}
-          {settings.groupBy && (
-            <>
-              <Select<BandKind>
-                label="Band"
-                value={settings.band}
-                onChange={(band) => updateSettings({ band })}
-                options={[
-                  { value: "std", label: "Mean ± std" },
-                  { value: "sem", label: "Mean ± std. error" },
-                  { value: "minmax", label: "Min – max" },
-                ]}
-              />
-              <Toggle
-                label="Hide member runs"
-                checked={settings.hideMembers}
-                onChange={(v) => updateSettings({ hideMembers: v })}
-              />
-            </>
-          )}
-        </>
-      )}
-
-      <SettingsSection title="Smoothing" />
-      <Select
-        label="Kind"
-        value={settings.smoothingKind}
-        onChange={(kind) => {
-          const info = SMOOTHING_KINDS[kind];
-          const v = settings.smoothing;
-          // Values don't carry across kinds (a 0.6 EMA weight is not a
-          // 0.6-point window); keep "off" off, otherwise start at the kind's default.
-          updateSettings({
-            smoothingKind: kind,
-            smoothing: v > 0 ? info.defaultValue : 0,
-          });
-        }}
-        options={(Object.keys(SMOOTHING_KINDS) as SmoothingKind[]).map((k) => ({
-          value: k,
-          label: SMOOTHING_KINDS[k].label,
-        }))}
-      />
-      <Slider
-        label={SMOOTHING_KINDS[settings.smoothingKind].short}
-        value={settings.smoothing}
-        onChange={(v) => updateSettings({ smoothing: v }, { mergeKey: "smoothing" })}
-        min={SMOOTHING_KINDS[settings.smoothingKind].min}
-        max={SMOOTHING_KINDS[settings.smoothingKind].max}
-        step={SMOOTHING_KINDS[settings.smoothingKind].step}
-        format={(v) => formatSmoothing(settings.smoothingKind, v)}
-        description={`${SMOOTHING_KINDS[settings.smoothingKind].description}; 0 is off`}
-      />
-
-      <SettingsSection title="Outliers" />
-      <Slider
-        label="Low percentile"
-        value={settings.outlierPct[0]}
-        onChange={(v) =>
-          updateSettings({ outlierPct: [v, settings.outlierPct[1]] }, { mergeKey: "outlierPct" })
-        }
-        min={0}
-        max={100}
-        step={0.5}
-        format={(v) => `${v.toFixed(1)}%`}
-      />
-      <Slider
-        label="High percentile"
-        value={settings.outlierPct[1]}
-        onChange={(v) =>
-          updateSettings({ outlierPct: [settings.outlierPct[0], v] }, { mergeKey: "outlierPct" })
-        }
-        min={0}
-        max={100}
-        step={0.5}
-        format={(v) => `${v.toFixed(1)}%`}
-      />
-      <p className="text-xs text-fg-muted">Set [0, 100] to disable.</p>
-
-      <SettingsSection title="Display" />
-      <Toggle
-        label="Show legend"
-        checked={settings.showLegend}
-        onChange={(v) => updateSettings({ showLegend: v })}
-      />
-      <Toggle
-        label="Tooltip: wall time"
-        checked={settings.tooltip.showWallTime}
-        onChange={(v) =>
-          updateSettings({
-            tooltip: { ...settings.tooltip, showWallTime: v },
-          })
-        }
-      />
-    </>
-  );
+  const runSequences = useSequences(runId);
+  const chosen = useMemo(() => [...new Set(effectiveMetrics.map((m) => m.name))], [effectiveMetrics]);
+  const metricNames = useMemo(() => {
+    const names = new Set<string>(chosen);
+    for (const m of runSequences.data?.sequences ?? []) if (m.object_type === "scalar") names.add(m.name);
+    return [...names].sort();
+  }, [runSequences.data, chosen]);
+  // Every run draws each chosen metric: removing a name drops it for all
+  // runs, adding one adds it for all of them.
+  const onChosenChange = (names: string[]) => {
+    const keep = new Set(names);
+    const kept = effectiveMetrics.filter((m) => keep.has(m.name));
+    const have = new Set(kept.map((m) => m.name));
+    const perRun = controlledSeries || multipleRuns;
+    const fresh = names
+      .filter((n) => !have.has(n))
+      .flatMap((name) => (perRun ? allRunIds.map((rid) => ({ runId: rid, name })) : [{ name }]));
+    updateSettings({ metrics: [...kept, ...fresh] });
+  };
+  const panelCtx: ScalarPanelCtx = {
+    metricNames,
+    chosen,
+    onChosenChange,
+    paramKeys,
+    multipleRuns,
+    lines: series
+      .filter((s) => (s.role ?? "line") === "line" && !s.key.startsWith("expr:"))
+      .map((s) => ({ key: s.key, label: s.label, color: s.color })),
+  };
+  const settingsPanel = <ScalarSettingsPanel ctl={ctl} ctx={panelCtx} mode="card" />;
 
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
   const cardRef = useRef<HTMLDivElement>(null);
-
   const hasData = series.some((s) => s.points.length > 0);
 
+  const onOpenRun = (rid: string) => {
+    const pid = runById.get(rid)?.project_id;
+    if (pid) navigate(`/p/${pid}/r/${rid}`);
+  };
 
   const plotProps = {
     series,
-    xAxis: settings.xAxis,
-    xLabel: xMetric?.name,
+    xKind: xAxisKind(xSrc),
+    xLabel: xSrc,
     xScale: settings.xScale,
     yScale: settings.yScale,
     xRange: settings.xRange,
     yRange: settings.yRange,
-    view: settings.viewport,
-    onViewChange: (v: ScalarSettings["viewport"]) =>
-      updateSettings({ viewport: v }, { mergeKey: "viewport", label: "Zoom" }),
+    view,
+    onViewChange,
     smoothing: settings.smoothing,
     smoothingKind: settings.smoothingKind,
     outlierPct: settings.outlierPct,
     lineType: settings.lineType,
-    showLegend: settings.showLegend,
+    showOriginal: settings.showOriginal,
+    stack: settings.stack,
+    fullFidelity: settings.fullFidelity,
+    legend: settings.legend,
     tooltip: settings.tooltip,
+    tooltipLabels: built.tooltipLabels.size > 0 ? built.tooltipLabels : undefined,
+    axisTitles: settings.axisTitles,
+    styles: built.styles,
+    baselineRunId: runView.baseline,
+    cursorSyncKey: syncOn ? cursorSyncKey(syncGroup) : null,
+    onOpenRun,
   };
 
+  const xError = xCompiled.error;
+  const errorBody = xError && (
+    <div className="flex flex-1 items-center justify-center p-3 text-center text-xs text-status-failed">
+      <span>
+        X expression <code className="mono">{xSrc}</code>: {xError.message}
+      </span>
+    </div>
+  );
+
   return (
-    <CardShell cardKind="scalar"
+    <CardShell
+      cardKind="scalar"
       cardRef={cardRef}
       settings={settings}
       updateSettings={updateSettings}
@@ -651,37 +502,43 @@ export default function ScalarPlotCard({
         }
         downloadCsv(headers, rows, safeName(settings.title ?? metric.name) + ".csv");
       }}
-      onScreenshot={() => { if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? metric.name)); }}
+      onScreenshot={() => {
+        if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? metric.name));
+      }}
       addToComparisonSlot={<AddToComparisonButton cardType="scalar" series={compSeries} />}
       onRemove={onRemove}
       onResetView={resetViewport}
       viewModified={viewportModified}
-      headerActions={<>
-        {settings.smoothing > 0 && (
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            className="h-5 touch:h-10 touch:min-w-[40px] inline-flex items-center justify-center rounded px-1.5 text-[10px] text-accent hover:bg-bg-hover"
-            title="Smoothing active — click to open settings"
-          >
-            {SMOOTHING_KINDS[settings.smoothingKind].short} {formatSmoothing(settings.smoothingKind, settings.smoothing)}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={flipYScale}
-          className={`h-5 touch:h-10 touch:min-w-[40px] inline-flex items-center justify-center rounded px-1.5 text-[10px] hover:bg-bg-hover ${
-            settings.yScale === "log"
-              ? "text-accent"
-              : "text-fg-muted hover:text-fg"
-          }`}
-          title={
-            settings.yScale === "log" ? "Y: log (click for linear)" : "Y: linear (click for log)"
-          }
-        >
-          {settings.yScale === "log" ? "lin" : "log"}
-        </button>
-      </>}
+      headerActions={
+        <>
+          {built.asOf && (
+            <HeaderBadge
+              tone="warn"
+              title="Series logged at different steps were joined as of each step (each takes its last value at or before the step)"
+            >
+              as-of
+            </HeaderBadge>
+          )}
+          {settings.smoothing > 0 && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="inline-flex items-center rounded touch:h-10"
+              title="Smoothing on: open settings"
+            >
+              <HeaderBadge tone="accent">
+                {SMOOTHING_KINDS[settings.smoothingKind].short} {formatSmoothing(settings.smoothingKind, settings.smoothing)}
+              </HeaderBadge>
+            </button>
+          )}
+          <HeaderToggle
+            icon="fa-superscript"
+            label={settings.yScale === "log" ? "Log y-scale (click for linear)" : "Linear y-scale (click for log)"}
+            pressed={settings.yScale === "log"}
+            onToggle={flipYScale}
+          />
+        </>
+      }
       dropHighlight={dropHighlight}
       dropProps={dropProps}
       settingsPanel={settingsPanel}
@@ -690,27 +547,31 @@ export default function ScalarPlotCard({
       scrollIntoViewOnMount={autoOpenSettings}
       modalContent={
         <div className="flex flex-col h-[calc(100vh-12rem)]">
-          <div className="flex-1 min-h-0">
-            <ScalarChart {...plotProps} className="h-full" />
+          <div className="flex flex-1 min-h-0 flex-col">
+            {errorBody || <ScalarChart {...plotProps} className="h-full" />}
           </div>
         </div>
       }
     >
       <>
-      {isLoading && !hasData ? (
-        <div className="flex-1 motion-safe:animate-pulse rounded bg-bg-hover" />
-      ) : (
-        <ScalarChart {...plotProps} className="flex-1 min-h-0" />
-      )}
+        {errorBody ||
+          (isLoading && !hasData ? (
+            <div className="flex-1 motion-safe:animate-pulse rounded bg-bg-hover" />
+          ) : (
+            <ScalarChart {...plotProps} className="flex-1 min-h-0" />
+          ))}
 
-      <SeriesChipStrip
-        metrics={effectiveMetrics}
-        controlledSeries={controlledSeries}
-        runId={runId}
-        allRunIds={allRunIds}
-        onMetricsChange={(next) => updateSettings({ metrics: next })}
-        className={series.length > 12 ? "max-h-24 overflow-y-auto" : undefined}
-      />
+        <SeriesChipStrip
+          metrics={effectiveMetrics}
+          controlledSeries={controlledSeries}
+          runId={runId}
+          allRunIds={allRunIds}
+          onMetricsChange={(next) => updateSettings({ metrics: next })}
+          colorOf={(m, i) =>
+            (multipleRuns ? runColors.get(m.runId ?? runId) : undefined) ?? SERIES_COLORS[i % SERIES_COLORS.length]!
+          }
+          className={series.length > 12 ? "max-h-24 overflow-y-auto" : undefined}
+        />
       </>
     </CardShell>
   );

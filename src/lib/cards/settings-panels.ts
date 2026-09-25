@@ -22,4 +22,5 @@ export const SETTINGS_PANELS: Partial<Record<CardType, () => Promise<{ default: 
   parallel: () => import("../../components/settings-panels/ParallelSettingsPanel"),
   tile: () => import("../../components/settings-panels/TileSettingsPanel"),
   importance: () => import("../../components/settings-panels/ImportanceSettingsPanel"),
+  scalar: () => import("../../components/settings-panels/ScalarSettingsPanel"),
 };

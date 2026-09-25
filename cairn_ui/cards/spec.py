@@ -106,12 +106,6 @@ class SeriesRef(_Strict):
     name: str
 
 
-class XMetricRef(_Strict):
-    """= ``XMetricRef`` — the scalar series a ``"metric"`` x-axis reads."""
-
-    name: str
-
-
 class CardSettingsSpec(BaseModel):
     """Permissive per-card settings side-channel (a few well-known keys +
     arbitrary JSON), matching ``additionalProperties`` in the schema."""
@@ -123,8 +117,8 @@ class CardSettingsSpec(BaseModel):
     smoothing: Optional[float] = None
     smoothingKind: Optional[Literal["ema", "twema", "gaussian", "window"]] = None
     step: Optional[float] = None
-    xAxis: Optional[Literal["step", "relative_time", "wall_time", "metric"]] = None
-    xMetric: Optional[XMetricRef] = None
+    # Scalar cards: the x-axis as an expression (``"step"``, ``"epoch"``, ``"step * 32"``).
+    x: Optional[str] = None
 
 
 class CardSpec(_Strict):

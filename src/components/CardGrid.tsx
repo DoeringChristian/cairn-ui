@@ -33,6 +33,7 @@ import { compilePanelFilter, filterPanels } from "../lib/workspace/panel-filter"
 import type { BuiltPanel } from "../lib/workspace/panel-builder";
 import { sendCardsToReport } from "../lib/workspace/send-to-report";
 import { useWorkspace } from "../lib/workspace/use-workspace";
+import { ChartSyncProvider } from "../lib/chart-sync";
 
 interface Props {
   runId: string;
@@ -191,7 +192,7 @@ export default function CardGrid({ runId, sequences }: Props) {
 
   return (
     <WorkspaceDefaultsProvider defaults={doc.defaults}>
-      {/* MERGER: ChartSyncProvider (lib/chart-sync.tsx) wraps from here, driven by doc.prefs.syncZoom / doc.prefs.syncCursor. */}
+      <ChartSyncProvider enabled={doc.prefs.syncZoom}>
       <CardNavProvider>
       <div className="space-y-8">
         {projectId && (
@@ -303,6 +304,7 @@ export default function CardGrid({ runId, sequences }: Props) {
         })}
       </div>
       </CardNavProvider>
+      </ChartSyncProvider>
     </WorkspaceDefaultsProvider>
   );
 }
