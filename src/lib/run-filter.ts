@@ -86,6 +86,8 @@ export function pyCmp(a: unknown, b: unknown): number {
   if (isNum(a) && isNum(b)) {
     const x = Number(a);
     const y = Number(b);
+    // NaN is unordered: every comparison against it is False, as in Python.
+    if (Number.isNaN(x) || Number.isNaN(y)) return NaN;
     return x < y ? -1 : x > y ? 1 : 0;
   }
   if (typeof a === "string" && typeof b === "string") return cmpCodePoints(a, b);

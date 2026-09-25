@@ -174,3 +174,10 @@ test("parseRunsFilterState drops malformed entries", () => {
   assert.equal(parseRunsFilterState({ groupBy: { source: "param" } }).groupBy, null);
   assert.deepEqual(parseRunsFilterState({ groupBy: { source: "tag" } }).groupBy, { source: "tag" });
 });
+
+test("NaN is unordered, like Python", () => {
+  for (const op of ["gt", "gte", "lt", "lte"] as const) {
+    assert.equal(evaluate(op, NaN, 1), false);
+    assert.equal(evaluate(op, 1, NaN), false);
+  }
+});
