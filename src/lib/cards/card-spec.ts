@@ -96,6 +96,13 @@ export type CardSpec = ComparisonCard & { settings?: CardSettingsSpec };
 export interface RunsSpec {
   ids?: string[];
   selector?: RunSelectorSpec;
+  // --- run view (wave 2, E): mirrors `RunView` in lib/run-view.tsx ---
+  /** Runs hidden from the cell's charts. */
+  hidden?: string[];
+  /** Runs drawn first, in this order. */
+  pinned?: string[];
+  /** The run the others are compared against. */
+  baseline?: string | null;
 }
 
 /**

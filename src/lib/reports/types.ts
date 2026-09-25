@@ -5,6 +5,7 @@
 
 import type { ComparisonCard } from "../comparisons";
 import type { RunSelector } from "../run-selector";
+import type { RunView } from "../run-view";
 
 export interface MarkdownBlock {
   id: string;
@@ -20,6 +21,8 @@ export interface CardsBlock {
   runIds?: string[];
   /** Dynamic run selector — when present, resolved live and takes precedence over `runIds`. */
   runSelector?: RunSelector;
+  /** Runs hidden from this cell's charts, pinned first, and its baseline (```cairn `runs.hidden/pinned/baseline`). */
+  runView?: RunView;
   cards: ComparisonCard[];
 }
 

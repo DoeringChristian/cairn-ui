@@ -161,3 +161,51 @@ cards:
   assert.ok(card);
   assert.deepEqual([...new Set(card.series.map((s) => s.runId))].sort(), ["run_a", "run_b"]);
 });
+
+// The cell's run view (runs.hidden/pinned/baseline) survives the fence.
+test("runs view round trip: hidden, pinned, baseline", () => {
+  const card: ComparisonCard = {
+    id: "card_rv",
+    type: "scalar",
+    series: [
+      { runId: "run_a", name: "loss" },
+      { runId: "run_b", name: "loss" },
+      { runId: "run_c", name: "loss" },
+    ],
+  };
+  const block: CardsBlock = {
+    id: "blk_rv",
+    type: "cards",
+    runIds: ["run_a", "run_b", "run_c"],
+    runView: { hidden: ["run_b"], pinned: ["run_c"], baseline: "run_a" },
+    cards: [card],
+  };
+  const yamlText = stringifyCairnSpec(serializeCairnSpec(block));
+  assert.match(yamlText, /hidden:\n\s+- run_b/);
+  assert.match(yamlText, /baseline: run_a/);
+  const compiled = compileCairnBlock(parseCairnSpec(yamlText), buildMetricIndex([]));
+  assert.deepEqual(compiled.block.runView, block.runView);
+  assert.deepEqual(compiled.block.runIds, block.runIds);
+
+  // An empty view writes nothing and reads back as absent.
+  const plain = stringifyCairnSpec(serializeCairnSpec({ ...block, runView: { hidden: [], pinned: [], baseline: null } }));
+  assert.doesNotMatch(plain, /hidden|pinned|baseline/);
+  assert.equal(compileCairnBlock(parseCairnSpec(plain), buildMetricIndex([])).block.runView, undefined);
+});
+
+test("runs view is validated", () => {
+  assert.throws(
+    () => compileCairnBlock(parseCairnSpec("runs:\n  ids: [a]\n  hidden: a\n"), buildMetricIndex([])),
+    /runs.hidden must be a list/,
+  );
+  assert.throws(
+    () => compileCairnBlock(parseCairnSpec("runs:\n  ids: [a]\n  baseline: [a]\n"), buildMetricIndex([])),
+    /runs.baseline must be a run-id string/,
+  );
+  const sel = compileCairnBlock(
+    parseCairnSpec("runs:\n  selector: { mode: latest-n, n: 2 }\n  pinned: [x]\n"),
+    buildMetricIndex([]),
+    { resolvedRunIds: ["x", "y"] },
+  );
+  assert.deepEqual(sel.block.runView, { hidden: [], pinned: ["x"], baseline: null });
+});

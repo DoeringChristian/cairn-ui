@@ -242,6 +242,27 @@
         },
         "selector": {
           "$ref": "#/definitions/RunSelectorSpec"
+        },
+        "hidden": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Runs hidden from the cell's charts."
+        },
+        "pinned": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Runs drawn first, in this order."
+        },
+        "baseline": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The run the others are compared against."
         }
       },
       "additionalProperties": false,

@@ -11,6 +11,9 @@
  *     # or
  *     selector: { mode: newest-per-name, namePattern: "train-*", tags: [prod], n: 5 }
  *                                              # → CardsBlock.runSelector (query)
+ *     hidden: [run_def]                        # optional run view → CardsBlock.runView
+ *     pinned: [run_abc]
+ *     baseline: run_abc
  *   title: "Validation metrics"                # optional
  *   cards:
  *     - metric: train/loss                     # series card
@@ -23,6 +26,7 @@
  * Field → existing-model mapping:
  *   runs.ids            → CardsBlock.runIds
  *   runs.selector        → CardsBlock.runSelector (QueryRunSelector)
+ *   runs.hidden/pinned/baseline → CardsBlock.runView (lib/run-view.tsx)
  *   cards[].metric+.type → cardFromSpec({kind:"series", ...})
  *   cards[].type (multi-run, no metric/series) → cardFromSpec({kind:"multi-run", ...})
  *   cards[].series       → cardFromSpec({kind:"manual-series", ...})
@@ -43,6 +47,7 @@ import { cardFromSpec, type AddCardSelection } from "./card-from-spec.ts";
 import { newId } from "./ids.ts";
 import type { MetricIndex } from "./metric-index";
 import type { CardsBlock } from "./types";
+import type { RunView } from "../run-view";
 
 export class CairnBlockError extends Error {
   constructor(message: string) {
@@ -62,6 +67,10 @@ interface CairnRunsSelectorInput {
 interface CairnRunsInput {
   ids?: unknown;
   selector?: CairnRunsSelectorInput;
+  /** The cell's run view: runs hidden from its charts, pinned first, and the baseline. */
+  hidden?: unknown;
+  pinned?: unknown;
+  baseline?: unknown;
 }
 
 interface CairnCardInput {
@@ -180,6 +189,28 @@ export function resolveRuns(spec: CairnSpec): { runIds?: string[]; runSelector?:
   return {};
 }
 
+/** The cell's run view from `runs.hidden`/`pinned`/`baseline`; undefined when none is given. */
+export function resolveRunView(spec: CairnSpec): RunView | undefined {
+  const runs = spec.runs;
+  if (!runs) return undefined;
+  const { hidden, pinned, baseline } = runs;
+  const list = (v: unknown, key: string): string[] => {
+    if (v === undefined) return [];
+    if (!Array.isArray(v) || !v.every((x) => typeof x === "string")) {
+      throw new CairnBlockError(`runs.${key} must be a list of run-id strings`);
+    }
+    return v as string[];
+  };
+  const h = list(hidden, "hidden");
+  const p = list(pinned, "pinned");
+  if (baseline !== undefined && baseline !== null && typeof baseline !== "string") {
+    throw new CairnBlockError("runs.baseline must be a run-id string");
+  }
+  const b = typeof baseline === "string" && baseline ? baseline : null;
+  if (h.length === 0 && p.length === 0 && b === null) return undefined;
+  return { hidden: h, pinned: p, baseline: b };
+}
+
 /**
  * The card's own declared shape (metric+type, or its exact manual `series`
  * list) — deliberately NOT derived from any resolved data (metricIndex/
@@ -291,6 +322,7 @@ export function compileCairnBlock(
   opts?: { id?: string; resolvedRunIds?: string[] },
 ): CompiledCairnBlock {
   const { runIds, runSelector } = resolveRuns(spec);
+  const runView = resolveRunView(spec);
   const effectiveRunIds = runIds ?? (runSelector ? (opts?.resolvedRunIds ?? []) : []);
   // Stabilized the same way the block id already is (opts.id/spec.id) — see
   // stableCardId's doc: card ids below are derived from this + each card's
@@ -332,6 +364,7 @@ export function compileCairnBlock(
     type: "cards",
     ...(spec.title !== undefined ? { title: spec.title } : {}),
     ...(runSelector ? { runSelector } : { runIds: effectiveRunIds }),
+    ...(runView ? { runView } : {}),
     cards,
   };
   return { block, settings };
@@ -365,6 +398,12 @@ export function serializeCairnSpec(block: CardsBlock, settingsByCardId: Record<s
     doc.runs = { selector: selectorOut };
   } else {
     doc.runs = { ids: block.runIds ?? [] };
+  }
+  const view = block.runView;
+  if (view) {
+    if (view.hidden.length > 0) doc.runs.hidden = view.hidden;
+    if (view.pinned.length > 0) doc.runs.pinned = view.pinned;
+    if (view.baseline) doc.runs.baseline = view.baseline;
   }
   if (block.title !== undefined) doc.title = block.title;
 

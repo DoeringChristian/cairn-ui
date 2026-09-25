@@ -31,6 +31,8 @@ import { cardFromSpec, cardSettingsKeyForReport, useMetricIndex, type CardsBlock
 import { describeRunSelector, type QueryRunSelector } from "../../lib/run-selector";
 import { useRunSelectorResolution } from "../../api/hooks";
 import type { Run } from "../../api/types";
+import { EMPTY_RUN_VIEW, RunViewContext, type RunView } from "../../lib/run-view";
+import { isEmptyRunView } from "../../lib/run-view-store";
 
 interface Props {
   projectId: string;
@@ -181,6 +183,20 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
   // localStorage, not `block`, so it would never reach ReportEditorPage's
   // blocks[]-keyed autosave. "Touch" this block (new object identity, same
   // content) whenever a settings write lands, reusing that autosave trigger.
+  // The cell's run view (```cairn `runs.hidden/pinned/baseline`). A viewer
+  // can still toggle it, but only for this session.
+  const [sessionView, setSessionView] = useState<RunView | null>(null);
+  const runViewCtx = useMemo(
+    () => ({
+      view: (readOnly ? sessionView : null) ?? block.runView ?? EMPTY_RUN_VIEW,
+      set: readOnly
+        ? setSessionView
+        : (next: RunView) => onChange({ ...block, runView: isEmptyRunView(next) ? undefined : next }),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [readOnly, sessionView, block],
+  );
+
   const handleSettingsTouched = useCallback(() => {
     onChange({ ...block });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,6 +207,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
     <CardMutationContext.Provider value={!readOnly}>
     <CascadeScopeContext.Provider value="builtin-only">
     <CardSettingsChangeContext.Provider value={readOnly ? undefined : handleSettingsTouched}>
+    <RunViewContext.Provider value={runViewCtx}>
     <div>
       {!readOnly && toolbar(
         <>
@@ -283,6 +300,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
         />
       )}
     </div>
+    </RunViewContext.Provider>
     </CardSettingsChangeContext.Provider>
     </CascadeScopeContext.Provider>
     </CardMutationContext.Provider>
