@@ -47,6 +47,7 @@ export default function MarkdownCard(props: SteppedMediaCardProps) {
       nearest
       settingsPanel={(ctl, ctx) => <MarkdownSettingsPanel ctl={ctl} ctx={ctx} mode="card" />}
       prefetch={(qc, point) => qc.prefetchQuery(artifactTextQuery(point.artifact_hash!))}
+      peek={(qc, point) => qc.getQueryData(artifactTextQuery(point.artifact_hash!).queryKey) !== undefined}
       renderArtifact={({ hash, settings, single }) => (
         <MarkdownBody hash={hash} fontSize={settings.fontSize} fill={single} />
       )}

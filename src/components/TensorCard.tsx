@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { safeJsonParse } from "../lib/format";
 import { formatNum } from "../lib/plot-utils/types";
@@ -7,7 +7,10 @@ import { downloadArtifact, artifactFilename } from "../lib/download";
 import { api } from "../api/client";
 import { cardOverridesStorageKey, useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { TensorSettings, TensorViewMode as ViewMode } from "./cards-settings/tensor";
-import type { SequenceMeta } from "../api/types";
+import type { SequenceMeta, SequencePoint } from "../api/types";
+import GalleryView from "./media/GalleryView";
+import { isGalleryPoint } from "../lib/media/gallery";
+import { galleryQuery } from "../lib/media/gallery-query";
 import { computeHistogram } from "../lib/plot-utils/histogram";
 import {
   HistogramBars,
@@ -87,104 +90,28 @@ async function fetchNpy(hash: string): Promise<NpyArray> {
   return parseNpy(await res.arrayBuffer());
 }
 
-export default function TensorCard({
-  runId,
-  metric,
-  settingsKeyOverride,
-  onRemove,
-  autoOpenSettings,
-}: Props) {
-  const q = useSequence(runId, metric.name);
-  const points = useMemo(
-    () => (q.data?.points ?? []).filter((p) => p.artifact_hash),
-    [q.data],
-  );
+const npyQueryOf = (hash: string) => ({
+  queryKey: ["cairn-npy", hash],
+  queryFn: () => fetchNpy(hash),
+  staleTime: Infinity,
+});
 
-  const settingsKey = useMemo(
-    () =>
-      settingsKeyOverride ?? {
-        runId,
-        metricName: metric.name,
-      },
-    [settingsKeyOverride, runId, metric.name],
-  );
-  const ctl = useCardSettings<TensorSettings>(settingsKey, "tensor");
-  const settings = ctl.value;
-
-  const seriesPoints = useMemo(() => [points], [points]);
-  const seriesRunIds = useMemo(() => [runId], [runId]);
-  const slider = useStepSlider({
-    seriesPoints,
-    persistedIdx: settings.sliderStep,
-    updateSettings: ctl.set,
-    sliderKey: settings.sliderKey,
-    seriesRunIds,
-    sync: { cardId: cardOverridesStorageKey(settingsKey), follow: settings.followSection },
-  });
-  const { safeIdx, currentStep, onSliderChange } = slider;
-  const scalarMetrics = useScalarMetricNames(runId);
-  const current = useMemo(
-    () => resolveAtStep(points, currentStep) ?? points[0],
-    [points, currentStep],
-  );
-  const meta = useMemo(
-    () => safeJsonParse<TensorMeta>(current?.artifact_metadata),
-    [current],
-  );
-
+/** The shape/stats facts of one tensor. */
+function tensorFacts(meta: TensorMeta | null, settings: TensorSettings) {
   const shape = meta?.shape ?? [];
   const ndim = shape.length;
   const tooBig = (meta?.size_bytes ?? 0) > SIZE_CAP;
-
   // Resolve the effective view: fall back to stats for oversized blobs and to
   // histogram when a heatmap is requested for a < 2D tensor.
   let effectiveView: ViewMode = settings.viewMode;
   if (tooBig) effectiveView = "stats";
   else if (effectiveView === "heatmap" && ndim < 2) effectiveView = "histogram";
-
-  const needsBlob = effectiveView !== "stats";
-  const npyQuery = useQuery({
-    queryKey: ["cairn-npy", current?.artifact_hash],
-    queryFn: () => fetchNpy(current!.artifact_hash!),
-    enabled: !!current?.artifact_hash && needsBlob,
-    staleTime: Infinity,
-    // The previous step stays on screen while the next one loads (no placeholder flash).
-    placeholderData: keepPreviousData,
-  });
-  const arr = npyQuery.data;
-
-  const histogram = useMemo(() => {
-    if (effectiveView !== "histogram" || !arr) return null;
-    return computeHistogram(arr.data, settings.bins);
-  }, [effectiveView, arr, settings.bins]);
-
-  const leadingDims = ndim > 2 ? shape.slice(0, ndim - 2) : [];
-  const matrix = useMemo(() => {
-    if (effectiveView !== "heatmap" || !arr || arr.shape.length < 2) return null;
-    return sliceMatrix(
-      arr.data,
-      arr.shape,
-      arr.fortranOrder,
-      settings.sliceIndices ?? [],
-    );
-  }, [effectiveView, arr, settings.sliceIndices]);
-
-  const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
-
-  const compSeries = useMemo(
-    () => [{ runId, name: metric.name }],
-    [runId, metric.name],
-  );
-
   const shapeLabel = ndim > 0 ? shape.join("×") : "scalar";
-  const subtitle =
-    points.length > 0
-      ? `${shapeLabel} · ${meta?.dtype ?? "?"} · step ${current?.step ?? "—"} (${safeIdx + 1}/${slider.values.length})`
-      : `${metric.count} pts`;
+  return { shape, ndim, tooBig, effectiveView, shapeLabel, leadingDims: ndim > 2 ? shape.slice(0, ndim - 2) : [] };
+}
 
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  const statsGrid = meta && (
+function StatsGrid({ meta, shapeLabel }: { meta: TensorMeta; shapeLabel: string }) {
+  return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-fg-muted">
       <span>shape</span>
       <span className="mono num">{shapeLabel}</span>
@@ -200,12 +127,39 @@ export default function TensorCard({
       <span className="mono num">{meta.size_bytes} B</span>
     </div>
   );
+}
 
+/** One tensor artifact (a plain point or a gallery item) in the card's view mode. */
+function TensorView({ point, settings }: { point: SequencePoint; settings: TensorSettings }) {
+  const meta = useMemo(() => safeJsonParse<TensorMeta>(point.artifact_metadata), [point.artifact_metadata]);
+  const { ndim, tooBig, effectiveView, shapeLabel } = tensorFacts(meta, settings);
+  const needsBlob = effectiveView !== "stats";
+  const npyQuery = useQuery({
+    ...npyQueryOf(point.artifact_hash!),
+    enabled: needsBlob,
+    // The previous step stays on screen while the next one loads (no placeholder flash).
+    placeholderData: keepPreviousData,
+  });
+  const arr = npyQuery.data;
+
+  const histogram = useMemo(() => {
+    if (effectiveView !== "histogram" || !arr) return null;
+    return computeHistogram(arr.data, settings.bins);
+  }, [effectiveView, arr, settings.bins]);
+
+  const matrix = useMemo(() => {
+    if (effectiveView !== "heatmap" || !arr || arr.shape.length < 2) return null;
+    return sliceMatrix(
+      arr.data,
+      arr.shape,
+      arr.fortranOrder,
+      settings.sliceIndices ?? [],
+    );
+  }, [effectiveView, arr, settings.sliceIndices]);
+
+  const statsGrid = meta && <StatsGrid meta={meta} shapeLabel={shapeLabel} />;
   const renderBody = () => {
-    if (q.isLoading) {
-      return <div className="h-48 motion-safe:animate-pulse rounded bg-bg-hover" />;
-    }
-    if (!current?.artifact_hash || !meta) {
+    if (!meta) {
       return <div className="text-sm text-fg-muted">no tensor logged yet</div>;
     }
 
@@ -265,6 +219,100 @@ export default function TensorCard({
         )}
       </div>
     );
+  };
+
+  return renderBody();
+}
+
+export default function TensorCard({
+  runId,
+  metric,
+  settingsKeyOverride,
+  onRemove,
+  autoOpenSettings,
+}: Props) {
+  const q = useSequence(runId, metric.name);
+  const points = useMemo(
+    () => (q.data?.points ?? []).filter((p) => p.artifact_hash),
+    [q.data],
+  );
+
+  const settingsKey = useMemo(
+    () =>
+      settingsKeyOverride ?? {
+        runId,
+        metricName: metric.name,
+      },
+    [settingsKeyOverride, runId, metric.name],
+  );
+  const ctl = useCardSettings<TensorSettings>(settingsKey, "tensor");
+  const settings = ctl.value;
+
+  const seriesPoints = useMemo(() => [points], [points]);
+  const seriesRunIds = useMemo(() => [runId], [runId]);
+  const slider = useStepSlider({
+    seriesPoints,
+    persistedIdx: settings.sliderStep,
+    updateSettings: ctl.set,
+    sliderKey: settings.sliderKey,
+    seriesRunIds,
+    sync: { cardId: cardOverridesStorageKey(settingsKey), follow: settings.followSection },
+  });
+  const { safeIdx, currentStep, onSliderChange } = slider;
+  const scalarMetrics = useScalarMetricNames(runId);
+  const current = useMemo(
+    () => resolveAtStep(points, currentStep) ?? points[0],
+    [points, currentStep],
+  );
+  const qc = useQueryClient();
+  // A gallery's facts (shape, stats) for the subtitle and settings come from its first item.
+  const gallery = isGalleryPoint(current);
+  const galleryItems = useQuery({ ...galleryQuery(current?.artifact_hash ?? ""), enabled: gallery });
+  const meta = useMemo(
+    () => (gallery
+      ? (galleryItems.data?.[0]?.metadata ?? null) as TensorMeta | null
+      : safeJsonParse<TensorMeta>(current?.artifact_metadata)),
+    [gallery, galleryItems.data, current],
+  );
+  const { ndim, shapeLabel, leadingDims } = tensorFacts(meta, settings);
+  const statsGrid = meta && <StatsGrid meta={meta} shapeLabel={shapeLabel} />;
+
+  const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
+
+  const compSeries = useMemo(
+    () => [{ runId, name: metric.name }],
+    [runId, metric.name],
+  );
+
+  const subtitle =
+    points.length > 0
+      ? `${gallery ? `${galleryItems.data?.length ?? "…"} × ` : ""}${shapeLabel} · ${meta?.dtype ?? "?"} · step ${current?.step ?? "—"} (${safeIdx + 1}/${slider.values.length})`
+      : `${metric.count} pts`;
+
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const renderBody = () => {
+    if (q.isLoading) {
+      return <div className="h-48 motion-safe:animate-pulse rounded bg-bg-hover" />;
+    }
+    if (!current?.artifact_hash) {
+      return <div className="text-sm text-fg-muted">no tensor logged yet</div>;
+    }
+    if (gallery) {
+      return (
+        <div className="flex-1 min-h-0 overflow-auto">
+          <GalleryView
+            point={current}
+            fill
+            minItemHeight={150}
+            prefetchItem={(p) => qc.prefetchQuery(npyQueryOf(p.artifact_hash!))}
+            peekItem={(p) => settings.viewMode === "stats" || qc.getQueryData(npyQueryOf(p.artifact_hash!).queryKey) !== undefined}
+            renderItem={(item) => <TensorView point={item} settings={settings} />}
+          />
+        </div>
+      );
+    }
+    return <TensorView point={current} settings={settings} />;
   };
 
   const renderContent = () => (

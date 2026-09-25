@@ -196,6 +196,10 @@ export default function VideoPlayerCard(props: SteppedMediaCardProps) {
       nearest={false}
       settingsPanel={(ctl, ctx) => <VideoSettingsPanel ctl={ctl} ctx={ctx} mode="card" />}
       prefetch={(_qc, point, signal) => prefetchVideo(point, signal)}
+      peek={(_qc, point) => {
+        const poster = posterOf(point);
+        return !poster || !!peekDecoded(poster);
+      }}
       renderArtifact={(view) => <VideoClip {...view} clock={clockFor(view.settings, view.paneCount, view.following)} />}
       footer={({ settings, paneCount, following }) => {
         const clock = clockFor(settings, paneCount, following);

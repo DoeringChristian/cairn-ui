@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
-import { keepPreviousData, useQuery, useQueries } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueries, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import SettledImg from "./media/SettledImg";
 import { useSequence } from "../api/hooks";
 import { api } from "../api/client";
@@ -12,7 +12,11 @@ import { useCardDrop } from "../lib/use-series-drop";
 import type { ComparisonSeriesRef } from "../lib/comparisons";
 import { useRunMetadataVersion, shortRunLabel } from "../lib/run-label";
 import { seriesKey, seriesLabel } from "../lib/series-utils";
-import type { SequenceMeta, SequenceResponse } from "../api/types";
+import type { SequenceMeta, SequencePoint, SequenceResponse } from "../api/types";
+import GalleryView, { useSettledGalleries } from "./media/GalleryView";
+import type { GalleryFrame } from "../lib/media/gallery-query";
+import { isGalleryPoint } from "../lib/media/gallery";
+import { decodeImage, peekDecoded } from "../lib/media/decoded-image";
 import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid } from "./card-kit";
 import {
   instanceDefaults,
@@ -64,23 +68,45 @@ type PlotlyFigure = PlotlyFigureLike;
 
 const EMPTY_FIGURE: PlotlyFigure = { data: [], layout: {} };
 
+const plotlySourceQuery = (sourceHash: string) => ({
+  queryKey: qk.plotlySource(sourceHash),
+  queryFn: async (): Promise<PlotlyFigure> => {
+    const res = await fetch(api.artifactUrl(sourceHash));
+    if (!res.ok) {
+      throw new Error(`${res.status} ${res.statusText}`);
+    }
+    return (await res.json()) as PlotlyFigure;
+  },
+  // Content addressed: never stale.
+  staleTime: Infinity,
+  retry: false,
+});
+
 function usePlotlySource(sourceHash: string | null | undefined) {
   return useQuery({
-    queryKey: qk.plotlySource(sourceHash),
-    queryFn: async (): Promise<PlotlyFigure> => {
-      const res = await fetch(api.artifactUrl(sourceHash as string));
-      if (!res.ok) {
-        throw new Error(`${res.status} ${res.statusText}`);
-      }
-      return (await res.json()) as PlotlyFigure;
-    },
+    ...plotlySourceQuery(sourceHash ?? ""),
     enabled: !!sourceHash,
-    // Content addressed: never stale. The previous step's figure stays on
-    // screen while the next one loads (no placeholder flash).
-    staleTime: Infinity,
+    // The previous step's figure stays on screen while the next one loads
+    // (no placeholder flash).
     placeholderData: keepPreviousData,
-    retry: false,
   });
+}
+
+/** The point's interactive Plotly source, when it has one. */
+function plotlySourceHash(point: SequencePoint): string | null {
+  const meta = safeJsonParse<FigureMetadata>(point.artifact_metadata ?? null);
+  return meta?.has_source && meta.source_format === "plotly_json" ? meta.source_hash ?? null : null;
+}
+
+/** Warm one figure: its Plotly source, or its PNG decoded. */
+function prefetchFigure(qc: QueryClient, point: SequencePoint, signal: AbortSignal): Promise<unknown> {
+  const source = plotlySourceHash(point);
+  return source ? qc.prefetchQuery(plotlySourceQuery(source)) : decodeImage(api.artifactUrl(point.artifact_hash!), signal);
+}
+
+function peekFigure(qc: QueryClient, point: SequencePoint): boolean {
+  const source = plotlySourceHash(point);
+  return source ? qc.getQueryData(qk.plotlySource(source)) !== undefined : !!peekDecoded(api.artifactUrl(point.artifact_hash!));
 }
 
 // ---------------------------------------------------------------------------
@@ -221,6 +247,60 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
   return width;
 }
 
+/** Shared view (zoom/pan/camera) wiring, handed down to every figure. */
+interface ViewSync {
+  settings: FigureSettings;
+  viewOverrides?: SharedView;
+  onRelayout?: (view: SharedView) => void;
+  revision?: number;
+}
+
+/** One figure: interactive from its Plotly source, else its PNG. */
+function FigureItem({ point, label, sync }: { point: SequencePoint; label: string; sync: ViewSync }) {
+  const sourceHash = plotlySourceHash(point);
+  const sourceQ = usePlotlySource(sourceHash);
+  if (sourceHash && sourceQ.isSuccess && sourceQ.data?.data) {
+    return (
+      <InteractiveFigure
+        figure={sourceQ.data}
+        settings={sync.settings}
+        viewOverrides={sync.viewOverrides}
+        onRelayout={sync.onRelayout}
+        revision={sync.revision}
+        liveRelayout
+      />
+    );
+  }
+  if (sourceHash && sourceQ.isLoading) {
+    return <div className="h-full min-h-[8rem] motion-safe:animate-pulse rounded bg-bg-hover" />;
+  }
+  return (
+    <div className="flex h-full justify-center items-center rounded bg-bg p-2 overflow-hidden">
+      <SettledImg
+        src={api.artifactUrl(point.artifact_hash!)}
+        alt={label}
+        className="max-h-full max-w-full object-contain"
+      />
+    </div>
+  );
+}
+
+/** A gallery point's figures in a grid filling the pane, swapped as a whole per step. */
+function FigureGallery({ point, frame, name, sync }: { point: SequencePoint; frame?: GalleryFrame; name: string; sync: ViewSync }) {
+  const qc = useQueryClient();
+  return (
+    <GalleryView
+      point={point}
+      frame={frame}
+      fill
+      minItemHeight={180}
+      prefetchItem={(p, signal) => prefetchFigure(qc, p, signal)}
+      peekItem={(p) => peekFigure(qc, p)}
+      renderItem={(item, i) => <FigureItem point={item} label={`${name} @ step ${item.step} #${i}`} sync={sync} />}
+    />
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Single pane: renders one figure at the given global step number.
 // ---------------------------------------------------------------------------
@@ -232,7 +312,10 @@ function FigurePane({
   viewOverrides,
   onRelayout,
   revision,
+  galleryFrame,
 }: {
+  /** This pane's gallery frame, settled by the card with every other pane's. */
+  galleryFrame?: GalleryFrame;
   runId: string;
   m: { runId?: string; name: string };
   /** The pane's step (per run for a slider key); null shows the empty state. */
@@ -272,6 +355,13 @@ function FigurePane({
   }
   if (!current?.artifact_hash) {
     return <div className="text-sm text-fg-muted">no figure logged yet</div>;
+  }
+  if (isGalleryPoint(current)) {
+    return (
+      <div className="h-full overflow-auto">
+        <FigureGallery point={current} frame={galleryFrame} name={m.name} sync={{ settings, viewOverrides, onRelayout, revision }} />
+      </div>
+    );
   }
   if (showPlotly) {
     return (
@@ -409,7 +499,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
         paneMeta?.has_source && paneMeta?.source_format === "plotly_json"
           ? paneMeta.source_hash ?? null
           : null;
-      return { m, runId: rid, sourceHash: paneSourceHash };
+      return { m, runId: rid, sourceHash: paneSourceHash, hash: paneCurrent?.artifact_hash ?? null, point: paneCurrent };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -418,6 +508,13 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     runId,
     multiQueries.map((q) => q.dataUpdatedAt).join("|"),
   ]);
+
+  // Gallery panes swap steps together (runs side by side never differ).
+  const qcFig = useQueryClient();
+  const paneGalleries = useSettledGalleries(
+    paneCurrents.map((p, i) => ({ id: String(i), point: p.point })),
+    { prefetchItem: (p, signal) => prefetchFigure(qcFig, p, signal), peekItem: (p) => peekFigure(qcFig, p) },
+  );
 
   const overlaySourceQueries = useQueries({
     queries: paneCurrents.map((p) => ({
@@ -526,8 +623,9 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   // so drop them whenever the rendered figure's identity changes (the single
   // pane's plotly source hash plus every multi-pane one).
   const figureIdentity = useMemo(
-    () => [sourceHash ?? "", ...paneCurrents.map((p) => p.sourceHash ?? "")].join("|"),
-    [sourceHash, paneCurrents],
+    // (A gallery has no source of its own: its manifest names the figures.)
+    () => [sourceHash ?? current?.artifact_hash ?? "", ...paneCurrents.map((p) => p.sourceHash ?? p.hash ?? "")].join("|"),
+    [sourceHash, current?.artifact_hash, paneCurrents],
   );
   useEffect(() => {
     setSharedView({});
@@ -602,7 +700,15 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     }
     return (
       <>
-        {showPlotly ? (
+        {isGalleryPoint(current) ? (
+          <div className={`${heightClass} overflow-auto`} style={heightStyle}>
+            <FigureGallery
+              point={current}
+              name={metric.name}
+              sync={{ settings, viewOverrides: sharedView, onRelayout: handlePaneRelayout, revision: plotRevision }}
+            />
+          </div>
+        ) : showPlotly ? (
           <InteractiveFigure
             figure={sourceQ.data!}
             settings={settings}
@@ -668,6 +774,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
             viewOverrides={sharedView}
             onRelayout={handlePaneRelayout}
             revision={plotRevision}
+            galleryFrame={paneGalleries?.get(String(i))}
           />
         );
       }}

@@ -16,6 +16,7 @@ import {
 import ImagePane, { type ImageRendering, type PaneTransform } from "./ImagePane";
 import { decodeMask } from "./decode-mask";
 import type { ImageFrame, ImageItem } from "./image-frame";
+import { galleryGridColumns } from "../../lib/media/gallery";
 
 const EMPTY_ITEMS: ImageItem[] = [];
 
@@ -145,8 +146,8 @@ export default function ImagePointView({
   };
 
   if (!gallery) return cell(items[0]!, 0);
-  // Near-square grid of equal cells.
-  const cols = Math.ceil(Math.sqrt(items.length));
+  // Near-square grid of equal cells (the layout every gallery shares).
+  const cols = galleryGridColumns(items.length);
   const grid = (
     <div
       className="grid min-h-0 w-full flex-1 gap-1"

@@ -21,6 +21,11 @@ import SeriesChipStrip from "../SeriesChipStrip";
 import StepSlider from "../StepSlider";
 import Scene3DSettingsPanel from "../settings-panels/Scene3DSettingsPanel";
 import Viewer3D from "./Viewer3D";
+import { useQuery } from "@tanstack/react-query";
+import { pointCaption } from "../../lib/caption";
+import { isGalleryPoint } from "../../lib/media/gallery";
+import { galleryQuery } from "../../lib/media/gallery-query";
+import { useGalleryFrame } from "../media/GalleryView";
 import { CameraLink } from "./camera-link";
 import { disposeObject, propertyNames, useArtifactArrays, type ArtifactArrays, type Scene3DMeta } from "./artifact-arrays";
 
@@ -51,26 +56,25 @@ export interface Scene3DKind<V extends object, M extends Scene3DMeta> {
   }) => ReactNode;
 }
 
-function ScenePane<V extends object, M extends Scene3DMeta>({
+/** One 3D artifact in one viewer (a plain point, or one gallery item). */
+function SceneView<V extends object, M extends Scene3DMeta>({
   spec,
-  points,
-  targetStep,
+  current,
   view,
   link,
   resetKey,
+  overlay,
 }: {
   spec: Scene3DKind<V, M>;
-  points: SequencePoint[];
-  /** The pane's step (per run for a slider key); null shows the empty state. */
-  targetStep: number | null;
+  current: SequencePoint;
   view: V;
   link: CameraLink | null;
   resetKey: number;
+  overlay?: ReactNode;
 }) {
-  const current = targetStep == null ? null : resolveAtStep(points, targetStep);
-  const metaJson = current?.artifact_metadata;
+  const metaJson = current.artifact_metadata;
   const meta = useMemo(() => safeJsonParse<M>(metaJson), [metaJson]);
-  const q = useArtifactArrays(current?.artifact_hash ?? null);
+  const q = useArtifactArrays(current.artifact_hash ?? null);
 
   const built = useMemo(() => {
     if (!q.data) return { objects: [] as THREE.Object3D[], error: null };
@@ -82,9 +86,6 @@ function ScenePane<V extends object, M extends Scene3DMeta>({
   }, [spec, q.data, view]);
   useEffect(() => () => built.objects.forEach(disposeObject), [built]);
 
-  if (!current) {
-    return <div className="flex h-full items-center justify-center text-sm text-fg-muted">no {spec.noun} logged yet</div>;
-  }
   const error = q.error ? String(q.error) : built.error;
   return (
     <div className="relative h-full w-full overflow-hidden rounded bg-bg">
@@ -94,6 +95,7 @@ function ScenePane<V extends object, M extends Scene3DMeta>({
       ) : q.isFetching ? (
         <div className="absolute right-1 top-1 rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-muted">loading…</div>
       ) : null}
+      {overlay}
       {meta && (
         <div className="mono pointer-events-none absolute bottom-1 left-1 rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-subtle">
           {spec.caption(meta)}
@@ -101,6 +103,83 @@ function ScenePane<V extends object, M extends Scene3DMeta>({
       )}
     </div>
   );
+}
+
+/**
+ * A gallery point in ONE viewer, with a tab per item: browsers cap live WebGL
+ * contexts (about 16 per page), so a grid of viewers per gallery would start
+ * losing contexts on a page of 3D cards. The tab (`item`) is the card's, so
+ * every run's pane shows the same item.
+ */
+function SceneGallery<V extends object, M extends Scene3DMeta>({
+  point,
+  item,
+  onItem,
+  ...rest
+}: {
+  spec: Scene3DKind<V, M>;
+  point: SequencePoint;
+  item: number;
+  onItem: (item: number) => void;
+  view: V;
+  link: CameraLink | null;
+  resetKey: number;
+}) {
+  const frame = useGalleryFrame(point);
+  if (!frame) return <div className="h-full motion-safe:animate-pulse rounded bg-bg-hover" />;
+  if (frame.items.length === 0) return <div className="flex h-full items-center justify-center text-xs text-fg-subtle">empty gallery</div>;
+  const index = Math.min(item, frame.items.length - 1);
+  const caption = pointCaption(frame.point.metadata);
+  const tabs = (
+    <div className="absolute left-1 right-1 top-1 flex flex-wrap items-center gap-1" data-gallery-step={frame.point.step} data-gallery-count={frame.items.length}>
+      {caption && <span className="max-w-[40%] truncate rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-muted" title={caption}>{caption}</span>}
+      {frame.items.map((it, i) => (
+        <button
+          key={i}
+          type="button"
+          data-gallery-item={i}
+          aria-pressed={i === index}
+          onClick={() => onItem(i)}
+          title={it.caption ?? `item ${i + 1}`}
+          className={`max-w-[10rem] truncate rounded px-1.5 py-0.5 text-[10px] ${
+            i === index ? "bg-accent text-bg" : "bg-bg/80 text-fg-muted hover:text-fg"
+          }`}
+        >
+          {it.caption ?? `#${i + 1}`}
+        </button>
+      ))}
+    </div>
+  );
+  return <SceneView {...rest} current={frame.itemPoints[index]!} overlay={tabs} />;
+}
+
+function ScenePane<V extends object, M extends Scene3DMeta>({
+  spec,
+  points,
+  targetStep,
+  item,
+  onItem,
+  ...rest
+}: {
+  spec: Scene3DKind<V, M>;
+  points: SequencePoint[];
+  /** The pane's step (per run for a slider key); null shows the empty state. */
+  targetStep: number | null;
+  /** The shown item of a gallery point. */
+  item: number;
+  onItem: (item: number) => void;
+  view: V;
+  link: CameraLink | null;
+  resetKey: number;
+}) {
+  const current = targetStep == null ? null : resolveAtStep(points, targetStep);
+  if (!current) {
+    return <div className="flex h-full items-center justify-center text-sm text-fg-muted">no {spec.noun} logged yet</div>;
+  }
+  if (isGalleryPoint(current)) {
+    return <SceneGallery {...rest} spec={spec} point={current} item={item} onItem={onItem} />;
+  }
+  return <SceneView {...rest} spec={spec} current={current} />;
 }
 
 /** One pane per series (run), a shared step slider, and orbit cameras that follow each other. */
@@ -164,8 +243,18 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   const slot = useOverlaySlot(settingsOpen);
   const cardRef = useRef<HTMLDivElement>(null);
 
+  // The gallery item every pane shows (see SceneGallery).
+  const [item, setItem] = useState(0);
   const seedCurrent = resolveAtStep(seriesPoints[0] ?? [], currentStep);
-  const seedMeta = safeJsonParse<M>(seedCurrent?.artifact_metadata);
+  // A gallery's settings (color-by properties…) come from its shown item.
+  const seedGallery = useQuery({
+    ...galleryQuery(seedCurrent?.artifact_hash ?? ""),
+    enabled: isGalleryPoint(seedCurrent),
+  });
+  const seedItems = isGalleryPoint(seedCurrent) ? seedGallery.data ?? [] : null;
+  const seedMeta = seedItems
+    ? ((seedItems[Math.min(item, seedItems.length - 1)]?.metadata ?? null) as M | null)
+    : safeJsonParse<M>(seedCurrent?.artifact_metadata);
 
   const paneKeys = panes.keys;
   const paneLabels = panes.labels;
@@ -241,6 +330,8 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
                   spec={spec}
                   points={seriesPoints[i] ?? []}
                   targetStep={stepFor(i)}
+                  item={item}
+                  onItem={setItem}
                   view={view}
                   link={link}
                   resetKey={resetKey}

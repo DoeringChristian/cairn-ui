@@ -24,7 +24,8 @@ export const qk = {
   sourceFile: (runId: string, path: string | null) => ["source-file", runId, path] as const,
   highlight: (selected: string | null, content: string | undefined) => ["highlight", selected, content] as const,
   plotlySource: (sourceHash: string | null | undefined) => ["plotly-source", sourceHash] as const,
-  imageGallery: (hash: string | null | undefined) => ["image-gallery", hash] as const,
+  /** A gallery point's manifest (lib/media/gallery.ts); content addressed, so never stale. */
+  gallery: (hash: string | null | undefined) => ["gallery", hash] as const,
   /** An artifact's bytes as text (markdown, HTML); content addressed, so never stale. */
   artifactText: (hash: string | null | undefined) => ["artifact-text", hash] as const,
   artifactFamilies: (projectId: string) => ["artifact-families", projectId] as const,

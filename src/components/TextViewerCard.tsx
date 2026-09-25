@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { TextSettings } from "./cards-settings/text";
@@ -10,6 +11,9 @@ import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import TextSettingsPanel from "./settings-panels/TextSettingsPanel";
 import StepSlider from "./StepSlider";
+import GalleryView from "./media/GalleryView";
+import { artifactTextQuery } from "../lib/media/artifact-text";
+import { isGalleryPoint } from "../lib/media/gallery";
 
 interface Props {
   runId: string;
@@ -25,27 +29,23 @@ const FONT_SIZE_CLASS: Record<TextSettings["fontSize"], string> = {
   base: "text-base",
 };
 
+/**
+ * One text artifact. The previous step's text stays while the next one
+ * loads (no empty flash).
+ */
+function TextBody({ hash, className }: { hash: string; className: string }) {
+  const q = useQuery({ ...artifactTextQuery(hash), placeholderData: keepPreviousData });
+  const content = q.isError && !q.isPlaceholderData ? `<fetch error: ${(q.error as Error).message}>` : q.data ?? "";
+  return <pre className={className}>{content}</pre>;
+}
+
 export default function TextViewerCard({ runId, metric, settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
   const q = useSequence(runId, metric.name);
   const points = useMemo(() => q.data?.points ?? [], [q.data]);
   const [idx, setIdx] = useState(0);
   const safeIdx = Math.min(Math.max(0, idx), Math.max(0, points.length - 1));
   const current = points[safeIdx];
-  const [content, setContent] = useState<string>("");
-
-  // Fetch the artifact's bytes lazily when the hash changes.
-  useEffect(() => {
-    if (!current?.artifact_hash) {
-      setContent("");
-      return;
-    }
-    let cancelled = false;
-    fetch(`/api/artifacts/${current.artifact_hash}`)
-      .then((r) => r.text())
-      .then((text) => { if (!cancelled) setContent(text); })
-      .catch((e) => { if (!cancelled) setContent(`<fetch error: ${e.message}>`); });
-    return () => { cancelled = true; };
-  }, [current?.artifact_hash]);
+  const qc = useQueryClient();
 
   const settingsKey = useMemo(
     () => settingsKeyOverride ?? {
@@ -74,15 +74,28 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
     ? "whitespace-pre-wrap break-all"
     : "whitespace-pre overflow-x-auto";
 
+  const textClass = `mono overflow-auto ${wrapClass} rounded bg-bg p-3 ${FONT_SIZE_CLASS[settings.fontSize]} text-fg-muted`;
+
   const cardRef = useRef<HTMLDivElement>(null);
 
   const renderContent = () => (
     <>
-      <pre
-        className={`mono flex-1 min-h-0 overflow-auto ${wrapClass} rounded bg-bg p-3 ${FONT_SIZE_CLASS[settings.fontSize]} text-fg-muted`}
-      >
-        {content}
-      </pre>
+      {current && isGalleryPoint(current) ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <GalleryView
+            point={current}
+            prefetchItem={(p) => qc.prefetchQuery(artifactTextQuery(p.artifact_hash!))}
+            peekItem={(p) => qc.getQueryData(artifactTextQuery(p.artifact_hash!).queryKey) !== undefined}
+            renderItem={(item) => (
+              <TextBody hash={item.artifact_hash!} className={`${textClass} max-h-64`} />
+            )}
+          />
+        </div>
+      ) : current?.artifact_hash ? (
+        <TextBody hash={current.artifact_hash} className={`${textClass} flex-1 min-h-0`} />
+      ) : (
+        <pre className={`${textClass} flex-1 min-h-0`} />
+      )}
       <StepSlider
         points={points}
         currentIndex={safeIdx}

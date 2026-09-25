@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { keepPreviousData, useQuery, useQueries } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { safeJsonParse } from "../lib/format";
 import {
@@ -24,6 +24,8 @@ import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import HistogramSettingsPanel from "./settings-panels/HistogramSettingsPanel";
 import { useStepSlider, resolveAtStep } from "./card-kit";
+import GalleryView from "./media/GalleryView";
+import { isGalleryPoint } from "../lib/media/gallery";
 
 interface Props {
   runId: string;
@@ -39,6 +41,21 @@ interface HistogramMeta {
   max: number;
   count: number;
   mean: number;
+}
+
+const npzQuery = (hash: string) => ({
+  queryKey: ["cairn-npz", hash],
+  queryFn: () => fetchNpz(hash),
+  staleTime: Infinity,
+});
+
+/** One histogram artifact's bars (a gallery item). */
+function HistogramItem({ hash, logY }: { hash: string; logY: boolean }) {
+  const q = useQuery({ ...npzQuery(hash), placeholderData: keepPreviousData });
+  const data = useMemo(() => toHistogram(q.data), [q.data]);
+  if (q.isLoading) return <div className="h-full motion-safe:animate-pulse rounded bg-bg-hover" />;
+  if (!data) return <div className="text-xs text-fg-muted">could not read histogram blob</div>;
+  return <HistogramBars counts={data.counts} edges={data.edges} logY={logY} />;
 }
 
 async function fetchNpz(
@@ -94,14 +111,17 @@ export default function HistogramCard({
     [current],
   );
 
-  const heatmapAvailable = points.length > 3;
+  // A gallery (several histograms per step) shows its bars; the per-step
+  // heatmap holds one histogram per step.
+  const gallery = isGalleryPoint(current);
+  const heatmapAvailable = points.length > 3 && !points.some(isGalleryPoint);
   const heatmapActive = settings.viewMode === "heatmap" && heatmapAvailable;
 
   // Current-step blob (bars view).
   const barsQuery = useQuery({
     queryKey: ["cairn-npz", current?.artifact_hash],
     queryFn: () => fetchNpz(current!.artifact_hash!),
-    enabled: !!current?.artifact_hash && !heatmapActive,
+    enabled: !!current?.artifact_hash && !heatmapActive && !gallery,
     staleTime: Infinity,
     // The previous step stays on screen while the next one loads (no placeholder flash).
     placeholderData: keepPreviousData,
@@ -131,6 +151,7 @@ export default function HistogramCard({
   }, [points, heatVersion]);
 
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
+  const qc = useQueryClient();
 
   const compSeries = useMemo(
     () => [{ runId, name: metric.name }],
@@ -174,8 +195,17 @@ export default function HistogramCard({
 
     return (
       <>
-        <div className="flex-1 min-h-0">
-          {barsQuery.isLoading ? (
+        <div className={`flex-1 min-h-0${gallery ? " overflow-auto" : ""}`}>
+          {gallery ? (
+            <GalleryView
+              point={current}
+              fill
+              minItemHeight={150}
+              prefetchItem={(p) => qc.prefetchQuery(npzQuery(p.artifact_hash!))}
+              peekItem={(p) => qc.getQueryData(npzQuery(p.artifact_hash!).queryKey) !== undefined}
+              renderItem={(item) => <HistogramItem hash={item.artifact_hash!} logY={settings.logY} />}
+            />
+          ) : barsQuery.isLoading ? (
             <div className="h-full motion-safe:animate-pulse rounded bg-bg-hover" />
           ) : barsData ? (
             <HistogramBars
@@ -200,7 +230,7 @@ export default function HistogramCard({
   };
 
   const settingsPanel = (
-    <HistogramSettingsPanel ctl={ctl} mode="card" ctx={{ heatmapAvailable, meta: meta ?? null }} />
+    <HistogramSettingsPanel ctl={ctl} mode="card" ctx={{ heatmapAvailable, meta: gallery ? null : meta ?? null }} />
   );
 
   return (

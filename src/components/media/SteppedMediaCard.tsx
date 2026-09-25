@@ -4,6 +4,10 @@
  * and a side-by-side pane grid with a chip strip once the card holds more
  * than one series. Each card supplies only its own settings, its settings
  * panel, and how one artifact renders.
+ *
+ * A gallery point (a tracked list of the card's media, lib/media/gallery.ts)
+ * renders as a grid of its items, each through the same `renderArtifact`,
+ * swapped in as a whole once every item is warm (see GalleryView).
  */
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
@@ -17,6 +21,9 @@ import type { ComparisonSeriesRef } from "../../lib/comparisons";
 import { gridValues, normalizeSlots, slotValue } from "../../lib/media/panel-layout";
 import { STEP_KEY, formatKeyValue } from "../../lib/media/slider-key";
 import { useNeighbourPrefetch } from "../../lib/media/use-settled-frame";
+import { galleryCount, isGalleryPoint } from "../../lib/media/gallery";
+import { prefetchPointOrGallery } from "../../lib/media/gallery-query";
+import GalleryView, { useSettledGalleries } from "./GalleryView";
 import type { SequenceMeta, SequencePoint } from "../../api/types";
 import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid } from "../card-kit";
 import ComparePanes from "../card-kit/ComparePanes";
@@ -49,12 +56,15 @@ export interface MediaView<S> {
   /** Series name of the pane. */
   name: string;
   settings: S;
-  /** True when this is the card's only pane (it fills the card); false for one pane of a grid. */
+  /**
+   * True when this is the card's only pane (it fills the card); false for one
+   * pane of a grid or one item of a gallery.
+   */
   single: boolean;
   inModal: boolean;
-  /** Stable id of the pane (per series and layout slot). */
+  /** Stable id of the pane (per series and layout slot; `#i` added per gallery item). */
   paneId: string;
-  /** How many panes the card shows at once. */
+  /** How many media the card shows at once (each gallery item counts). */
   paneCount: number;
   /** The card follows a section media sync right now. */
   following: boolean;
@@ -87,6 +97,8 @@ interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
    * prefetch (audio streams on demand).
    */
   prefetch?: (qc: QueryClient, point: SequencePoint, signal: AbortSignal) => Promise<unknown>;
+  /** `prefetch`'s work for this point is done already (a gallery swaps at once then). */
+  peek?: (qc: QueryClient, point: SequencePoint) => boolean;
   /** Extra controls between the panes and the slider (the video transport). */
   footer?: (args: { settings: S; paneCount: number; following: boolean }) => ReactNode;
 }
@@ -112,6 +124,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   settingsPanel,
   renderArtifact,
   prefetch,
+  peek,
   footer,
 }: Props<S>) {
   const { ctl, effectiveMetrics, allRunIds } =
@@ -161,10 +174,13 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
     return step == null ? null : resolveAtStep(seriesPoints[i] ?? [], step, { nearest: near });
   };
   const qc = useQueryClient();
-  useNeighbourPrefetch(prefetch && settings.panelMode !== "grid" ? values.length : 0, safeIdx, (j) =>
+  const prefetchItem = prefetch ? (p: SequencePoint, signal: AbortSignal) => prefetch(qc, p, signal) : undefined;
+  const peekItem = peek ? (p: SequencePoint) => peek(qc, p) : undefined;
+  useNeighbourPrefetch(settings.panelMode !== "grid" ? values.length : 0, safeIdx, (j) =>
     shown.flatMap((_, i) => {
       const p = pointAt(i, values[j]!, nearest);
-      return p?.artifact_hash ? [{ key: `${kind}:${p.artifact_hash}`, run: (signal: AbortSignal) => prefetch!(qc, p, signal) }] : [];
+      if (!p?.artifact_hash || (!prefetch && !isGalleryPoint(p))) return [];
+      return [{ key: `${kind}:${p.artifact_hash}`, run: (signal: AbortSignal) => prefetchPointOrGallery(qc, p, prefetchItem, signal) }];
     }),
   );
 
@@ -196,16 +212,51 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   );
   const compareSlots = useMemo(() => normalizeSlots(settings.compareSlots, paneKeys), [settings.compareSlots, paneKeys]);
   const gridCols = mode === "grid" ? gridValues(values, settings.columns) : [];
-  const paneCount = mode === "grid"
-    ? shown.length * gridCols.length
-    : mode === "compare" ? compareSlots.length : shown.length;
+  // Every pane on screen with its point (ids as `view` gets them below).
+  const paneRequests: Array<{ id: string; point: SequencePoint | null }> = mode === "grid"
+    ? shown.flatMap((_, i) => gridCols.map((v, col) => ({ id: `grid:${i}:${col}`, point: pointAt(i, v, false) })))
+    : mode === "compare"
+      ? compareSlots.map((slot, i) => {
+          const idx = paneKeys.indexOf(slot.pane);
+          return { id: `compare:${i}`, point: idx < 0 ? null : pointAt(idx, slotValue(slot, settings.compareLinked, currentValue), nearest) };
+        })
+      : shown.length <= 1
+        ? [{ id: paneKeys[0] ?? "single", point: pointAt(0, currentValue, false) }]
+        : paneKeys.map((key, i) => ({ id: key, point: pointAt(i, currentValue, nearest) }));
+  const panePoints = paneRequests.map((r) => r.point);
+  // Gallery panes swap steps together (runs side by side never differ).
+  const galleryFrames = useSettledGalleries(paneRequests, { prefetchItem, peekItem });
+  const paneCount = panePoints.reduce((n, p) => n + Math.max(1, galleryCount(p)), 0);
 
   const view = (i: number, point: SequencePoint | null, paneId: string, single: boolean, inModal: boolean) => {
     if (!point?.artifact_hash) return <Placeholder loading={loadingAt(i)} noun={noun} />;
+    const name = shown[i]?.name ?? metric.name;
+    if (isGalleryPoint(point)) {
+      const gallery = (
+        <GalleryView
+          point={point}
+          frame={galleryFrames?.get(paneId)}
+          prefetchItem={prefetchItem}
+          peekItem={peekItem}
+          renderItem={(item, j) => renderArtifact({
+            point: item,
+            hash: item.artifact_hash!,
+            name,
+            settings,
+            single: false,
+            inModal,
+            paneId: `${paneId}#${j}`,
+            paneCount,
+            following,
+          })}
+        />
+      );
+      return single ? <div className="min-h-0 flex-1 overflow-auto">{gallery}</div> : gallery;
+    }
     return renderArtifact({
       point,
       hash: point.artifact_hash,
-      name: shown[i]?.name ?? metric.name,
+      name,
       settings,
       single,
       inModal,

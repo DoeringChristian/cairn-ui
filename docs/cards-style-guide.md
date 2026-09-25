@@ -78,6 +78,16 @@ Use the established libraries; don't write a renderer.
   (`panelMode`, `columns`, `maxRuns`, `compareSlots`, `compareLinked`) live
   in `components/cards-settings/media.ts`; the panes in card-kit's
   `MultiPaneGrid`, `GridPanes` and `ComparePanes`.
+- Gallery points (a list of media of one kind tracked under one name and
+  step; `lib/media/gallery.ts`): the point's artifact is a manifest of item
+  artifacts and its `object_type` is the items' kind, so the kind's card
+  shows it. Every media card renders one through `components/media/GalleryView.tsx`
+  (or `useGalleryFrame`), passing each item — turned into a plain point by
+  `galleryItemPoints` — to the same renderer it uses for a plain point, with
+  `prefetchItem`/`peekItem` so the grid swaps steps in one commit. Items lay
+  out near-square (`galleryGridColumns`, shared with the image card, which
+  settles its gallery through `image-frame.ts`). 3D cards show a gallery in
+  one viewer with a tab per item (WebGL contexts are capped per page).
 - Images: only browser-native encodings are drawn (`isBrowserDisplayable`,
   `lib/artifact-format.ts`). Besides the panel modes, an image card can set a
   reference tag, shown against each image in a draggable split view.

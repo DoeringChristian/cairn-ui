@@ -14,6 +14,8 @@ import { plotCardPolicy } from "./card-kit/plot-card-policy";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import UnsupportedArtifact from "./UnsupportedArtifact";
+import GalleryView from "./media/GalleryView";
+import { isGalleryPoint } from "../lib/media/gallery";
 import VolumeSettingsPanel from "./settings-panels/VolumeSettingsPanel";
 import type { Scene3DCardProps } from "./viewer3d/Scene3DCard";
 
@@ -29,7 +31,18 @@ function VolumePane({ name, points, targetStep }: { name: string; points: Sequen
   if (!current?.artifact_hash) {
     return <div className="flex h-full items-center justify-center text-sm text-fg-muted">no volume logged yet</div>;
   }
-  const meta = safeJsonParse<VolumeMeta>(current.artifact_metadata);
+  if (isGalleryPoint(current)) {
+    return (
+      <div className="h-full overflow-auto">
+        <GalleryView point={current} renderItem={(item, i) => <VolumePlaceholder name={`${name}_${i}`} point={item} />} />
+      </div>
+    );
+  }
+  return <VolumePlaceholder name={name} point={current} />;
+}
+
+function VolumePlaceholder({ name, point }: { name: string; point: SequencePoint }) {
+  const meta = safeJsonParse<VolumeMeta>(point.artifact_metadata);
   const detail = meta
     ? `${meta.shape.join("×")} · ${meta.dtype} · [${meta.vmin.toPrecision(3)}, ${meta.vmax.toPrecision(3)}]`
     : undefined;
@@ -37,8 +50,8 @@ function VolumePane({ name, points, targetStep }: { name: string; points: Sequen
     <UnsupportedArtifact
       label="Volume — not viewable in the browser"
       detail={detail}
-      downloadUrl={api.artifactUrl(current.artifact_hash)}
-      filename={artifactFilename(name, current.step, current.artifact_mime, ".npz")}
+      downloadUrl={api.artifactUrl(point.artifact_hash!)}
+      filename={artifactFilename(name, point.step, point.artifact_mime, ".npz")}
     />
   );
 }

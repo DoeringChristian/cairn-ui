@@ -15,7 +15,9 @@ import type { QueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { qk } from "../../api/query-keys";
 import type { SequencePoint } from "../../api/types";
-import { GALLERY_MIME, isBrowserDisplayable } from "../../lib/artifact-format";
+import { isBrowserDisplayable } from "../../lib/artifact-format";
+import { isGalleryPoint, type GalleryItem } from "../../lib/media/gallery";
+import { galleryQuery } from "../../lib/media/gallery-query";
 import { pointCaption } from "../../lib/caption";
 import { decodeImage, peekDecoded } from "../../lib/media/decoded-image";
 import { parseOverlays } from "../../lib/overlays";
@@ -38,10 +40,6 @@ export interface ImageFrame {
   sizes: Record<string, { w: number; h: number }>;
 }
 
-interface GalleryManifest {
-  images: Array<{ hash: string; mime_type: string; metadata: Record<string, unknown>; caption?: string }>;
-}
-
 function parseMetadata(raw: string | null | undefined): Record<string, unknown> | null {
   if (!raw) return null;
   try {
@@ -51,19 +49,9 @@ function parseMetadata(raw: string | null | undefined): Record<string, unknown> 
   }
 }
 
-const galleryQuery = (hash: string) => ({
-  queryKey: qk.imageGallery(hash),
-  queryFn: async (): Promise<GalleryManifest> => {
-    const res = await fetch(api.artifactUrl(hash));
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    return (await res.json()) as GalleryManifest;
-  },
-  staleTime: Infinity,
-});
-
-function itemsOf(point: SequencePoint | null, manifest: GalleryManifest | undefined): ImageItem[] | undefined {
+function itemsOf(point: SequencePoint | null, manifest: GalleryItem[] | undefined): ImageItem[] | undefined {
   if (!point?.artifact_hash) return [];
-  if (point.artifact_mime !== GALLERY_MIME) {
+  if (!isGalleryPoint(point)) {
     return [{
       hash: point.artifact_hash,
       mime: point.artifact_mime,
@@ -72,7 +60,7 @@ function itemsOf(point: SequencePoint | null, manifest: GalleryManifest | undefi
     }];
   }
   if (!manifest) return undefined;
-  return manifest.images.map((i) => ({ hash: i.hash, mime: i.mime_type, metadata: i.metadata, caption: i.caption || null }));
+  return manifest.map((i) => ({ hash: i.hash, mime: i.mime_type, metadata: i.metadata, caption: i.caption }));
 }
 
 /** The frame's identity: what it shows, not when it was asked for. */
@@ -90,8 +78,8 @@ const masksOf = (items: ImageItem[]) => items.flatMap((i) => parseOverlays(i.met
 /** The complete frame, when everything it paints is cached and decoded. */
 export function peekImageFrame(qc: QueryClient, point: SequencePoint | null, refPoint: SequencePoint | null): ImageFrame | undefined {
   const manifest = (p: SequencePoint | null) =>
-    p?.artifact_mime === GALLERY_MIME && p.artifact_hash
-      ? qc.getQueryData<GalleryManifest>(qk.imageGallery(p.artifact_hash))
+    p && isGalleryPoint(p)
+      ? qc.getQueryData<GalleryItem[]>(qk.gallery(p.artifact_hash))
       : undefined;
   const items = itemsOf(point, manifest(point));
   const refItems = itemsOf(refPoint, manifest(refPoint));
@@ -119,9 +107,9 @@ export async function resolveImageFrame(
   signal?: AbortSignal,
 ): Promise<ImageFrame> {
   const itemsFor = async (p: SequencePoint | null): Promise<ImageItem[]> => {
-    if (p?.artifact_mime === GALLERY_MIME && p.artifact_hash) {
+    if (p && isGalleryPoint(p)) {
       try {
-        return itemsOf(p, await qc.fetchQuery(galleryQuery(p.artifact_hash))) ?? [];
+        return itemsOf(p, await qc.fetchQuery(galleryQuery(p.artifact_hash!))) ?? [];
       } catch {
         return [];
       }

@@ -119,6 +119,7 @@ export default function HtmlCard(props: SteppedMediaCardProps) {
       nearest
       settingsPanel={(ctl, ctx) => <HtmlSettingsPanel ctl={ctl} ctx={ctx} mode="card" />}
       prefetch={(qc, point) => qc.prefetchQuery(artifactTextQuery(point.artifact_hash!))}
+      peek={(qc, point) => qc.getQueryData(artifactTextQuery(point.artifact_hash!).queryKey) !== undefined}
       renderArtifact={({ hash, name, settings, single }) => {
         const frame = <HtmlFrame hash={hash} name={name} autoHeight={settings.autoHeight} fixedHeight={settings.fixedHeight} />;
         return single ? <div className="flex-1 min-h-0 overflow-auto">{frame}</div> : frame;
