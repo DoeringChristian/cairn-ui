@@ -63,6 +63,28 @@ export interface Run {
    * Resolved server-side per page; absent on endpoints that do not compute it.
    */
   values?: Record<string, number | string | boolean | null>;
+  // --- run stats (wave 2, E) ---
+  /**
+   * Per scalar metric: count, first/last/min/max/mean and the metric's
+   * summary rule. Only present when fetched with `include: ["stats"]` (the
+   * list) or from `GET /api/runs/{id}`.
+   */
+  stats?: Record<string, RunMetricStats>;
+}
+
+// --- run stats (wave 2, E) ---
+/** One metric's server-side reduction (`_metric_stats` in cairn routes/runs.py). */
+export interface RunMetricStats {
+  count: number;
+  first: number | null;
+  last: number | null;
+  min: number | null;
+  max: number | null;
+  mean: number | null;
+  first_step: number | null;
+  last_step: number | null;
+  /** The run's `metric_defs.summary` for the metric: min|max|mean|last, or null. */
+  rule: string | null;
 }
 
 export interface Param {
@@ -144,7 +166,7 @@ export interface RunDetailResponse {
 }
 
 /** Per-run extras `GET /api/runs` adds on request (`?include=`). */
-export type RunInclude = "params";
+export type RunInclude = "params" | "stats";
 
 /** Filters and paging for `GET /api/runs`. */
 export interface RunsQuery {

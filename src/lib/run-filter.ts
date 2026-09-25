@@ -1,6 +1,8 @@
 /**
- * The runs table's filter builder: field/operator/argument predicates over
- * the loaded runs, evaluated client-side.
+ * The runs table's filter: a tree of and/or groups over builder chips
+ * (field/operator/argument predicates) and expression leaves (lib/expr),
+ * evaluated client-side over the loaded runs. Also the table's persisted
+ * state (`RunsFilterState` v2).
  *
  * The operators are a TS port of the server's authoritative comparators
  * (cairn `cairn/server/_operators.py`), with Python's semantics: `==` that
@@ -16,6 +18,13 @@
 
 import type { Run } from "../api/types.ts";
 import { loadJson, saveJson, storageKeys } from "./storage.ts";
+// lib/expr imports this module's Python semantics back (a cycle): nothing
+// below may use these imports at module top level, only inside functions.
+import { evaluate as evaluate_, matches } from "./expr/index.ts";
+import { compileScalarExpr, type Better, type ColumnsState, type ComputedColumn } from "./runs-table/columns.ts";
+import { parseTags, runContextOf } from "./runs-table/context.ts";
+import { isGroupBy, type GroupBy } from "./runs-table/group.ts";
+import { DEFAULT_SORT, type SortKey } from "./runs-table/sort.ts";
 
 export const OPERATORS = [
   "exact",
@@ -188,27 +197,52 @@ export function coerceArg(op: Operator, text: string): unknown {
 }
 
 // ---------------------------------------------------------------------------
-// Runs
+// Runs: the filter tree
 // ---------------------------------------------------------------------------
 
-/** One builder chip. `arg` is kept as typed; it is coerced on evaluation. */
+/**
+ * One builder chip. `arg` is kept as typed; it is coerced on evaluation.
+ * A chip compiles to its `__op_<op>` builtin applied to the field's value.
+ */
 export interface RunFilter {
   field: string;
   op: Operator;
   arg: string;
 }
 
-export const BUILTIN_FIELDS = ["display_name", "status", "tags", "group", "job_type"] as const;
-
-function parseTags(tags: string | null): string[] {
-  if (!tags) return [];
-  try {
-    const parsed: unknown = JSON.parse(tags);
-    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === "string") : [];
-  } catch {
-    return [];
-  }
+export interface ChipNode extends RunFilter {
+  kind: "chip";
 }
+
+/** A scalar expression (lib/expr) that a run matches when it is truthy. */
+export interface ExprNode {
+  kind: "expr";
+  expr: string;
+}
+
+/** And/or over children. An empty group constrains nothing. */
+export interface GroupNode {
+  kind: "group";
+  op: "and" | "or";
+  children: FilterNode[];
+}
+
+export type FilterNode = ChipNode | ExprNode | GroupNode;
+
+export const EMPTY_FILTER: GroupNode = { kind: "group", op: "and", children: [] };
+
+/** The builtins chips compile to: `__op_<operator>(fieldValue, coercedArg)`. */
+export type OpBuiltin = `__op_${Operator}`;
+
+export const OP_BUILTINS = Object.fromEntries(
+  OPERATORS.map((op) => [`__op_${op}`, (a: unknown, b: unknown) => evaluate(op, a, b)]),
+) as Record<OpBuiltin, (fieldValue: unknown, arg: unknown) => boolean>;
+
+export function opBuiltin(op: Operator): OpBuiltin {
+  return `__op_${op}`;
+}
+
+export const BUILTIN_FIELDS = ["display_name", "status", "tags", "group", "job_type"] as const;
 
 /**
  * A run's value for a filter field: a built-in column, `values.<key>` (the
@@ -234,9 +268,52 @@ export function fieldValue(run: Run, field: string): unknown {
   return null;
 }
 
-/** True when the run satisfies every filter (all-of, like repeated query keys). */
+/** True when the run satisfies one chip. */
+export function matchesChip(run: Run, f: RunFilter): boolean {
+  return OP_BUILTINS[opBuiltin(f.op)](fieldValue(run, f.field), coerceArg(f.op, f.arg));
+}
+
+/** True when the run satisfies every chip (all-of, like repeated query keys). */
 export function matchesFilters(run: Run, filters: readonly RunFilter[]): boolean {
-  return filters.every((f) => evaluate(f.op, fieldValue(run, f.field), coerceArg(f.op, f.arg)));
+  return filters.every((f) => matchesChip(run, f));
+}
+
+/**
+ * The error of an expression leaf (parse/type error, or a series where a
+ * single value is needed), or null when it is valid. An invalid leaf is
+ * skipped (matches everything) so a half-typed expression never blanks
+ * the table; the bar shows the error instead.
+ */
+export function exprLeafError(expr: string): string | null {
+  return compileScalarExpr(expr).error;
+}
+
+/** True when the run satisfies the filter tree. */
+export function matchesFilter(run: Run, node: FilterNode): boolean {
+  switch (node.kind) {
+    case "chip":
+      return matchesChip(run, node);
+    case "expr": {
+      const { node: ast } = compileScalarExpr(node.expr);
+      if (!ast) return true;
+      try {
+        return matches(evaluate_(ast, runContextOf(run)));
+      } catch {
+        return false;
+      }
+    }
+    case "group": {
+      if (node.children.length === 0) return true;
+      return node.op === "and"
+        ? node.children.every((c) => matchesFilter(run, c))
+        : node.children.some((c) => matchesFilter(run, c));
+    }
+  }
+}
+
+/** True when the tree constrains nothing (only empty groups). */
+export function isEmptyFilter(node: FilterNode): boolean {
+  return node.kind === "group" && node.children.every(isEmptyFilter);
 }
 
 /** Every filterable field across the runs: built-ins, then values.*, then params.*. */
@@ -251,96 +328,136 @@ export function filterFieldsOf(runs: readonly Run[]): string[] {
   return [...BUILTIN_FIELDS, ...sort(values), ...sort(params)];
 }
 
-// ---------------------------------------------------------------------------
-// Group-by
-// ---------------------------------------------------------------------------
+// Tree edits, addressed by a path of child indices from the root.
 
-export type GroupBy =
-  | { source: "group" | "job_type" | "tag" }
-  | { source: "param"; key: string };
+export type NodePath = readonly number[];
 
-export interface RunGroup {
-  /** Stable id for React keys and collapse state; null-valued groups use "∅". */
-  id: string;
-  /** Display label; null when the runs have no value. */
-  label: string | null;
-  runs: Run[];
-}
-
-function labelOf(v: unknown): string | null {
-  if (v === null || v === undefined) return null;
-  return typeof v === "string" ? v : JSON.stringify(v);
-}
-
-/**
- * Partition runs (kept in their given order) into groups. A run with several
- * tags appears under each of them. Groups sort by label (numeric-aware), the
- * no-value group last.
- */
-export function groupRuns(runs: readonly Run[], by: GroupBy): RunGroup[] {
-  const groups = new Map<string | null, Run[]>();
-  const add = (label: string | null, run: Run) => {
-    const arr = groups.get(label) ?? [];
-    arr.push(run);
-    groups.set(label, arr);
-  };
-  for (const run of runs) {
-    switch (by.source) {
-      case "group":
-        add(labelOf(run.group), run);
-        break;
-      case "job_type":
-        add(labelOf(run.job_type), run);
-        break;
-      case "param":
-        add(labelOf(run.params?.[by.key]), run);
-        break;
-      case "tag": {
-        const tags = parseTags(run.tags);
-        if (tags.length === 0) add(null, run);
-        for (const t of new Set(tags)) add(t, run);
-        break;
-      }
-    }
+export function nodeAt(root: FilterNode, path: NodePath): FilterNode | null {
+  let n: FilterNode = root;
+  for (const i of path) {
+    if (n.kind !== "group") return null;
+    const c: FilterNode | undefined = n.children[i];
+    if (!c) return null;
+    n = c;
   }
-  return [...groups.entries()]
-    .sort(([a], [b]) => {
-      if (a === null) return b === null ? 0 : 1;
-      if (b === null) return -1;
-      return a.localeCompare(b, undefined, { numeric: true });
-    })
-    .map(([label, rs]) => ({ id: label === null ? "∅" : `=${label}`, label, runs: rs }));
+  return n;
+}
+
+/** Replace the node at `path` (null removes it). Returns a new tree. */
+export function updateAt(root: GroupNode, path: NodePath, fn: (n: FilterNode) => FilterNode | null): GroupNode {
+  const rec = (n: FilterNode, depth: number): FilterNode | null => {
+    if (depth === path.length) return fn(n);
+    if (n.kind !== "group") return n;
+    const i = path[depth]!;
+    const children: FilterNode[] = [];
+    n.children.forEach((c, k) => {
+      if (k !== i) {
+        children.push(c);
+        return;
+      }
+      const next = rec(c, depth + 1);
+      if (next) children.push(next);
+    });
+    return { ...n, children };
+  };
+  const out = rec(root, 0);
+  return out && out.kind === "group" ? out : EMPTY_FILTER;
+}
+
+/** Append `child` to the group at `path`. */
+export function addChild(root: GroupNode, path: NodePath, child: FilterNode): GroupNode {
+  return updateAt(root, path, (n) => (n.kind === "group" ? { ...n, children: [...n.children, child] } : n));
+}
+
+function parseNode(v: unknown, depth: number): FilterNode | null {
+  if (!isObj(v) || depth > 16) return null;
+  if (v.kind === "chip") {
+    return typeof v.field === "string" && isOperator(v.op) && typeof v.arg === "string"
+      ? { kind: "chip", field: v.field, op: v.op, arg: v.arg }
+      : null;
+  }
+  if (v.kind === "expr") return typeof v.expr === "string" ? { kind: "expr", expr: v.expr } : null;
+  if (v.kind === "group" && (v.op === "and" || v.op === "or") && Array.isArray(v.children)) {
+    return {
+      kind: "group",
+      op: v.op,
+      children: v.children.map((c) => parseNode(c, depth + 1)).filter((c): c is FilterNode => c !== null),
+    };
+  }
+  return null;
+}
+
+/** Parse a stored filter tree; the root is always a group. */
+export function parseFilter(raw: unknown): GroupNode {
+  const n = parseNode(raw, 0);
+  return n && n.kind === "group" ? n : EMPTY_FILTER;
 }
 
 // ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------
 
+/** The runs table's persisted view: filter, nested grouping, multi-sort, columns and computed columns. */
 export interface RunsFilterState {
-  version: 1;
-  filters: RunFilter[];
-  groupBy: GroupBy | null;
+  version: 2;
+  filter: GroupNode;
+  groupBy: GroupBy[];
+  sort: SortKey[];
+  columns: ColumnsState;
+  computed: ComputedColumn[];
 }
 
-export const EMPTY_RUNS_FILTER: RunsFilterState = { version: 1, filters: [], groupBy: null };
+export const EMPTY_RUNS_FILTER: RunsFilterState = {
+  version: 2,
+  filter: EMPTY_FILTER,
+  groupBy: [],
+  sort: DEFAULT_SORT,
+  // Not `EMPTY_COLUMNS`: see the import cycle note at the top.
+  columns: { order: [], hidden: [], pinned: [], better: {} },
+  computed: [],
+};
 
-function validGroupBy(v: unknown): GroupBy | null {
-  if (!isObj(v)) return null;
-  if (v.source === "group" || v.source === "job_type" || v.source === "tag") return { source: v.source };
-  if (v.source === "param" && typeof v.key === "string") return { source: "param", key: v.key };
-  return null;
+const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+
+function parseColumns(v: unknown): ColumnsState {
+  if (!isObj(v)) return EMPTY_RUNS_FILTER.columns;
+  const better: Record<string, Better> = {};
+  if (isObj(v.better)) {
+    for (const [k, b] of Object.entries(v.better)) if (b === "lower" || b === "higher") better[k] = b;
+  }
+  return { order: strings(v.order), hidden: strings(v.hidden), pinned: strings(v.pinned), better };
 }
 
-/** Parse a stored state, dropping anything malformed. */
+function parseSort(v: unknown): SortKey[] {
+  if (!Array.isArray(v)) return DEFAULT_SORT;
+  return v
+    .filter((k): k is SortKey => isObj(k) && typeof k.column === "string" && (k.direction === "asc" || k.direction === "desc"))
+    .map((k) => ({ column: k.column, direction: k.direction }));
+}
+
+function parseComputed(v: unknown): ComputedColumn[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((c): c is Record<string, unknown> => isObj(c) && typeof c.id === "string" && typeof c.expr === "string")
+    .map((c) => ({
+      id: c.id as string,
+      expr: c.expr as string,
+      ...(typeof c.name === "string" && c.name ? { name: c.name } : {}),
+      ...(c.better === "lower" || c.better === "higher" ? { better: c.better } : {}),
+    }));
+}
+
+/** Parse a stored state, dropping anything malformed. Anything but v2 is empty (no migration). */
 export function parseRunsFilterState(raw: unknown): RunsFilterState {
-  if (!isObj(raw)) return EMPTY_RUNS_FILTER;
-  const filters = Array.isArray(raw.filters)
-    ? raw.filters.filter(
-        (f): f is RunFilter =>
-          isObj(f) && typeof f.field === "string" && isOperator(f.op) && typeof f.arg === "string",
-      ).map((f) => ({ field: f.field, op: f.op, arg: f.arg }))
-    : [];
-  return { version: 1, filters, groupBy: validGroupBy(raw.groupBy) };
+  if (!isObj(raw) || raw.version !== 2) return EMPTY_RUNS_FILTER;
+  return {
+    version: 2,
+    filter: parseFilter(raw.filter),
+    groupBy: Array.isArray(raw.groupBy) ? raw.groupBy.filter(isGroupBy) : [],
+    sort: parseSort(raw.sort),
+    columns: parseColumns(raw.columns),
+    computed: parseComputed(raw.computed),
+  };
 }
 
 export function loadRunsFilter(storage: Storage, projectId: string): RunsFilterState {
