@@ -1,9 +1,10 @@
 /**
  * Report page — /p/:projectId/reports/:reportId
  *
- * A notebook that is always editable (see `ReportNotebook`): markdown and
- * cards cells, inserted, moved and deleted in place. Autosave: debounced PUT
- * ~1.5s after the last change (and on leaving the page). Card settings are
+ * A notebook that is editable (see `ReportNotebook`): markdown and
+ * cards cells, inserted, moved and deleted in place. A read-role session
+ * gets it in view mode instead. Autosave: debounced PUT
+ * ~1.5s after the last change (and on leaving the page). Card settings overrides are
  * gathered from/restored to localStorage under the report's pseudo-scope on
  * save/load — see lib/reports/payload.ts.
  *
@@ -14,9 +15,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { RUN_SELECTOR_FETCH_LIMIT, useReport, useRuns, useUpdateReport } from "../api/hooks";
+import { RUN_SELECTOR_FETCH_LIMIT, useReport, useRuns, useSession, useUpdateReport } from "../api/hooks";
 import { formatRelative } from "../lib/format";
-import { loadCardSettings } from "../lib/card-settings";
+import { loadCardOverrides } from "../lib/card-settings";
 import { templateCardOf, type ComparisonTemplateCard } from "../lib/comparisons";
 import {
   allReportCards,
@@ -59,6 +60,8 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 export default function ReportEditorPage() {
   const { projectId, reportId } = useParams<{ projectId: string; reportId: string }>();
   const q = useReport(projectId ?? "", reportId ?? "");
+  // A read-role session views the report: cards explore without saving.
+  const readOnly = useSession().data?.role === "read";
   const updateMut = useUpdateReport(projectId ?? "", reportId ?? "");
   const queryClient = useQueryClient();
   const [printing, setPrinting] = useState(false);
@@ -263,9 +266,7 @@ export default function ReportEditorPage() {
     const templateCards: ComparisonTemplateCard[] = cards.map((card) =>
       templateCardOf(
         card,
-        loadCardSettings<Record<string, unknown>>(
-          cardSettingsKeyForReport(reportId, card),
-        ) ?? undefined,
+        loadCardOverrides(cardSettingsKeyForReport(reportId, card)) ?? undefined,
       ),
     );
     createReportTemplate(projectId, templateName, templateCards);
@@ -401,6 +402,7 @@ export default function ReportEditorPage() {
         onMoveBlock={moveBlock}
         onDeleteBlock={deleteBlock}
         onInsertBlock={insertBlock}
+        readOnly={readOnly}
       />
 
     </div>

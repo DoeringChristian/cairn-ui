@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
+import { useState, useCallback, useContext, useRef, useEffect, type ReactNode } from "react";
 import { useDraggableCard } from "./DraggableCard";
+import { CardMutationContext } from "../lib/card-settings";
 import { useClickOutside } from "../lib/use-click-outside";
 import { useCoarsePointer, useCompactLayout } from "../lib/use-media-query";
 
@@ -59,7 +60,7 @@ export default function CardHeader({
   title,
   subtitle,
   cardActions,
-  onTitleChange,
+  onTitleChange: onTitleChangeProp,
   collapsed,
   onToggleCollapse,
   onSettings,
@@ -67,11 +68,18 @@ export default function CardHeader({
   viewModified,
   onDownload,
   onScreenshot,
-  addToComparisonSlot,
-  onRemove,
+  addToComparisonSlot: addToComparisonSlotProp,
+  onRemove: onRemoveProp,
   interact,
 }: Props) {
-  const drag = useDraggableCard();
+  // Read-only cards (report viewers, embeds) can't be renamed, removed,
+  // added elsewhere or dragged.
+  const mutable = useContext(CardMutationContext);
+  const onTitleChange = mutable ? onTitleChangeProp : undefined;
+  const addToComparisonSlot = mutable ? addToComparisonSlotProp : undefined;
+  const onRemove = mutable ? onRemoveProp : undefined;
+  const dragCtx = useDraggableCard();
+  const drag = mutable ? dragCtx : null;
   // Below `md` the standard actions fold into a "⋯" menu so the title keeps
   // its room; touch screens (no HTML5 drag) get move up / down there too.
   const compact = useCompactLayout();

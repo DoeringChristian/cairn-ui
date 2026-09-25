@@ -1,5 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { CardMutationContext } from "../../lib/card-settings";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export interface StepSliderState {
   /** Sorted union of steps across all series' points. */
@@ -30,14 +29,9 @@ export function useStepSlider(args: {
   seriesPoints: Array<Array<{ step: number }>>;
   /** Persisted slider index (settings.sliderStep). */
   persistedIdx: number | undefined;
-  updateSettings: (patch: { sliderStep?: number }) => void;
+  updateSettings: (patch: { sliderStep?: number }, opts?: { mergeKey?: string }) => void;
 }): StepSliderState {
   const { seriesPoints, persistedIdx, updateSettings } = args;
-  // `idx` is local state that mirrors, but is independent of,
-  // `useCardSettings`'s persisted `sliderStep` — a no-op `updateSettings`
-  // alone wouldn't stop the slider moving locally, so gate this hook's own
-  // state update on the same context directly.
-  const mutable = useContext(CardMutationContext);
 
   const globalSteps = useMemo(() => {
     const stepSet = new Set<number>();
@@ -50,8 +44,8 @@ export function useStepSlider(args: {
   const pendingPersistRef = useRef<number | null>(null);
   const updateSettingsRef = useRef(updateSettings);
   updateSettingsRef.current = updateSettings;
+  // Read-only cards move too: their settings writes land in the session layer.
   const onSliderChange = useCallback((newIdx: number) => {
-    if (!mutable) return;
     setIdx(newIdx);
     pendingPersistRef.current = newIdx;
     if (persistTimerRef.current != null) clearTimeout(persistTimerRef.current);
@@ -59,13 +53,13 @@ export function useStepSlider(args: {
       persistTimerRef.current = null;
       const pending = pendingPersistRef.current;
       pendingPersistRef.current = null;
-      if (pending != null) updateSettingsRef.current({ sliderStep: pending });
+      if (pending != null) updateSettingsRef.current({ sliderStep: pending }, { mergeKey: "sliderStep" });
     }, 150);
-  }, [mutable]);
+  }, []);
   useEffect(() => () => {
     if (persistTimerRef.current != null) clearTimeout(persistTimerRef.current);
     const pending = pendingPersistRef.current;
-    if (pending != null) updateSettingsRef.current({ sliderStep: pending });
+    if (pending != null) updateSettingsRef.current({ sliderStep: pending }, { mergeKey: "sliderStep" });
   }, []);
   const safeIdx = Math.min(Math.max(0, idx), Math.max(0, globalSteps.length - 1));
   const currentStep = globalSteps[safeIdx] ?? 0;
