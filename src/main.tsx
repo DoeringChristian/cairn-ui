@@ -43,6 +43,8 @@ const router = createBrowserRouter([
     element: <App />,
     children: [
       { index: true, element: <ProjectsPage /> },
+      // The settings-palette gallery (dev reference), code-split.
+      { path: "_ui", lazy: () => import("./pages/UiGalleryPage").then((m) => ({ Component: m.default })) },
       {
         path: "p/:projectId",
         element: <ProjectLayout />,
