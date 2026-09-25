@@ -119,13 +119,9 @@
         "step": {
           "type": "number"
         },
-        "xAxis": {
-          "$ref": "#/definitions/AxisSource",
-          "description": "Scalar cards: the x-axis; `\"metric\"` plots against `xMetric`."
-        },
-        "xMetric": {
-          "$ref": "#/definitions/XMetricRef",
-          "description": "Scalar cards: the series an `xAxis: \"metric\"` card is joined to on step."
+        "x": {
+          "type": "string",
+          "description": "Scalar cards: the x-axis as an expression over the run (`step`, `wall_time`, `relative_time`, a metric such as `epoch`, `step * 32`)."
         }
       },
       "additionalProperties": {
@@ -139,29 +135,6 @@
         ]
       },
       "description": "Per-card `settings` (see `CairnCardInput.settings` in lib/reports/cairn-block.ts): a few well-known keys, otherwise any JSON. Each card type's full settings interface lives with the card."
-    },
-    "AxisSource": {
-      "type": "string",
-      "enum": [
-        "step",
-        "relative_time",
-        "wall_time",
-        "metric"
-      ],
-      "description": "`metric`: another scalar series of the same run is the x-axis (see `xMetric`)."
-    },
-    "XMetricRef": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "additionalProperties": false,
-      "description": "The scalar series a `metric` x-axis reads, as card settings name it."
     },
     "JSONValue": {
       "anyOf": [

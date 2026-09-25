@@ -18,7 +18,6 @@
 
 import type { ComparisonCard, ComparisonSeriesRef } from "../comparisons/types";
 import type { RunSelector } from "../run-selector";
-import type { AxisSource, XMetricRef } from "../plot-utils/x-axis";
 
 /**
  * Every card type `CardRenderer` knows how to render. Order: per-metric
@@ -78,10 +77,11 @@ export interface CardSettingsSpec {
   smoothing?: number;
   smoothingKind?: "ema" | "twema" | "gaussian" | "window";
   step?: number;
-  /** Scalar cards: the x-axis; `"metric"` plots against `xMetric`. */
-  xAxis?: AxisSource;
-  /** Scalar cards: the series an `xAxis: "metric"` card is joined to on step. */
-  xMetric?: XMetricRef;
+  /**
+   * Scalar cards: the x-axis as an expression over the run (`step`,
+   * `wall_time`, `relative_time`, a metric such as `epoch`, `step * 32`).
+   */
+  x?: string;
   [key: string]: JSONValue | undefined;
 }
 
