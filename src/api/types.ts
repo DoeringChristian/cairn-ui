@@ -387,3 +387,46 @@ export interface SavedView extends SavedViewSummary {
   project_id: string;
   payload: Record<string, unknown>;
 }
+
+// ── Report share links (server: routes/shares.py) — wave 3 / I ──────────
+
+/** A share link as listed (the secret is never listed). */
+export interface ReportShare {
+  id: string;
+  report_id: string;
+  created_by: string | null;
+  created_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+  status: "active" | "expired" | "revoked";
+}
+
+/** A freshly created share: `secret`/`url` are returned this once only. */
+export interface ReportShareCreated {
+  id: string;
+  report_id: string;
+  secret: string;
+  /** Path of the link, `/share/<secret>`. */
+  url: string;
+  created_at: string;
+  expires_at: string;
+}
+
+/** `GET /api/share/context`: everything a share viewer's page needs. */
+export interface ShareContext {
+  report: {
+    id: string;
+    project_id: string;
+    name: string;
+    created_at: string;
+    updated_at: string;
+    payload: Record<string, unknown>;
+  };
+  expires_at: string;
+  /** The report's runs (no environment), newest first. */
+  runs: Run[];
+  /** Each run's sequence roster, as `GET /api/runs/{id}/sequences` lists it. */
+  metric_index: Record<string, SequenceMeta[]>;
+  /** Runs whose source files a code-diff card may show. */
+  source_run_ids: string[];
+}

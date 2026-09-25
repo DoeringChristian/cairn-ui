@@ -1,0 +1,511 @@
+{
+  "description": "Vectors for resolveRunSelectorFromRuns (src/lib/run-selector.ts) and its Python port, cairn.server.report_scope.resolve_run_selector_from_runs (share-link scope). Each case resolves `selector` against the shared, deliberately unsorted `runs` pool; `expected` is the ordered list of run ids.",
+  "runs": [
+    {
+      "id": "r05",
+      "display_name": null,
+      "tags": "not json",
+      "created_at": "2026-01-01T00:00:05+00:00"
+    },
+    {
+      "id": "r01",
+      "display_name": "train-a",
+      "tags": "[\"prod\",\"gpu\"]",
+      "created_at": "2026-01-01T00:00:01+00:00"
+    },
+    {
+      "id": "r10",
+      "display_name": "tie",
+      "tags": "[\"prod\"]",
+      "created_at": "2026-01-01T00:00:09+00:00"
+    },
+    {
+      "id": "r03",
+      "display_name": "train-a",
+      "tags": "[\"dev\"]",
+      "created_at": "2026-01-01T00:00:03+00:00"
+    },
+    {
+      "id": "r12",
+      "display_name": "colour?",
+      "tags": "[\"gpu\"]",
+      "created_at": "2026-01-01T00:00:12+00:00"
+    },
+    {
+      "id": "r07",
+      "display_name": "train-b",
+      "tags": "[\"prod\", 3, null]",
+      "created_at": "2026-01-01T00:00:07+00:00"
+    },
+    {
+      "id": "r02",
+      "display_name": "train-b",
+      "tags": "[\"prod\"]",
+      "created_at": "2026-01-01T00:00:02+00:00"
+    },
+    {
+      "id": "r09",
+      "display_name": "tie",
+      "tags": "",
+      "created_at": "2026-01-01T00:00:09+00:00"
+    },
+    {
+      "id": "r04",
+      "display_name": "Eval.Main",
+      "tags": null,
+      "created_at": "2026-01-01T00:00:04+00:00"
+    },
+    {
+      "id": "r11",
+      "display_name": "TRAIN-C",
+      "tags": "[\"prod\",\"gpu\"]",
+      "created_at": "2026-01-01T00:00:11+00:00"
+    },
+    {
+      "id": "r06",
+      "display_name": "",
+      "tags": "{\"a\":1}",
+      "created_at": "2026-01-01T00:00:06+00:00"
+    },
+    {
+      "id": "r08",
+      "display_name": "sweep(1)+x",
+      "tags": "[]",
+      "created_at": "2026-01-01T00:00:08+00:00"
+    }
+  ],
+  "cases": [
+    {
+      "name": "static returns ids verbatim",
+      "selector": {
+        "kind": "static",
+        "runIds": [
+          "zz",
+          "r01",
+          "zz"
+        ]
+      },
+      "expected": [
+        "zz",
+        "r01",
+        "zz"
+      ]
+    },
+    {
+      "name": "static empty",
+      "selector": {
+        "kind": "static",
+        "runIds": []
+      },
+      "expected": []
+    },
+    {
+      "name": "latest default n=5",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n"
+      },
+      "expected": [
+        "r12",
+        "r11",
+        "r10",
+        "r09",
+        "r08"
+      ]
+    },
+    {
+      "name": "latest n=2",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "n": 2
+      },
+      "expected": [
+        "r12",
+        "r11"
+      ]
+    },
+    {
+      "name": "latest n=0",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "n": 0
+      },
+      "expected": []
+    },
+    {
+      "name": "latest n larger than pool",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "n": 100
+      },
+      "expected": [
+        "r12",
+        "r11",
+        "r10",
+        "r09",
+        "r08",
+        "r07",
+        "r06",
+        "r05",
+        "r04",
+        "r03",
+        "r02",
+        "r01"
+      ]
+    },
+    {
+      "name": "latest n fractional truncates",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "n": 2.7
+      },
+      "expected": [
+        "r12",
+        "r11"
+      ]
+    },
+    {
+      "name": "latest n negative drops from the end",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "n": -2
+      },
+      "expected": [
+        "r12",
+        "r11",
+        "r10",
+        "r09",
+        "r08",
+        "r07",
+        "r06",
+        "r05",
+        "r04",
+        "r03"
+      ]
+    },
+    {
+      "name": "substring case-insensitive",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "TRAIN",
+        "n": 10
+      },
+      "expected": [
+        "r11",
+        "r07",
+        "r03",
+        "r02",
+        "r01"
+      ]
+    },
+    {
+      "name": "substring no match",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "nope",
+        "n": 10
+      },
+      "expected": []
+    },
+    {
+      "name": "empty pattern matches all",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "",
+        "n": 3
+      },
+      "expected": [
+        "r12",
+        "r11",
+        "r10"
+      ]
+    },
+    {
+      "name": "glob prefix",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "train-*",
+        "n": 10
+      },
+      "expected": [
+        "r11",
+        "r07",
+        "r03",
+        "r02",
+        "r01"
+      ]
+    },
+    {
+      "name": "glob anchored both ends",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "*a",
+        "n": 10
+      },
+      "expected": [
+        "r03",
+        "r01"
+      ]
+    },
+    {
+      "name": "glob dot is literal",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "eval.*",
+        "n": 10
+      },
+      "expected": [
+        "r04"
+      ]
+    },
+    {
+      "name": "glob dot literal no match",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "evalxmain*",
+        "n": 10
+      },
+      "expected": []
+    },
+    {
+      "name": "glob parens and plus literal",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "sweep(1)+*",
+        "n": 10
+      },
+      "expected": [
+        "r08"
+      ]
+    },
+    {
+      "name": "glob question mark keeps regex meaning",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "colou?r?*",
+        "n": 10
+      },
+      "expected": [
+        "r12"
+      ]
+    },
+    {
+      "name": "glob invalid regex matches nothing",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "?*",
+        "n": 10
+      },
+      "expected": []
+    },
+    {
+      "name": "glob star alone matches empty and null names",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "*",
+        "n": 20
+      },
+      "expected": [
+        "r12",
+        "r11",
+        "r10",
+        "r09",
+        "r08",
+        "r07",
+        "r06",
+        "r05",
+        "r04",
+        "r03",
+        "r02",
+        "r01"
+      ]
+    },
+    {
+      "name": "tags all required",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "tags": [
+          "prod",
+          "gpu"
+        ],
+        "n": 10
+      },
+      "expected": [
+        "r11",
+        "r01"
+      ]
+    },
+    {
+      "name": "tags single",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "tags": [
+          "prod"
+        ],
+        "n": 10
+      },
+      "expected": [
+        "r11",
+        "r10",
+        "r07",
+        "r02",
+        "r01"
+      ]
+    },
+    {
+      "name": "tags empty list matches all",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "tags": [],
+        "n": 3
+      },
+      "expected": [
+        "r12",
+        "r11",
+        "r10"
+      ]
+    },
+    {
+      "name": "tags unknown",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "tags": [
+          "nope"
+        ],
+        "n": 10
+      },
+      "expected": []
+    },
+    {
+      "name": "tags and pattern",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "train",
+        "tags": [
+          "prod"
+        ],
+        "n": 10
+      },
+      "expected": [
+        "r11",
+        "r07",
+        "r02",
+        "r01"
+      ]
+    },
+    {
+      "name": "newest per name no cap",
+      "selector": {
+        "kind": "query",
+        "mode": "newest-per-name"
+      },
+      "expected": [
+        "r12",
+        "r11",
+        "r10",
+        "r08",
+        "r07",
+        "r06",
+        "r05",
+        "r04",
+        "r03"
+      ]
+    },
+    {
+      "name": "newest per name cap 2",
+      "selector": {
+        "kind": "query",
+        "mode": "newest-per-name",
+        "n": 2
+      },
+      "expected": [
+        "r12",
+        "r11"
+      ]
+    },
+    {
+      "name": "newest per name cap 0 still yields one",
+      "selector": {
+        "kind": "query",
+        "mode": "newest-per-name",
+        "n": 0
+      },
+      "expected": [
+        "r12"
+      ]
+    },
+    {
+      "name": "newest per name with pattern",
+      "selector": {
+        "kind": "query",
+        "mode": "newest-per-name",
+        "namePattern": "train*"
+      },
+      "expected": [
+        "r11",
+        "r07",
+        "r03"
+      ]
+    },
+    {
+      "name": "newest per name tie keeps input order",
+      "selector": {
+        "kind": "query",
+        "mode": "newest-per-name",
+        "namePattern": "tie"
+      },
+      "expected": [
+        "r10"
+      ]
+    },
+    {
+      "name": "latest tie keeps input order",
+      "selector": {
+        "kind": "query",
+        "mode": "latest-n",
+        "namePattern": "tie",
+        "n": 1
+      },
+      "expected": [
+        "r10"
+      ]
+    },
+    {
+      "name": "newest per name tags",
+      "selector": {
+        "kind": "query",
+        "mode": "newest-per-name",
+        "tags": [
+          "prod"
+        ]
+      },
+      "expected": [
+        "r11",
+        "r10",
+        "r07",
+        "r01"
+      ]
+    }
+  ]
+}
