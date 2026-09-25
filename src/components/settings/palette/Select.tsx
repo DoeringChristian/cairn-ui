@@ -12,6 +12,9 @@ type Props<T extends string> = ControlProps<T> & {
   options: ReadonlyArray<SelectOption<T>>;
 };
 
+/** Longest option label (in characters) that fits the inline width. */
+const INLINE_MAX_CHARS = 18;
+
 /** One choice from a short list (a native select, styled like `.input`). */
 export default function Select<T extends string>({
   value,
@@ -24,9 +27,12 @@ export default function Select<T extends string>({
   ...row
 }: Props<T>) {
   const id = useId();
+  // An inline select is 10rem wide; options that would be cut off stack it
+  // under its label instead, at full width.
+  const eff = layout === "inline" && options.some((o) => o.label.length > INLINE_MAX_CHARS) ? "stacked" : layout;
   return (
-    <SettingRow {...row} layout={layout} controlId={id} overridden={overridden} onReset={onReset} disabled={disabled}>
-      <span className={`relative ${layout === "inline" ? "w-40" : "block w-full"}`}>
+    <SettingRow {...row} layout={eff} controlId={id} overridden={overridden} onReset={onReset} disabled={disabled}>
+      <span className={`relative ${eff === "inline" ? "w-40" : "block w-full"}`}>
         <select
           id={id}
           value={value}
