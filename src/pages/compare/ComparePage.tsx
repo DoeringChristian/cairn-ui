@@ -18,6 +18,7 @@ import {
   type SmartFilters,
 } from "../../lib/comparisons";
 import { cardFromSpec, type AddCardSelection } from "../../lib/reports";
+import { useComparisonUndo } from "../../lib/comparisons/undo";
 import { storageKeys } from "../../lib/storage";
 import { useElementScrollRestore } from "../../lib/use-scroll-restore";
 import { useRuns } from "../../api/hooks";
@@ -35,6 +36,8 @@ export default function ComparePage() {
   // Run label cache is seeded centrally in `useRuns` (api/hooks.ts).
   const [searchParams, setSearchParams] = useSearchParams();
   const { comparisons, refresh } = useComparisons(projectId ?? "");
+  // Each edit below is one undo step (⌘Z).
+  const track = useComparisonUndo(projectId);
 
   // Sync with server on mount.
   useEffect(() => {
@@ -107,31 +110,31 @@ export default function ComparePage() {
   const handleRename = useCallback(
     (id: string, name: string) => {
       if (!projectId) return;
-      renameComparison(projectId, id, name);
+      track("Rename comparison", id, () => renameComparison(projectId, id, name));
       refresh();
     },
-    [projectId, refresh],
+    [projectId, refresh, track],
   );
 
   const handleDelete = useCallback(
     (id: string) => {
       if (!projectId) return;
-      deleteComparison(projectId, id);
+      track("Delete comparison", id, () => deleteComparison(projectId, id));
       const lastKey = storageKeys.lastComparison(projectId);
       if (sessionStorage.getItem(lastKey) === id) sessionStorage.removeItem(lastKey);
       if (id === selectedId) clearSelection();
       refresh();
     },
-    [projectId, selectedId, clearSelection, refresh],
+    [projectId, selectedId, clearSelection, refresh, track],
   );
 
   const handleRemoveCard = useCallback(
     (comparisonId: string, cardId: string) => {
       if (!projectId) return;
-      removeCardFromComparison(projectId, comparisonId, cardId);
+      track("Remove card", comparisonId, () => removeCardFromComparison(projectId, comparisonId, cardId));
       refresh();
     },
-    [projectId, refresh],
+    [projectId, refresh, track],
   );
 
   // Id of the just-added card, so the section below can auto-open its
@@ -143,11 +146,13 @@ export default function ComparePage() {
     (comparisonId: string, sel: AddCardSelection) => {
       if (!projectId) return;
       const card = cardFromSpec(sel);
-      updateComparison(projectId, comparisonId, (c) => ({ ...c, cards: [...c.cards, card] }));
+      track("Add card", comparisonId, () =>
+        updateComparison(projectId, comparisonId, (c) => ({ ...c, cards: [...c.cards, card] })),
+      );
       refresh();
       setAutoFocusCardId(card.id);
     },
-    [projectId, refresh],
+    [projectId, refresh, track],
   );
 
   // Clear the auto-focus flag right after it's been handed to the card grid
@@ -348,21 +353,21 @@ export default function ComparePage() {
               onRemoveCard={(cardId) => handleRemoveCard(selected.id, cardId)}
               onAddCard={(sel) => handleAddCard(selected.id, sel)}
               onAddRuns={(runIds) => {
-                addRunsToComparison(projectId, selected.id, runIds);
+                track("Add runs", selected.id, () => addRunsToComparison(projectId, selected.id, runIds));
                 refresh();
               }}
               onRemoveRun={(runId) => {
-                removeRunFromComparison(projectId, selected.id, runId);
+                track("Remove run", selected.id, () => removeRunFromComparison(projectId, selected.id, runId));
                 refresh();
               }}
               onRefreshSmartFilters={handleRefreshSmartFilters}
               onRefreshRunSelector={handleRefreshRunSelector}
               onSetRunSelector={(sel) => {
-                setComparisonRunSelector(projectId, selected.id, sel);
+                track("Change run selector", selected.id, () => setComparisonRunSelector(projectId, selected.id, sel));
                 refresh();
               }}
               onReorderCards={(fromId, toId) => {
-                reorderComparisonCards(projectId, selected.id, fromId, toId);
+                track("Move card", selected.id, () => reorderComparisonCards(projectId, selected.id, fromId, toId));
                 refresh();
               }}
             />

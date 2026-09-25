@@ -31,6 +31,7 @@ import {
   type ReportPayload,
 } from "../lib/reports";
 import ReportNotebook, { makeEmptyBlock } from "../components/reports/ReportNotebook";
+import { usePushUndo } from "../lib/undo-context";
 
 const AUTOSAVE_DELAY_MS = 1500;
 const PRINT_WAIT_LIMIT_MS = 20000;
@@ -221,22 +222,36 @@ export default function ReportEditorPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Every block edit is an undo step; typing into one block within the
+  // merge window is one step.
+  const pushUndo = usePushUndo();
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
+  const editBlocks = (label: string, fn: (prev: ReportBlock[]) => ReportBlock[], mergeKey?: string) => {
+    const prev = blocksRef.current;
+    const next = fn(prev);
+    if (next === prev) return;
+    blocksRef.current = next;
+    setBlocks(next);
+    pushUndo({ label, undo: () => setBlocks(prev), redo: () => setBlocks(next), mergeKey });
+  };
+
   const updateBlock = (id: string, next: ReportBlock) => {
     // A CardsBlock's content changed — its cached raw ```cairn fence text
     // (if any, from the last markdown parse) is now stale; drop it so the
     // next markdown-source serialize regenerates fresh YAML instead of
     // silently showing the pre-edit text (see rawCairnSourceRef's doc above).
     if (isCardsBlock(next)) delete rawCairnSourceRef.current[id];
-    setBlocks((prev) => prev.map((b) => (b.id === id ? next : b)));
+    editBlocks("Edit cell", (prev) => prev.map((b) => (b.id === id ? next : b)), `report-block|${id}`);
   };
 
   const deleteBlock = (id: string) => {
     delete rawCairnSourceRef.current[id];
-    setBlocks((prev) => prev.filter((b) => b.id !== id));
+    editBlocks("Delete cell", (prev) => prev.filter((b) => b.id !== id));
   };
 
   const moveBlock = (id: string, dir: -1 | 1) => {
-    setBlocks((prev) => {
+    editBlocks("Move cell", (prev) => {
       const idx = prev.findIndex((b) => b.id === id);
       if (idx < 0) return prev;
       const toIdx = idx + dir;
@@ -252,7 +267,7 @@ export default function ReportEditorPage() {
   // end when `afterId` is null) — Jupyter's insert-below.
   const insertBlock = (index: number, type: ReportBlock["type"]) => {
     const block = makeEmptyBlock(type);
-    setBlocks((prev) => [...prev.slice(0, index), block, ...prev.slice(index)]);
+    editBlocks("Insert cell", (prev) => [...prev.slice(0, index), block, ...prev.slice(index)]);
   };
 
   // Save every cards-block card across this report as a reusable report
