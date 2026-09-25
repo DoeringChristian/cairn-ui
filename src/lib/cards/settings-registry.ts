@@ -17,6 +17,8 @@ import { meta as histogram } from "../../components/cards-settings/histogram.ts"
 import { meta as html } from "../../components/cards-settings/html.ts";
 import { meta as image } from "../../components/cards-settings/image.ts";
 import { meta as importance } from "../../components/cards-settings/importance.ts";
+import { meta as runCompare } from "../../components/cards-settings/run-compare.ts";
+import { meta as codeDiff } from "../../components/cards-settings/code-diff.ts";
 import { meta as markdown } from "../../components/cards-settings/markdown.ts";
 import { meta as mesh } from "../../components/cards-settings/mesh.ts";
 import { meta as parallel } from "../../components/cards-settings/parallel.ts";
@@ -54,6 +56,8 @@ const REGISTRY: Record<CardType, CardSettingsMeta<any>> = {
   bar,
   tile,
   importance,
+  "run-compare": runCompare,
+  "code-diff": codeDiff,
   table,
   html,
   markdown,

@@ -38,6 +38,8 @@ const MarkdownCard = lazy(() => import("./MarkdownCard"));
 const BarChartCard = lazy(() => import("./BarChartCard"));
 
 const ImportanceCard = lazy(() => import("./ImportanceCard"));
+const RunCompareCard = lazy(() => import("./RunCompareCard"));
+const CodeDiffCard = lazy(() => import("./CodeDiffCard"));
 const ScalarTileCard = lazy(() => import("./ScalarTileCard"));
 const ScalarValueCard = lazy(() => import("./ScalarValueCard"));
 const PointCloudCard = lazy(() => import("./PointCloudCard"));
@@ -161,6 +163,20 @@ export default function CardRenderer(props: CardDescriptor) {
       return (
         <Suspense fallback={<LazyCardFallback label="loading importance…" />}>
           <ImportanceCard runIds={runIds} settingsKey={settingsKey} onRemove={onRemove} autoOpenSettings={autoOpenSettings} />
+        </Suspense>
+      );
+    }
+    if (cardType === "run-compare") {
+      return (
+        <Suspense fallback={<LazyCardFallback label="loading run comparer…" />}>
+          <RunCompareCard runIds={runIds} settingsKey={settingsKey} onRemove={onRemove} autoOpenSettings={autoOpenSettings} />
+        </Suspense>
+      );
+    }
+    if (cardType === "code-diff") {
+      return (
+        <Suspense fallback={<LazyCardFallback label="loading code diff…" />}>
+          <CodeDiffCard runIds={runIds} settingsKey={settingsKey} onRemove={onRemove} autoOpenSettings={autoOpenSettings} />
         </Suspense>
       );
     }

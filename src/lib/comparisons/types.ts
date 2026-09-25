@@ -30,7 +30,7 @@ export interface ComparisonCard {
  * Centralized here so every dispatch site (CardRenderer, ComparePage,
  * AddCardModal, sync.cardSettingsKeyFor) agrees on the same list.
  */
-export const MULTI_RUN_CARD_TYPES = ["parallel", "scatter", "bar", "tile", "importance"] as const;
+export const MULTI_RUN_CARD_TYPES = ["parallel", "scatter", "bar", "tile", "importance", "run-compare", "code-diff"] as const;
 export type MultiRunCardType = (typeof MULTI_RUN_CARD_TYPES)[number];
 export function isMultiRunCardType(t: string): t is MultiRunCardType {
   return (MULTI_RUN_CARD_TYPES as readonly string[]).includes(t);
@@ -48,6 +48,8 @@ export const MULTI_RUN_CARD_LABELS: Record<MultiRunCardType, string> = {
   bar: "Bar Chart",
   tile: "Scalar Tile",
   importance: "Parameter Importance",
+  "run-compare": "Run Comparer",
+  "code-diff": "Code Diff",
 };
 
 export interface SmartFilterEntry {

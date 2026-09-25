@@ -79,7 +79,8 @@ export function groupComparisonCardsIntoSections(
   const buckets = new Map<string, ComparisonCard[]>();
   for (const card of cards) {
     let section: string;
-    if (card.type === "parallel" || card.type === "scatter" || card.type === "importance") {
+    if (card.type === "parallel" || card.type === "scatter" || card.type === "importance" ||
+      card.type === "run-compare" || card.type === "code-diff") {
       section = "Charts";
     } else if (MEDIA_TYPES.has(card.type)) {
       section = "Media";
