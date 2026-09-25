@@ -20,11 +20,7 @@ const COMPONENTS = join(SRC, "components");
  * entries that are already clean so the list cannot go stale.
  */
 const ALLOWLIST = new Set<string>([
-  "components/BarChartCard.tsx",
   "components/ImageCard.tsx",
-  "components/ImportanceCard.tsx",
-  "components/ScalarTileCard.tsx",
-  "components/ScatterPlotCard.tsx",
 ]);
 
 const RAW_CONTROL = /<select\b|type=\{?\s*["'](?:checkbox|range|number)["']/g;
