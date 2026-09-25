@@ -16,8 +16,15 @@ import { seedRunCursor, seedRunEpoch } from "./live-updates-core";
 function redirectToLogin(): void {
   if (typeof window === "undefined") return;
   if (window.location.pathname === "/login") return; // avoid a redirect loop
+  // A share-link viewer has no login to go to: its page shows the error.
+  if (isSharePath(window.location.pathname)) return;
   const returnTo = window.location.pathname + window.location.search;
   window.location.assign(`/login?return=${encodeURIComponent(returnTo)}`);
+}
+
+/** The share-link pages: `/share/<secret>` and the report view `/s/<rid>`. */
+export function isSharePath(pathname: string): boolean {
+  return pathname.startsWith("/share/") || pathname.startsWith("/s/");
 }
 
 async function checkOk(res: Response, path: string): Promise<Response> {
@@ -372,4 +379,29 @@ export const api = {
     ),
   deleteView: (projectId: string, id: string) =>
     del_<{ deleted: string }>(`/api/projects/${projectId}/views/${id}`),
+
+  // Report share links (routes/shares.py) — wave 3 / I
+  reportShares: (projectId: string, reportId: string) =>
+    get<{ shares: import("./types").ReportShare[] }>(
+      `/api/projects/${projectId}/reports/${reportId}/shares`,
+    ),
+  /** `expiresAt`: ISO timestamp; the server defaults to 30 days. */
+  createReportShare: (projectId: string, reportId: string, expiresAt?: string) =>
+    post<import("./types").ReportShareCreated>(
+      `/api/projects/${projectId}/reports/${reportId}/shares`,
+      expiresAt ? { expires_at: expiresAt } : {},
+    ),
+  revokeReportShare: (projectId: string, reportId: string, shareId: string) =>
+    del_<{ revoked: string }>(`/api/projects/${projectId}/reports/${reportId}/shares/${shareId}`),
+  /** Trade a link's secret for the share cookie. Throws with `status` set on failure. */
+  redeemShare: async (secret: string): Promise<{ report_id: string; project_id: string }> => {
+    const res = await fetch("/api/share/redeem", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret }),
+    });
+    if (!res.ok) throw Object.assign(new Error(`${res.status} ${res.statusText}`), { status: res.status });
+    return (await res.json()) as { report_id: string; project_id: string };
+  },
+  shareContext: () => get<import("./types").ShareContext>("/api/share/context"),
 };

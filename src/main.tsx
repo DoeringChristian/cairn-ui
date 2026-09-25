@@ -22,6 +22,7 @@ import ReportEditorPage from "./pages/ReportEditorPage";
 import SweepsListPage from "./pages/SweepsListPage";
 import SweepDetailPage from "./pages/SweepDetailPage";
 import LoginPage from "./pages/LoginPage";
+import ReportViewPage, { ShareRedeemPage } from "./pages/ReportViewPage";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -38,6 +39,10 @@ const router = createBrowserRouter([
   // Outside <App>'s Outlet on purpose: it must render usefully even when
   // every /api/* route except /api/auth/* and /api/health 401s.
   { path: "/login", element: <LoginPage /> },
+  // Share links: outside <App> too — a share viewer gets the report alone,
+  // with no app chrome, and can read nothing but that report's runs.
+  { path: "/share/:secret", element: <ShareRedeemPage /> },
+  { path: "/s/:reportId", element: <ReportViewPage /> },
   {
     path: "/",
     element: <App />,

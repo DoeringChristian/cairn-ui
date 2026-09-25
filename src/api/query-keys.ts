@@ -38,4 +38,7 @@ export const qk = {
   sweep: (sweepId: string) => ["sweep", sweepId] as const,
   // Saved workspace views (lib/workspace/views.ts).
   views: (projectId: string) => ["views", projectId] as const,
+  // Report share links (wave 3 / I).
+  reportShares: (projectId: string, reportId: string) => ["report-shares", projectId, reportId] as const,
+  shareContext: () => ["share-context"] as const,
 } as const;
