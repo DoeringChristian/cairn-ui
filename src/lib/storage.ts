@@ -30,6 +30,9 @@ export const storageKeys = {
   streamMode: "cairn:stream-mode",
   scroll: (key: string) => `cairn:scroll:${key}`, // sessionStorage
   lastComparison: (projectId: string) => `cairn:last-comparison:${projectId}`, // sessionStorage
+  // --- media (wave 2, agent C) ---
+  /** A section's media sync value and key — see components/card-kit/media-sync.tsx. */
+  mediaSync: (scopeKey: string) => `cairn:media-sync:${scopeKey}`,
 } as const;
 
 /** Parse JSON from a `Storage` (localStorage/sessionStorage), swallowing errors. */

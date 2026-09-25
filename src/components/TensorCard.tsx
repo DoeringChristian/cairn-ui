@@ -5,11 +5,10 @@ import { safeJsonParse } from "../lib/format";
 import { formatNum } from "../lib/plot-utils/types";
 import { downloadArtifact, artifactFilename } from "../lib/download";
 import { api } from "../api/client";
-import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
+import { cardOverridesStorageKey, useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { TensorSettings, TensorViewMode as ViewMode } from "./cards-settings/tensor";
 import type { SequenceMeta } from "../api/types";
 import { computeHistogram } from "../lib/plot-utils/histogram";
-import { COLORMAP_OPTIONS, type Colormap } from "../charts/colormaps";
 import {
   HistogramBars,
   MatrixHeatmap,
@@ -18,10 +17,9 @@ import { parseNpy, type NpyArray } from "../lib/parse-npy";
 import AddToComparisonButton from "./AddToComparisonButton";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
-import Select from "./settings/Select";
-import Slider from "./settings/Slider";
-import Toggle from "./settings/Toggle";
 import { useStepSlider, resolveAtStep } from "./card-kit";
+import { useScalarMetricNames } from "./card-kit/use-media-panes";
+import TensorSettingsPanel from "./settings-panels/TensorSettingsPanel";
 
 interface Props {
   runId: string;
@@ -112,11 +110,18 @@ export default function TensorCard({
   const ctl = useCardSettings<TensorSettings>(settingsKey, "tensor");
   const settings = ctl.value;
 
-  const { safeIdx, currentStep, onSliderChange } = useStepSlider({
-    seriesPoints: [points],
+  const seriesPoints = useMemo(() => [points], [points]);
+  const seriesRunIds = useMemo(() => [runId], [runId]);
+  const slider = useStepSlider({
+    seriesPoints,
     persistedIdx: settings.sliderStep,
     updateSettings: ctl.set,
+    sliderKey: settings.sliderKey,
+    seriesRunIds,
+    sync: { cardId: cardOverridesStorageKey(settingsKey), follow: settings.followSection },
   });
+  const { safeIdx, currentStep, onSliderChange } = slider;
+  const scalarMetrics = useScalarMetricNames(runId);
   const current = useMemo(
     () => resolveAtStep(points, currentStep) ?? points[0],
     [points, currentStep],
@@ -171,7 +176,7 @@ export default function TensorCard({
   const shapeLabel = ndim > 0 ? shape.join("×") : "scalar";
   const subtitle =
     points.length > 0
-      ? `${shapeLabel} · ${meta?.dtype ?? "?"} · step ${current?.step ?? "—"} (${safeIdx + 1}/${points.length})`
+      ? `${shapeLabel} · ${meta?.dtype ?? "?"} · step ${current?.step ?? "—"} (${safeIdx + 1}/${slider.values.length})`
       : `${metric.count} pts`;
 
   const cardRef = useRef<HTMLDivElement>(null);
@@ -262,11 +267,12 @@ export default function TensorCard({
   const renderContent = () => (
     <>
       {renderBody()}
-      {points.length > 1 && (
+      {slider.values.length > 1 && (
         <StepSlider
-          points={points}
+          points={slider.sliderPoints}
           currentIndex={safeIdx}
           onChange={onSliderChange}
+          keyName={slider.keyName}
           xAxis={settings.xAxis}
           onXAxisChange={(m) => ctl.set({ xAxis: m })}
           className="mt-3"
@@ -276,65 +282,17 @@ export default function TensorCard({
   );
 
   const settingsPanel = (
-    <>
-      <Select<ViewMode>
-        label="View"
-        value={settings.viewMode}
-        onChange={(v) => ctl.set({ viewMode: v })}
-        options={[
-          { value: "stats", label: "Stats" },
-          { value: "histogram", label: "Histogram" },
-          { value: "heatmap", label: "Heatmap" },
-        ]}
-        description={
-          ndim < 2 && settings.viewMode === "heatmap"
-            ? "Heatmap needs a 2D+ tensor; showing histogram."
-            : undefined
-        }
-      />
-      {settings.viewMode === "histogram" && (
-        <Slider
-          label="Bins"
-          value={settings.bins}
-          onChange={(v) => ctl.set({ bins: Math.round(v) })}
-          min={8}
-          max={256}
-          step={8}
-        />
-      )}
-      {(settings.viewMode === "histogram" || settings.viewMode === "heatmap") && (
-        <Toggle
-          label={settings.viewMode === "heatmap" ? "Log color scale" : "Log Y axis"}
-          checked={settings.logY}
-          onChange={(v) => ctl.set({ logY: v })}
-        />
-      )}
-      {settings.viewMode === "heatmap" && (
-        <Select<Colormap>
-          label="Colormap"
-          value={settings.colormap}
-          onChange={(v) => ctl.set({ colormap: v })}
-          options={COLORMAP_OPTIONS}
-        />
-      )}
-      {settings.viewMode === "heatmap" &&
-        leadingDims.map((dim, k) => (
-          <Slider
-            key={k}
-            label={`Slice dim ${k} (0–${dim - 1})`}
-            value={Math.min(dim - 1, settings.sliceIndices?.[k] ?? 0)}
-            onChange={(v) => {
-              const next = [...(settings.sliceIndices ?? leadingDims.map(() => 0))];
-              next[k] = Math.round(v);
-              ctl.set({ sliceIndices: next });
-            }}
-            min={0}
-            max={dim - 1}
-            step={1}
-          />
-        ))}
-      <div className="mt-2">{statsGrid}</div>
-    </>
+    <TensorSettingsPanel
+      ctl={ctl}
+      mode="card"
+      ctx={{
+        leadingDims,
+        below2d: ndim < 2,
+        stats: statsGrid,
+        scalarMetrics,
+        following: slider.sync != null,
+      }}
+    />
   );
 
   return (

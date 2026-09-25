@@ -1,31 +1,30 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { useSequencesForRuns } from "../api/hooks";
-import type { SequenceMeta } from "../api/types";
-import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
+import type { SequenceMeta, SequencePoint } from "../api/types";
+import { cardOverridesStorageKey, useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { ImageCardSettings } from "./cards-settings/image";
 import type { ComparisonSeriesRef } from "../lib/comparisons";
 import {
-  classColor,
   EMPTY_OVERLAY_SUMMARY,
   mergeOverlaySummaries,
   type OverlaySummary,
   type OverlayView,
 } from "../lib/overlays";
+import { gridValues, normalizeSlots, slotValue } from "../lib/media/panel-layout";
+import { STEP_KEY, formatKeyValue } from "../lib/media/slider-key";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
-import { ExternalBaselinePicker } from "./card-kit/ExternalBaselinePicker";
+import ComparePanes from "./card-kit/ComparePanes";
+import GridPanes from "./card-kit/GridPanes";
 import MultiPaneGrid from "./card-kit/MultiPaneGrid";
 import { plotCardPolicy } from "./card-kit/plot-card-policy";
 import { resolveAtStep } from "./card-kit/resolve-at-step";
-import { seriesLabel } from "./card-kit/series-identity";
-import { useRunInfo } from "./card-kit/use-run-info";
+import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
 import { useStepSlider } from "./card-kit/use-step-slider";
 import { type PaneTransform } from "./image/ImagePane";
 import ImagePointView from "./image/ImagePointView";
-import SettingsSection from "./settings/SettingsSection";
-import Slider from "./settings/Slider";
-import Toggle from "./settings/Toggle";
+import ImageSettingsPanel from "./settings-panels/ImageSettingsPanel";
 
 interface Props {
   runId: string;
@@ -40,7 +39,6 @@ const IDENTITY: PaneTransform = { scale: 1, x: 0, y: 0 };
 
 type Series = { runId: string; name: string };
 
-
 export default function ImageCard({ runId, metric, extraSeries = [], settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(autoOpenSettings ?? false);
@@ -51,8 +49,9 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
   );
   const ctl = useCardSettings<ImageCardSettings>(settingsKey, "image");
   const settings = ctl.value;
+  const scalarMetrics = useScalarMetricNames(runId);
 
-  const series = useMemo<Series[]>(() => {
+  const allSeries = useMemo<Series[]>(() => {
     const seen = new Set<string>();
     return [{ runId, name: metric.name }, ...extraSeries]
       .map((s) => ({ runId: s.runId, name: s.name }))
@@ -63,13 +62,13 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
         return true;
       });
   }, [runId, metric.name, extraSeries]);
-  const paneKeys = useMemo(() => series.map((s) => `${s.runId}:${s.name}`), [series]);
-  const runIds = useMemo(() => [...new Set(series.map((s) => s.runId))], [series]);
-  useRunInfo(runIds);
-  const labels = useMemo(() => {
-    const multiRun = runIds.length > 1;
-    return new Map(series.map((s, i) => [paneKeys[i]!, seriesLabel(s, runId, multiRun, runIds)]));
-  }, [series, paneKeys, runId, runIds]);
+  const panes = useMediaPanes(allSeries, runId, settings.maxRuns);
+  const series = panes.shown;
+  const paneKeys = panes.keys;
+  const labels = useMemo(
+    () => (panes.multiRun ? panes.labels : new Map(paneKeys.map((k, i) => [k, series[i]!.name]))),
+    [panes, paneKeys, series],
+  );
 
   // Foreground sequences, then (when a reference tag is set) the same tag per run.
   const reference = settings.reference;
@@ -89,12 +88,15 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataKey, series, reference]);
 
-  const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
+  const slider = useStepSlider({
     seriesPoints: points,
     persistedIdx: settings.sliderStep,
     updateSettings: ctl.set,
+    sliderKey: settings.sliderKey,
+    seriesRunIds: panes.runIds,
+    sync: { cardId: cardOverridesStorageKey(settingsKey), follow: settings.followSection },
   });
-  const stepPoints = useMemo(() => globalSteps.map((step) => ({ step, wall_time: null })), [globalSteps]);
+  const { globalSteps, values, safeIdx, currentValue, currentStep, stepFor, keyName } = slider;
 
   // Zoom/pan shared by every pane.
   const [transform, setTransform] = useState<PaneTransform>(IDENTITY);
@@ -132,24 +134,26 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     return fn;
   };
   const overlaySummary = useMemo(
-    () => mergeOverlaySummaries(paneKeys.map((k) => paneOverlays[k] ?? EMPTY_OVERLAY_SUMMARY)),
-    [paneKeys, paneOverlays],
+    () => mergeOverlaySummaries([EMPTY_OVERLAY_SUMMARY, ...Object.values(paneOverlays)]),
+    [paneOverlays],
   );
-  const toggleClass = (id: number, visible: boolean) => {
-    const hidden = new Set(settings.hiddenClasses);
-    if (visible) hidden.delete(id);
-    else hidden.add(id);
-    ctl.set({ hiddenClasses: [...hidden].sort((a, b) => a - b) });
+
+  /** Pane `index` at slider value `value`: its step (per run for a metric key), then its point. */
+  const pointAt = (index: number, value: number, nearest: boolean): SequencePoint | null => {
+    const step = stepFor(index, value, { nearest });
+    return step == null ? null : resolveAtStep(points[index] ?? [], step, { nearest });
+  };
+  const refAt = (index: number, point: SequencePoint | null): SequencePoint | null => {
+    if (!reference) return null;
+    const step = settings.referenceStep ?? point?.step;
+    return step == null ? null : resolveAtStep(refPoints[index] ?? [], step, { nearest: true });
   };
 
-  const renderPane = (key: string, index: number) => (
+  const renderView = (index: number, point: SequencePoint | null, overlayKey: string) => (
     <ImagePointView
-      key={key}
-      metricName={metric.name}
-      point={resolveAtStep(points[index] ?? [], currentStep, { nearest: true })}
-      refPoint={reference
-        ? resolveAtStep(refPoints[index] ?? [], settings.referenceStep ?? currentStep, { nearest: true })
-        : null}
+      metricName={series[index]?.name ?? metric.name}
+      point={point}
+      refPoint={refAt(index, point)}
       refLabel={reference?.name}
       split={split}
       onSplitChange={onSplitChange}
@@ -157,133 +161,107 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       onTransformChange={setTransform}
       loadingHint={anyLoading}
       overlayView={overlayView}
-      onOverlays={reporterFor(key)}
+      onOverlays={reporterFor(overlayKey)}
+      rendering={settings.rendering}
     />
   );
 
-  const settingsPanel = (
-    <>
-      <SettingsSection title="Compare with" first>
-        <p className="mb-1 text-xs text-fg-muted">
-          Choose a reference image tag. Each pane splits its image against that tag from its own run.
-        </p>
-        {reference && (
-          <div className="mb-2 flex items-center gap-1 rounded border border-accent/40 bg-accent/5 px-2 py-1 text-xs text-fg-muted">
-            <span className="mono min-w-0 flex-1 truncate">{reference.name}</span>
-            <button
-              type="button"
-              onClick={() => ctl.set({ reference: undefined, referenceStep: undefined })}
-              className="shrink-0 text-fg-subtle hover:text-fg"
-              aria-label="Remove reference"
-            >
-              ×
-            </button>
-          </div>
-        )}
-        <ExternalBaselinePicker
-          runId={runId}
-          objectType="image"
-          currentMetricName={metric.name}
-          selected={reference?.name}
-          onSelect={(name) => ctl.set({ reference: { name } })}
-        />
-        {reference && (
-          <>
-            <Toggle
-              label="Pin reference step"
-              checked={settings.referenceStep != null}
-              onChange={(pinned) => ctl.set({ referenceStep: pinned ? currentStep : undefined })}
-              description="Off follows the slider; on keeps the reference fixed."
-            />
-            {settings.referenceStep != null && (
-              <Slider
-                label="Reference step"
-                value={settings.referenceStep}
-                onChange={(v) => ctl.set({ referenceStep: Math.round(v) })}
-                min={globalSteps[0] ?? 0}
-                max={globalSteps[globalSteps.length - 1] ?? 1}
-                step={1}
-                format={(v) => Math.round(v).toString()}
-              />
-            )}
-          </>
-        )}
-      </SettingsSection>
-      {(overlaySummary.hasBoxes || overlaySummary.hasMasks) && (
-        <SettingsSection title="Overlays">
-          {overlaySummary.hasBoxes && (
-            <Toggle label="Show boxes" checked={settings.showBoxes} onChange={(showBoxes) => ctl.set({ showBoxes })} />
-          )}
-          {overlaySummary.hasBoxes && overlaySummary.hasScores && (
-            <Slider
-              label="Min box score"
-              value={settings.minScore}
-              onChange={(minScore) => ctl.set({ minScore })}
-              min={0}
-              max={1}
-              step={0.01}
-              format={(v) => v.toFixed(2)}
-              description="Boxes without a score always show."
-            />
-          )}
-          {overlaySummary.hasMasks && (
-            <>
-              <Toggle label="Show masks" checked={settings.showMasks} onChange={(showMasks) => ctl.set({ showMasks })} />
-              <Slider
-                label="Mask opacity"
-                value={settings.maskOpacity}
-                onChange={(maskOpacity) => ctl.set({ maskOpacity }, { mergeKey: "maskOpacity" })}
-                min={0}
-                max={1}
-                step={0.05}
-                format={(v) => `${Math.round(v * 100)}%`}
-              />
-            </>
-          )}
-          {overlaySummary.classes.length > 0 && (
-            <div className="py-1">
-              <p className="mb-1 text-sm text-fg">Classes</p>
-              <ul className="space-y-0.5">
-                {overlaySummary.classes.map((c) => (
-                  <li key={c.id}>
-                    <label className="flex cursor-pointer items-center gap-2 text-xs text-fg-muted">
-                      <input
-                        type="checkbox"
-                        className="accent-accent"
-                        checked={!settings.hiddenClasses.includes(c.id)}
-                        onChange={(e) => toggleClass(c.id, e.target.checked)}
-                      />
-                      <span className="h-3 w-3 shrink-0 rounded-sm" style={{ backgroundColor: classColor(c.id) }} aria-hidden="true" />
-                      <span className="min-w-0 truncate">{c.name}</span>
-                      <span className="mono ml-auto text-fg-subtle">{c.id}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </SettingsSection>
-      )}
-      <SettingsSection title="Display">
-        <Toggle label="Show pane labels" checked={settings.showLabels} onChange={(showLabels) => ctl.set({ showLabels })} />
-      </SettingsSection>
-    </>
+  const mode = settings.panelMode;
+  const compareSlots = useMemo(
+    () => normalizeSlots(settings.compareSlots, paneKeys),
+    [settings.compareSlots, paneKeys],
+  );
+  const paneOptions = useMemo(
+    () => paneKeys.map((k, i) => ({
+      key: k,
+      label: labels.get(k) ?? series[i]!.name,
+      color: panes.multiRun ? panes.colors.get(panes.runIds[i]!) : undefined,
+    })),
+    [paneKeys, labels, series, panes],
   );
 
-  const body = (
-    <div className="flex h-full min-h-0 flex-col">
+  const renderPanes = () => {
+    if (mode === "grid") {
+      const cols = gridValues(values, settings.columns);
+      return (
+        <GridPanes
+          rows={paneOptions}
+          columns={cols.map((v) => ({ value: v, label: `${keyName} ${formatKeyValue(v)}` }))}
+          current={currentValue}
+          onColumnClick={slider.setValue}
+          renderCell={(row, col) => renderView(row, pointAt(row, cols[col]!, false), `grid:${row}:${col}`)}
+        />
+      );
+    }
+    if (mode === "compare") {
+      return (
+        <ComparePanes
+          slots={compareSlots}
+          onSlotsChange={(slots) => ctl.set({ compareSlots: slots })}
+          linked={settings.compareLinked}
+          onLinkedChange={(linked, slots) => ctl.set({ compareLinked: linked, compareSlots: slots })}
+          panes={paneOptions}
+          values={values}
+          keyName={keyName}
+          current={currentValue}
+          columns={settings.columns}
+          renderSlot={(slot, _value, i) => {
+            const index = paneKeys.indexOf(slot.pane);
+            const v = slotValue(slot, settings.compareLinked, currentValue);
+            return index < 0 ? null : renderView(index, pointAt(index, v, true), `compare:${i}`);
+          }}
+        />
+      );
+    }
+    return (
       <MultiPaneGrid
         paneKeys={paneKeys}
         labels={settings.showLabels ? labels : new Map()}
         inModal={false}
+        columns={settings.columns}
         onPaneWidthsChange={() => {}}
-        renderPane={renderPane}
+        renderPane={(key, index) => renderView(index, pointAt(index, currentValue, true), key)}
       />
-      {globalSteps.length > 1 && (
-        <StepSlider points={stepPoints} currentIndex={safeIdx} onChange={onSliderChange} immediate className="shrink-0 px-1 pb-1 pt-2" />
+    );
+  };
+
+  const settingsPanel = (
+    <ImageSettingsPanel
+      ctl={ctl}
+      mode="card"
+      ctx={{
+        runId,
+        metricName: metric.name,
+        globalSteps,
+        currentStep,
+        overlays: overlaySummary,
+        paneKeys,
+        multi: series.length > 1,
+        following: slider.sync != null,
+        scalarMetrics,
+      }}
+    />
+  );
+
+  const body = (
+    <div className="flex h-full min-h-0 flex-col">
+      {renderPanes()}
+      {values.length > 1 && (
+        <StepSlider
+          points={slider.sliderPoints}
+          currentIndex={safeIdx}
+          onChange={slider.onSliderChange}
+          keyName={keyName}
+          immediate
+          className="shrink-0 px-1 pb-1 pt-2"
+        />
       )}
     </div>
   );
+
+  const subtitle = values.length === 0
+    ? undefined
+    : keyName === STEP_KEY ? `step ${currentStep}` : `${keyName} ${formatKeyValue(currentValue)}`;
 
   return (
     <CardShell
@@ -291,7 +269,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       settings={settings}
       updateSettings={ctl.set}
       title={metric.name}
-      subtitle={globalSteps.length > 0 ? `step ${currentStep}` : undefined}
+      subtitle={subtitle}
       cardKind="image"
       defaultHeight={policy.defaultHeight}
       onRemove={onRemove}

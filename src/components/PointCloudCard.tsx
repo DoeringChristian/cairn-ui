@@ -6,8 +6,7 @@ import {
   type PointCloudMeta,
   type PointCloudView,
 } from "./viewer3d/pointcloud";
-import Select from "./settings/Select";
-import Slider from "./settings/Slider";
+import { Select, Slider } from "./settings/palette";
 
 const SPEC: Scene3DKind<PointCloudView, PointCloudMeta> = {
   kind: "pointcloud",

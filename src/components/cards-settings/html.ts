@@ -1,5 +1,10 @@
 import type { CardSettingsMeta } from "./meta";
-import { steppedMediaInstanceDefaults, type SteppedMediaSettings } from "./stepped-media.ts";
+import {
+  STEPPED_MEDIA_CASCADE,
+  steppedMediaBuiltin,
+  steppedMediaInstanceDefaults,
+  type SteppedMediaSettings,
+} from "./stepped-media.ts";
 
 export interface HtmlSettings extends SteppedMediaSettings {
   /** Auto-size the iframe to its content height via the resize shim. */
@@ -8,12 +13,18 @@ export interface HtmlSettings extends SteppedMediaSettings {
   fixedHeight: number;
 }
 
-export const builtin: HtmlSettings = { version: 1, metrics: [], autoHeight: true, fixedHeight: 300 };
+export const builtin: HtmlSettings = {
+  ...steppedMediaBuiltin,
+  version: 1,
+  metrics: [],
+  autoHeight: true,
+  fixedHeight: 300,
+};
 
 export const instanceDefaults = steppedMediaInstanceDefaults as (seed: { name: string }) => Partial<HtmlSettings>;
 
 export const meta: CardSettingsMeta<HtmlSettings> = {
   builtin,
-  cascadeKeys: ["autoHeight", "fixedHeight"],
+  cascadeKeys: ["autoHeight", "fixedHeight", ...STEPPED_MEDIA_CASCADE],
   tabs: [],
 };

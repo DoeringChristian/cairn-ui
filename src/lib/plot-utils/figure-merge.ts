@@ -136,6 +136,8 @@ export interface FigureMergeEntry {
   /** Short display label for the run (e.g. "run-a"), used to prefix trace names. */
   runLabel: string;
   figure: PlotlyFigureLike;
+  /** The run's colour (lib/run-color.ts); falls back to `SERIES_COLORS` by run index. */
+  color?: string;
 }
 
 /**
@@ -186,8 +188,8 @@ function recolorTrace(trace: Record<string, unknown>, color: string): Record<str
  * function does not itself validate mergeability.
  *
  * When every run contributes at most `RECOLOR_MAX_TRACES_PER_RUN` trace(s),
- * each run's trace(s) are recolored to a distinct palette color (from
- * `SERIES_COLORS`, cycled by run index) so runs read at a glance. With more
+ * each run's trace(s) are recolored to the run's colour (`entry.color`, else
+ * `SERIES_COLORS` cycled by run index) so runs read at a glance. With more
  * traces per run (e.g. one line per class in an ROC/PR figure), original
  * per-trace colors are kept instead and traces are grouped per run via
  * `legendgroup`/`legendgrouptitle` — recoloring would collapse meaningful
@@ -205,7 +207,7 @@ export function mergeFigures(entries: FigureMergeEntry[]): PlotlyFigureLike {
 
   const data: Record<string, unknown>[] = [];
   entries.forEach((entry, runIdx) => {
-    const color = SERIES_COLORS[runIdx % SERIES_COLORS.length]!;
+    const color = entry.color ?? SERIES_COLORS[runIdx % SERIES_COLORS.length]!;
     for (const trace of entry.figure.data ?? []) {
       const origName = typeof trace.name === "string" && trace.name ? trace.name : undefined;
       let next: Record<string, unknown> = {

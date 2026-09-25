@@ -5,12 +5,12 @@ import { api } from "../../api/client";
 import type { SequenceMeta, SequencePoint } from "../../api/types";
 import { safeJsonParse } from "../../lib/format";
 import { downloadArtifact, artifactFilename } from "../../lib/download";
-import type { CardSettingsKey } from "../../lib/card-settings";
+import { cardOverridesStorageKey, type CardSettingsKey, type SettingsController } from "../../lib/card-settings";
 import type { ComparisonSeriesRef } from "../../lib/comparisons";
 import { useCardDrop } from "../../lib/use-series-drop";
-import { shortRunLabel, useRunMetadataVersion } from "../../lib/run-label";
-import { seriesKey } from "../../lib/series-utils";
-import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid } from "../card-kit";
+import { formatKeyValue } from "../../lib/media/slider-key";
+import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid } from "../card-kit";
+import { useMediaPanes, useScalarMetricNames } from "../card-kit/use-media-panes";
 import { scene3dInstanceDefaults, type Scene3DSettings } from "../cards-settings/scene3d";
 import { useOverlaySlot } from "../card-kit/use-overlay-slot";
 import { plotCardPolicy } from "../card-kit/plot-card-policy";
@@ -18,8 +18,7 @@ import AddToComparisonButton from "../AddToComparisonButton";
 import CardShell from "../CardShell";
 import SeriesChipStrip from "../SeriesChipStrip";
 import StepSlider from "../StepSlider";
-import SettingsSection from "../settings/SettingsSection";
-import Toggle from "../settings/Toggle";
+import Scene3DSettingsPanel from "../settings-panels/Scene3DSettingsPanel";
 import Viewer3D from "./Viewer3D";
 import { CameraLink } from "./camera-link";
 import { disposeObject, propertyNames, useArtifactArrays, type ArtifactArrays, type Scene3DMeta } from "./artifact-arrays";
@@ -61,12 +60,13 @@ function ScenePane<V extends object, M extends Scene3DMeta>({
 }: {
   spec: Scene3DKind<V, M>;
   points: SequencePoint[];
-  targetStep: number;
+  /** The pane's step (per run for a slider key); null shows the empty state. */
+  targetStep: number | null;
   view: V;
   link: CameraLink | null;
   resetKey: number;
 }) {
-  const current = resolveAtStep(points, targetStep);
+  const current = targetStep == null ? null : resolveAtStep(points, targetStep);
   const metaJson = current?.artifact_metadata;
   const meta = useMemo(() => safeJsonParse<M>(metaJson), [metaJson]);
   const q = useArtifactArrays(current?.artifact_hash ?? null);
@@ -113,7 +113,7 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   onRemove,
   autoOpenSettings,
 }: Scene3DCardProps & { spec: Scene3DKind<V, M> }) {
-  const { ctl, effectiveMetrics, allRunIds, multipleRuns } =
+  const { ctl, effectiveMetrics: allMetrics, allRunIds } =
     useCardSeries<Scene3DSettings<V>>({
       runId,
       metric,
@@ -124,7 +124,11 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
       instanceDefaults: scene3dInstanceDefaults as (seed: { name: string }) => Partial<Scene3DSettings<V>>,
     });
   const settings = ctl.value;
-  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, ctl.set);
+  const { highlight: dropHighlight, dropProps } = useCardDrop(allMetrics, ctl.set);
+  // The series shown: hidden runs dropped, pinned first, at most `maxRuns` runs.
+  const panes = useMediaPanes(allMetrics, runId, settings.maxRuns);
+  const effectiveMetrics = panes.shown;
+  const scalarMetrics = useScalarMetricNames(runId);
 
   const queries = useSequencesForRuns(
     effectiveMetrics.map((m) => ({ runId: m.runId ?? runId, name: m.name })),
@@ -135,12 +139,18 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
     [queries.map((q) => q.dataUpdatedAt).join(","), effectiveMetrics.length],
   );
 
-  const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
+  const slider = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
     updateSettings: ctl.set,
+    sliderKey: settings.sliderKey,
+    seriesRunIds: panes.runIds,
+    sync: {
+      cardId: cardOverridesStorageKey(settingsKeyOverride ?? { runId, metricName: metric.name }),
+      follow: settings.followSection,
+    },
   });
-  const sliderPoints = useMemo(() => globalSteps.map((step) => ({ step })), [globalSteps]);
+  const { values, safeIdx, currentStep, currentValue, onSliderChange, stepFor, keyName } = slider;
 
   const viewJson = JSON.stringify(settings.view ?? {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,26 +166,16 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   const seedCurrent = resolveAtStep(seriesPoints[0] ?? [], currentStep);
   const seedMeta = safeJsonParse<M>(seedCurrent?.artifact_metadata);
 
-  const runMetaVersion = useRunMetadataVersion();
-  useRunInfo(allRunIds);
-
-  const paneKeys = useMemo(() => effectiveMetrics.map(seriesKey), [effectiveMetrics]);
-  const paneLabels = useMemo(() => {
-    const map = new Map<string, string>();
-    if (multipleRuns) {
-      for (const m of effectiveMetrics) map.set(seriesKey(m), shortRunLabel(m.runId ?? runId, allRunIds));
-    }
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [multipleRuns, effectiveMetrics, allRunIds, runId, runMetaVersion]);
+  const paneKeys = panes.keys;
+  const paneLabels = panes.labels;
 
   const compSeries = useMemo(
     () => [{ runId, name: metric.name }],
     [runId, metric.name],
   );
   const isMulti = effectiveMetrics.length > 1;
-  const subtitle = globalSteps.length > 0
-    ? `step ${currentStep} (${safeIdx + 1}/${globalSteps.length})`
+  const subtitle = values.length > 0
+    ? `${keyName} ${formatKeyValue(currentValue)} (${safeIdx + 1}/${values.length})`
     : `${metric.count} pts`;
 
 
@@ -201,23 +201,17 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
       dropHighlight={dropHighlight}
       dropProps={dropProps}
       settingsPanel={
-        <SettingsSection title="3D view" first>
-          {spec.viewSettings({ view, setView, meta: seedMeta, properties: propertyNames(seedMeta) })}
-          {isMulti && (
-            <Toggle
-              label="Sync cameras"
-              checked={settings.syncCameras}
-              onChange={(syncCameras) => ctl.set({ syncCameras })}
-            />
-          )}
-          <button
-            type="button"
-            className="mt-2 w-full rounded border border-border px-2 py-1 text-xs hover:bg-bg-hover"
-            onClick={() => setResetKey((k) => k + 1)}
-          >
-            Reset camera
-          </button>
-        </SettingsSection>
+        <Scene3DSettingsPanel
+          ctl={ctl as unknown as SettingsController<Scene3DSettings>}
+          mode="card"
+          ctx={{
+            viewSettings: spec.viewSettings({ view, setView, meta: seedMeta, properties: propertyNames(seedMeta) }),
+            onResetCamera: () => setResetKey((k) => k + 1),
+            multi: isMulti,
+            scalarMetrics,
+            following: slider.sync != null,
+          }}
+        />
       }
       modalOpen={settingsOpen}
       onModalClose={() => setSettingsOpen(false)}
@@ -237,13 +231,14 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
               paneKeys={paneKeys}
               labels={paneLabels}
               inModal={false}
+              columns={settings.columns}
               onPaneWidthsChange={() => {}}
               renderPane={(key, i) => (
                 <ScenePane
                   key={key}
                   spec={spec}
                   points={seriesPoints[i] ?? []}
-                  targetStep={currentStep}
+                  targetStep={stepFor(i)}
                   view={view}
                   link={link}
                   resetKey={resetKey}
@@ -251,12 +246,18 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
               )}
             />
           </div>
-          {globalSteps.length > 1 && (
-            <StepSlider points={sliderPoints} currentIndex={safeIdx} onChange={onSliderChange} className="mt-2 shrink-0" />
+          {values.length > 1 && (
+            <StepSlider
+              points={slider.sliderPoints}
+              currentIndex={safeIdx}
+              onChange={onSliderChange}
+              keyName={keyName}
+              className="mt-2 shrink-0"
+            />
           )}
-          {isMulti && (
+          {allMetrics.length > 1 && (
             <SeriesChipStrip
-              metrics={effectiveMetrics}
+              metrics={allMetrics}
               controlledSeries={controlledSeries}
               runId={runId}
               allRunIds={allRunIds}

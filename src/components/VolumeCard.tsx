@@ -1,18 +1,20 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSequencesForRuns } from "../api/hooks";
 import { api } from "../api/client";
 import type { SequencePoint } from "../api/types";
+import { cardOverridesStorageKey } from "../lib/card-settings";
 import { safeJsonParse } from "../lib/format";
 import { artifactFilename } from "../lib/download";
+import { formatKeyValue } from "../lib/media/slider-key";
 import { useCardDrop } from "../lib/use-series-drop";
-import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
-import { seriesKey } from "../lib/series-utils";
 import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid } from "./card-kit";
+import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
 import { instanceDefaults, type VolumeSettings } from "./cards-settings/volume";
 import { plotCardPolicy } from "./card-kit/plot-card-policy";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import UnsupportedArtifact from "./UnsupportedArtifact";
+import VolumeSettingsPanel from "./settings-panels/VolumeSettingsPanel";
 import type { Scene3DCardProps } from "./viewer3d/Scene3DCard";
 
 interface VolumeMeta {
@@ -22,8 +24,8 @@ interface VolumeMeta {
   vmax: number;
 }
 
-function VolumePane({ name, points, targetStep }: { name: string; points: SequencePoint[]; targetStep: number }) {
-  const current = resolveAtStep(points, targetStep);
+function VolumePane({ name, points, targetStep }: { name: string; points: SequencePoint[]; targetStep: number | null }) {
+  const current = targetStep == null ? null : resolveAtStep(points, targetStep);
   if (!current?.artifact_hash) {
     return <div className="flex h-full items-center justify-center text-sm text-fg-muted">no volume logged yet</div>;
   }
@@ -49,8 +51,9 @@ export default function VolumeCard({
   controlledSeries,
   settingsKeyOverride,
   onRemove,
+  autoOpenSettings,
 }: Scene3DCardProps) {
-  const { ctl, effectiveMetrics, allRunIds, multipleRuns } =
+  const { ctl, effectiveMetrics: allMetrics } =
     useCardSeries<VolumeSettings>({
       runId,
       metric,
@@ -61,34 +64,59 @@ export default function VolumeCard({
       instanceDefaults,
     });
   const settings = ctl.value;
-  const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, ctl.set);
+  const { highlight: dropHighlight, dropProps } = useCardDrop(allMetrics, ctl.set);
+  const panes = useMediaPanes(allMetrics, runId, settings.maxRuns);
+  const scalarMetrics = useScalarMetricNames(runId);
 
   const queries = useSequencesForRuns(
-    effectiveMetrics.map((m) => ({ runId: m.runId ?? runId, name: m.name })),
+    panes.shown.map((m, i) => ({ runId: panes.runIds[i]!, name: m.name })),
   );
   const seriesPoints = useMemo(
     () => queries.map((q) => (q.data?.points ?? []).filter((p) => p.artifact_hash)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [queries.map((q) => q.dataUpdatedAt).join(","), effectiveMetrics.length],
+    [queries.map((q) => q.dataUpdatedAt).join(","), panes.shown.length],
   );
-  const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
+  const slider = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
     updateSettings: ctl.set,
+    sliderKey: settings.sliderKey,
+    seriesRunIds: panes.runIds,
+    sync: {
+      cardId: cardOverridesStorageKey(settingsKeyOverride ?? { runId, metricName: metric.name }),
+      follow: settings.followSection,
+    },
   });
-  const sliderPoints = useMemo(() => globalSteps.map((step) => ({ step })), [globalSteps]);
+  const { values, safeIdx, currentValue, onSliderChange, stepFor, keyName } = slider;
 
-  const runMetaVersion = useRunMetadataVersion();
-  const paneKeys = useMemo(() => effectiveMetrics.map(seriesKey), [effectiveMetrics]);
-  const paneLabels = useMemo(() => {
-    const map = new Map<string, string>();
-    if (multipleRuns) {
-      for (const m of effectiveMetrics) map.set(seriesKey(m), shortRunLabel(m.runId ?? runId, allRunIds));
-    }
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [multipleRuns, effectiveMetrics, allRunIds, runId, runMetaVersion]);
+  const [settingsOpen, setSettingsOpen] = useState(autoOpenSettings ?? false);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  const body = (
+    <div className="mt-2 flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1">
+        <MultiPaneGrid
+          paneKeys={panes.keys}
+          labels={panes.labels}
+          inModal={false}
+          columns={settings.columns}
+          onPaneWidthsChange={() => {}}
+          renderPane={(key, i) => (
+            <VolumePane key={key} name={metric.name} points={seriesPoints[i] ?? []} targetStep={stepFor(i)} />
+          )}
+        />
+      </div>
+      {values.length > 1 && (
+        <StepSlider
+          points={slider.sliderPoints}
+          currentIndex={safeIdx}
+          onChange={onSliderChange}
+          keyName={keyName}
+          className="mt-2 shrink-0"
+        />
+      )}
+    </div>
+  );
 
   return (
     <CardShell
@@ -97,28 +125,25 @@ export default function VolumeCard({
       settings={settings}
       updateSettings={ctl.set}
       title={metric.name}
-      subtitle={globalSteps.length > 0 ? `step ${currentStep} (${safeIdx + 1}/${globalSteps.length})` : `${metric.count} pts`}
+      subtitle={values.length > 0 ? `${keyName} ${formatKeyValue(currentValue)} (${safeIdx + 1}/${values.length})` : `${metric.count} pts`}
       defaultHeight={plotCardPolicy("volume").defaultHeight}
       onRemove={onRemove}
+      onSettings={() => setSettingsOpen(true)}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
+      settingsPanel={
+        <VolumeSettingsPanel
+          ctl={ctl}
+          mode="card"
+          ctx={{ multi: panes.shown.length > 1, scalarMetrics, following: slider.sync != null }}
+        />
+      }
+      modalOpen={settingsOpen}
+      onModalClose={() => setSettingsOpen(false)}
+      modalContent={body}
+      scrollIntoViewOnMount={autoOpenSettings}
     >
-      <div className="mt-2 flex min-h-0 flex-1 flex-col">
-        <div className="min-h-0 flex-1">
-          <MultiPaneGrid
-            paneKeys={paneKeys}
-            labels={paneLabels}
-            inModal={false}
-            onPaneWidthsChange={() => {}}
-            renderPane={(key, i) => (
-              <VolumePane key={key} name={metric.name} points={seriesPoints[i] ?? []} targetStep={currentStep} />
-            )}
-          />
-        </div>
-        {globalSteps.length > 1 && (
-          <StepSlider points={sliderPoints} currentIndex={safeIdx} onChange={onSliderChange} className="mt-2 shrink-0" />
-        )}
-      </div>
+      {settingsOpen ? null : body}
     </CardShell>
   );
 }

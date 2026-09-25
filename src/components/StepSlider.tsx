@@ -4,11 +4,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { STEP_KEY, formatKeyValue } from "../lib/media/slider-key";
 
 export type XAxisMode = "step" | "relative_time" | "wall_time";
 
 interface StepSliderProps {
-  /** Sequence points — only `step` and `wall_time` are used. */
+  /**
+   * Slider positions — only `step` and `wall_time` are used. With a metric
+   * `keyName`, `step` holds the key's value.
+   */
   points: ReadonlyArray<{ step: number; wall_time?: string | null }>;
   /** Current index into the points array. */
   currentIndex: number;
@@ -22,6 +26,8 @@ interface StepSliderProps {
   xAxis?: XAxisMode;
   /** If provided, show axis mode toggle buttons. */
   onXAxisChange?: (mode: XAxisMode) => void;
+  /** The slider key; a scalar metric (not `step`) labels positions with its values and drops the time modes. */
+  keyName?: string;
   className?: string;
 }
 
@@ -58,8 +64,10 @@ export default function StepSlider({
   immediate = false,
   xAxis = "step",
   onXAxisChange,
+  keyName = STEP_KEY,
   className,
 }: StepSliderProps) {
+  const metricKey = keyName !== STEP_KEY;
   const onChangeRef = useRef(onChange);
   const [draftIndex, setDraftIndex] = useState(currentIndex);
   const interactingRef = useRef(false);
@@ -126,7 +134,9 @@ export default function StepSlider({
   const current = points[safeIdx]!;
 
   let label: string;
-  if (xAxis === "relative_time" && current.wall_time && firstWallTime != null) {
+  if (metricKey) {
+    label = `${keyName} ${formatKeyValue(current.step)}`;
+  } else if (xAxis === "relative_time" && current.wall_time && firstWallTime != null) {
     const elapsed = (new Date(current.wall_time).getTime() - firstWallTime) / 1000;
     label = `+${formatRelativeTime(elapsed)}`;
   } else if (xAxis === "wall_time" && current.wall_time) {
@@ -157,7 +167,7 @@ export default function StepSlider({
           {label} ({safeIdx + 1}/{points.length})
         </span>
       </div>
-      {onXAxisChange && (
+      {onXAxisChange && !metricKey && (
         <div className="mt-1 flex gap-0.5">
           {MODES.map((m) => (
             <button

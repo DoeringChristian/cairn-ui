@@ -14,14 +14,10 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), "..");
 const COMPONENTS = join(SRC, "components");
 
 /**
- * Files that still use raw controls, as of the palette's introduction.
- * THIS LIST MUST ONLY SHRINK, and be empty by the end of phase 2 (every card
- * on the palette). Remove a file here when you migrate it; the test fails on
- * entries that are already clean so the list cannot go stale.
+ * Files allowed to use raw controls. Empty: every card is on the palette;
+ * do not add to it (the test also fails on entries that are already clean).
  */
-const ALLOWLIST = new Set<string>([
-  "components/ImageCard.tsx",
-]);
+const ALLOWLIST = new Set<string>([]);
 
 const RAW_CONTROL = /<select\b|type=\{?\s*["'](?:checkbox|range|number)["']/g;
 

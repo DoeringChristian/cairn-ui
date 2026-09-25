@@ -1,6 +1,6 @@
 import Scene3DCard, { type Scene3DCardProps, type Scene3DKind } from "./viewer3d/Scene3DCard";
 import { boxesCaption, boxesColorOptions, buildBoxes, type Boxes3DMeta, type BoxesView } from "./viewer3d/boxes3d";
-import Select from "./settings/Select";
+import { Select } from "./settings/palette";
 
 const SPEC: Scene3DKind<BoxesView, Boxes3DMeta> = {
   kind: "boxes3d",
