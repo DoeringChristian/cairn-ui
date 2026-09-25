@@ -23,7 +23,7 @@ const ROW_BTN =
 export default function ParallelSettingsPanel({ ctl, ctx, mode }: Props) {
   if (mode !== "card") return null;
   const cols = ctl.value.columns;
-  const ro = ctl.readOnly;
+  const ro = ctl.locked;
   const set = (next: ParallelColumn[]) => ctl.set({ columns: next });
   const patch = (i: number, p: Partial<ParallelColumn>) => set(cols.map((c, j) => (j === i ? { ...c, ...p } : c)));
   const move = (i: number, d: number) => {

@@ -62,7 +62,7 @@ export default function ScatterSettingsPanel({ ctl, ctx, mode }: Props) {
   const cascade = useMemo(() => new Set<string>(metaFor("scatter").cascadeKeys), []);
   const show = (k: keyof ScatterSettings & string) => card || cascade.has(k);
   const options = ctx?.options ?? [];
-  const ro = ctl.readOnly;
+  const ro = ctl.locked;
 
   const expr = (k: "x" | "y" | "color", label: string, clearable: boolean, info?: string) => (
     <ExprField

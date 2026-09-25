@@ -23,7 +23,7 @@ export default function ArtifactSettingsPanel({ ctl, mode }: Props) {
         onChange={(xAxis) => ctl.set({ xAxis })}
         overridden={ctl.isOverridden("xAxis")}
         onReset={() => ctl.reset("xAxis")}
-        disabled={ctl.readOnly}
+        disabled={ctl.locked}
         options={[
           { value: "step", label: "Step" },
           { value: "relative_time", label: "Relative" },

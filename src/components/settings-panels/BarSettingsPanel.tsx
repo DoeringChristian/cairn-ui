@@ -34,7 +34,7 @@ const GROUP_PLOTS = [
 export default function BarSettingsPanel({ ctl, ctx, mode }: Props) {
   const s = ctl.value;
   const card = mode === "card";
-  const ro = ctl.readOnly;
+  const ro = ctl.locked;
   const options = ctx?.options ?? [];
   const compare = s.compareMode ?? "grouped";
   const distribution = s.groupPlot !== "bar";

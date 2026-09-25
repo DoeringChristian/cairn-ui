@@ -27,7 +27,7 @@ export default function ImportanceSettingsPanel({ ctl, ctx, mode }: Props) {
           onChange={(src) => ctl.set({ metric: src == null ? null : { src } })}
           overridden={ctl.isOverridden("metric")}
           onReset={() => ctl.reset("metric")}
-          disabled={ctl.readOnly}
+          disabled={ctl.locked}
           options={ctx?.options ?? []}
           error={ctx?.error}
         />

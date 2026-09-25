@@ -56,7 +56,7 @@ function bind<K extends keyof ScalarSettings & string>(ctl: Ctl, k: K, opts?: Se
     onChange: (v) => ctl.set({ [k]: v } as Partial<ScalarSettings>, opts),
     overridden: ctl.isOverridden(k),
     onReset: () => ctl.reset(k),
-    disabled: ctl.readOnly,
+    disabled: ctl.locked,
   };
 }
 
@@ -73,7 +73,7 @@ function bindField<K extends "legend" | "tooltip" | "axisTitles", F extends keyo
     onChange: (v) => ctl.set({ [k]: { ...obj, [f]: v } } as Partial<ScalarSettings>, opts),
     overridden: ctl.isOverridden(k),
     onReset: () => ctl.reset(k),
-    disabled: ctl.readOnly,
+    disabled: ctl.locked,
   };
 }
 
@@ -250,7 +250,7 @@ function DerivedRow({
 export default function ScalarSettingsPanel({ ctl, ctx, mode }: Props) {
   const s = ctl.value;
   const card = mode === "card";
-  const ro = ctl.readOnly;
+  const ro = ctl.locked;
   const kind = SMOOTHING_KINDS[s.smoothingKind];
 
   const metricOptions: FieldOption[] = (ctx?.metricNames ?? []).map((n) => ({ key: n, kind: "metric", label: n }));

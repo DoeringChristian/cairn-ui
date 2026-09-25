@@ -64,7 +64,7 @@ function bind<K extends keyof TableSettings & string>(
     onChange: (v) => ctl.set({ [k]: v } as Partial<TableSettings>),
     overridden: ctl.isOverridden(k),
     onReset: () => ctl.reset(k),
-    disabled: ctl.readOnly,
+    disabled: ctl.locked,
   };
 }
 
@@ -83,7 +83,7 @@ const AGG_LABEL: Record<AggFn, string> = {
 function CombineEditor({ ctl, ctx }: { ctl: SettingsController<TableSettings>; ctx: TablePanelCtx }) {
   const combine = ctl.value.combine;
   const setCombine = (patch: Partial<TableCombine>) => ctl.set({ combine: { ...combine, ...patch } });
-  const disabled = ctl.readOnly;
+  const disabled = ctl.locked;
   // No sources yet: the card's series at the slider's step.
   const sources: TableCombineSource[] =
     combine.sources.length > 0
@@ -219,7 +219,7 @@ function CombineEditor({ ctl, ctx }: { ctl: SettingsController<TableSettings>; c
 function GroupByEditor({ ctl, ctx }: { ctl: SettingsController<TableSettings>; ctx: TablePanelCtx }) {
   const ops = ctl.value.ops;
   const gb: TableGroupBy = ops.groupBy ?? { keys: [], aggs: [] };
-  const disabled = ctl.readOnly;
+  const disabled = ctl.locked;
   const setGroupBy = (next: TableGroupBy) =>
     ctl.set({ ops: { ...ops, groupBy: next.keys.length === 0 && next.aggs.length === 0 ? null : next } });
   const derived = new Set(ctx.derivedColumns);
@@ -324,7 +324,7 @@ export default function TableSettingsPanel({ ctl, ctx, mode }: Props) {
             }}
             overridden={ctl.isOverridden("hiddenColumns")}
             onReset={() => ctl.reset("hiddenColumns")}
-            disabled={ctl.readOnly}
+            disabled={ctl.locked}
             items={ctx.outputColumns.map((c) => ({ key: c, label: c }))}
           />
         )}
@@ -339,7 +339,7 @@ export default function TableSettingsPanel({ ctl, ctx, mode }: Props) {
               onChange={(v) => ctl.set({ diffMode: v })}
               overridden={ctl.isOverridden("diffMode")}
               onReset={() => ctl.reset("diffMode")}
-              disabled={ctl.readOnly}
+              disabled={ctl.locked}
             />
             <Switch
               label="Invert colors"
@@ -348,7 +348,7 @@ export default function TableSettingsPanel({ ctl, ctx, mode }: Props) {
               onChange={(v) => ctl.set({ invertDiffColors: v })}
               overridden={ctl.isOverridden("invertDiffColors")}
               onReset={() => ctl.reset("invertDiffColors")}
-              disabled={ctl.readOnly}
+              disabled={ctl.locked}
             />
           </>
         )}
@@ -381,7 +381,7 @@ export default function TableSettingsPanel({ ctl, ctx, mode }: Props) {
             onChange={(derived) => ctl.set({ ops: { ...s.ops, derived } })}
             errors={ctx.derivedErrors}
             columns={ctx.inputColumns.filter((c) => !ctx.derivedColumns.includes(c))}
-            disabled={ctl.readOnly}
+            disabled={ctl.locked}
           />
         ),
       }}

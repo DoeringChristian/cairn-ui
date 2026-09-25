@@ -153,8 +153,10 @@ export interface SettingsController<T> {
   /** Effective settings: every layer resolved. */
   value: T;
   level: SettingsLevel;
-  /** Writes go to the session layer and are never persisted. */
+  /** Writes go to the session layer and are never persisted (viewers explore). */
   readOnly: boolean;
+  /** Writes are impossible: controls render disabled. */
+  locked: boolean;
   /** Override keys; a value equal to the inherited one drops the override. */
   set: (patch: Partial<T>, opts?: SetOptions) => void;
   /** Drop the override of one key. */
@@ -272,6 +274,7 @@ export function useCardSettings<T extends object>(
       value,
       level: "card",
       readOnly,
+      locked: false,
       set,
       reset,
       resetAll,
@@ -319,6 +322,6 @@ export function bind<T, K extends keyof T & string>(
     onChange: (v) => ctl.set({ [key]: v } as unknown as Partial<T>, opts),
     overridden: ctl.isOverridden(key),
     onReset: () => ctl.reset(key),
-    disabled: ctl.readOnly,
+    disabled: ctl.locked,
   };
 }

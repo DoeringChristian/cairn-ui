@@ -79,7 +79,7 @@ function DefaultsPanel({ projectId, type, where }: { projectId: string; type: Ca
       <Suspense fallback={<p className="py-2 text-sm text-fg-muted">Loading…</p>}>
         <Panel ctl={ctl} mode="defaults" />
       </Suspense>
-      {anySet && !ctl.readOnly && (
+      {anySet && !ctl.locked && (
         <SettingsAction
           label={where.level === "workspace" ? "Reset workspace defaults" : "Reset section defaults"}
           icon="fa-rotate-left"

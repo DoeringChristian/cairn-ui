@@ -85,6 +85,7 @@ export function useDefaultsController<T extends object = Record<string, unknown>
       value,
       level: section == null ? "workspace" : "section",
       readOnly: ws.readOnly,
+      locked: ws.readOnly,
       set,
       reset,
       resetAll,

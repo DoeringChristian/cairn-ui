@@ -14,7 +14,7 @@ function bind<K extends keyof TextSettings & string>(ctl: SettingsController<Tex
     onChange: (v) => ctl.set({ [k]: v } as Partial<TextSettings>),
     overridden: ctl.isOverridden(k),
     onReset: () => ctl.reset(k),
-    disabled: ctl.readOnly,
+    disabled: ctl.locked,
   };
 }
 
