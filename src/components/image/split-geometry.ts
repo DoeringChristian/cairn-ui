@@ -3,7 +3,7 @@
  *
  * The divider bar and the foreground's clip edge both come from `split`, as
  * a fraction of the pane's own (screen-space) width: the bar sits at
- * `left: split·100%`, the clip cuts at `inset(0 (1 − split)·100% 0 0)` on a
+ * `left: split·100%`, the clip cuts at `inset(0 0 0 split·100%)` on a
  * layer OUTSIDE the zoom/pan transform. The zoomed content is transformed
  * inside that layer, so no zoom level, pan offset, letterbox or rounding can
  * move one without the other. (The old clip lived inside the transform in
@@ -27,9 +27,12 @@ export function splitBarLeft(split: number): string {
   return `${clampSplit(split) * 100}%`;
 }
 
-/** The foreground layer's `clip-path`: keep everything left of the bar. */
+/**
+ * The foreground layer's `clip-path`: keep everything right of the bar. The
+ * reference shows on the left, the image (the method) on the right.
+ */
 export function splitClipPath(split: number): string {
-  return `inset(0 ${(1 - clampSplit(split)) * 100}% 0 0)`;
+  return `inset(0 0 0 ${clampSplit(split) * 100}%)`;
 }
 
 /** Screen-space x (pane px) of a content-space x under a zoom/pan transform (origin 0 0). */

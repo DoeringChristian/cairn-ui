@@ -1,0 +1,1 @@
+import{j as s,c2 as i,da as n,dc as o}from"./index-BiBXgLz_.js";function d({ctl:a,ctx:t,mode:e}){return s.jsx(i,{tabs:{data:s.jsx(o,{ctl:a,ctx:t}),display:s.jsx(n,{ctl:a,ctx:t,mode:e})}})}export{d as default};

@@ -10,11 +10,11 @@ import {
 
 const pct = (s: string) => Number(/(-?[\d.]+)%/.exec(s)![1]);
 
-test("the bar and the clip edge are one number: left% + right inset% = 100", () => {
+test("the bar and the clip edge are one number: bar left% = clip left inset%", () => {
   for (const split of [0, 0.123456789, 0.5, 0.75, 1]) {
-    const left = pct(splitBarLeft(split));
-    const right = pct(splitClipPath(split).replace(/^inset\(0 /, ""));
-    assert.ok(Math.abs(left + right - 100) < 1e-9, `split ${split}`);
+    const bar = pct(splitBarLeft(split));
+    const clipLeft = pct(splitClipPath(split).replace(/^inset\(0 0 0 /, ""));
+    assert.ok(Math.abs(bar - clipLeft) < 1e-9, `split ${split}`);
   }
 });
 
@@ -23,7 +23,8 @@ test("split is clamped to the pane", () => {
   assert.equal(clampSplit(2), 1);
   assert.equal(clampSplit(Number.NaN), 0.5);
   assert.equal(splitBarLeft(2), "100%");
-  assert.equal(splitClipPath(-1), "inset(0 100% 0 0)");
+  assert.equal(splitClipPath(-1), "inset(0 0 0 0%)");
+  assert.equal(splitClipPath(2), "inset(0 0 0 100%)");
 });
 
 test("screen ↔ content mapping round-trips at every zoom and pan", () => {

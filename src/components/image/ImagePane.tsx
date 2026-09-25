@@ -18,7 +18,7 @@ export interface ImageSource {
 }
 
 interface Props {
-  /** The pane's own image (left of the divider when comparing). */
+  /** The pane's own image (right of the divider when comparing; the reference is on the left). */
   image: ImageSource;
   /** Reference image; when present the pane shows an A/B divider. */
   reference?: ImageSource | null;
@@ -146,7 +146,8 @@ export default function ImagePane({
     if (!reference || !onSplitChange) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault();
-    // Flip: ← shows all of the reference, → all of the image.
+    // Flip the divider to the edge the arrow points at: ← shows all of the
+    // image (right side), → all of the reference (left side).
     onSplitChange(e.key === "ArrowLeft" ? 0 : 1, true);
   };
 
@@ -265,10 +266,10 @@ export default function ImagePane({
             </div>
           </div>
           <span className="pointer-events-none absolute bottom-1 left-1 z-10 max-w-[45%] truncate rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-muted">
-            {image.label ?? "A"}
+            {reference.label ?? "B"}
           </span>
           <span className="pointer-events-none absolute bottom-1 right-1 z-10 max-w-[45%] truncate rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-muted">
-            {reference.label ?? "B"}
+            {image.label ?? "A"}
           </span>
         </>
       )}
