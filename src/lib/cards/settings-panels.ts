@@ -13,4 +13,7 @@ import type { CardType } from "./card-spec";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const SETTINGS_PANELS: Partial<Record<CardType, () => Promise<{ default: ComponentType<any> }>>> = {
+  table: () => import("../../components/settings-panels/TableSettingsPanel"),
+  text: () => import("../../components/settings-panels/TextSettingsPanel"),
+  artifact: () => import("../../components/settings-panels/ArtifactSettingsPanel"),
 };

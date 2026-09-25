@@ -2,21 +2,10 @@ import { useMemo, useState } from "react";
 import { diffCellClassName, type CellComparison } from "../../lib/table-diff";
 import { formatNum } from "../../lib/plot-utils/types";
 import { mediaOf } from "../../lib/table-media";
+import { cellText, type TableData } from "../../lib/table/types";
+import { isTextCell, type TextDiffMode } from "../../lib/table/text-diff";
 import MediaCellView from "./MediaCellView";
-
-export type ColumnType = "number" | "string" | "bool" | "media" | "other";
-
-export interface TableColumn {
-  name: string;
-  type: ColumnType;
-}
-
-/** The `table` artifact's JSON blob. */
-export interface TableData {
-  columns: TableColumn[];
-  data: unknown[][];
-  truncated?: boolean;
-}
+import TextDiffCell from "./TextDiffCell";
 
 interface Props {
   table: TableData;
@@ -25,18 +14,15 @@ interface Props {
   /** [rowIdx][colIdx] status, same row/col order as `table`. No diff coloring when omitted. */
   diffStatuses?: CellComparison[][];
   invertDiff?: boolean;
+  /**
+   * [rowIdx][colIdx] reference value per cell: a text cell that differs from
+   * its (text) reference shows a diff against it. None when omitted.
+   */
+  textRefs?: unknown[][];
+  textDiffMode?: TextDiffMode;
 }
 
 type Sort = { column: string; direction: "asc" | "desc" } | null;
-
-/** Raw text of a cell: what filtering, width hints and the tooltip see. A media cell is its hash. */
-export function cellText(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "boolean") return v ? "true" : "false";
-  const media = mediaOf(v);
-  if (media) return media.hash;
-  return String(v);
-}
 
 /** Displayed text: non-integer numbers are shortened; integers stay exact. */
 function cellDisplay(v: unknown): string {
@@ -45,12 +31,20 @@ function cellDisplay(v: unknown): string {
 }
 
 /**
- * Sortable, filterable, paginated table with a sticky header. Self-contained:
- * sort, filter and page are local state.
+ * Display of one (already processed) table: sortable, paginated, with a
+ * sticky header. Filtering and every other operation happen upstream
+ * (lib/table/pipeline.ts, `QueryBar`); sort and page are local state.
  */
-export default function DataTable({ table, rowsPerPage, hiddenColumns, diffStatuses, invertDiff = false }: Props) {
+export default function DataTable({
+  table,
+  rowsPerPage,
+  hiddenColumns,
+  diffStatuses,
+  invertDiff = false,
+  textRefs,
+  textDiffMode = "words",
+}: Props) {
   const [sort, setSort] = useState<Sort>(null);
-  const [filter, setFilter] = useState("");
   const [page, setPage] = useState(0);
 
   const columns = table.columns ?? [];
@@ -61,22 +55,17 @@ export default function DataTable({ table, rowsPerPage, hiddenColumns, diffStatu
     [columns, hiddenColumns],
   );
 
-  // Original row indices travel through filter/sort/page so diff colors
-  // (keyed by original index) stay on their row.
-  const filtered = useMemo(() => {
-    const all = rows.map((_, i) => i);
-    const needle = filter.trim().toLowerCase();
-    if (!needle) return all;
-    return all.filter((i) => visibleCols.some((c) => cellText(rows[i]![c]).toLowerCase().includes(needle)));
-  }, [rows, filter, visibleCols]);
+  // Original row indices travel through sort/page so diff colors (keyed by
+  // original index) stay on their row.
+  const all = useMemo(() => rows.map((_, i) => i), [rows]);
 
   const sorted = useMemo(() => {
-    if (!sort) return filtered;
+    if (!sort) return all;
     const col = columns.findIndex((column) => column.name === sort.column);
-    if (col < 0) return filtered;
+    if (col < 0) return all;
     const numeric = columns[col]!.type === "number";
     const factor = sort.direction === "asc" ? 1 : -1;
-    return filtered.slice().sort((ia, ib) => {
+    return all.slice().sort((ia, ib) => {
       const a = rows[ia]![col];
       const b = rows[ib]![col];
       // Nulls sort last in either direction.
@@ -88,7 +77,7 @@ export default function DataTable({ table, rowsPerPage, hiddenColumns, diffStatu
       if (numeric) return (Number(a) - Number(b)) * factor;
       return cellText(a).localeCompare(cellText(b), undefined, { sensitivity: "base", numeric: true }) * factor;
     });
-  }, [filtered, sort, columns, rows]);
+  }, [all, sort, columns, rows]);
 
   // `table-layout: fixed` + a <colgroup> give header and body one width per
   // column, so the sticky header never drifts. Widths are hinted from the
@@ -124,20 +113,6 @@ export default function DataTable({ table, rowsPerPage, hiddenColumns, diffStatu
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="mb-2 flex items-center gap-2">
-        <input
-          className="input flex-1"
-          type="text"
-          placeholder="Filter rows…"
-          value={filter}
-          onChange={(e) => { setFilter(e.target.value); setPage(0); }}
-        />
-        <span className="mono shrink-0 text-xs text-fg-subtle">
-          {sorted.length}
-          {sorted.length !== rows.length ? `/${rows.length}` : ""} rows
-        </span>
-      </div>
-
       {/* A stable scrollbar gutter keeps header and body aligned whether or not a scrollbar shows. */}
       <div className="flex-1 min-h-0 overflow-auto rounded border border-border" style={{ scrollbarGutter: "stable" }}>
         <table className="w-full table-fixed border-collapse text-xs">
@@ -178,13 +153,21 @@ export default function DataTable({ table, rowsPerPage, hiddenColumns, diffStatu
                     const status = diffStatuses?.[ri]?.[c];
                     const align = columns[c]!.type === "number" ? "mono text-right" : "";
                     const media = mediaOf(row[c]);
+                    const ref = textRefs?.[ri]?.[c];
+                    const textDiff = !media && isTextCell(row[c]) && isTextCell(ref) && ref !== row[c];
                     return (
                       <td
                         key={c}
-                        title={cellText(row[c])}
-                        className={`truncate border-b border-border px-2 py-1 text-fg ${align} ${status ? diffCellClassName(status, invertDiff) : ""}`}
+                        title={textDiff ? `${ref}\n→\n${cellText(row[c])}` : cellText(row[c])}
+                        className={`${textDiff ? "whitespace-pre-wrap break-words" : "truncate"} border-b border-border px-2 py-1 text-fg ${align} ${status ? diffCellClassName(status, invertDiff) : ""}`}
                       >
-                        {media ? <MediaCellView media={media} /> : cellDisplay(row[c])}
+                        {media ? (
+                          <MediaCellView media={media} />
+                        ) : textDiff ? (
+                          <TextDiffCell before={ref} after={row[c]} mode={textDiffMode} />
+                        ) : (
+                          cellDisplay(row[c])
+                        )}
                       </td>
                     );
                   })}
@@ -193,7 +176,7 @@ export default function DataTable({ table, rowsPerPage, hiddenColumns, diffStatu
             })}
             {pageRows.length === 0 && (
               <tr>
-                <td colSpan={visibleCols.length} className="px-2 py-3 text-center text-fg-muted">no matching rows</td>
+                <td colSpan={visibleCols.length} className="px-2 py-3 text-center text-fg-muted">no rows</td>
               </tr>
             )}
           </tbody>
