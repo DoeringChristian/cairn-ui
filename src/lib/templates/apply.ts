@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { api } from "../../api/client";
+import { isInternalName } from "../internal-names";
 import { matchTemplateCards } from "../comparisons/template-match";
 import type { MatchedTemplateCard, SeqMap, SeriesEntry } from "../comparisons/template-match";
 import type { Template } from "./store";
@@ -20,6 +21,7 @@ export async function buildSeqMap(runIds: string[]): Promise<SeqMap> {
   seqResults.forEach((result, idx) => {
     const runId = runIds[idx]!;
     for (const seq of result.sequences) {
+      if (isInternalName(seq.name)) continue;
       const entry: SeriesEntry = { runId, name: seq.name };
       const existing = seqMap.get(seq.name);
       if (existing) {

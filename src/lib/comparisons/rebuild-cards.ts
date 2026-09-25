@@ -7,6 +7,7 @@
 import { api } from "../../api/client";
 import { buildMetricIndex, type MetricIndex } from "../reports/metric-index";
 import { newId } from "../reports/ids";
+import { isInternalName } from "../internal-names";
 import { isMultiRunCardType } from "./types";
 import type { ComparisonCard, ComparisonSeriesRef } from "./types";
 
@@ -26,6 +27,7 @@ export async function cardsForRuns(runIds: string[]): Promise<Omit<ComparisonCar
   seqResults.forEach((result, idx) => {
     const runId = runIds[idx]!;
     for (const seq of result.sequences) {
+      if (isInternalName(seq.name)) continue;
       const key = `${seq.name}::${seq.object_type}`;
       const existing = cardMap.get(key);
       if (existing) {

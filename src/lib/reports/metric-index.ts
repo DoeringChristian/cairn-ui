@@ -7,6 +7,7 @@
  */
 
 import type { SequenceMeta } from "../../api/types";
+import { isInternalName } from "../internal-names.ts";
 
 export interface MetricIndexEntry {
   name: string;
@@ -27,6 +28,7 @@ export function buildMetricIndex(perRun: Array<{ runId: string; sequences: Seque
   const map: MetricIndex = new Map();
   for (const { runId, sequences } of perRun) {
     for (const seq of sequences) {
+      if (isInternalName(seq.name)) continue;
       const key = `${seq.name}::${seq.object_type}`;
       const existing = map.get(key);
       if (existing) {

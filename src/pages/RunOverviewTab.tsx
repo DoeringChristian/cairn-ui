@@ -9,6 +9,7 @@ import { summaryRuleFor } from "../lib/metric-defs";
 import { formatNum } from "../lib/plot-utils/types";
 import { useProjectTags } from "../lib/use-project-tags";
 import TagInput from "../components/TagInput";
+import { GIT_DIFF_ARTIFACT } from "../lib/internal-names";
 
 interface Ctx {
   run: Run;
@@ -131,10 +132,10 @@ function GitRemote({ remote }: { remote: string | null }) {
   );
 }
 
-/** The ``git.diff`` artifact the SDK uploads for a dirty tree, as a download. */
+/** The ``_cairn/git.diff`` artifact the SDK uploads for a dirty tree, as a download. */
 function GitDiffLink({ runId }: { runId: string }) {
   const q = useArtifacts(runId);
-  const diff = q.data?.named.find((a) => a.name === "git.diff");
+  const diff = q.data?.named.find((a) => a.name === GIT_DIFF_ARTIFACT);
   if (!diff) return <>—</>;
   return (
     <a

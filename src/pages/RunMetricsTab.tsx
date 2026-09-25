@@ -3,6 +3,7 @@ import { useOutletContext, useParams } from "react-router-dom";
 import { useSequences, useArtifacts } from "../api/hooks";
 import CardGrid from "../components/CardGrid";
 import type { Run, SequenceMeta } from "../api/types";
+import { isInternalName } from "../lib/internal-names";
 
 interface Ctx {
   run: Run;
@@ -18,9 +19,10 @@ export default function RunMetricsTab() {
   // so they appear as cards in the grid alongside sequence-based metrics.
   // Multiple log_artifact() calls with the same name (different steps) collapse
   // into ONE card — ArtifactCard renders all steps via the slider.
+  // Internal `_cairn/` attachments (the git diff) never get a card.
   const allSequences = useMemo(() => {
-    const sequences: SequenceMeta[] = q.data?.sequences ?? [];
-    const named = artifactsQ.data?.named ?? [];
+    const sequences: SequenceMeta[] = (q.data?.sequences ?? []).filter((s) => !isInternalName(s.name));
+    const named = (artifactsQ.data?.named ?? []).filter((a) => !isInternalName(a.name));
     if (named.length === 0) return sequences;
 
     const seqNames = new Set(sequences.map((s) => s.name));
