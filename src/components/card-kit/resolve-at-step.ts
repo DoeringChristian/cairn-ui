@@ -44,3 +44,25 @@ export function resolveAtStep<T extends SteppedPoint>(
   }
   return best;
 }
+
+/** The sorted union of every series' steps (the step key's slider positions). */
+export function stepUnion(seriesPoints: ReadonlyArray<ReadonlyArray<SteppedPoint>>): number[] {
+  const set = new Set<number>();
+  for (const pts of seriesPoints) for (const p of pts) set.add(p.step);
+  return [...set].sort((a, b) => a - b);
+}
+
+/**
+ * The point each series shows at its own step: `steps[i]` for series `i`
+ * (a slider key resolves to a different step per run), `null` for none.
+ */
+export function resolveEach<T extends SteppedPoint>(
+  seriesPoints: ReadonlyArray<T[]>,
+  steps: ReadonlyArray<number | null>,
+  options?: ResolveAtStepOptions,
+): Array<T | null> {
+  return seriesPoints.map((pts, i) => {
+    const step = steps[i];
+    return step == null ? null : resolveAtStep(pts, step, options);
+  });
+}

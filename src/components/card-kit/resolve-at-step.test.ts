@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveAtStep } from "./resolve-at-step.ts";
+import { resolveAtStep, resolveEach, stepUnion } from "./resolve-at-step.ts";
 
 interface P { step: number; tag: string }
 
@@ -51,4 +51,16 @@ test("a single point resolves on both sides under nearest", () => {
   assert.equal(resolveAtStep(one, 99, { nearest: true })?.tag, "only");
   assert.equal(resolveAtStep(one, 0), null);
   assert.equal(resolveAtStep(one, 42)?.tag, "only");
+});
+
+test("stepUnion merges, sorts and dedupes every series' steps", () => {
+  assert.deepEqual(stepUnion([[{ step: 30 }, { step: 10 }], [], [{ step: 10 }, { step: 20 }]]), [10, 20, 30]);
+  assert.deepEqual(stepUnion([]), []);
+});
+
+test("resolveEach resolves every series at its own step", () => {
+  const other: P[] = [{ step: 5, tag: "x" }, { step: 50, tag: "y" }];
+  const got = resolveEach([points, other, points], [25, 49, null]);
+  assert.deepEqual(got.map((p) => p?.tag ?? null), ["b", "x", null]);
+  assert.deepEqual(resolveEach([points], [0], { nearest: true }).map((p) => p?.tag), ["a"]);
 });
