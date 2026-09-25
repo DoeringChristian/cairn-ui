@@ -1,0 +1,57 @@
+/*
+ * The runs table's frozen left block (checkbox, Name, pinned columns):
+ * `position: sticky` cells with an OPAQUE background in every row state, so
+ * the scrolling columns never show through, and a shadow on the block's
+ * right edge. Offsets and widths are set inline by RunsTablePage.
+ */
+
+.runs-table .frozen {
+  position: sticky;
+  z-index: 1;
+  background: rgb(var(--color-bg-rgb));
+}
+
+.runs-table thead .frozen {
+  z-index: 2;
+  background: rgb(var(--color-bg-elevated-rgb));
+}
+
+.runs-table tbody tr:hover > .frozen,
+.runs-table tbody tr.is-group > .frozen {
+  background: rgb(var(--color-bg-elevated-rgb));
+}
+
+.runs-table tbody tr.is-selected > .frozen {
+  background:
+    linear-gradient(rgb(var(--color-accent-rgb) / 0.08), rgb(var(--color-accent-rgb) / 0.08)),
+    rgb(var(--color-bg-rgb));
+}
+
+.runs-table tbody tr.is-selected:hover > .frozen {
+  background:
+    linear-gradient(rgb(var(--color-accent-rgb) / 0.08), rgb(var(--color-accent-rgb) / 0.08)),
+    rgb(var(--color-bg-elevated-rgb));
+}
+
+.runs-table .frozen-edge {
+  box-shadow: 6px 0 6px -6px rgb(0 0 0 / 0.35);
+}
+
+.runs-table .frozen-edge::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgb(var(--color-border-rgb));
+}
+
+/* Hidden runs: dim the contents, never the (opaque) cells. */
+.runs-table tr.is-hidden-run > td > * {
+  opacity: 0.45;
+}
+
+.runs-table tr.is-hidden-run > td > .run-controls {
+  opacity: 1;
+}

@@ -156,6 +156,10 @@ RunSelector = Union[StaticRunSelector, QueryRunSelector]
 class RunsSpec(_Strict):
     ids: Optional[list[str]] = None
     selector: Optional[RunSelector] = None
+    # Run view (mirrors `RunView` in lib/run-view.tsx).
+    hidden: Optional[list[str]] = None
+    pinned: Optional[list[str]] = None
+    baseline: Optional[str] = None
 
 
 class CardsSpec(_Strict):

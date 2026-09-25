@@ -162,7 +162,7 @@ export interface RunDetailResponse {
 }
 
 /** Per-run extras `GET /api/runs` adds on request (`?include=`). */
-export type RunInclude = "params";
+export type RunInclude = "params" | "stats";
 
 /** Filters and paging for `GET /api/runs`. */
 export interface RunsQuery {

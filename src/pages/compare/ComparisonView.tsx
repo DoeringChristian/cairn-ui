@@ -22,9 +22,12 @@ import {
   type ComparisonCard,
   type ComparisonTemplateCard,
   type SmartFilters,
+  updateComparison,
 } from "../../lib/comparisons";
 import { useComparisonUndo } from "../../lib/comparisons/undo";
 import { useMetricIndex } from "../../lib/reports";
+import { EMPTY_RUN_VIEW, RunViewContext, type RunView } from "../../lib/run-view";
+import { isEmptyRunView } from "../../lib/run-view-store";
 import { describeRunSelector } from "../../lib/run-selector";
 import { loadCardOverrides, saveCardOverrides } from "../../lib/card-settings";
 import { groupComparisonCardsIntoSections, orderSections } from "../../lib/sections";
@@ -156,6 +159,16 @@ export default function ComparisonView({
   }, [comparison.id, comparison.smartFilters, onRefreshSmartFilters]);
 
   const compRunIds = useMemo(() => comparisonRunIds(comparison), [comparison]);
+
+  // The comparison's run view (hidden, pinned, baseline), saved with it.
+  const runView = useMemo(
+    () => ({
+      view: comparison.runView ?? EMPTY_RUN_VIEW,
+      set: (next: RunView) =>
+        void updateComparison(projectId, comparison.id, (c) => ({ ...c, runView: isEmptyRunView(next) ? undefined : next })),
+    }),
+    [comparison.runView, comparison.id, projectId],
+  );
 
   const metaVersion = useRunMetadataVersion();
   const runLabels = useMemo(() => disambiguateRunLabels(compRunIds), [compRunIds, metaVersion]);
@@ -356,7 +369,7 @@ export default function ComparisonView({
       )}
 
       {tab === "metrics" && (
-        <>
+        <RunViewContext.Provider value={runView}>
           <RunSetEditor
             title="Runs in comparison"
             runIds={compRunIds}
@@ -449,7 +462,7 @@ export default function ComparisonView({
             </CardNavProvider>
             </WorkspaceDefaultsProvider>
           )}
-        </>
+        </RunViewContext.Provider>
       )}
 
       {tab === "source" && (

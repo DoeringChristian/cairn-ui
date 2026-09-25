@@ -21,6 +21,8 @@ export const storageKeys = {
   workspace: (projectId: string) => `cairn:workspace:${projectId}`,
   /** The runs table's filter chips and group-by — see lib/run-filter.ts. */
   runsFilter: (projectId: string) => `cairn:runs-filter:${projectId}`,
+  /** The project's run view (hidden, pinned, baseline) — see lib/run-view-store.ts. */
+  runView: (projectId: string) => `cairn:run-view:${projectId}`,
   comparisonTemplates: (projectId: string) => `cairn:comparison-templates:${projectId}`,
   reportTemplates: (projectId: string) => `cairn:report-templates:${projectId}`,
   /** Newest alert created_at the user has seen in the bell — see lib/alerts.ts. */

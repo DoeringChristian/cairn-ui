@@ -3,6 +3,7 @@ import CardRenderer from "../CardRenderer";
 import { isMultiRunCardType, type ComparisonCard } from "../../lib/comparisons";
 import type { CardSettingsKey } from "../../lib/card-settings";
 import type { SequenceMeta } from "../../api/types";
+import { useVisibleRuns } from "../../lib/run-view";
 
 interface Props {
   card: ComparisonCard;
@@ -20,8 +21,18 @@ interface Props {
  * SequenceMeta for its first series (CardRenderer fetches the real one) and
  * overlays the rest.
  */
-export default function ComparisonCardView({ card, settingsKey, onRemove, autoOpenSettings }: Props) {
-  const runIds = useMemo(() => Array.from(new Set(card.series.map((s) => s.runId))), [card.series]);
+export default function ComparisonCardView({ card: rawCard, settingsKey, onRemove, autoOpenSettings }: Props) {
+  // The scope's run view: hidden runs drop out, pinned runs come first.
+  const allRunIds = useMemo(() => Array.from(new Set(rawCard.series.map((s) => s.runId))), [rawCard.series]);
+  const runIds = useVisibleRuns(allRunIds);
+  const card = useMemo(() => {
+    if (runIds.length === allRunIds.length && runIds.every((id, i) => id === allRunIds[i])) return rawCard;
+    const rank = new Map(runIds.map((id, i) => [id, i]));
+    const series = rawCard.series
+      .filter((s) => rank.has(s.runId))
+      .sort((a, b) => rank.get(a.runId)! - rank.get(b.runId)!);
+    return { ...rawCard, series };
+  }, [rawCard, runIds, allRunIds]);
 
   if (isMultiRunCardType(card.type)) {
     return (
@@ -40,7 +51,7 @@ export default function ComparisonCardView({ card, settingsKey, onRemove, autoOp
   if (!primary) {
     return (
       <div data-cairn-card className="card p-4 text-sm text-fg-muted flex items-baseline justify-between gap-2">
-        <span>Empty card.</span>
+        <span>{allRunIds.length > 0 ? "Every run in this card is hidden." : "Empty card."}</span>
         {onRemove && (
           <button type="button" className="btn text-xs" onClick={onRemove}>
             Remove

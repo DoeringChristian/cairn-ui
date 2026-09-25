@@ -5,10 +5,14 @@
  * the scope that owns the state provides `RunViewContext`.
  *
  * Colours come from `lib/run-color.ts` (derived from run ids, never stored).
+ * The pure edits (`toggleRunHidden`, `toggleRunPinned`, `toggleRunBaseline`,
+ * `applyRunView`) and the project store (`useProjectRunView`) live in
+ * `lib/run-view-store.ts`.
  */
 
 import { createContext, useContext, useMemo } from "react";
 import { assignRunColors } from "./run-color.ts";
+import { applyRunView } from "./run-view-store.ts";
 import { getRunMetadata, useRunMetadataVersion } from "./run-label";
 
 export interface RunView {
@@ -49,11 +53,11 @@ export function useRunColors(runIds: readonly string[]): Map<string, string> {
 export function useVisibleRuns(runIds: readonly string[]): string[] {
   const { view } = useRunView();
   const key = runIds.join("|");
-  return useMemo(() => {
-    const hidden = new Set(view.hidden);
-    const pinned = new Set(view.pinned);
-    const shown = runIds.filter((id) => !hidden.has(id));
-    return [...shown.filter((id) => pinned.has(id)), ...shown.filter((id) => !pinned.has(id))];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, view]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => applyRunView(runIds, view), [key, view]);
+}
+
+/** The baseline run of the current scope, or null. */
+export function useBaselineRun(): string | null {
+  return useRunView().view.baseline;
 }

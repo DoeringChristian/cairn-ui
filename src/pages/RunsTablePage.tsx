@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useInfiniteScroll } from "../lib/use-infinite-scroll";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useBulkRunMutation, useInfiniteRuns, useSetTags } from "../api/hooks";
@@ -6,13 +6,6 @@ import type { Run, RunStatus } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
 import { formatDuration, formatRelative, safeJsonParse } from "../lib/format";
 import { formatNum } from "../lib/plot-utils/types";
-import {
-  compareValuesDirected,
-  isValueColumn,
-  valueColumnKey,
-  valueColumnsOf,
-  type ValueColumn,
-} from "../lib/run-value-columns";
 import {
   addCardsToComparison,
   applyTemplateToRuns,
@@ -25,6 +18,7 @@ import { downloadBlob } from "../lib/download";
 import { gcDeletedRunKeys } from "../lib/storage";
 import { api } from "../api/client";
 import SettingsPopover from "../components/SettingsPopover";
+import Popover from "../components/ui/Popover";
 import BulkTagEditor from "../components/BulkTagEditor";
 import ImportRunsDialog from "../components/ImportRunsDialog";
 import CopyId from "../components/CopyId";
@@ -34,30 +28,38 @@ import { useProjectTags } from "../lib/use-project-tags";
 import {
   EMPTY_RUNS_FILTER,
   filterFieldsOf,
-  groupRuns,
+  isEmptyFilter,
   loadRunsFilter,
-  matchesFilters,
+  matchesFilter,
   saveRunsFilter,
-  type RunGroup,
   type RunsFilterState,
 } from "../lib/run-filter.ts";
 import RunFilterBar from "../components/RunFilterBar";
-
-type SortColumn =
-  | "name"
-  | "status"
-  | "created_at"
-  | "duration"
-  | "tags"
-  // A metric/summary column, e.g. `value:val.acc`. The prefix keeps the union
-  // open without letting a metric named "status" shadow a built-in column.
-  | `value:${string}`;
-type SortDirection = "asc" | "desc";
-
-interface SortState {
-  column: SortColumn;
-  direction: SortDirection;
-}
+import RunControls, { RunSwatch } from "../components/RunViewControls";
+import {
+  availableColumns,
+  cellValue,
+  columnKind,
+  columnLabel,
+  compileScalarExpr,
+  computeColumns,
+  isNumericColumn,
+  layoutColumns,
+  moveColumn,
+  setBetter,
+  setHidden,
+  togglePinned,
+  type Better,
+  type ColumnsState,
+  type ComputedColumn,
+} from "../lib/runs-table/columns.ts";
+import { removeSortKey, sortBy, toggleSort, type SortKey } from "../lib/runs-table/sort.ts";
+import { flattenGroups, groupByLabel, groupRunsNested, type RunGroupNode, type TableRow } from "../lib/runs-table/group.ts";
+import { betterFor, deltaOf, formatDelta, relativeDelta, toneOf, type Tone } from "../lib/runs-table/delta.ts";
+import { RunViewContext, useRunColors, type RunView } from "../lib/run-view";
+import { useProjectRunView } from "../lib/run-view-store";
+import { newId } from "../lib/reports/ids";
+import "./runs-table.css";
 
 const STATUS_OPTIONS: Array<{ value: "all" | RunStatus; label: string }> = [
   { value: "all", label: "All" },
@@ -69,43 +71,19 @@ const STATUS_OPTIONS: Array<{ value: "all" | RunStatus; label: string }> = [
   { value: "archived", label: "archived" },
 ];
 
-function durationSeconds(run: Run): number {
-  const start = new Date(run.created_at).getTime();
-  const end = run.ended_at ? new Date(run.ended_at).getTime() : Date.now();
-  return Math.max(0, end - start);
-}
+/** Widths of the frozen left block (px): the checkbox, Name, each pinned column. */
+const CHECK_W = 40;
+const NAME_W = 260;
+const PIN_W = 150;
 
-/** Built-in columns only — metric columns are handled by
- *  `compareValuesDirected`, and excluding them here keeps this switch
- *  exhaustive over the fixed set. */
-function compareRuns(
-  a: Run,
-  b: Run,
-  col: Exclude<SortColumn, ValueColumn>,
-): number {
-  switch (col) {
-    case "name": {
-      const an = (a.display_name ?? a.id).toLowerCase();
-      const bn = (b.display_name ?? b.id).toLowerCase();
-      return an.localeCompare(bn);
-    }
-    case "status":
-      return a.status.localeCompare(b.status);
-    case "created_at":
-      return (
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-    case "duration":
-      return durationSeconds(a) - durationSeconds(b);
-    case "tags": {
-      const at = (safeJsonParse<string[]>(a.tags) ?? []).join(",");
-      const bt = (safeJsonParse<string[]>(b.tags) ?? []).join(",");
-      return at.localeCompare(bt);
-    }
-  }
-}
+const TONE_CLASS: Record<Tone, string> = {
+  better: "text-status-completed",
+  worse: "text-status-failed",
+  same: "text-fg-subtle",
+  neutral: "text-fg-subtle",
+};
 
-/** The project's persisted filter chips + group-by, reloaded when the project changes. */
+/** The project's persisted table view (filter, grouping, sort, columns), reloaded when the project changes. */
 function useRunsFilterState(projectId: string | undefined) {
   const load = (pid: string | undefined) => (pid ? loadRunsFilter(localStorage, pid) : EMPTY_RUNS_FILTER);
   const [entry, setEntry] = useState(() => ({ projectId, state: load(projectId) }));
@@ -121,19 +99,34 @@ function useRunsFilterState(projectId: string | undefined) {
   return [current.state, update] as const;
 }
 
+function formatCell(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "number") return formatNum(v);
+  if (typeof v === "string") return v;
+  return JSON.stringify(v);
+}
+
+function formatCreated(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+  } catch {
+    return formatRelative(iso);
+  }
+}
+
 export default function RunsTablePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const q = useInfiniteRuns({ project: projectId, include: ["params"] });
+  const q = useInfiniteRuns({ project: projectId, include: ["params", "stats"] });
   const { bulkDelete, bulkArchive, bulkStop } = useBulkRunMutation();
 
   const [statusFilter, setStatusFilter] = useState<"all" | RunStatus>("all");
   const [search, setSearch] = useState<string>("");
   const [filterState, setFilterState] = useRunsFilterState(projectId);
-  const [sort, setSort] = useState<SortState>({
-    column: "created_at",
-    direction: "desc",
-  });
+  const runViewCtl = useProjectRunView(projectId);
+  const runView = runViewCtl.view;
+  const setRunView = runViewCtl.set!;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [templatePopoverOpen, setTemplatePopoverOpen] = useState(false);
   const [templateApplyMessage, setTemplateApplyMessage] = useState<string | null>(null);
@@ -149,6 +142,10 @@ export default function RunsTablePage() {
   const [exporting, setExporting] = useState(false);
   const { templates } = useTemplates(projectId ?? "");
   const [addingTagFor, setAddingTagFor] = useState<string | null>(null);
+  const [menuColumn, setMenuColumn] = useState<string | null>(null);
+  const menuAnchorRef = useRef<HTMLElement | null>(null);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const columnsBtnRef = useRef<HTMLButtonElement | null>(null);
   const [newTagValue, setNewTagValue] = useState("");
 
   const runs = useMemo(() => {
@@ -194,7 +191,7 @@ export default function RunsTablePage() {
 
   // Filters and groups apply to the loaded runs, so while either is active
   // load every page: a filter over the first 100 runs silently hides matches.
-  const needsAllRuns = filterState.filters.length > 0 || filterState.groupBy != null;
+  const needsAllRuns = !isEmptyFilter(filterState.filter) || filterState.groupBy.length > 0;
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = q;
   useEffect(() => {
     if (needsAllRuns && hasNextPage && !isFetchingNextPage) void fetchNextPage();
@@ -306,7 +303,7 @@ export default function RunsTablePage() {
       // Hide archived runs by default; only show when explicitly filtered.
       if (statusFilter === "all" && r.status === "archived") return false;
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
-      if (!matchesFilters(r, filterState.filters)) return false;
+      if (!matchesFilter(r, filterState.filter)) return false;
       if (searchRegex) {
         const tags = (safeJsonParse<string[]>(r.tags) ?? []).join(" ");
         const hay = `${r.display_name ?? ""} ${r.id} ${r.status} ${tags}`;
@@ -314,48 +311,57 @@ export default function RunsTablePage() {
       }
       return true;
     });
-  }, [runs, statusFilter, searchRegex, showLatestOnly, latestIds, filterState.filters]);
+  }, [runs, statusFilter, searchRegex, showLatestOnly, latestIds, filterState.filter]);
 
-  // Metric columns are the UNION across the loaded runs, not the intersection:
-  // a run that crashed before logging `val.acc` should show a blank cell, not
-  // delete the column for every other run.
-  const valueColumns = useMemo(() => valueColumnsOf(filtered), [filtered]);
+  const { sort, columns, computed, groupBy } = filterState;
+  const setColumns = (next: ColumnsState) => setFilterState({ ...filterState, columns: next });
+  const setSort = (next: SortKey[]) => setFilterState({ ...filterState, sort: next });
+  const setComputed = (next: ComputedColumn[]) => setFilterState({ ...filterState, computed: next });
+
+  // The baseline may be filtered out of the table; deltas still compare against it.
+  const baselineRun = useMemo(
+    () => (runView.baseline ? runs.find((r) => r.id === runView.baseline) : undefined),
+    [runs, runView.baseline],
+  );
+
+  const computedValues = useMemo(
+    () => computeColumns(baselineRun && !filtered.includes(baselineRun) ? [...filtered, baselineRun] : filtered, computed),
+    [filtered, computed, baselineRun],
+  );
+
+  // Metric and param columns are the UNION across the loaded runs, not the
+  // intersection: a run that crashed before logging `val.acc` should show a
+  // blank cell, not delete the column for every other run.
+  const available = useMemo(() => availableColumns(filtered, computed), [filtered, computed]);
+  const layout = useMemo(() => layoutColumns(available, columns), [available, columns]);
+  const shownColumns = useMemo(() => [...layout.frozen, ...layout.scroll], [layout]);
 
   const sorted = useMemo(() => {
-    const arr = [...filtered];
-    arr.sort((a, b) => {
-      // Metric columns direct themselves: missing values sort last in BOTH
-      // directions, which the negation below would undo.
-      const cmp = isValueColumn(sort.column)
-        ? compareValuesDirected(a, b, valueColumnKey(sort.column), sort.direction)
-        : (() => {
-            const c = compareRuns(a, b, sort.column);
-            return sort.direction === "asc" ? c : -c;
-          })();
-      if (cmp !== 0) return cmp;
-      // Stable tiebreaker: run ID is unique and immutable.
-      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-    });
-    return arr;
-  }, [filtered, sort]);
+    const arr = sortBy(filtered, sort, (r, col) => cellValue(r, col, computedValues), (r) => r.id);
+    // Pinned runs go first, in the sorted order.
+    if (runView.pinned.length === 0) return arr;
+    const pinned = new Set(runView.pinned);
+    return [...arr.filter((r) => pinned.has(r.id)), ...arr.filter((r) => !pinned.has(r.id))];
+  }, [filtered, sort, computedValues, runView.pinned]);
 
-  const toggleSort = (column: SortColumn) => {
-    setSort((prev) =>
-      prev.column === column
-        ? {
-            column,
-            direction: prev.direction === "asc" ? "desc" : "asc",
-          }
-        : { column, direction: column === "created_at" ? "desc" : "asc" },
-    );
-  };
+  const colors = useRunColors(useMemo(() => sorted.map((r) => r.id), [sorted]));
 
-  const groups = useMemo<RunGroup[] | null>(
-    () => (filterState.groupBy ? groupRuns(sorted, filterState.groupBy) : null),
-    [sorted, filterState.groupBy],
-  );
+  const betterByColumn = useMemo(() => {
+    const out = new Map<string, Better | null>();
+    for (const col of shownColumns) {
+      if (!isNumericColumn(col) || col === "duration") continue;
+      const { kind, key } = columnKind(col);
+      const own = columns.better[col] ?? (kind === "computed" ? computed.find((c) => c.id === key)?.better : undefined);
+      // Config params are inputs, not results: deltas only once the user says which way is better.
+      if (kind === "param" && !own) continue;
+      out.set(col, betterFor(col, own, baselineRun, filtered));
+    }
+    return out;
+  }, [shownColumns, columns.better, computed, baselineRun, filtered]);
+
+  const groups = useMemo<RunGroupNode[] | null>(() => groupRunsNested(sorted, groupBy), [sorted, groupBy]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const groupByKey = JSON.stringify(filterState.groupBy);
+  const groupByKey = JSON.stringify(groupBy);
   useEffect(() => setCollapsed(new Set()), [groupByKey]);
   const toggleGroup = (id: string) =>
     setCollapsed((prev) => {
@@ -365,22 +371,23 @@ export default function RunsTablePage() {
       return next;
     });
 
+  const rows = useMemo<TableRow[]>(
+    () => (groups ? flattenGroups(groups, collapsed) : sorted.map((run) => ({ kind: "run", run, key: run.id, depth: 0 }))),
+    [groups, collapsed, sorted],
+  );
+
   // The rows in on-screen order (expanded groups only, a run listed once),
   // which is what a shift-click range spans.
   const displayOrder = useMemo(() => {
-    if (!groups) return sorted;
     const seen = new Set<string>();
     const out: Run[] = [];
-    for (const g of groups) {
-      if (collapsed.has(g.id)) continue;
-      for (const r of g.runs) {
-        if (seen.has(r.id)) continue;
-        seen.add(r.id);
-        out.push(r);
-      }
+    for (const row of rows) {
+      if (row.kind !== "run" || seen.has(row.run.id)) continue;
+      seen.add(row.run.id);
+      out.push(row.run);
     }
     return out;
-  }, [groups, collapsed, sorted]);
+  }, [rows]);
 
   const lastSelectedId = useRef<string | null>(null);
 
@@ -537,11 +544,21 @@ export default function RunsTablePage() {
       : []),
   ];
 
-  const renderMobileRun = (r: Run, key: string) => {
+  const runControls = (r: Run) => (
+    <RunControls
+      runId={r.id}
+      view={runView}
+      onChange={setRunView}
+    />
+  );
+
+  const renderMobileRun = (r: Run, key: string, depth: number) => {
     const isSelected = selected.has(r.id);
+    const hidden = runView.hidden.includes(r.id);
     return (
       <li
         key={key}
+        style={depth > 0 ? { marginLeft: depth * 12 } : undefined}
         className={`rounded-lg border border-border bg-bg-elevated p-3 ${
           isSelected ? "border-accent/50 bg-accent/5" : ""
         } ${latestByName.has(r.id) ? "border-l-2 border-l-accent" : ""}`}
@@ -555,21 +572,18 @@ export default function RunsTablePage() {
               onChange={(e) => toggleRow(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
             />
           </div>
+          <RunSwatch color={colors.get(r.id)} />
           <Link
             to={`/p/${projectId}/r/${r.id}`}
-            className="mono min-h-[44px] min-w-0 flex-1 truncate leading-[44px] text-accent hover:underline"
+            className={`mono min-h-[44px] min-w-0 flex-1 truncate leading-[44px] text-accent hover:underline ${hidden ? "opacity-50" : ""}`}
           >
             {r.display_name ?? r.id}
           </Link>
+          {runControls(r)}
           <RunStatusBadge status={r.status} />
         </div>
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
-          <span>{(() => {
-            try {
-              const d = new Date(r.created_at);
-              return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
-            } catch { return formatRelative(r.created_at); }
-          })()}</span>
+          <span>{formatCreated(r.created_at)}</span>
           <span className="mono num">
             dur: {formatDuration(r.created_at, r.ended_at)}
           </span>
@@ -590,16 +604,116 @@ export default function RunsTablePage() {
     );
   };
 
-  const renderDesktopRun = (r: Run, key: string) => {
-    const isSelected = selected.has(r.id);
+  // The frozen block: checkbox at 0, Name after it, pinned columns after Name.
+  const frozenLeft = (i: number) => CHECK_W + (i === 0 ? 0 : NAME_W + (i - 1) * PIN_W);
+  const frozenWidth = (i: number) => (i === 0 ? NAME_W : PIN_W);
+  const frozenTotal = CHECK_W + NAME_W + (layout.frozen.length - 1) * PIN_W;
+  const lastFrozen = layout.frozen.length - 1;
+  const frozenProps = (i: number, extra = "") => {
+    const w = frozenWidth(i);
+    return {
+      className: `frozen ${i === lastFrozen ? "frozen-edge" : ""} ${extra}`,
+      style: { left: frozenLeft(i), width: w, minWidth: w, maxWidth: w },
+    };
+  };
+
+  const renderCell = (r: Run, col: string, depth: number): ReactNode => {
+    const { kind, key } = columnKind(col);
+    if (kind === "builtin") {
+      switch (key) {
+        case "name": {
+          const isBaseline = runView.baseline === r.id;
+          return (
+            <div className="relative flex min-w-0 items-center gap-1.5" style={{ paddingLeft: depth * 12 }}>
+              <RunSwatch color={colors.get(r.id)} />
+              <Link
+                to={`/p/${projectId}/r/${r.id}`}
+                className="dim mono min-w-0 truncate text-accent hover:underline"
+                title={r.display_name ?? r.id}
+              >
+                {r.display_name ?? r.id}
+              </Link>
+              {isBaseline && (
+                <span className="shrink-0 rounded bg-accent/15 px-1 text-[10px] font-medium text-accent">baseline</span>
+              )}
+              <span className="ml-auto shrink-0">
+                <RunControls runId={r.id} view={runView} onChange={setRunView} show="active" />
+              </span>
+              {/* On hover, every toggle overlays the end of the cell (no layout shift). */}
+              <span className="absolute inset-y-0 right-0 hidden items-center gap-1 bg-bg-elevated pl-2 group-hover/row:flex touch:flex">
+                <CopyId id={r.id} className="text-xs" />
+                <RunControls runId={r.id} view={runView} onChange={setRunView} show="all" />
+              </span>
+            </div>
+          );
+        }
+        case "status":
+          return <span className="dim"><RunStatusBadge status={r.status} /></span>;
+        case "created_at":
+          return <span className="dim whitespace-nowrap text-fg-muted">{formatCreated(r.created_at)}</span>;
+        case "duration":
+          return <span className="dim mono num whitespace-nowrap text-fg-muted">{formatDuration(r.created_at, r.ended_at)}</span>;
+        case "tags":
+          return (
+            <span className="dim flex items-center gap-1 whitespace-nowrap">
+              <RunTagCell
+                run={r}
+                variant="desktop"
+                allTags={allTags}
+                addingTagFor={addingTagFor}
+                onStartAdd={onStartAddTag}
+                onCancelAdd={onCancelAddTag}
+                newTagValue={newTagValue}
+                setNewTagValue={setNewTagValue}
+              />
+            </span>
+          );
+      }
+    }
+    const v = cellValue(r, col, computedValues);
+    let delta: ReactNode = null;
+    if (baselineRun && baselineRun.id !== r.id && betterByColumn.has(col)) {
+      const base = cellValue(baselineRun, col, computedValues);
+      const d = deltaOf(v, base);
+      if (d !== null) {
+        const rel = relativeDelta(d, base);
+        delta = (
+          <span
+            className={`ml-1.5 text-[10px] ${TONE_CLASS[toneOf(d, betterByColumn.get(col) ?? null)]}`}
+            title={`vs baseline${rel !== null ? ` (${rel > 0 ? "+" : ""}${(rel * 100).toFixed(1)}%)` : ""}`}
+          >
+            {formatDelta(d)}
+          </span>
+        );
+      }
+    }
     return (
-      <tr
-        key={key}
-        className={`border-t border-border-subtle hover:bg-bg-elevated ${
-          isSelected ? "bg-accent/5" : ""
-        } ${latestByName.has(r.id) ? "border-l-2 border-l-accent" : ""}`}
-      >
-        <td className="px-3 py-2">
+      <span className="dim whitespace-nowrap">
+        <span className="text-fg-muted">{formatCell(v)}</span>
+        {delta}
+      </span>
+    );
+  };
+
+  const renderDesktopRun = (r: Run, key: string, depth: number) => {
+    const isSelected = selected.has(r.id);
+    const rowClass = [
+      "group/row border-t border-border-subtle hover:bg-bg-elevated",
+      isSelected ? "is-selected bg-accent/5" : "",
+      runView.hidden.includes(r.id) ? "is-hidden-run" : "",
+    ].join(" ");
+    return (
+      <tr key={key} className={rowClass}>
+        <td
+          className="frozen px-3 py-2"
+          style={{
+            left: 0,
+            width: CHECK_W,
+            minWidth: CHECK_W,
+            maxWidth: CHECK_W,
+            ...(latestByName.has(r.id) ? { boxShadow: "inset 2px 0 0 rgb(var(--color-accent-rgb))" } : {}),
+          }}
+        >
           <input
             type="checkbox"
             aria-label={`select run ${r.display_name ?? r.id}`}
@@ -607,55 +721,16 @@ export default function RunsTablePage() {
             onChange={(e) => toggleRow(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
           />
         </td>
-        <td className="px-3 py-2">
-          <Link
-            to={`/p/${projectId}/r/${r.id}`}
-            className="mono text-accent hover:underline"
-          >
-            {r.display_name ?? r.id}
-          </Link>
-          <CopyId id={r.id} className="ml-2 text-xs" />
-        </td>
-        <td className="px-3 py-2">
-          <RunStatusBadge status={r.status} />
-        </td>
-        <td className="px-3 py-2 text-fg-muted">
-          {(() => {
-            try {
-              const d = new Date(r.created_at);
-              return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
-            } catch { return formatRelative(r.created_at); }
-          })()}
-        </td>
-        <td className="mono num px-3 py-2 text-fg-muted">
-          {formatDuration(r.created_at, r.ended_at)}
-        </td>
-        <td className="px-3 py-2">
-          <span className="flex flex-wrap items-center gap-1">
-            <RunTagCell
-              run={r}
-              variant="desktop"
-              allTags={allTags}
-              addingTagFor={addingTagFor}
-              onStartAdd={onStartAddTag}
-              onCancelAdd={onCancelAddTag}
-              newTagValue={newTagValue}
-              setNewTagValue={setNewTagValue}
-            />
-          </span>
-        </td>
-        {valueColumns.map((key) => {
-          const v = r.values?.[key];
-          return (
-            <td key={key} className="mono num px-3 py-2 text-fg-muted">
-              {v == null
-                ? ""
-                : typeof v === "number"
-                  ? formatNum(v)
-                  : String(v)}
-            </td>
-          );
-        })}
+        {layout.frozen.map((col, i) => (
+          <td key={col} {...frozenProps(i, `px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`)}>
+            {i === 0 ? renderCell(r, col, depth) : <div className="truncate">{renderCell(r, col, depth)}</div>}
+          </td>
+        ))}
+        {layout.scroll.map((col) => (
+          <td key={col} className={`px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`}>
+            {renderCell(r, col, depth)}
+          </td>
+        ))}
       </tr>
     );
   };
@@ -666,6 +741,7 @@ export default function RunsTablePage() {
     return <p className="text-status-failed">Error: {String(q.error)}</p>;
 
   return (
+    <RunViewContext.Provider value={runViewCtl}>
     <div>
       <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h1 className="mono min-w-0 break-all text-xl font-semibold">{projectId} / runs</h1>
@@ -725,6 +801,30 @@ export default function RunsTablePage() {
           <input type="checkbox" checked={showLatestOnly} onChange={(e) => setShowLatestOnly(e.target.checked)} className="accent-accent" />
           Latest only
         </label>
+        <button
+          ref={columnsBtnRef}
+          type="button"
+          className="btn px-2 py-1 text-xs"
+          onClick={() => setColumnsOpen((v) => !v)}
+          aria-expanded={columnsOpen}
+        >
+          <i className="fa-solid fa-table-columns mr-1 text-[10px]" aria-hidden="true" />
+          Columns{computed.length > 0 ? ` (+${computed.length} ƒ)` : ""}
+        </button>
+        {sort.length > 1 && (
+          <span className="flex items-center gap-1 text-[11px] text-fg-subtle" title="Shift-click a header to add a sort key">
+            Sort:
+            {sort.map((k) => (
+              <span key={k.column} className="mono inline-flex items-center gap-0.5 rounded border border-border-subtle px-1">
+                {columnLabel(k.column, computed)} {k.direction === "asc" ? "↑" : "↓"}
+                <button type="button" className="hover:text-status-failed" aria-label={`Remove sort by ${k.column}`} onClick={() => setSort(removeSortKey(sort, k.column))}>
+                  {"×"}
+                </button>
+              </span>
+            ))}
+          </span>
+        )}
+        <RunViewSummary view={runView} onChange={setRunView} runs={runs} />
         <div className="ml-auto flex flex-wrap gap-2">
           <button type="button" className="btn px-2 py-1 text-xs" onClick={onArchiveOldVersions}>Archive old</button>
           <button type="button" className="btn px-2 py-1 text-xs text-status-failed" onClick={onDeleteOldVersions}>Delete old</button>
@@ -878,97 +978,137 @@ export default function RunsTablePage() {
       ) : (
         <>
           <ul className="flex flex-col gap-2 md:hidden">
-            {groups
-              ? groups.map((g) => (
-                  <Fragment key={g.id}>
-                    <li>
-                      <GroupHeader group={g} collapsed={collapsed.has(g.id)} onToggle={() => toggleGroup(g.id)} />
-                    </li>
-                    {!collapsed.has(g.id) && g.runs.map((r) => renderMobileRun(r, `${g.id}:${r.id}`))}
-                  </Fragment>
-                ))
-              : sorted.map((r) => renderMobileRun(r, r.id))}
+            {rows.map((row) =>
+              row.kind === "group" ? (
+                <li key={row.node.id} style={{ marginLeft: row.node.depth * 12 }}>
+                  <GroupHeader group={row.node} collapsed={collapsed.has(row.node.id)} onToggle={() => toggleGroup(row.node.id)} />
+                </li>
+              ) : (
+                renderMobileRun(row.run, row.key, row.depth)
+              ),
+            )}
           </ul>
-          {/* overflow-x-auto, not -hidden: metric columns are unbounded in
-              number and must stay reachable. */}
-          <div className="hidden overflow-x-auto overflow-y-hidden rounded-lg border border-border md:block">
-            <table className="w-full text-sm">
-            <thead className="bg-bg-elevated text-left text-xs uppercase tracking-wide text-fg-muted">
-              <tr>
-                <th className="px-3 py-2">
-                  <input
-                    type="checkbox"
-                    aria-label="select all visible rows"
-                    checked={allVisibleSelected}
-                    ref={(el) => {
-                      if (el)
-                        el.indeterminate =
-                          !allVisibleSelected && someVisibleSelected;
-                    }}
-                    onChange={onHeaderCheckbox}
-                  />
-                </th>
-                <SortableTh
-                  label="Name"
-                  column="name"
-                  sort={sort}
-                  onClick={toggleSort}
-                />
-                <SortableTh
-                  label="Status"
-                  column="status"
-                  sort={sort}
-                  onClick={toggleSort}
-                />
-                <SortableTh
-                  label="Created"
-                  column="created_at"
-                  sort={sort}
-                  onClick={toggleSort}
-                />
-                <SortableTh
-                  label="Duration"
-                  column="duration"
-                  sort={sort}
-                  onClick={toggleSort}
-                  numeric
-                />
-                <SortableTh
-                  label="Tags"
-                  column="tags"
-                  sort={sort}
-                  onClick={toggleSort}
-                />
-                {valueColumns.map((key) => (
-                  <SortableTh
-                    key={key}
-                    label={key}
-                    column={`value:${key}`}
-                    sort={sort}
-                    onClick={toggleSort}
-                    numeric
-                  />
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {groups
-                ? groups.map((g) => (
-                    <Fragment key={g.id}>
-                      <tr className="border-t border-border-subtle bg-bg-elevated/60">
-                        <td colSpan={6 + valueColumns.length} className="px-3 py-1.5">
-                          <GroupHeader group={g} collapsed={collapsed.has(g.id)} onToggle={() => toggleGroup(g.id)} />
-                        </td>
-                      </tr>
-                      {!collapsed.has(g.id) && g.runs.map((r) => renderDesktopRun(r, `${g.id}:${r.id}`))}
-                    </Fragment>
-                  ))
-                : sorted.map((r) => renderDesktopRun(r, r.id))}
-            </tbody>
-          </table>
+          {/* overflow-x-auto, not -hidden: metric and param columns are
+              unbounded in number and must stay reachable. The checkbox,
+              Name and pinned columns stay frozen on the left. */}
+          <div className="runs-table hidden overflow-x-auto overflow-y-hidden rounded-lg border border-border md:block">
+            <table className="w-full border-separate border-spacing-0 text-sm">
+              <thead className="bg-bg-elevated text-left text-xs uppercase tracking-wide text-fg-muted">
+                <tr>
+                  <th className="frozen px-3 py-2" style={{ left: 0, width: CHECK_W, minWidth: CHECK_W, maxWidth: CHECK_W }}>
+                    <input
+                      type="checkbox"
+                      aria-label="select all visible rows"
+                      checked={allVisibleSelected}
+                      ref={(el) => {
+                        if (el)
+                          el.indeterminate =
+                            !allVisibleSelected && someVisibleSelected;
+                      }}
+                      onChange={onHeaderCheckbox}
+                    />
+                  </th>
+                  {shownColumns.map((col) => {
+                    const fi = layout.frozen.indexOf(col);
+                    const sortIdx = sort.findIndex((k) => k.column === col);
+                    return (
+                      <ColumnTh
+                        key={col}
+                        column={col}
+                        label={columnLabel(col, computed)}
+                        title={col}
+                        sortKey={sortIdx >= 0 ? sort[sortIdx]! : null}
+                        sortRank={sort.length > 1 && sortIdx >= 0 ? sortIdx + 1 : null}
+                        numeric={isNumericColumn(col)}
+                        pinned={fi > 0}
+                        frozen={fi >= 0 ? frozenProps(fi) : null}
+                        onSort={(additive) => setSort(toggleSort(sort, col, additive))}
+                        onMenu={(anchor) => {
+                          menuAnchorRef.current = anchor;
+                          setMenuColumn((c) => (c === col ? null : col));
+                        }}
+                        onDropColumn={(dragged) => {
+                          if (dragged === col || dragged === "name" || col === "name") return;
+                          const draggedPinned = columns.pinned.includes(dragged);
+                          if (draggedPinned !== columns.pinned.includes(col)) return;
+                          setColumns(moveColumn(columns, layout.scroll, dragged, col));
+                        }}
+                      />
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) =>
+                  row.kind === "group" ? (
+                    <tr key={row.node.id} className="is-group">
+                      <td
+                        colSpan={1 + layout.frozen.length}
+                        className="frozen frozen-edge border-t border-border-subtle px-3 py-1.5"
+                        style={{ left: 0, width: frozenTotal, minWidth: frozenTotal, maxWidth: frozenTotal }}
+                      >
+                        <div style={{ paddingLeft: row.node.depth * 12 }}>
+                          <GroupHeader group={row.node} collapsed={collapsed.has(row.node.id)} onToggle={() => toggleGroup(row.node.id)} />
+                        </div>
+                      </td>
+                      {layout.scroll.length > 0 && (
+                        <td colSpan={layout.scroll.length} className="border-t border-border-subtle bg-bg-elevated" />
+                      )}
+                    </tr>
+                  ) : (
+                    renderDesktopRun(row.run, row.key, row.depth)
+                  ),
+                )}
+              </tbody>
+            </table>
           </div>
         </>
       )}
+      <Popover
+        open={menuColumn !== null}
+        onClose={() => setMenuColumn(null)}
+        anchorRef={menuAnchorRef}
+        title={menuColumn ? columnLabel(menuColumn, computed) : ""}
+        titleAnchored
+        width={240}
+        align="start"
+        role="menu"
+        bodyClassName="p-1"
+      >
+        {menuColumn && (
+          <ColumnMenu
+            column={menuColumn}
+            columns={columns}
+            sort={sort}
+            computed={computed}
+            better={isNumericColumn(menuColumn) && menuColumn !== "duration" ? (betterByColumn.get(menuColumn) ?? null) : undefined}
+            onColumns={setColumns}
+            onSort={setSort}
+            onComputed={setComputed}
+            onMove={(d) => {
+              const list = columns.pinned.includes(menuColumn) ? layout.frozen.slice(1) : layout.scroll;
+              const i = list.indexOf(menuColumn);
+              if (d < 0) {
+                if (i <= 0) return;
+                setColumns(moveColumn(columns, layout.scroll, menuColumn, list[i - 1]!));
+              } else {
+                if (i < 0 || i >= list.length - 1) return;
+                setColumns(moveColumn(columns, layout.scroll, menuColumn, list[i + 2] ?? null));
+              }
+            }}
+            onClose={() => setMenuColumn(null)}
+          />
+        )}
+      </Popover>
+      <Popover open={columnsOpen} onClose={() => setColumnsOpen(false)} anchorRef={columnsBtnRef} title="Columns" titleAnchored width={360} align="start" bodyClassName="p-3">
+        <ColumnManager
+          available={available}
+          columns={columns}
+          computed={computed}
+          onColumns={setColumns}
+          onComputed={setComputed}
+        />
+      </Popover>
       {/* Sentinel for infinite scroll */}
       <div ref={sentinelRef} className="h-1" />
       {q.isFetchingNextPage && (
@@ -976,6 +1116,7 @@ export default function RunsTablePage() {
       )}
       <ImportRunsDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
+    </RunViewContext.Provider>
   );
 }
 
@@ -1078,7 +1219,7 @@ function GroupHeader({
   collapsed,
   onToggle,
 }: {
-  group: RunGroup;
+  group: RunGroupNode;
   collapsed: boolean;
   onToggle: () => void;
 }) {
@@ -1087,44 +1228,398 @@ function GroupHeader({
       type="button"
       onClick={onToggle}
       aria-expanded={!collapsed}
-      className="flex w-full items-center gap-2 text-left text-xs text-fg-muted hover:text-fg touch:min-h-[40px]"
+      className="flex w-full min-w-0 items-center gap-2 text-left text-xs text-fg-muted hover:text-fg touch:min-h-[40px]"
     >
       <i className={`fa-solid ${collapsed ? "fa-chevron-right" : "fa-chevron-down"} w-3 text-[10px]`} aria-hidden="true" />
-      <span className={`mono font-semibold ${group.label == null ? "italic text-fg-subtle" : "text-fg"}`}>
+      <span className="mono shrink truncate text-fg-subtle">{groupByLabel(group.by)}:</span>
+      <span className={`mono truncate font-semibold ${group.label == null ? "italic text-fg-subtle" : "text-fg"}`}>
         {group.label ?? "(none)"}
       </span>
-      <span className="rounded bg-bg-hover px-1.5 py-0.5 text-[10px]">{group.runs.length}</span>
+      <span className="shrink-0 rounded bg-bg-hover px-1.5 py-0.5 text-[10px]">{group.runs.length}</span>
     </button>
   );
 }
 
-function SortableTh({
-  label,
+/** A compact summary of the project run view with a reset, shown only when something is set. */
+function RunViewSummary({ view, onChange, runs }: { view: RunView; onChange: (next: RunView) => void; runs: Run[] }) {
+  if (view.hidden.length === 0 && view.pinned.length === 0 && !view.baseline) return null;
+  const baseline = view.baseline ? runs.find((r) => r.id === view.baseline) : undefined;
+  const parts = [
+    view.hidden.length > 0 ? `${view.hidden.length} hidden` : null,
+    view.pinned.length > 0 ? `${view.pinned.length} pinned` : null,
+    view.baseline ? `baseline ${baseline?.display_name ?? view.baseline}` : null,
+  ].filter(Boolean);
+  return (
+    <span className="flex items-center gap-1 text-[11px] text-fg-subtle">
+      <span className="mono truncate">{parts.join(" · ")}</span>
+      <button
+        type="button"
+        className="rounded px-1 hover:text-fg"
+        onClick={() => onChange({ hidden: [], pinned: [], baseline: null })}
+        title="Show all runs, unpin all, clear the baseline"
+      >
+        reset
+      </button>
+    </span>
+  );
+}
+
+const COLUMN_DRAG_TYPE = "application/x-cairn-column";
+
+function ColumnTh({
   column,
-  sort,
-  onClick,
-  numeric = false,
+  label,
+  title,
+  sortKey,
+  sortRank,
+  numeric,
+  pinned,
+  frozen,
+  onSort,
+  onMenu,
+  onDropColumn,
 }: {
+  column: string;
   label: string;
-  column: SortColumn;
-  sort: SortState;
-  onClick: (c: SortColumn) => void;
-  numeric?: boolean;
+  title: string;
+  sortKey: SortKey | null;
+  sortRank: number | null;
+  numeric: boolean;
+  pinned: boolean;
+  frozen: { className: string; style: React.CSSProperties } | null;
+  onSort: (additive: boolean) => void;
+  onMenu: (anchor: HTMLElement) => void;
+  onDropColumn: (dragged: string) => void;
 }) {
-  const active = sort.column === column;
-  const arrow = active ? (sort.direction === "asc" ? " ↑" : " ↓") : "";
+  const [over, setOver] = useState(false);
+  const arrow = sortKey ? (sortKey.direction === "asc" ? "↑" : "↓") : "";
   return (
     <th
-      className={`cursor-pointer select-none px-3 py-2 hover:text-fg ${
-        numeric ? "mono" : ""
-      }`}
-      onClick={() => onClick(column)}
-      aria-sort={
-        active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"
-      }
+      className={`group/th cursor-pointer select-none whitespace-nowrap px-3 py-2 hover:text-fg ${numeric ? "mono" : ""} ${
+        frozen?.className ?? ""
+      } ${over ? "outline outline-1 -outline-offset-1 outline-accent" : ""}`}
+      style={frozen?.style}
+      title={`${title}\nClick to sort, shift-click to add a sort key, drag to reorder`}
+      onClick={(e) => onSort(e.shiftKey)}
+      aria-sort={sortKey ? (sortKey.direction === "asc" ? "ascending" : "descending") : "none"}
+      draggable={column !== "name"}
+      onDragStart={(e) => {
+        e.dataTransfer.setData(COLUMN_DRAG_TYPE, column);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(COLUMN_DRAG_TYPE)) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        setOver(false);
+        const dragged = e.dataTransfer.getData(COLUMN_DRAG_TYPE);
+        if (dragged) onDropColumn(dragged);
+      }}
     >
-      {label}
-      <span className="text-fg">{arrow}</span>
+      <span className="flex min-w-0 items-center gap-1">
+        {pinned && <i className="fa-solid fa-thumbtack text-[9px] text-fg-subtle" aria-hidden="true" />}
+        <span className="truncate">{label}</span>
+        {arrow && (
+          <span className="shrink-0 text-fg">
+            {arrow}
+            {sortRank !== null && <sup className="text-[9px]">{sortRank}</sup>}
+          </span>
+        )}
+        <button
+          type="button"
+          className="ml-auto shrink-0 rounded px-1 text-fg-subtle hover:bg-bg-hover hover:text-fg can-hover:opacity-0 can-hover:group-hover/th:opacity-100 focus-visible:opacity-100"
+          aria-label={`Column options for ${label}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onMenu(e.currentTarget);
+          }}
+        >
+          <i className="fa-solid fa-ellipsis-vertical text-[10px]" aria-hidden="true" />
+        </button>
+      </span>
     </th>
+  );
+}
+
+const MENU_ITEM =
+  "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-fg hover:bg-bg-hover disabled:opacity-40 touch:min-h-10";
+
+function ColumnMenu({
+  column,
+  columns,
+  sort,
+  computed,
+  better,
+  onColumns,
+  onSort,
+  onComputed,
+  onMove,
+  onClose,
+}: {
+  column: string;
+  columns: ColumnsState;
+  sort: SortKey[];
+  computed: ComputedColumn[];
+  /** The column's resolved better direction; undefined when deltas don't apply. */
+  better: Better | null | undefined;
+  onColumns: (next: ColumnsState) => void;
+  onSort: (next: SortKey[]) => void;
+  onComputed: (next: ComputedColumn[]) => void;
+  onMove: (dir: -1 | 1) => void;
+  onClose: () => void;
+}) {
+  const { kind, key } = columnKind(column);
+  const def = kind === "computed" ? computed.find((c) => c.id === key) : undefined;
+  const [editing, setEditing] = useState(false);
+  const inSort = sort.some((k) => k.column === column);
+  const pinned = columns.pinned.includes(column);
+  const act = (fn: () => void) => () => {
+    fn();
+    onClose();
+  };
+  const own = columns.better[column] ?? def?.better;
+  const setOwnBetter = (b: Better | null) => {
+    if (def) onComputed(computed.map((c) => (c.id === def.id ? { ...c, better: b ?? undefined } : c)));
+    else onColumns(setBetter(columns, column, b));
+  };
+  if (editing && def) {
+    return (
+      <ComputedForm
+        initial={def}
+        onSubmit={(next) => {
+          onComputed(computed.map((c) => (c.id === def.id ? { ...next, id: def.id } : c)));
+          onClose();
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
+  return (
+    <div className="flex flex-col" role="none">
+      <button type="button" role="menuitem" className={MENU_ITEM} onClick={act(() => onSort([{ column, direction: "asc" }]))}>
+        <i className="fa-solid fa-arrow-up-short-wide w-3" aria-hidden="true" /> Sort ascending
+      </button>
+      <button type="button" role="menuitem" className={MENU_ITEM} onClick={act(() => onSort([{ column, direction: "desc" }]))}>
+        <i className="fa-solid fa-arrow-down-wide-short w-3" aria-hidden="true" /> Sort descending
+      </button>
+      {!inSort ? (
+        <button type="button" role="menuitem" className={MENU_ITEM} onClick={act(() => onSort(toggleSort(sort, column, true)))}>
+          <i className="fa-solid fa-plus w-3" aria-hidden="true" /> Add to sort
+        </button>
+      ) : (
+        <button type="button" role="menuitem" className={MENU_ITEM} onClick={act(() => onSort(removeSortKey(sort, column)))}>
+          <i className="fa-solid fa-xmark w-3" aria-hidden="true" /> Remove from sort
+        </button>
+      )}
+      <div className="my-1 border-t border-border-subtle" />
+      {column !== "name" && (
+        <>
+          <button type="button" role="menuitem" className={MENU_ITEM} onClick={act(() => onColumns(togglePinned(columns, column)))}>
+            <i className="fa-solid fa-thumbtack w-3" aria-hidden="true" /> {pinned ? "Unpin" : "Pin (freeze left)"}
+          </button>
+          <button type="button" role="menuitem" className={MENU_ITEM} onClick={act(() => onMove(-1))}>
+            <i className="fa-solid fa-arrow-left w-3" aria-hidden="true" /> Move left
+          </button>
+          <button type="button" role="menuitem" className={MENU_ITEM} onClick={act(() => onMove(1))}>
+            <i className="fa-solid fa-arrow-right w-3" aria-hidden="true" /> Move right
+          </button>
+          <button type="button" role="menuitem" className={MENU_ITEM} onClick={act(() => onColumns(setHidden(columns, column, true)))}>
+            <i className="fa-solid fa-eye-slash w-3" aria-hidden="true" /> Hide column
+          </button>
+        </>
+      )}
+      {better !== undefined && (
+        <>
+          <div className="my-1 border-t border-border-subtle" />
+          <div className="flex items-center gap-1 px-2 py-1 text-[11px] text-fg-muted">
+            <span className="mr-auto">Better</span>
+            {([null, "lower", "higher"] as const).map((b) => (
+              <button
+                key={b ?? "auto"}
+                type="button"
+                aria-pressed={(own ?? null) === b}
+                className={`rounded border px-1.5 py-0.5 ${(own ?? null) === b ? "border-accent bg-accent/10 text-fg" : "border-border hover:text-fg"}`}
+                onClick={() => setOwnBetter(b)}
+                title={b === null ? `From the metric's summary rule${better && !own ? ` (${better})` : ""}` : `${b} is better`}
+              >
+                {b ?? "auto"}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {def && (
+        <>
+          <div className="my-1 border-t border-border-subtle" />
+          <button type="button" role="menuitem" className={MENU_ITEM} onClick={() => setEditing(true)}>
+            <i className="fa-solid fa-pen w-3" aria-hidden="true" /> Edit expression
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`${MENU_ITEM} text-status-failed`}
+            onClick={act(() => onComputed(computed.filter((c) => c.id !== def.id)))}
+          >
+            <i className="fa-solid fa-trash w-3" aria-hidden="true" /> Remove column
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ComputedForm({
+  initial,
+  onSubmit,
+  onCancel,
+}: {
+  initial?: ComputedColumn;
+  onSubmit: (c: Omit<ComputedColumn, "id">) => void;
+  onCancel?: () => void;
+}) {
+  const [expr, setExpr] = useState(initial?.expr ?? "");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [better, setBetterDraft] = useState<Better | "">(initial?.better ?? "");
+  const error = expr.trim() ? compileScalarExpr(expr.trim()).error : null;
+  return (
+    <form
+      className="flex flex-col gap-1.5 p-1 text-xs"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!expr.trim() || error) return;
+        onSubmit({
+          expr: expr.trim(),
+          ...(name.trim() ? { name: name.trim() } : {}),
+          ...(better ? { better } : {}),
+        });
+        if (!initial) {
+          setExpr("");
+          setName("");
+          setBetterDraft("");
+        }
+      }}
+    >
+      <input
+        className={`input mono text-xs ${error ? "border-status-failed" : ""}`}
+        value={expr}
+        onChange={(e) => setExpr(e.target.value)}
+        placeholder="min(val.loss)"
+        aria-label="Column expression"
+        autoFocus={!!initial}
+      />
+      {error && <p className="text-[10px] text-status-failed">{error}</p>}
+      <div className="flex flex-col gap-1">
+        <input
+          className="input w-full text-xs"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name (optional)"
+          aria-label="Column name"
+        />
+        <select
+          className="input w-full py-1 text-xs"
+          value={better}
+          onChange={(e) => setBetterDraft(e.target.value as Better | "")}
+          aria-label="Better"
+          title="Which way is better, for deltas against the baseline"
+        >
+          <option value="">better: none</option>
+          <option value="lower">lower is better</option>
+          <option value="higher">higher is better</option>
+        </select>
+      </div>
+      <div className="flex justify-end gap-1">
+        {onCancel && (
+          <button type="button" className="btn px-2 py-0.5 text-xs" onClick={onCancel}>Cancel</button>
+        )}
+        <button type="submit" className="btn px-2 py-0.5 text-xs" disabled={!expr.trim() || !!error}>
+          {initial ? "Save" : "Add column"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Show/hide and pin every column, and add computed expression columns. */
+function ColumnManager({
+  available,
+  columns,
+  computed,
+  onColumns,
+  onComputed,
+}: {
+  available: string[];
+  columns: ColumnsState;
+  computed: ComputedColumn[];
+  onColumns: (next: ColumnsState) => void;
+  onComputed: (next: ComputedColumn[], columns?: ColumnsState) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const list = available.filter((c) => c !== "name" && (!q || columnLabel(c, computed).toLowerCase().includes(q) || c.toLowerCase().includes(q)));
+  const hidden = new Set(columns.hidden);
+  const allShown = list.every((c) => !hidden.has(c));
+  return (
+    <div className="flex flex-col gap-2 text-xs">
+      <div className="flex items-center gap-2">
+        <input
+          className="input min-w-0 flex-1 text-xs"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search columns"
+          aria-label="Search columns"
+        />
+        <button
+          type="button"
+          className="text-[11px] text-fg-subtle hover:text-fg"
+          onClick={() => {
+            let next = columns;
+            for (const c of list) next = setHidden(next, c, allShown);
+            onColumns(next);
+          }}
+        >
+          {allShown ? "Hide all" : "Show all"}
+        </button>
+      </div>
+      <ul className="max-h-64 overflow-y-auto">
+        {list.map((c) => {
+          const isPinned = columns.pinned.includes(c);
+          return (
+            <li key={c} className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-bg-hover">
+              <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="accent-accent"
+                  checked={!hidden.has(c)}
+                  onChange={(e) => onColumns(setHidden(columns, c, !e.target.checked))}
+                />
+                <span className="mono truncate" title={c}>{columnLabel(c, computed)}</span>
+                <span className="shrink-0 text-[10px] text-fg-subtle">{columnKind(c).kind === "builtin" ? "" : columnKind(c).kind}</span>
+              </label>
+              <button
+                type="button"
+                className={`shrink-0 px-1 ${isPinned ? "text-accent" : "text-fg-subtle hover:text-fg"}`}
+                aria-pressed={isPinned}
+                aria-label={isPinned ? `Unpin ${c}` : `Pin ${c}`}
+                title={isPinned ? "Unpin" : "Pin (freeze left)"}
+                onClick={() => onColumns(togglePinned(columns, c))}
+              >
+                <i className="fa-solid fa-thumbtack text-[10px]" aria-hidden="true" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="border-t border-border-subtle pt-2">
+        <p className="mb-1 text-[11px] text-fg-muted">
+          Computed column: a scalar expression over <span className="mono">min|max|mean|first|last(metric)</span>,{" "}
+          <span className="mono">config.&lt;key&gt;</span>, <span className="mono">summary.&lt;key&gt;</span>.
+        </p>
+        <ComputedForm onSubmit={(c) => onComputed([...computed, { ...c, id: newId() }])} />
+      </div>
+    </div>
   );
 }
