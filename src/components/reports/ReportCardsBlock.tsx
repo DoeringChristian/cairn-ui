@@ -33,6 +33,7 @@ import { useRunSelectorResolution } from "../../api/hooks";
 import type { Run } from "../../api/types";
 import { EMPTY_RUN_VIEW, RunViewContext, type RunView } from "../../lib/run-view";
 import { isEmptyRunView } from "../../lib/run-view-store";
+import { MediaSyncProvider, SectionMediaBar } from "../card-kit/media-sync";
 
 interface Props {
   projectId: string;
@@ -285,6 +286,8 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
           </button>}
         </div>
       ) : (
+        <MediaSyncProvider scopeKey={`report:${reportId}:${block.id}`}>
+        <SectionMediaBar className="mb-3" />
         <ReorderableCardGrid
           cards={displayCards.map((card) => ({
             key: card.id,
@@ -298,6 +301,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
           }))}
           onReorder={readOnly ? undefined : reorderCards}
         />
+        </MediaSyncProvider>
       )}
     </div>
     </RunViewContext.Provider>

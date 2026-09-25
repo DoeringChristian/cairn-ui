@@ -16,6 +16,7 @@ import { ops } from "../lib/workspace/doc";
 import { useWorkspace } from "../lib/workspace/use-workspace";
 import { HeaderToggle } from "./card-header";
 import { ICON_BTN } from "./card-header/icon-btn";
+import { MediaSyncProvider, SectionMediaBar } from "./card-kit/media-sync";
 import Popover from "./ui/Popover";
 import DefaultsEditor from "./DefaultsEditor";
 
@@ -23,6 +24,8 @@ const NO_DEFAULTS: CardDefaults = Object.freeze({}) as CardDefaults;
 
 export interface SectionBlockProps {
   sectionName: string;
+  /** Where this section's shared media slider persists; unique per page (e.g. `run:<id>`). */
+  scope?: string;
   itemCount: number;
   collapsed: boolean;
   onToggleCollapse: () => void;
@@ -37,6 +40,7 @@ export interface SectionBlockProps {
 
 export default function SectionBlock({
   sectionName,
+  scope,
   itemCount,
   collapsed,
   onToggleCollapse,
@@ -70,7 +74,7 @@ export default function SectionBlock({
 
   return (
     <SectionDefaultsProvider id={sectionName} defaults={defaults}>
-      {/* MERGER: MediaSyncProvider (card-kit/media-sync.tsx) wraps this section, with SectionMediaBar in `actions`/below the header. */}
+      <MediaSyncProvider scopeKey={`${scope ?? "page"}:${sectionName}`}>
       <section data-cairn-section={sectionName}>
         <header
           className="mb-3 flex items-center justify-between gap-2 border-b border-border pb-1 cursor-pointer select-none"
@@ -134,6 +138,7 @@ export default function SectionBlock({
             </span>
           </div>
         </header>
+        {!collapsed && <SectionMediaBar className="mb-3" />}
         {!collapsed && children}
         {editable && projectId && (
           <Popover
@@ -150,6 +155,7 @@ export default function SectionBlock({
           </Popover>
         )}
       </section>
+      </MediaSyncProvider>
     </SectionDefaultsProvider>
   );
 }

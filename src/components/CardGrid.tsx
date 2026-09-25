@@ -263,6 +263,7 @@ export default function CardGrid({ runId, sequences }: Props) {
           );
           return (
             <SectionBlock
+              scope={`run:${runId}`}
               key={section.name}
               sectionName={section.name}
               itemCount={entries.length}

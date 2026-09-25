@@ -434,6 +434,7 @@ export default function ComparisonView({
               {sections.length === 0 && <p className="text-sm text-fg-muted">No cards match.</p>}
               {sections.map((section) => (
                 <SectionBlock
+              scope={`compare:${comparison.id}`}
                   key={section.name}
                   sectionName={section.name}
                   itemCount={section.items.length}
