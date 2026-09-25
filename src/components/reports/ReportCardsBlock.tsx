@@ -19,6 +19,7 @@ import ReorderableCardGrid from "../ReorderableCardGrid";
 import Dialog, { DialogBody } from "../ui/Dialog";
 import { CELL_TOOLBAR_BTN } from "./cell-toolbar";
 import { CardCommentsContext, ReportCommentsContext } from "./comments-context";
+import { shouldAutoRebind } from "../../lib/reports/selector-rebind";
 import RunSelectorBadge from "../RunSelectorBadge";
 import RunSetEditor, { DEFAULT_QUERY_SELECTOR } from "../comparison/RunSetEditor";
 import { CardMutationContext, CardSettingsChangeContext } from "../../lib/card-settings";
@@ -78,8 +79,9 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
   // handling (cairn-block.ts), just without ever calling `onChange`.
   const { index: liveMetricIndex } = useMetricIndex(selector ? runIds : []);
   const displayCards = useMemo(
-    () => (selector ? rebindCardsToMetricIndex(block.cards, runIds, liveMetricIndex) : block.cards),
-    [selector, block.cards, runIds, liveMetricIndex],
+    () =>
+      selector && resolution.resolved ? rebindCardsToMetricIndex(block.cards, runIds, liveMetricIndex) : block.cards,
+    [selector, resolution.resolved, block.cards, runIds, liveMetricIndex],
   );
 
   const addRun = (id: string) => {
@@ -138,12 +140,9 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
   const lastReboundKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!selector || readOnly) return;
-    if (block.cards.length === 0) return;
-    const boundRunIds = new Set(block.cards.flatMap((c) => c.series.map((s) => s.runId)));
-    const resolvedSet = new Set(runIds);
-    const isStale =
-      boundRunIds.size !== resolvedSet.size || [...resolvedSet].some((id) => !boundRunIds.has(id));
-    if (!isStale) return;
+    // Not while the selector is still resolving: its run set reads as empty
+    // then, and rebinding would save every card with `series: []`.
+    if (!shouldAutoRebind({ resolved: resolution.resolved, cards: block.cards, resolvedRunIds: runIds })) return;
     // Guard against re-running for a key we already rebound (e.g. while the
     // async rebind for this exact run set is in flight, or after it landed
     // and block.cards was updated but still doesn't perfectly match, which
@@ -159,7 +158,7 @@ export default function ReportCardsBlock({ projectId, reportId, block, allProjec
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selector, resolvedRunIdsKey]);
+  }, [selector, resolvedRunIdsKey, resolution.resolved]);
 
   // AddCardSelection → ComparisonCard is the shared `cardFromSpec` (see
   // lib/reports/card-from-spec.ts) — also consumed by the ```cairn dialect

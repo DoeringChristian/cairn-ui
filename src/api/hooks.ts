@@ -429,7 +429,14 @@ const RUN_SELECTOR_STALE_MS = 10_000;
 export function useRunSelectorResolution(
   projectId: string,
   selector: RunSelector | undefined,
-): { runIds: string[]; active: boolean; isFetching: boolean; refresh: () => Promise<string[]> } {
+): {
+  runIds: string[];
+  active: boolean;
+  isFetching: boolean;
+  /** `runIds` is the real resolution (false while a query selector's runs are loading; `runIds` is [] then). */
+  resolved: boolean;
+  refresh: () => Promise<string[]>;
+} {
   const enabled = !!projectId && selector?.kind === "query";
   const q = useQuery({
     queryKey: qk.runs({ project: projectId, limit: RUN_SELECTOR_FETCH_LIMIT, runSelector: true }),
@@ -450,6 +457,7 @@ export function useRunSelectorResolution(
     runIds,
     active: selector?.kind === "query",
     isFetching: q.isFetching,
+    resolved: selector?.kind !== "query" || q.data !== undefined,
     // Re-fetches and returns the freshly-resolved run ids (rather than the
     // possibly-stale `runIds` from before the call) — callers that rebuild
     // cards from the resolved set (see rebuildCardsFromRuns) should await
