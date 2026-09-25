@@ -5,6 +5,7 @@
 import type { CardSettingsKey } from "../card-settings";
 import type { RunSelector } from "../run-selector";
 import type { CardType } from "../cards/card-spec";
+import type { RunView } from "../run-view";
 
 export interface ComparisonSeriesRef {
   runId: string;
@@ -80,6 +81,8 @@ export interface Comparison {
    * mechanism at a time (see `setComparisonRunSelector`).
    */
   runSelector?: RunSelector;
+  /** Hidden, pinned and baseline runs of this comparison (lib/run-view.tsx); absent = none. */
+  runView?: RunView;
   /** Server-side ID (set after first save to server). */
   serverId?: string;
 }

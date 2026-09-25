@@ -4,6 +4,8 @@ import type { Run } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
 import RunAlertBanners from "../components/alerts/RunAlertBanners";
 import { formatDuration, formatRelative } from "../lib/format";
+import { RunViewContext } from "../lib/run-view";
+import { useProjectRunView } from "../lib/run-view-store";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -16,6 +18,8 @@ const TABS = [
 export default function RunDetailPage() {
   const { projectId, runId } = useParams<{ projectId: string; runId: string }>();
   const q = useRun(runId!);
+  // The project's run view (hidden, pinned, baseline), shared with the runs table.
+  const runView = useProjectRunView(projectId);
 
   if (q.isLoading) return <p className="text-fg-muted">Loading…</p>;
   if (q.isError) return <p className="text-status-failed">Error: {String(q.error)}</p>;
@@ -67,7 +71,9 @@ export default function RunDetailPage() {
           </NavLink>
         ))}
       </nav>
-      <Outlet context={{ run, params: q.data.params, summary: q.data.summary ?? [], metricDefs: q.data.metric_defs ?? [] }} />
+      <RunViewContext.Provider value={runView}>
+        <Outlet context={{ run, params: q.data.params, summary: q.data.summary ?? [], metricDefs: q.data.metric_defs ?? [] }} />
+      </RunViewContext.Provider>
     </div>
   );
 }

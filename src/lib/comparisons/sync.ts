@@ -7,6 +7,7 @@ import { loadCardOverrides, saveCardOverrides, type CardOverrides, type CardSett
 import { storageKeys } from "../storage";
 import type { RunSelector } from "../run-selector";
 import { isRunSelector } from "../run-selector";
+import { isEmptyRunView, parseRunView } from "../run-view-store";
 import type { Comparison, ComparisonCard, SmartFilters } from "./types";
 import { cardSettingsKeyForScope, compareRunId } from "./types";
 import { newId } from "../reports/ids";
@@ -34,6 +35,7 @@ function buildPayload(cmp: Comparison): Record<string, unknown> {
     runIds: cmp.runIds,
     smartFilters: cmp.smartFilters,
     runSelector: cmp.runSelector,
+    runView: cmp.runView,
     cardSettings,
   };
 }
@@ -92,6 +94,8 @@ export async function syncComparisonsFromServer(projectId: string): Promise<void
           smartFilters: payload.smartFilters as SmartFilters | undefined,
           runSelector: isRunSelector(payload.runSelector) ? (payload.runSelector as RunSelector) : undefined,
         };
+        const runView = parseRunView(payload.runView);
+        if (!isEmptyRunView(runView)) cmp.runView = runView;
         local.push(cmp);
         changed = true;
 

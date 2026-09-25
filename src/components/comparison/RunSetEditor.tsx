@@ -6,6 +6,8 @@ import {
 } from "../../lib/run-selector";
 import { disambiguateRunLabels, shortRunId, useRunMetadataVersion } from "../../lib/run-label";
 import type { Run } from "../../api/types";
+import { useRunColors, useRunView } from "../../lib/run-view";
+import RunViewControls, { RunSwatch } from "../RunViewControls";
 
 /** The selector a run set switches to when it goes from static to auto. */
 export const DEFAULT_QUERY_SELECTOR: QueryRunSelector = {
@@ -39,7 +41,9 @@ const HEADER_BUTTON =
 /**
  * A run set bound either to a static list (removable chips + a "+ run"
  * picker) or to a query selector (name pattern / tags / mode / N fields and
- * read-only chips of the resolved runs).
+ * read-only chips of the resolved runs). Each chip shows the run's colour
+ * and, when the surrounding scope provides an editable `RunViewContext`,
+ * the eye / pin / baseline toggles of that scope's run view.
  */
 export default function RunSetEditor({
   title,
@@ -76,6 +80,10 @@ export default function RunSetEditor({
     [allProjectRuns, metaVersion],
   );
 
+  const colors = useRunColors(runIds);
+  const { view, set: setView } = useRunView();
+  const hiddenCount = runIds.filter((id) => view.hidden.includes(id)).length;
+
   const query = selector?.kind === "query" ? selector : undefined;
   const staticMode = !selector;
 
@@ -83,7 +91,7 @@ export default function RunSetEditor({
     <div className="card p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs uppercase tracking-wide text-fg-muted">
-          {title} ({runIds.length})
+          {title} ({runIds.length}{hiddenCount > 0 ? `, ${hiddenCount} hidden` : ""})
         </span>
         <div className="flex flex-wrap items-center gap-2">
           {actions}
@@ -170,30 +178,29 @@ export default function RunSetEditor({
         <div className="flex flex-wrap gap-1.5">
           {includedRuns.map((r) => {
             const label = chipLabels[r.id] ?? shortRunId(r.id);
-            return editable && staticMode ? (
+            const hidden = view.hidden.includes(r.id);
+            return (
               <span
                 key={r.id}
-                className="group/chip inline-flex min-w-0 max-w-full items-center gap-1 rounded border border-border-subtle bg-bg-hover px-1.5 py-0.5 text-[11px] mono"
+                className={`group/chip inline-flex min-w-0 max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] mono ${
+                  view.baseline === r.id ? "border-accent/60 bg-accent/10" : "border-border-subtle bg-bg-hover"
+                }`}
                 title={r.id}
               >
-                <span className="truncate text-fg">{label}</span>
-                <button
-                  type="button"
-                  onClick={() => onRemoveRun(r.id)}
-                  className="shrink-0 text-fg-subtle hover:text-status-failed touch:-my-3 touch:-mr-3 touch:inline-flex touch:h-10 touch:w-10 touch:items-center touch:justify-center"
-                  aria-label={`Remove ${label}`}
-                  title={`Remove ${label}`}
-                >
-                  {"×"}
-                </button>
-              </span>
-            ) : (
-              <span
-                key={r.id}
-                className="inline-flex items-center gap-1 rounded border border-border-subtle bg-bg-hover px-1.5 py-0.5 text-[11px] mono text-fg"
-                title={r.id}
-              >
-                {label}
+                <RunSwatch color={colors.get(r.id)} />
+                <span className={`truncate text-fg ${hidden ? "line-through opacity-50" : ""}`}>{label}</span>
+                <RunViewControls runId={r.id} view={view} onChange={setView} />
+                {editable && staticMode && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveRun(r.id)}
+                    className="shrink-0 text-fg-subtle hover:text-status-failed touch:-my-3 touch:-mr-3 touch:inline-flex touch:h-10 touch:w-10 touch:items-center touch:justify-center"
+                    aria-label={`Remove ${label}`}
+                    title={`Remove ${label}`}
+                  >
+                    {"×"}
+                  </button>
+                )}
               </span>
             );
           })}
