@@ -33,7 +33,14 @@ interface Props {
   /** Annotations drawn over the pane's own image (never over the reference). */
   overlays?: ImageOverlays | null;
   overlayView?: OverlayView;
+  /**
+   * Upscaling: `auto` turns nearest-neighbour on once a source pixel covers
+   * more than ~1.5 screen pixels; `smooth` and `pixelated` force one.
+   */
+  rendering?: ImageRendering;
 }
+
+export type ImageRendering = "auto" | "smooth" | "pixelated";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 64;
@@ -51,7 +58,7 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
  * scrolls the page.
  */
 export default function ImagePane({
-  image, reference, split, onSplitChange, transform, onTransformChange, overlays, overlayView,
+  image, reference, split, onSplitChange, transform, onTransformChange, overlays, overlayView, rendering = "auto",
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null);
   /** The foreground layer: the image plus its overlay, clipped together. */
@@ -173,7 +180,8 @@ export default function ImagePane({
   };
 
   const imgClass = "absolute inset-0 h-full w-full object-contain select-none";
-  const imgStyle = { imageRendering: pixelated ? "pixelated" : "auto" } as const;
+  const crisp = rendering === "pixelated" || (rendering === "auto" && pixelated);
+  const imgStyle = { imageRendering: crisp ? "pixelated" : "auto" } as const;
 
   return (
     <div

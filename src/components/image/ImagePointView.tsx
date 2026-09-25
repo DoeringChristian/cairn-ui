@@ -16,7 +16,7 @@ import {
   type OverlaySummary,
   type OverlayView,
 } from "../../lib/overlays";
-import ImagePane, { type PaneTransform } from "./ImagePane";
+import ImagePane, { type ImageRendering, type PaneTransform } from "./ImagePane";
 import { decodeMask } from "./decode-mask";
 
 /** One stored image: a single point's artifact, or one entry of a gallery. */
@@ -84,6 +84,7 @@ interface Props {
   overlayView: OverlayView;
   /** Reports the overlays this point's images carry (for the card's overlay settings). */
   onOverlays?: (summary: OverlaySummary) => void;
+  rendering?: ImageRendering;
 }
 
 /**
@@ -126,7 +127,7 @@ function useItemOverlays(items: ImageItem[], onOverlays?: (summary: OverlaySumma
  */
 export default function ImagePointView({
   metricName, point, refPoint, refLabel, split, onSplitChange, transform, onTransformChange, loadingHint,
-  overlayView, onOverlays,
+  overlayView, onOverlays, rendering,
 }: Props) {
   const { items, loading } = useImageItems(point);
   const refs = useImageItems(refPoint ?? null);
@@ -175,6 +176,7 @@ export default function ImagePointView({
         onTransformChange={onTransformChange}
         overlays={overlays[i]}
         overlayView={overlayView}
+        rendering={rendering}
       />
     );
     if (!item.caption) return pane;

@@ -2,6 +2,14 @@ import type { BaseCardSettings } from "../card-kit/base-settings";
 import type { SeriesRef } from "../card-kit/use-card-series";
 import { plotCardPolicy } from "../card-kit/plot-card-policy.ts";
 import type { CardSettingsMeta } from "./meta";
+import {
+  MEDIA_COLUMNS_CASCADE,
+  MEDIA_SLIDER_CASCADE,
+  mediaColumnsBuiltin,
+  mediaSliderBuiltin,
+  type MediaColumnsSettings,
+  type MediaSliderSettings,
+} from "./media.ts";
 
 export type HoverMode = "closest" | "x unified" | "y unified" | "none";
 export type DragMode = "zoom" | "pan" | "select" | "lasso" | "none";
@@ -14,10 +22,9 @@ export type DragMode = "zoom" | "pan" | "select" | "lasso" | "none";
  */
 export type FigureCompareMode = "panes" | "overlay";
 
-export interface FigureSettings extends BaseCardSettings {
+export interface FigureSettings extends BaseCardSettings, MediaSliderSettings, MediaColumnsSettings {
   metrics: SeriesRef[];
   paneWidths?: number[];
-  sliderStep?: number;
   displayModeBar: boolean;
   scrollZoom: boolean;
   hoverMode: HoverMode;
@@ -31,6 +38,8 @@ export interface FigureSettings extends BaseCardSettings {
 export const builtin: FigureSettings = {
   version: 1,
   colSpan: plotCardPolicy("figure").colSpan,
+  ...mediaSliderBuiltin,
+  ...mediaColumnsBuiltin,
   metrics: [],
   displayModeBar: false,
   scrollZoom: true,
@@ -45,6 +54,14 @@ export function instanceDefaults(seed: { name: string }): Partial<FigureSettings
 
 export const meta: CardSettingsMeta<FigureSettings> = {
   builtin,
-  cascadeKeys: ["displayModeBar", "scrollZoom", "hoverMode", "dragMode", "showLegend"],
-  tabs: ["display"],
+  cascadeKeys: [
+    "displayModeBar",
+    "scrollZoom",
+    "hoverMode",
+    "dragMode",
+    "showLegend",
+    ...MEDIA_SLIDER_CASCADE,
+    ...MEDIA_COLUMNS_CASCADE,
+  ],
+  tabs: ["data", "display"],
 };

@@ -21,7 +21,6 @@ const COMPONENTS = join(SRC, "components");
  */
 const ALLOWLIST = new Set<string>([
   "components/BarChartCard.tsx",
-  "components/ImageCard.tsx",
   "components/ImportanceCard.tsx",
   "components/ScalarTileCard.tsx",
   "components/ScatterPlotCard.tsx",
