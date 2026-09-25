@@ -6,6 +6,7 @@ import { downloadArtifact, artifactFilename } from "../lib/download";
 import { api } from "../api/client";
 import type { SequenceMeta } from "../api/types";
 import AddToComparisonButton from "./AddToComparisonButton";
+import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import TextSettingsPanel from "./settings-panels/TextSettingsPanel";
 import StepSlider from "./StepSlider";
@@ -105,6 +106,7 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
       onRemove={onRemove}
       onDownload={current?.artifact_hash ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), artifactFilename(metric.name, current?.step ?? 0, "text/plain")) : undefined}
       addToComparisonSlot={<AddToComparisonButton cardType="text" series={compSeries} />}
+      addToReportSlot={<AddToReportButton cardType="text" series={compSeries} settingsKey={settingsKey} />}
       settingsPanel={<TextSettingsPanel ctl={ctl} mode="card" />}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

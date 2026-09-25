@@ -15,6 +15,7 @@ import {
 } from "../charts/HistogramChart";
 import { parseNpy, type NpyArray } from "../lib/parse-npy";
 import AddToComparisonButton from "./AddToComparisonButton";
+import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import { useStepSlider, resolveAtStep } from "./card-kit";
@@ -317,6 +318,7 @@ export default function TensorCard({
       addToComparisonSlot={
         <AddToComparisonButton cardType="tensor" series={compSeries} />
       }
+      addToReportSlot={<AddToReportButton cardType="tensor" series={compSeries} settingsKey={settingsKey} />}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

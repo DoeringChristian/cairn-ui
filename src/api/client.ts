@@ -280,6 +280,77 @@ export const api = {
   deleteReport: (projectId: string, id: string) =>
     del_<{ deleted: string }>(`/api/projects/${projectId}/reports/${id}`),
 
+  // --- reports editing (wave 3, agent H) ---
+  /** PUT a report only if it is still at `expectedUpdatedAt`; a stale write returns the server copy. */
+  updateReportIfUnchanged: async (
+    projectId: string,
+    id: string,
+    body: { name?: string; payload?: Record<string, unknown> },
+    expectedUpdatedAt: string,
+  ): Promise<import("./types").ReportPutResult> => {
+    const path = `/api/projects/${projectId}/reports/${id}`;
+    const res = await fetch(path, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, expected_updated_at: expectedUpdatedAt }),
+    });
+    if (res.status === 409) {
+      const b = (await res.json()) as { name: string; updated_at: string; payload: Record<string, unknown> };
+      return { conflict: { name: b.name, updated_at: b.updated_at, payload: b.payload } };
+    }
+    await checkOk(res, path);
+    return { ok: (await res.json()) as { id: string; updated_at: string } };
+  },
+  /**
+   * Upload an image into a report (multipart `file`). XHR rather than fetch
+   * for upload progress (`onProgress` gets 0..1). Rejects with the server's
+   * `detail` message on failure.
+   */
+  uploadReportAsset: (
+    projectId: string,
+    reportId: string,
+    file: Blob,
+    onProgress?: (fraction: number) => void,
+  ): Promise<import("./types").ReportAsset> =>
+    new Promise((resolve, reject) => {
+      const path = `/api/projects/${projectId}/reports/${reportId}/assets`;
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", path);
+      xhr.responseType = "json";
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+      };
+      xhr.onload = () => {
+        if (xhr.status === 401) redirectToLogin();
+        if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.response as import("./types").ReportAsset);
+        else {
+          const detail = (xhr.response as { detail?: unknown } | null)?.detail;
+          reject(new Error(typeof detail === "string" ? detail : `${xhr.status} ${xhr.statusText}`));
+        }
+      };
+      xhr.onerror = () => reject(new Error("network error"));
+      const form = new FormData();
+      form.append("file", file, (file as File).name || "image");
+      xhr.send(form);
+    }),
+  reportComments: (projectId: string, reportId: string) =>
+    get<{ comments: import("./types").ReportComment[] }>(`/api/projects/${projectId}/reports/${reportId}/comments`),
+  createReportComment: (projectId: string, reportId: string, body: import("./types").ReportCommentCreate) =>
+    post<import("./types").ReportComment>(`/api/projects/${projectId}/reports/${reportId}/comments`, body),
+  updateReportComment: (projectId: string, reportId: string, commentId: string, body: string) =>
+    put<import("./types").ReportComment>(
+      `/api/projects/${projectId}/reports/${reportId}/comments/${commentId}`,
+      { body },
+    ),
+  deleteReportComment: (projectId: string, reportId: string, commentId: string) =>
+    del_<{ deleted: string[] }>(`/api/projects/${projectId}/reports/${reportId}/comments/${commentId}`),
+  resolveReportComment: (projectId: string, reportId: string, commentId: string, resolved: boolean) =>
+    post<import("./types").ReportComment>(
+      `/api/projects/${projectId}/reports/${reportId}/comments/${commentId}/resolve`,
+      { resolved },
+    ),
+  // --- end reports editing ---
+
   // Report templates (server-persisted)
   reportTemplates: (projectId: string) =>
     get<{ report_templates: Array<{ id: string; name: string; created_at: string; updated_at: string; card_count: number }> }>(

@@ -15,6 +15,7 @@ import {
 import type { RunDetailResponse, SequenceMeta, SequenceResponse } from "../api/types";
 import SeriesChipStrip from "./SeriesChipStrip";
 import AddToComparisonButton from "./AddToComparisonButton";
+import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import { HeaderBadge, HeaderToggle } from "./card-header";
 import ScalarSettingsPanel, { type ScalarPanelCtx } from "./settings-panels/ScalarSettingsPanel";
@@ -506,6 +507,7 @@ export default function ScalarPlotCard({
         if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? metric.name));
       }}
       addToComparisonSlot={<AddToComparisonButton cardType="scalar" series={compSeries} />}
+      addToReportSlot={<AddToReportButton cardType="scalar" series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       onRemove={onRemove}
       onResetView={resetViewport}
       viewModified={viewportModified}

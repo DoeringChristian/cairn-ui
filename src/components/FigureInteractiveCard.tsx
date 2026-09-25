@@ -28,6 +28,7 @@ import type { PlotlyFigureLike } from "../lib/plot-utils/types";
 import PlotlyChart from "../charts/PlotlyChart";
 import { readChartTheme, type ChartTheme } from "../charts/theme";
 import AddToComparisonButton from "./AddToComparisonButton";
+import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
@@ -745,6 +746,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       onDownload={current?.artifact_hash ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), artifactFilename(metric.name, current.step, current.artifact_mime ?? "image/png")) : undefined}
       onScreenshot={() => { if (cardRef.current) exportPlotlyChart(cardRef.current, safeName(settings.title ?? metric.name), "png"); }}
       addToComparisonSlot={<AddToComparisonButton cardType="figure" series={compSeries} />}
+      addToReportSlot={<AddToReportButton cardType="figure" series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       onResetView={resetView}
       viewModified={viewModified}
       headerActions={<>

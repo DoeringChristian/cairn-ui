@@ -26,6 +26,8 @@ interface Props {
   onDownload?: () => void;
   onScreenshot?: () => void;
   addToComparisonSlot?: ReactNode;
+  /** AddToReportButton, beside the comparison slot. */
+  addToReportSlot?: ReactNode;
   headerActions?: ReactNode;
   dropHighlight?: boolean;
   dropProps?: Record<string, unknown>;
@@ -57,6 +59,7 @@ export default function CardShell({
   onDownload,
   onScreenshot,
   addToComparisonSlot,
+  addToReportSlot,
   headerActions,
   dropHighlight,
   dropProps,
@@ -131,6 +134,7 @@ export default function CardShell({
           onDownload={onDownload}
           onScreenshot={onScreenshot}
           addToComparisonSlot={addToComparisonSlot}
+          addToReportSlot={addToReportSlot}
           cardActions={headerActions}
           interact={interact.available && !collapsed
             ? { on: interact.on, onToggle: interact.toggle }

@@ -34,6 +34,8 @@ export const qk = {
   reports: (projectId: string, params?: unknown) =>
     params != null ? (["reports", projectId, params] as const) : (["reports", projectId] as const),
   report: (projectId: string, reportId: string) => ["report", projectId, reportId] as const,
+  // Report comment threads (wave 3, agent H).
+  reportComments: (projectId: string, reportId: string) => ["report-comments", projectId, reportId] as const,
   sweeps: (projectId: string) => ["sweeps", projectId] as const,
   sweep: (sweepId: string) => ["sweep", sweepId] as const,
   // Saved workspace views (lib/workspace/views.ts).

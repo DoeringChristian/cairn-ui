@@ -12,6 +12,7 @@ import type { SequenceMeta, SequencePoint } from "../api/types";
 import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid } from "./card-kit";
 import { instanceDefaults, type TableCombineSource, type TableSettings } from "./cards-settings/table";
 import AddToComparisonButton from "./AddToComparisonButton";
+import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import StepSlider from "./StepSlider";
@@ -446,6 +447,7 @@ export default function TableCard({
       onRemove={onRemove}
       onDownload={first ? downloadCurrentCsv : undefined}
       addToComparisonSlot={<AddToComparisonButton cardType="table" series={compSeries} />}
+      addToReportSlot={<AddToReportButton cardType="table" series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
       settingsPanel={<TableSettingsPanel ctl={ctl} ctx={panelCtx} mode="card" />}

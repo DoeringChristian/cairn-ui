@@ -19,6 +19,7 @@ import {
 } from "../charts/HistogramChart";
 import { parseNpz } from "../lib/parse-npz";
 import AddToComparisonButton from "./AddToComparisonButton";
+import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import HistogramSettingsPanel from "./settings-panels/HistogramSettingsPanel";
@@ -226,6 +227,7 @@ export default function HistogramCard({
       addToComparisonSlot={
         <AddToComparisonButton cardType="histogram" series={compSeries} />
       }
+      addToReportSlot={<AddToReportButton cardType="histogram" series={compSeries} settingsKey={settingsKey} />}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}
