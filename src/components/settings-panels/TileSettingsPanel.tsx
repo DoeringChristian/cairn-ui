@@ -34,6 +34,7 @@ export default function TileSettingsPanel({ ctl, ctx, mode }: Props) {
       )}
       <Segmented<TileReduce>
         label="Across runs"
+          layout="stacked"
         options={[
           { value: "best", label: "Best" },
           { value: "mean", label: "Mean" },

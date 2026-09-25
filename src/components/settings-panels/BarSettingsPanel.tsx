@@ -70,6 +70,7 @@ export default function BarSettingsPanel({ ctl, ctx, mode }: Props) {
         )}
         <Segmented<BarGroupPlot>
           label="Plot"
+          layout="stacked"
           description={
             s.groupPlot === "bar"
               ? "Each group's mean, with ± one standard deviation."

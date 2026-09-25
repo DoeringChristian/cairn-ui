@@ -74,6 +74,8 @@ export default function ScatterChart({
     [points, pareto?.x, pareto?.y],
   );
 
+  const fit = useMemo(() => (regression ? regressionLine(points, { xLog, yLog }) : null), [points, regression, xLog, yLog]);
+
   const data = useMemo<PlotlyData>(() => {
     const onFront = new Set(front.map((p) => p.id));
     const dim = pareto && dimNonFrontier;
@@ -138,34 +140,38 @@ export default function ScatterChart({
         x: r.x,
         y: r.y,
         line: { color: withAlpha(theme.fgMuted, 0.8), width: 1.5, dash: RUNNING_DASH[stat], shape: "hv" },
-        hovertemplate: `running ${stat}: %{y}<extra></extra>`,
+        // Overlays never take the hover: a click must land on a run's marker.
+        hoverinfo: "skip",
         showlegend: false,
       });
     }
-    if (regression) {
-      const fit = regressionLine(points, { xLog, yLog });
-      if (fit) {
-        lines.push({
-          type: "scatter",
-          mode: "lines",
-          x: fit.x,
-          y: fit.y,
-          line: { color: withAlpha(theme.fg, 0.6), width: 1.5 },
-          hovertemplate:
-            `fit: slope ${formatNum(fit.fit.slope)}, intercept ${formatNum(fit.fit.intercept)}` +
-            `<br>R² ${formatNum(fit.fit.r2)} (${fit.fit.n} runs)` +
-            `${xLog || yLog ? "<br>fitted in log space" : ""}<extra></extra>`,
-          showlegend: false,
-        });
-      }
+    if (fit) {
+      lines.push({
+        type: "scatter",
+        mode: "lines",
+        x: fit.x,
+        y: fit.y,
+        line: { color: withAlpha(theme.fg, 0.6), width: 1.5 },
+        hoverinfo: "skip",
+        showlegend: false,
+      });
     }
     // Lines under the markers.
     return [...lines, ...traces];
-  }, [points, front, xLabel, yLabel, colorLabel, pareto, dimNonFrontier, running, regression,
-    xLog, yLog, theme.accent, theme.fg, theme.fgMuted]);
+  }, [points, front, xLabel, yLabel, colorLabel, pareto, dimNonFrontier, running, fit,
+    theme.accent, theme.fg, theme.fgMuted]);
 
   const layout = useMemo(() => {
     const { shapes, annotations } = refLineShapes(refLines, { xLog, yLog, color: theme.fgMuted });
+    if (fit) {
+      // The fit's summary at the line's right end (log axes place annotations in log10 units).
+      const at = (v: number, log: boolean) => (log ? Math.log10(v) : v);
+      annotations.push({
+        x: at(fit.x[1]!, xLog), y: at(fit.y[1]!, yLog), xref: "x", yref: "y",
+        text: `R² ${formatNum(fit.fit.r2)}${xLog || yLog ? " (log)" : ""}`,
+        showarrow: false, xanchor: "right", yanchor: "bottom", font: { size: 10, color: theme.fgMuted },
+      });
+    }
     return {
       hovermode: "closest",
       // New ranges from the settings replace the user's zoom.
@@ -175,7 +181,7 @@ export default function ScatterChart({
       shapes,
       annotations,
     };
-  }, [xLabel, yLabel, xRange, yRange, xLog, yLog, refLines, theme.fgMuted]);
+  }, [xLabel, yLabel, xRange, yRange, xLog, yLog, refLines, fit, theme.fgMuted]);
 
   return (
     <div className={className}>

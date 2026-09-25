@@ -43,6 +43,7 @@ export default function HistogramSettingsPanel({ ctl, ctx, mode }: Props) {
     <SettingsSection name="Appearance">
       <Segmented<HistogramSettings["viewMode"]>
         label="View"
+          layout="stacked"
         options={[
           { value: "bars", label: "Bars (per step)" },
           { value: "heatmap", label: "Heatmap (over steps)" },

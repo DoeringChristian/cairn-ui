@@ -145,6 +145,7 @@ export default function ScatterSettingsPanel({ ctl, ctx, mode }: Props) {
               <div key={i} className="my-1 rounded border border-border-subtle px-2">
                 <Segmented<"x" | "y">
                   label={`Reference line ${i + 1}`}
+          layout="stacked"
                   value={l.axis}
                   onChange={(axis) => setRefLines(refLines.map((r, j) => (j === i ? { ...r, axis } : r)))}
                   disabled={ro}
