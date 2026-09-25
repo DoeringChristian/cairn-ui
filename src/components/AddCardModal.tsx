@@ -46,9 +46,11 @@ const TYPE_LABELS: Record<string, string> = {
   bar: "Bar Chart",
   tile: "Scalar Tiles",
   importance: "Parameter Importance",
+  "run-compare": "Run Comparer",
+  "code-diff": "Code Diff",
 };
 
-const TYPE_ORDER = ["scalar", "image", "figure", "audio", "video", "histogram", "tensor", "text", "table", "html", "markdown", "pointcloud", "mesh", "boxes3d", "volume", "preset", "artifact", "parallel", "scatter", "bar", "tile", "importance"];
+const TYPE_ORDER = ["scalar", "image", "figure", "audio", "video", "histogram", "tensor", "text", "table", "html", "markdown", "pointcloud", "mesh", "boxes3d", "volume", "preset", "artifact", "parallel", "scatter", "bar", "tile", "importance", "run-compare", "code-diff"];
 
 /** Map a picked grouping entry (a lib/reports/metric-index.ts entry) to a typed selection. */
 function toSelection(m: MetricIndexEntry): AddCardSelection {
@@ -133,6 +135,8 @@ export default function AddCardModal({
       { type: "bar", name: "Bar Chart" },
       { type: "tile", name: "Scalar Tile" },
       { type: "importance", name: "Parameter Importance" },
+      { type: "run-compare", name: "Run Comparer" },
+      { type: "code-diff", name: "Code Diff" },
     ];
     for (const { type, name } of multiRunDefaults) {
       if (!byType.has(type)) {

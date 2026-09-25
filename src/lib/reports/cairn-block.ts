@@ -38,6 +38,7 @@ import { parse as parseYamlDoc, stringify as stringifyYamlDoc } from "yaml";
 import {
   isMultiRunCardType,
   MULTI_RUN_CARD_LABELS,
+  MULTI_RUN_CARD_TYPES,
   type ComparisonCard,
   type ComparisonSeriesRef,
   type MultiRunCardType,
@@ -258,7 +259,7 @@ function selectionForCard(c: CairnCardInput, index: number, metricIndex: MetricI
     // No metric, no explicit series → a workspace-level multi-run card.
     if (typeof c.type !== "string" || !isMultiRunCardType(c.type)) {
       throw new CairnBlockError(
-        `cards[${index}]: specify a \`metric\`, an explicit \`series\`, or a multi-run \`type\` (one of parallel/scatter/bar/tile)`,
+        `cards[${index}]: specify a \`metric\`, an explicit \`series\`, or a multi-run \`type\` (one of ${MULTI_RUN_CARD_TYPES.join("/")})`,
       );
     }
     const cardType: MultiRunCardType = c.type;
