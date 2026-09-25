@@ -41,7 +41,7 @@ import { xMetricFor } from "../lib/metric-defs";
 import { SERIES_COLORS, type Series } from "../lib/plot-utils/types";
 import { SMOOTHING_KINDS, formatSmoothing } from "../lib/plot-utils/smooth";
 import { groupSeries } from "../lib/plot-utils/aggregate";
-import { assignRunColors } from "../lib/run-color";
+import { RUN_PALETTE } from "../lib/run-color";
 import { useRunColors, useRunView, useVisibleRuns } from "../lib/run-view";
 import { cursorSyncKey, useChartSyncEnabled, useSyncedView } from "../lib/chart-sync";
 import type { RunContext, SeriesData } from "../lib/expr";
@@ -301,14 +301,14 @@ export default function ScalarPlotCard({
           group: groupValue(by, runById.get(s.runId!), paramsByRunId.get(s.runId!)),
         };
       });
-      const groupValues = [...new Set(items.map((i) => i.group).filter((g): g is string => g != null))];
-      const groupColors = assignRunColors(groupValues.map((g) => `group:${g}`), () => undefined);
+      // Groups take palette slots in sorted order (distinct, stable for a set of groups).
+      const groupValues = [...new Set(items.map((i) => i.group).filter((g): g is string => g != null))].sort();
       const grouped = groupSeries(items, {
         band: settings.band,
         hideMembers: settings.hideMembers,
         labelMetric: metricKeys.size > 1,
         agg: settings.agg,
-        groupColor: (g) => groupColors.get(`group:${g}`)!,
+        groupColor: (g) => RUN_PALETTE[groupValues.indexOf(g) % RUN_PALETTE.length]!,
       });
       if (grouped.groups > 0) {
         lines = grouped.series;

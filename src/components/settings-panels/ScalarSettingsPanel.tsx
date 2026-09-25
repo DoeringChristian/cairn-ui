@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { SetOptions, SettingsController } from "../../lib/card-settings";
 import {
   FieldMultiPicker,
@@ -100,8 +100,8 @@ function ErrorSpan({ src, span }: { src: string; span: { start: number; end: num
 
 /**
  * A text setting checked as it is typed: the draft shows its parse / type
- * error with the offending span, and is saved only once it compiles (an
- * empty template is valid).
+ * error with the offending span, and is saved once it compiles and typing
+ * pauses (an empty template is valid).
  */
 function CheckedText({
   bound,
@@ -120,6 +120,15 @@ function CheckedText({
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   const error = compile(draft).error;
+  // Save a valid draft once typing pauses (not every valid prefix: `s`, `st`, …).
+  const commit = useRef(onChange);
+  commit.current = onChange;
+  useEffect(() => {
+    if (draft === value || compile(draft).error) return;
+    const t = setTimeout(() => commit.current(draft), 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, value]);
   return (
     <TextInput
       label={label}
@@ -131,10 +140,7 @@ function CheckedText({
       onReset={onReset}
       error={error?.message ?? null}
       description={error ? <ErrorSpan src={draft} span={error.span} /> : description}
-      onChange={(v) => {
-        setDraft(v);
-        if (!compile(v).error && v !== value) onChange(v);
-      }}
+      onChange={setDraft}
     />
   );
 }
