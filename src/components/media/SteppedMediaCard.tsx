@@ -8,6 +8,11 @@
  * A gallery point (a tracked list of the card's media, lib/media/gallery.ts)
  * renders as a grid of its items, each through the same `renderArtifact`,
  * swapped in as a whole once every item is warm (see GalleryView).
+ *
+ * A card may compare every pane against a reference tag (`reference`): the
+ * tag is resolved in each pane's own run (see resolveReference) and handed
+ * to the renderer with the point; a gallery pairs with a reference gallery
+ * item by item (a single reference serves every item).
  */
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
@@ -26,11 +31,12 @@ import { prefetchPointOrGallery } from "../../lib/media/gallery-query";
 import GalleryView, { useSettledGalleries } from "./GalleryView";
 import type { SequenceMeta, SequencePoint } from "../../api/types";
 import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid } from "../card-kit";
+import { resolveReference } from "../card-kit/resolve-at-step";
 import ComparePanes from "../card-kit/ComparePanes";
 import GridPanes from "../card-kit/GridPanes";
 import { useMediaPanes, useScalarMetricNames } from "../card-kit/use-media-panes";
 import { steppedMediaInstanceDefaults, type SteppedMediaSettings } from "../cards-settings/stepped-media";
-import type { MediaPanelCtx } from "../settings-panels/media-panel-kit";
+import type { MediaPanelCtx, ReferencePanelCtx } from "../settings-panels/media-panel-kit";
 import AddToComparisonButton from "../AddToComparisonButton";
 import AddToReportButton from "../AddToReportButton";
 import CardShell from "../CardShell";
@@ -68,10 +74,16 @@ export interface MediaView<S> {
   paneCount: number;
   /** The card follows a section media sync right now. */
   following: boolean;
+  /** The reference this pane (or gallery item) compares against; null without one. */
+  reference: SequencePoint | null;
+  /** The reference's series name. */
+  referenceName?: string;
+  /** Patch the card's settings (e.g. a divider position). */
+  update: (patch: Partial<S>, opts?: { mergeKey?: string }) => void;
 }
 
 /** Runtime info a stepped media settings panel gets. */
-export interface SteppedMediaPanelCtx extends MediaPanelCtx {
+export interface SteppedMediaPanelCtx extends MediaPanelCtx, ReferencePanelCtx {
   paneKeys: readonly string[];
 }
 
@@ -101,6 +113,13 @@ interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
   peek?: (qc: QueryClient, point: SequencePoint) => boolean;
   /** Extra controls between the panes and the slider (the video transport). */
   footer?: (args: { settings: S; paneCount: number; following: boolean }) => ReactNode;
+  /**
+   * The reference tag every pane compares against (resolved in the pane's
+   * own run), at a pinned step or following the pane's; null for none.
+   */
+  reference?: (settings: S) => { name: string; step?: number } | null;
+  /** A zoom/pan the card's panes share: the header's reset-view button. */
+  viewReset?: { modified: boolean; reset: () => void };
 }
 
 function Placeholder({ loading, noun }: { loading: boolean; noun: string }) {
@@ -126,6 +145,8 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   prefetch,
   peek,
   footer,
+  reference: referenceOf,
+  viewReset,
 }: Props<S>) {
   const { ctl, effectiveMetrics, allRunIds } =
     useCardSeries<S>({
@@ -148,13 +169,22 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   const panes = useMediaPanes(effectiveMetrics, runId, settings.maxRuns);
   const shown = panes.shown;
   const paneKeys = panes.keys;
-  const queries = useSequencesForRuns(shown.map((m, i) => ({ runId: panes.runIds[i]!, name: m.name })));
+  const reference = referenceOf?.(settings) ?? null;
+  const refName = reference?.name ?? null;
+  // Foreground sequences, then (with a reference tag) the same tag per pane's run.
+  const queries = useSequencesForRuns([
+    ...shown.map((m, i) => ({ runId: panes.runIds[i]!, name: m.name })),
+    ...(refName ? shown.map((_, i) => ({ runId: panes.runIds[i]!, name: refName })) : []),
+  ]);
   const dataKey = queries.map((q) => q.dataUpdatedAt).join("|");
-  const seriesPoints = useMemo(
-    () => queries.map((q) => (q.data?.points ?? []).filter((p) => p.artifact_hash)),
+  const { seriesPoints, refPoints } = useMemo(() => {
+    const withArtifact = (i: number) => (queries[i]?.data?.points ?? []).filter((p) => p.artifact_hash);
+    return {
+      seriesPoints: shown.map((_, i) => withArtifact(i)),
+      refPoints: refName ? shown.map((_, i) => withArtifact(shown.length + i)) : [],
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dataKey, shown.length],
-  );
+  }, [dataKey, shown.length, refName]);
   const loadingAt = (i: number) => queries[i]?.isLoading ?? false;
 
   const slider = useStepSlider({
@@ -173,14 +203,18 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
     const step = stepFor(i, value, { nearest: near });
     return step == null ? null : resolveAtStep(seriesPoints[i] ?? [], step, { nearest: near });
   };
+  const refAt = (i: number, point: SequencePoint | null): SequencePoint | null =>
+    reference ? resolveReference(refPoints[i] ?? [], point, reference.step) : null;
   const qc = useQueryClient();
   const prefetchItem = prefetch ? (p: SequencePoint, signal: AbortSignal) => prefetch(qc, p, signal) : undefined;
   const peekItem = peek ? (p: SequencePoint) => peek(qc, p) : undefined;
   useNeighbourPrefetch(settings.panelMode !== "grid" ? values.length : 0, safeIdx, (j) =>
     shown.flatMap((_, i) => {
       const p = pointAt(i, values[j]!, nearest);
-      if (!p?.artifact_hash || (!prefetch && !isGalleryPoint(p))) return [];
-      return [{ key: `${kind}:${p.artifact_hash}`, run: (signal: AbortSignal) => prefetchPointOrGallery(qc, p, prefetchItem, signal) }];
+      return [p, refAt(i, p)].flatMap((q) => {
+        if (!q?.artifact_hash || (!prefetch && !isGalleryPoint(q))) return [];
+        return [{ key: `${kind}:${q.artifact_hash}`, run: (signal: AbortSignal) => prefetchPointOrGallery(qc, q, prefetchItem, signal) }];
+      });
     }),
   );
 
@@ -213,24 +247,36 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   const compareSlots = useMemo(() => normalizeSlots(settings.compareSlots, paneKeys), [settings.compareSlots, paneKeys]);
   const gridCols = mode === "grid" ? gridValues(values, settings.columns) : [];
   // Every pane on screen with its point (ids as `view` gets them below).
-  const paneRequests: Array<{ id: string; point: SequencePoint | null }> = mode === "grid"
-    ? shown.flatMap((_, i) => gridCols.map((v, col) => ({ id: `grid:${i}:${col}`, point: pointAt(i, v, false) })))
+  const paneRequests: Array<{ id: string; index: number; point: SequencePoint | null }> = mode === "grid"
+    ? shown.flatMap((_, i) => gridCols.map((v, col) => ({ id: `grid:${i}:${col}`, index: i, point: pointAt(i, v, false) })))
     : mode === "compare"
       ? compareSlots.map((slot, i) => {
           const idx = paneKeys.indexOf(slot.pane);
-          return { id: `compare:${i}`, point: idx < 0 ? null : pointAt(idx, slotValue(slot, settings.compareLinked, currentValue), nearest) };
+          return { id: `compare:${i}`, index: idx, point: idx < 0 ? null : pointAt(idx, slotValue(slot, settings.compareLinked, currentValue), nearest) };
         })
       : shown.length <= 1
-        ? [{ id: paneKeys[0] ?? "single", point: pointAt(0, currentValue, false) }]
-        : paneKeys.map((key, i) => ({ id: key, point: pointAt(i, currentValue, nearest) }));
+        ? [{ id: paneKeys[0] ?? "single", index: 0, point: pointAt(0, currentValue, false) }]
+        : paneKeys.map((key, i) => ({ id: key, index: i, point: pointAt(i, currentValue, nearest) }));
   const panePoints = paneRequests.map((r) => r.point);
-  // Gallery panes swap steps together (runs side by side never differ).
-  const galleryFrames = useSettledGalleries(paneRequests, { prefetchItem, peekItem });
+  // Gallery panes (and reference galleries) swap steps together (runs side by side never differ).
+  const galleryFrames = useSettledGalleries(
+    [
+      ...paneRequests,
+      ...(reference ? paneRequests.map((r) => ({ id: `${r.id}~ref`, point: r.index < 0 ? null : refAt(r.index, r.point) })) : []),
+    ],
+    { prefetchItem, peekItem },
+  );
   const paneCount = panePoints.reduce((n, p) => n + Math.max(1, galleryCount(p)), 0);
 
   const view = (i: number, point: SequencePoint | null, paneId: string, single: boolean, inModal: boolean) => {
     if (!point?.artifact_hash) return <Placeholder loading={loadingAt(i)} noun={noun} />;
     const name = shown[i]?.name ?? metric.name;
+    const ref = refAt(i, point);
+    // A reference gallery pairs item by item; one plain reference serves every item.
+    const refGallery = ref && isGalleryPoint(ref) ? galleryFrames?.get(`${paneId}~ref`)?.itemPoints ?? [] : null;
+    const refFor = (j: number): SequencePoint | null =>
+      refGallery ? (refGallery.length > 1 ? refGallery[j] ?? null : refGallery[0] ?? null) : ref;
+    const common = { name, settings, inModal, paneCount, following, referenceName: refName ?? undefined, update: ctl.set };
     if (isGalleryPoint(point)) {
       const gallery = (
         <GalleryView
@@ -239,30 +285,24 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
           prefetchItem={prefetchItem}
           peekItem={peekItem}
           renderItem={(item, j) => renderArtifact({
+            ...common,
             point: item,
             hash: item.artifact_hash!,
-            name,
-            settings,
             single: false,
-            inModal,
             paneId: `${paneId}#${j}`,
-            paneCount,
-            following,
+            reference: refFor(j),
           })}
         />
       );
       return single ? <div className="min-h-0 flex-1 overflow-auto">{gallery}</div> : gallery;
     }
     return renderArtifact({
+      ...common,
       point,
       hash: point.artifact_hash,
-      name,
-      settings,
       single,
-      inModal,
       paneId,
-      paneCount,
-      following,
+      reference: refFor(0),
     });
   };
 
@@ -360,7 +400,13 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       addToReportSlot={<AddToReportButton cardType={kind} series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
+      onResetView={viewReset?.reset}
+      viewModified={viewReset?.modified}
       settingsPanel={settingsPanel(ctl, {
+        runId,
+        metricName: metric.name,
+        globalSteps: slider.globalSteps,
+        currentStep: slider.currentStep,
         paneKeys,
         multi: shown.length > 1,
         following,

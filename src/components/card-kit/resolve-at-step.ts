@@ -66,3 +66,18 @@ export function resolveEach<T extends SteppedPoint>(
     return step == null ? null : resolveAtStep(pts, step, options);
   });
 }
+
+/**
+ * The reference a pane compares against (image and video cards): the point
+ * of the reference series at the pinned step, or else at the step the
+ * pane's own point sits at; the nearest one when the reference starts
+ * logging later. `null` without a step (no pin, no point) or reference points.
+ */
+export function resolveReference<T extends SteppedPoint>(
+  refPoints: T[],
+  point: SteppedPoint | null,
+  pinnedStep?: number,
+): T | null {
+  const step = pinnedStep ?? point?.step;
+  return step == null ? null : resolveAtStep(refPoints, step, { nearest: true });
+}

@@ -2,7 +2,7 @@ import type { SettingsController } from "../../lib/card-settings";
 import type { VideoSettings } from "../cards-settings/video";
 import type { SteppedMediaPanelCtx } from "../media/SteppedMediaCard";
 import { Select, SettingsSection, SettingsTabs, Switch } from "../settings/palette";
-import { LayoutSection, SliderSection, bind, type PanelSurface } from "./media-panel-kit";
+import { AppearanceSection, CompareSection, LayoutSection, SliderSection, bind, type PanelSurface } from "./media-panel-kit";
 
 const PRELOAD_OPTIONS = [
   { value: "metadata", label: "Metadata" },
@@ -19,10 +19,16 @@ export default function VideoSettingsPanel({
   ctx?: SteppedMediaPanelCtx;
   mode: PanelSurface;
 }) {
-  const data = <SliderSection ctl={ctl} ctx={ctx} />;
+  const data = (
+    <>
+      <SliderSection ctl={ctl} ctx={ctx} />
+      {mode === "card" && ctx && <CompareSection ctl={ctl} ctx={ctx} objectType="video" noun="video" />}
+    </>
+  );
   const display = (
     <>
       <LayoutSection ctl={ctl} modes ctx={ctx} mode={mode} paneKeys={ctx?.paneKeys} />
+      <AppearanceSection ctl={ctl} />
       <SettingsSection name="Playback">
         <Switch
           {...bind(ctl, "syncPlayback")}
