@@ -97,6 +97,7 @@ export const api = {
     if (params.group) q.set("group", params.group);
     if (params.job_type) q.set("job_type", params.job_type);
     if (params.sweep_id) q.set("sweep_id", params.sweep_id);
+    if (params.ids) q.set("ids", params.ids.join(","));
     if (params.include?.length) q.set("include", params.include.join(","));
     if (params.limit != null) q.set("limit", String(params.limit));
     if (params.offset != null) q.set("offset", String(params.offset));

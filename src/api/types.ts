@@ -171,6 +171,8 @@ export interface RunsQuery {
   group?: string;
   job_type?: string;
   sweep_id?: string;
+  /** Only these runs (the runs list's live poll). */
+  ids?: string[];
   include?: RunInclude[];
   limit?: number;
   offset?: number;

@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import {
+  type InfiniteData,
   useInfiniteQuery,
   useMutation,
   useQueries,
@@ -10,6 +11,7 @@ import {
 import type { RunDetailResponse, RunsListResponse, RunsQuery } from "./types";
 import { api } from "./client";
 import { qk } from "./query-keys";
+import { MAX_LIVE_IDS, mergeLiveRuns, runningIds } from "./runs-live-core";
 import { addRunMetadata, setRunMetadata } from "../lib/run-label";
 import { resolveRunSelectorFromRuns, type RunSelector } from "../lib/run-selector";
 
@@ -52,8 +54,10 @@ export function useRuns(params: Parameters<typeof api.runs>[0]) {
 const INFINITE_PAGE_SIZE = 100;
 
 export function useInfiniteRuns(params: Omit<RunsQuery, "limit" | "offset">) {
+  const qc = useQueryClient();
+  const key = qk.runsInfinite(params);
   const q = useInfiniteQuery<RunsListResponse>({
-    queryKey: qk.runsInfinite(params),
+    queryKey: key,
     queryFn: ({ pageParam }) =>
       api.runs({ ...params, limit: INFINITE_PAGE_SIZE, offset: pageParam as number }),
     initialPageParam: 0,
@@ -61,11 +65,36 @@ export function useInfiniteRuns(params: Omit<RunsQuery, "limit" | "offset">) {
       const next = lastPage.offset + lastPage.limit;
       return next < lastPage.total ? next : undefined;
     },
-    refetchInterval: (q) => {
-      const pages = q.state.data?.pages;
-      if (!pages) return false;
-      // Poll if any run on the first page is still running.
-      return pages[0]?.runs.some((r) => r.status === "running") ? 3_000 : false;
+  });
+
+  // Live poll: while loaded runs are running, re-read just those runs (plus
+  // the list head, to notice new runs) every 3 s and merge them into the
+  // pages, instead of refetching every loaded page. See runs-live-core.ts.
+  const running = useMemo(() => runningIds(q.data?.pages), [q.data]);
+  useQuery({
+    // Not under the "runs-infinite" prefix: invalidating the lists (after a
+    // mutation) refetches the pages, and must not also fire this poll.
+    queryKey: ["runs-live", params, running],
+    enabled: running.length > 0,
+    // The pages were just fetched: the first poll is due in one interval.
+    initialData: 0,
+    staleTime: 3_000,
+    refetchInterval: 3_000,
+    queryFn: async () => {
+      const refetchPages = () => qc.invalidateQueries({ queryKey: key, exact: true });
+      if (running.length > MAX_LIVE_IDS) {
+        await refetchPages();
+        return Date.now();
+      }
+      const [head, live] = await Promise.all([
+        api.runs({ ...params, include: undefined, limit: 1 }),
+        api.runs({ ...params, ids: running, limit: running.length }),
+      ]);
+      const cached = qc.getQueryData<InfiniteData<RunsListResponse>>(key);
+      const merged = cached ? mergeLiveRuns(cached, head, live, running) : null;
+      if (merged === null) await refetchPages();
+      else if (merged !== cached) qc.setQueryData(key, merged);
+      return Date.now();
     },
   });
 
