@@ -3,6 +3,7 @@
  * persisted value, following the section) and the pane layout.
  */
 import type { CompareSlot, Columns, PanelMode } from "../../lib/media/panel-layout.ts";
+import type { PixelRendering } from "../../lib/media/split-geometry.ts";
 
 export interface MediaSliderSettings {
   /** The slider's persisted VALUE (a step, or the slider key's value); per card. */
@@ -47,3 +48,25 @@ export const mediaLayoutBuiltin: MediaLayoutSettings = {
 };
 
 export const MEDIA_LAYOUT_CASCADE = [...MEDIA_COLUMNS_CASCADE, "panelMode"] as const;
+
+/**
+ * A/B split against a reference, zoom rendering: cards whose panes are
+ * zoomable split views (images, videos; see ZoomSplitPane).
+ */
+export interface MediaCompareSettings {
+  /** Upscaling: auto (nearest-neighbour once zoomed in), smooth or pixelated. */
+  rendering: PixelRendering;
+  /** Reference tag; every pane compares against this tag from its own run. */
+  reference?: { name: string };
+  /** Fixed reference step; absent follows the slider. */
+  referenceStep?: number;
+  /** Divider position (fraction of pane width), shared by all panes. */
+  split: number;
+}
+
+export const mediaCompareBuiltin: Pick<MediaCompareSettings, "rendering" | "split"> = {
+  rendering: "auto",
+  split: 0.5,
+};
+
+export const MEDIA_COMPARE_CASCADE = ["rendering", "split"] as const;

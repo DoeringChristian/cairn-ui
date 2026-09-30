@@ -21,7 +21,7 @@ import ComparePanes from "./card-kit/ComparePanes";
 import GridPanes from "./card-kit/GridPanes";
 import MultiPaneGrid from "./card-kit/MultiPaneGrid";
 import { plotCardPolicy } from "./card-kit/plot-card-policy";
-import { resolveAtStep } from "./card-kit/resolve-at-step";
+import { resolveAtStep, resolveReference } from "./card-kit/resolve-at-step";
 import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
 import { useStepSlider } from "./card-kit/use-step-slider";
 import { type PaneTransform } from "./image/ImagePane";
@@ -146,11 +146,8 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     const step = stepFor(index, value, { nearest });
     return step == null ? null : resolveAtStep(points[index] ?? [], step, { nearest });
   };
-  const refAt = (index: number, point: SequencePoint | null): SequencePoint | null => {
-    if (!reference) return null;
-    const step = settings.referenceStep ?? point?.step;
-    return step == null ? null : resolveAtStep(refPoints[index] ?? [], step, { nearest: true });
-  };
+  const refAt = (index: number, point: SequencePoint | null): SequencePoint | null =>
+    reference ? resolveReference(refPoints[index] ?? [], point, settings.referenceStep) : null;
 
   // Warm the frames around the slider (every pane's image + reference), so
   // stepping finds them decoded. Grid columns sit at fixed values: nothing to warm.

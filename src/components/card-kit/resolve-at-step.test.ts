@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveAtStep, resolveEach, stepUnion } from "./resolve-at-step.ts";
+import { resolveAtStep, resolveEach, resolveReference, stepUnion } from "./resolve-at-step.ts";
 
 interface P { step: number; tag: string }
 
@@ -63,4 +63,17 @@ test("resolveEach resolves every series at its own step", () => {
   const got = resolveEach([points, other, points], [25, 49, null]);
   assert.deepEqual(got.map((p) => p?.tag ?? null), ["b", "x", null]);
   assert.deepEqual(resolveEach([points], [0], { nearest: true }).map((p) => p?.tag), ["a"]);
+});
+
+test("resolveReference follows the pane's point, or the pinned step", () => {
+  const ref: P[] = [{ step: 10, tag: "r10" }, { step: 20, tag: "r20" }];
+  assert.equal(resolveReference(ref, { step: 15 })?.tag, "r10");
+  assert.equal(resolveReference(ref, { step: 20 })?.tag, "r20");
+  // A reference that starts later than the pane's point: its first point.
+  assert.equal(resolveReference(ref, { step: 3 })?.tag, "r10");
+  // Pinned: the pane's point does not matter, not even its absence.
+  assert.equal(resolveReference(ref, { step: 99 }, 10)?.tag, "r10");
+  assert.equal(resolveReference(ref, null, 20)?.tag, "r20");
+  assert.equal(resolveReference(ref, null), null);
+  assert.equal(resolveReference([] as P[], { step: 10 }), null);
 });

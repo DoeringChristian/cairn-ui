@@ -1,19 +1,24 @@
 /**
  * Pieces every media settings panel shares: binding a palette control to a
  * settings key, the slider section (key + follow the section) and the pane
- * layout section (mode, columns, max runs, compare slots).
+ * layout section (mode, columns, max runs, compare slots), and for zoomable
+ * split panes (images, videos) the reference and rendering sections.
  */
 
 import type { ReactNode } from "react";
 import type { SettingsController } from "../../lib/card-settings";
 import { clampSlots, normalizeSlots, type Columns, type PanelMode } from "../../lib/media/panel-layout";
 import { STEP_KEY } from "../../lib/media/slider-key";
-import type { MediaColumnsSettings, MediaLayoutSettings, MediaSliderSettings } from "../cards-settings/media";
+import type { PixelRendering } from "../../lib/media/split-geometry";
+import type { MediaColumnsSettings, MediaCompareSettings, MediaLayoutSettings, MediaSliderSettings } from "../cards-settings/media";
+import { ExternalBaselinePicker } from "../card-kit/ExternalBaselinePicker";
 import {
   FieldPicker,
   Segmented,
   Select,
+  SettingRow,
   SettingsSection,
+  Slider,
   Stepper,
   Switch,
   type Bound,
@@ -162,6 +167,111 @@ export function LayoutSection<T extends MediaColumnsSettings>({
         <Stepper {...bind(c, "maxRuns")} min={0} max={50} label="Max runs" description="Show only the first N runs; 0 shows all." />
       )}
       {children}
+    </SettingsSection>
+  );
+}
+
+/** Runtime info the reference picker needs (a card, not the defaults editor). */
+export interface ReferencePanelCtx {
+  runId: string;
+  metricName: string;
+  /** Union of logged steps (the reference step's range). */
+  globalSteps: readonly number[];
+  currentStep: number;
+}
+
+/**
+ * The reference every pane splits against: another tag of the card's kind,
+ * resolved in each pane's own run, following the slider or pinned to a
+ * step. Data tab; cards only (nothing to pick from in the defaults editor).
+ */
+export function CompareSection<T extends MediaCompareSettings>({
+  ctl,
+  ctx,
+  objectType,
+  noun,
+}: {
+  ctl: SettingsController<T>;
+  ctx: ReferencePanelCtx;
+  /** The `object_type` reference tags must have. */
+  objectType: string;
+  /** "image", "video". */
+  noun: string;
+}) {
+  const c = ctl as unknown as SettingsController<MediaCompareSettings>;
+  const s = c.value;
+  const reference = s.reference;
+  return (
+    <SettingsSection name="Compare">
+      <SettingRow
+        layout="stacked"
+        label="Reference tag"
+        description={`Each pane splits its ${noun} against this tag from its own run.`}
+      >
+        {reference && (
+          <div className="mb-2 flex items-center gap-1 rounded border border-accent/40 bg-accent/5 px-2 py-1 text-xs text-fg-muted">
+            <span className="mono min-w-0 flex-1 truncate">{reference.name}</span>
+            <button
+              type="button"
+              onClick={() => c.set({ reference: undefined, referenceStep: undefined })}
+              className="shrink-0 text-fg-subtle hover:text-fg"
+              aria-label="Remove reference"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <ExternalBaselinePicker
+          runId={ctx.runId}
+          objectType={objectType}
+          currentMetricName={ctx.metricName}
+          selected={reference?.name}
+          onSelect={(name) => c.set({ reference: { name } })}
+        />
+      </SettingRow>
+      {reference && (
+        <Switch
+          value={s.referenceStep != null}
+          onChange={(pinned) => c.set({ referenceStep: pinned ? ctx.currentStep : undefined })}
+          overridden={c.isOverridden("referenceStep")}
+          onReset={() => c.reset("referenceStep")}
+          label="Pin reference step"
+          description="Off follows the slider; on keeps the reference fixed."
+        />
+      )}
+      {reference && s.referenceStep != null && (
+        <Slider
+          value={s.referenceStep}
+          onChange={(v) => c.set({ referenceStep: Math.round(v) }, { mergeKey: "referenceStep" })}
+          label="Reference step"
+          min={ctx.globalSteps[0] ?? 0}
+          max={ctx.globalSteps[ctx.globalSteps.length - 1] ?? 1}
+          step={1}
+          format={(v) => Math.round(v).toString()}
+        />
+      )}
+    </SettingsSection>
+  );
+}
+
+const RENDERING_OPTIONS = [
+  { value: "auto", label: "Auto" },
+  { value: "smooth", label: "Smooth" },
+  { value: "pixelated", label: "Pixelated" },
+] as const satisfies ReadonlyArray<{ value: PixelRendering; label: string }>;
+
+/** How upscaled pixels render in a zoomable pane. Display tab. */
+export function AppearanceSection<T extends MediaCompareSettings>({ ctl }: { ctl: SettingsController<T> }) {
+  const c = ctl as unknown as SettingsController<MediaCompareSettings>;
+  return (
+    <SettingsSection name="Appearance">
+      <Segmented<PixelRendering>
+        {...bind(c, "rendering")}
+        options={RENDERING_OPTIONS}
+        layout="stacked"
+        label="Rendering"
+        info="Auto switches to nearest-neighbour once a source pixel covers more than ~1.5 screen pixels. Smooth always interpolates; pixelated never does."
+      />
     </SettingsSection>
   );
 }

@@ -1,4 +1,5 @@
 import type { CardSettingsMeta } from "./meta";
+import { MEDIA_COMPARE_CASCADE, mediaCompareBuiltin, type MediaCompareSettings } from "./media.ts";
 import {
   STEPPED_MEDIA_CASCADE,
   steppedMediaBuiltin,
@@ -6,7 +7,7 @@ import {
   type SteppedMediaSettings,
 } from "./stepped-media.ts";
 
-export interface VideoSettings extends SteppedMediaSettings {
+export interface VideoSettings extends SteppedMediaSettings, MediaCompareSettings {
   autoplay: boolean;
   loop: boolean;
   muted: boolean;
@@ -17,6 +18,7 @@ export interface VideoSettings extends SteppedMediaSettings {
 
 export const builtin: VideoSettings = {
   ...steppedMediaBuiltin,
+  ...mediaCompareBuiltin,
   version: 1,
   metrics: [],
   autoplay: false,
@@ -30,6 +32,6 @@ export const instanceDefaults = steppedMediaInstanceDefaults as (seed: { name: s
 
 export const meta: CardSettingsMeta<VideoSettings> = {
   builtin,
-  cascadeKeys: ["autoplay", "loop", "muted", "preload", "syncPlayback", ...STEPPED_MEDIA_CASCADE],
+  cascadeKeys: ["autoplay", "loop", "muted", "preload", "syncPlayback", ...MEDIA_COMPARE_CASCADE, ...STEPPED_MEDIA_CASCADE],
   tabs: ["data", "display"],
 };
