@@ -9,6 +9,7 @@ import CardDetailModal from "./CardDetailModal";
 import CardErrorBoundary from "./card-kit/CardErrorBoundary";
 import { useCardNavEntry } from "../lib/card-nav";
 import { useReportExporting } from "../lib/reports/export-context";
+import { PanelTitleContext } from "../lib/workspace/panel-actions";
 
 interface Props {
   cardRef: RefObject<HTMLDivElement>;
@@ -79,6 +80,9 @@ export default function CardShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A workspace panel over several metrics is titled by the panel, not its first metric.
+  const panelTitle = useContext(PanelTitleContext);
+  const shownTitle = settings.title ?? panelTitle ?? title;
   const minSize = cardMinSize(cardKind);
   // Own-min read-time clamp lives inside resolveCardHeight (single source);
   // pass the same minHeight anywhere inner content re-reads this height so
@@ -121,7 +125,7 @@ export default function CardShell({
     >
       <InteractContext.Provider value={interact.value}>
         <CardHeader
-          title={settings.title ?? title}
+          title={shownTitle}
           onTitleChange={(t) => updateSettings({ title: t || undefined })}
           subtitle={subtitle}
           collapsed={collapsed}
@@ -140,17 +144,17 @@ export default function CardShell({
         />
         {!collapsed && (
           <>
-            <CardErrorBoundary label={settings.title ?? title}>{children}</CardErrorBoundary>
+            <CardErrorBoundary label={shownTitle}>{children}</CardErrorBoundary>
             {modalContent !== undefined && (
               <CardDetailModal
                 open={!!modalOpen}
                 onClose={onModalClose ?? (() => {})}
-                title={settings.title ?? title}
+                title={shownTitle}
                 settingsContent={settingsPanel}
                 onPrev={step(nav.prev)}
                 onNext={step(nav.next)}
               >
-                <CardErrorBoundary label={settings.title ?? title}>{modalContent}</CardErrorBoundary>
+                <CardErrorBoundary label={shownTitle}>{modalContent}</CardErrorBoundary>
               </CardDetailModal>
             )}
           </>

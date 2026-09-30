@@ -11,3 +11,10 @@ export interface PanelActions {
 }
 
 export const PanelActionsContext = createContext<PanelActions | null>(null);
+
+/**
+ * The default title of a panel whose card would otherwise be titled by its
+ * first metric (a multi-metric or regex panel): `a, b` or `/val\..*\/`.
+ * A title the user set (settings.title) still wins.
+ */
+export const PanelTitleContext = createContext<string | null>(null);

@@ -18,6 +18,8 @@ import CardHeader from "../CardHeader";
 import { CardMutationContext, useCardOverridesReader, type CardSettingsKey } from "../../lib/card-settings";
 import { isMultiRunCardType, type ComparisonSeriesRef, type MultiRunCardType } from "../../lib/comparisons/types";
 import type { RenderedPanel } from "../../lib/workspace/layout";
+import { PanelTitleContext } from "../../lib/workspace/panel-actions";
+import { claimedMetric } from "../../lib/workspace/doc";
 import { useVisibleRuns } from "../../lib/run-view";
 import type { SequenceMeta } from "../../api/types";
 
@@ -108,6 +110,7 @@ export default function PanelCard({ rendered, runIds, settingsKey, onRemove, aut
     count: single ? first.count : 0,
   };
   return (
+    <PanelTitleContext.Provider value={claimedMetric(panel) == null ? label : null}>
     <CardRenderer
       runId={primary.runId}
       metric={seed}
@@ -117,6 +120,7 @@ export default function PanelCard({ rendered, runIds, settingsKey, onRemove, aut
       onRemove={onRemove}
       autoOpenSettings={autoOpenSettings}
     />
+    </PanelTitleContext.Provider>
   );
 }
 

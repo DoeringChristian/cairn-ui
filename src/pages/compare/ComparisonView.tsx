@@ -7,11 +7,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { qk } from "../../api/query-keys";
 import ComparisonOverviewTab from "../ComparisonOverviewTab";
 import ComparisonSourceTab from "../ComparisonSourceTab";
 import RunSetEditor, { DEFAULT_QUERY_SELECTOR } from "../../components/comparison/RunSetEditor";
 import RunSelectorBadge from "../../components/RunSelectorBadge";
-import WorkspaceView from "../../components/workspace/WorkspaceView";
+import WorkspaceView, { ViewerGate } from "../../components/workspace/WorkspaceView";
 import { useRunSelectorResolution } from "../../api/hooks";
 import type { ComparisonSummary, Run } from "../../api/types";
 import { describeRunSelector } from "../../lib/run-selector";
@@ -34,7 +36,15 @@ interface Props {
   onDelete: () => void;
 }
 
-export default function ComparisonView({ projectId, comparison, allProjectRuns, onRename, onDelete }: Props) {
+export default function ComparisonView(props: Props) {
+  return (
+    <ViewerGate>
+      <ComparisonViewInner {...props} />
+    </ViewerGate>
+  );
+}
+
+function ComparisonViewInner({ projectId, comparison, allProjectRuns, onRename, onDelete }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get("tab") ?? "metrics";
   const setTab = useCallback(
@@ -52,6 +62,12 @@ export default function ComparisonView({ projectId, comparison, allProjectRuns, 
   const selector = runs?.selector ?? undefined;
   const resolution = useRunSelectorResolution(projectId, selector);
   const [selectorRefreshing, setSelectorRefreshing] = useState(false);
+  // The sidebar lists each comparison's run count.
+  const qc = useQueryClient();
+  const runCount = runs?.ids.length;
+  useEffect(() => {
+    if (runCount != null) void qc.invalidateQueries({ queryKey: qk.comparisons(projectId) });
+  }, [runCount, qc, projectId]);
   const runIds = useMemo(
     () => (selector?.kind === "query" ? resolution.runIds : (runs?.ids ?? [])),
     [selector, resolution.runIds, runs?.ids],

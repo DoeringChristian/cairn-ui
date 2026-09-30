@@ -16,7 +16,7 @@
  * persisting anything.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import CardErrorBoundary from "../card-kit/CardErrorBoundary";
 import ReorderableCardGrid from "../ReorderableCardGrid";
@@ -26,7 +26,8 @@ import RunColorByProvider from "../RunColorByProvider";
 import PanelCard from "./PanelCard";
 import PanelDialog, { type PanelDialogResult } from "./PanelDialog";
 import { useWorkspaceMetrics } from "./use-workspace-metrics";
-import { CardSettingsStoreContext, type CardOverrides, type CardSettingsKey, type CardSettingsStore } from "../../lib/card-settings";
+import { useSession } from "../../api/hooks";
+import { CardMutationContext, CardSettingsStoreContext, type CardOverrides, type CardSettingsKey, type CardSettingsStore } from "../../lib/card-settings";
 import type { CardType } from "../../lib/cards/card-spec";
 import { isMultiRunCardType, type ComparisonCard } from "../../lib/comparisons/types";
 import { CardNavProvider } from "../../lib/card-nav";
@@ -64,7 +65,25 @@ interface Props {
   toolbarActions?: ReactNode;
 }
 
-export default function WorkspaceView({ wsRef, runIds, reportLabel, toolbarActions }: Props) {
+/**
+ * A read-role session views workspaces: everything renders, edits stay in
+ * this page (card settings in the session layer, layout edits disabled).
+ */
+export function ViewerGate({ children }: { children: ReactNode }) {
+  const viewer = useSession().data?.role === "read";
+  const outer = useContext(CardMutationContext);
+  return <CardMutationContext.Provider value={outer && !viewer}>{children}</CardMutationContext.Provider>;
+}
+
+export default function WorkspaceView(props: Props) {
+  return (
+    <ViewerGate>
+      <WorkspaceViewInner {...props} />
+    </ViewerGate>
+  );
+}
+
+function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Props) {
   const navigate = useNavigate();
   const key = refKey(wsRef);
   const scope = `ws:${key}`;
