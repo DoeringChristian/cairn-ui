@@ -1,18 +1,19 @@
 /**
- * A titled, collapsible section of cards (the run page and comparisons).
+ * A titled, collapsible section of a workspace (the run page and
+ * comparisons render the same one, through components/workspace/).
  *
- * The header's actions edit the project workspace (lib/workspace): section
- * defaults (the gear), pin to top, sort A–Z; plus "send to report" when the
- * caller supplies it. The section's defaults reach its cards through
- * `SectionDefaultsProvider`. Read-only surfaces show no actions.
+ * The header's actions are workspace edits the caller turns into document
+ * ops: collapse, rename (double-click the name), move up / down, sort A–Z,
+ * add a panel to this section (+), section defaults (the gear), send to a
+ * report, delete an empty section. The section's defaults reach its cards
+ * through `SectionDefaultsProvider`. Read-only surfaces show no actions.
  */
 
-import { useContext, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { CardMutationContext } from "../lib/card-settings";
 import type { CardType } from "../lib/cards/card-spec";
-import { useProjectId } from "../lib/project-context";
 import { SectionDefaultsProvider, type CardDefaults } from "../lib/settings-scope";
-import { ops } from "../lib/workspace/doc";
+import { useWorkspaceRef } from "../lib/workspace/ref";
 import { useWorkspace } from "../lib/workspace/use-workspace";
 import { HeaderToggle } from "./card-header";
 import { ICON_BTN } from "./card-header/icon-btn";
@@ -22,19 +23,29 @@ import DefaultsEditor from "./DefaultsEditor";
 
 const NO_DEFAULTS: CardDefaults = Object.freeze({}) as CardDefaults;
 
-export interface SectionBlockProps {
+export interface SectionActions {
+  onToggleCollapse: () => void;
+  onToggleSort?: () => void;
+  onMove?: (delta: -1 | 1) => void;
+  onRename?: (name: string) => void;
+  onAddPanel?: () => void;
+  onSendToReport?: () => Promise<void> | void;
+  /** Only offered for an empty section. */
+  onDelete?: () => void;
+}
+
+export interface SectionBlockProps extends SectionActions {
   sectionName: string;
   /** Where this section's shared media slider persists; unique per page (e.g. `run:<id>`). */
   scope?: string;
   itemCount: number;
   collapsed: boolean;
-  onToggleCollapse: () => void;
+  sorted: boolean;
+  /** First / last section: no move up / down. */
+  first?: boolean;
+  last?: boolean;
   /** Card types in the section; the defaults gear offers these first. */
   cardTypes?: readonly CardType[];
-  /** Copy the section's cards into a new report. */
-  onSendToReport?: () => Promise<void> | void;
-  /** Extra header actions, left of the built-in ones. */
-  actions?: ReactNode;
   children: ReactNode;
 }
 
@@ -43,24 +54,40 @@ export default function SectionBlock({
   scope,
   itemCount,
   collapsed,
-  onToggleCollapse,
+  sorted,
+  first,
+  last,
   cardTypes,
+  onToggleCollapse,
+  onToggleSort,
+  onMove,
+  onRename,
+  onAddPanel,
   onSendToReport,
-  actions,
+  onDelete,
   children,
 }: SectionBlockProps) {
-  const projectId = useProjectId();
-  const { doc, readOnly, update } = useWorkspace(projectId);
+  const wsRef = useWorkspaceRef();
+  const { doc, readOnly } = useWorkspace(wsRef);
   const mutable = useContext(CardMutationContext);
-  const editable = mutable && !readOnly && projectId != null;
+  const editable = mutable && !readOnly && wsRef != null;
   const defaults = doc.sectionDefaults[sectionName] ?? NO_DEFAULTS;
-  const pinned = doc.sections.pinned.includes(sectionName);
-  const sorted = doc.sections.sort.includes(sectionName);
   const hasDefaults = Object.keys(defaults).length > 0;
 
   const gearRef = useRef<HTMLButtonElement>(null);
   const [defaultsOpen, setDefaultsOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(sectionName);
+  useEffect(() => {
+    if (!editing) setDraft(sectionName);
+  }, [sectionName, editing]);
+
+  const commitRename = () => {
+    setEditing(false);
+    const t = draft.trim();
+    if (t && t !== sectionName) onRename?.(t);
+  };
 
   const send = async () => {
     if (!onSendToReport || sending) return;
@@ -78,7 +105,7 @@ export default function SectionBlock({
       <section data-cairn-section={sectionName}>
         <header
           className="mb-3 flex items-center justify-between gap-2 border-b border-border pb-1 cursor-pointer select-none"
-          onClick={onToggleCollapse}
+          onClick={editing ? undefined : onToggleCollapse}
         >
           <div className="flex min-w-0 items-baseline gap-1.5">
             <span
@@ -88,15 +115,54 @@ export default function SectionBlock({
             >
               {"▼"}
             </span>
-            <h2 className="truncate text-sm font-semibold uppercase tracking-wide text-fg-muted">
-              {sectionName}
-            </h2>
-            {pinned && <i className="fa-solid fa-thumbtack text-[10px] text-fg-subtle" aria-label="Pinned" />}
+            {editing ? (
+              <input
+                autoFocus
+                className="input py-0 text-sm font-semibold"
+                value={draft}
+                aria-label="Section name"
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitRename();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    setEditing(false);
+                  }
+                }}
+              />
+            ) : (
+              <h2
+                className="truncate text-sm font-semibold uppercase tracking-wide text-fg-muted"
+                title={editable && onRename ? "Double-click to rename" : undefined}
+                onDoubleClick={(e) => {
+                  if (!editable || !onRename) return;
+                  e.stopPropagation();
+                  setEditing(true);
+                }}
+              >
+                {sectionName}
+              </h2>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            {actions}
             {editable && (
               <>
+                {onAddPanel && (
+                  <button
+                    type="button"
+                    onClick={onAddPanel}
+                    className={ICON_BTN}
+                    aria-label={`Add a panel to ${sectionName}`}
+                    title="Add a panel to this section"
+                    data-testid="section-add-panel"
+                  >
+                    <i className="fa-solid fa-plus" aria-hidden="true" />
+                  </button>
+                )}
                 <button
                   ref={gearRef}
                   type="button"
@@ -107,18 +173,38 @@ export default function SectionBlock({
                 >
                   <i className="fa-solid fa-gear" aria-hidden="true" />
                 </button>
-                <HeaderToggle
-                  icon="fa-arrow-down-a-z"
-                  label={sorted ? "Sorted A–Z (click for manual order)" : "Sort cards A–Z"}
-                  pressed={sorted}
-                  onToggle={() => update(ops.toggleSorted(sectionName), { label: sorted ? "Unsort section" : "Sort section A–Z" })}
-                />
-                <HeaderToggle
-                  icon="fa-thumbtack"
-                  label={pinned ? "Unpin section" : "Pin section to top"}
-                  pressed={pinned}
-                  onToggle={() => update(ops.togglePinned(sectionName), { label: pinned ? "Unpin section" : "Pin section" })}
-                />
+                {onToggleSort && (
+                  <HeaderToggle
+                    icon="fa-arrow-down-a-z"
+                    label={sorted ? "Sorted A–Z (click for manual order)" : "Sort cards A–Z"}
+                    pressed={sorted}
+                    onToggle={onToggleSort}
+                  />
+                )}
+                {onMove && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onMove(-1)}
+                      disabled={first}
+                      className={`${ICON_BTN} disabled:opacity-30`}
+                      aria-label="Move section up"
+                      title="Move section up"
+                    >
+                      <i className="fa-solid fa-arrow-up" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onMove(1)}
+                      disabled={last}
+                      className={`${ICON_BTN} disabled:opacity-30`}
+                      aria-label="Move section down"
+                      title="Move section down"
+                    >
+                      <i className="fa-solid fa-arrow-down" aria-hidden="true" />
+                    </button>
+                  </>
+                )}
                 {onSendToReport && (
                   <button
                     type="button"
@@ -131,6 +217,17 @@ export default function SectionBlock({
                     <i className={`fa-solid ${sending ? "fa-spinner fa-spin" : "fa-file-export"}`} aria-hidden="true" />
                   </button>
                 )}
+                {onDelete && (
+                  <button
+                    type="button"
+                    onClick={onDelete}
+                    className={ICON_BTN}
+                    aria-label="Delete empty section"
+                    title="Delete this empty section"
+                  >
+                    <i className="fa-solid fa-trash-can" aria-hidden="true" />
+                  </button>
+                )}
               </>
             )}
             <span className="ml-1 text-xs text-fg-subtle">
@@ -140,7 +237,7 @@ export default function SectionBlock({
         </header>
         {!collapsed && <SectionMediaBar className="mb-3" />}
         {!collapsed && children}
-        {editable && projectId && (
+        {editable && wsRef && (
           <Popover
             open={defaultsOpen}
             onClose={() => setDefaultsOpen(false)}
@@ -151,7 +248,7 @@ export default function SectionBlock({
             align="end"
             bodyClassName="p-4"
           >
-            <DefaultsEditor projectId={projectId} where={{ level: "section", section: sectionName }} types={cardTypes} />
+            <DefaultsEditor wsRef={wsRef} where={{ level: "section", section: sectionName }} types={cardTypes} />
           </Popover>
         )}
       </section>

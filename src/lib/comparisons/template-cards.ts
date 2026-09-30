@@ -12,7 +12,7 @@ export interface ComparisonTemplateCard {
   type: ComparisonCard["type"];
   /**
    * The metric names this card displays, in the card's own series order
-   * (the `cardKeyOf` convention from lib/run-layout.ts).
+   * (a card's metric name is its key).
    *
    * A card is not a single reference: it can overlay several metrics (chip
    * drag-drop, the settings picker), and a template restores all of them.

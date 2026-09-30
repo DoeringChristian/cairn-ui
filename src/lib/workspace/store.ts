@@ -1,12 +1,13 @@
 /**
- * The in-tab working copy of each project's workspace document.
+ * The in-tab working copy of each workspace document (the project workspace
+ * and every open comparison), keyed by `refKey`.
  *
- * Per project it holds the last document the server confirmed (`base`, at
+ * Per document it holds the last version the server confirmed (`base`, at
  * `rev`), the local ops not yet written (`pending`) and the document every
  * component renders (`doc = rebase(base, pending)`). sync.ts moves ops to
  * the server; components subscribe through use-workspace.ts. The confirmed
  * document is cached in localStorage so a reload paints without waiting for
- * the server (the same working-copy idea as lib/comparisons/store.ts).
+ * the server.
  */
 
 import { loadJson, saveJson, storageKeys } from "../storage";
@@ -26,10 +27,10 @@ export interface WorkspaceState {
 const states = new Map<string, WorkspaceState>();
 const listeners = new Map<string, Set<() => void>>();
 
-export function workspaceState(projectId: string): WorkspaceState {
-  let s = states.get(projectId);
+export function workspaceState(key: string): WorkspaceState {
+  let s = states.get(key);
   if (!s) {
-    const cached = loadJson<{ rev?: unknown; payload?: unknown }>(localStorage, storageKeys.workspace(projectId));
+    const cached = loadJson<{ rev?: unknown; payload?: unknown }>(localStorage, storageKeys.workspace(key));
     const base = normalizeWorkspace(cached?.payload);
     s = {
       base,
@@ -40,51 +41,62 @@ export function workspaceState(projectId: string): WorkspaceState {
       lastFetch: 0,
       inflight: false,
     };
-    states.set(projectId, s);
+    states.set(key, s);
   }
   return s;
 }
 
-export function getWorkspace(projectId: string): WorkspaceDoc {
-  return workspaceState(projectId).doc;
+export function getWorkspace(key: string): WorkspaceDoc {
+  return workspaceState(key).doc;
 }
 
-export function subscribeWorkspace(projectId: string, fn: () => void): () => void {
-  let set = listeners.get(projectId);
-  if (!set) listeners.set(projectId, (set = new Set()));
+export function subscribeWorkspace(key: string, fn: () => void): () => void {
+  let set = listeners.get(key);
+  if (!set) listeners.set(key, (set = new Set()));
   set.add(fn);
   return () => {
     set!.delete(fn);
   };
 }
 
-export function notifyWorkspace(projectId: string): void {
-  for (const fn of listeners.get(projectId) ?? []) fn();
+export function notifyWorkspace(key: string): void {
+  for (const fn of listeners.get(key) ?? []) fn();
 }
 
 /** Apply an op locally and queue it for the server. */
-export function applyLocal(projectId: string, op: WorkspaceOp): void {
-  const s = workspaceState(projectId);
+export function applyLocal(key: string, op: WorkspaceOp): void {
+  const s = workspaceState(key);
   s.pending.push(op);
   s.doc = op(s.doc);
-  notifyWorkspace(projectId);
+  notifyWorkspace(key);
 }
 
 /** Adopt a server document (a fetch or a 409) and replay the pending ops on it. */
-export function adoptServer(projectId: string, rev: number, payload: unknown): void {
-  const s = workspaceState(projectId);
+export function adoptServer(key: string, rev: number, payload: unknown): void {
+  const s = workspaceState(key);
   s.base = normalizeWorkspace(payload);
   s.rev = rev;
   s.doc = rebase(s.base, s.pending);
-  saveJson(localStorage, storageKeys.workspace(projectId), { rev, payload: s.base });
-  notifyWorkspace(projectId);
+  saveJson(localStorage, storageKeys.workspace(key), { rev, payload: s.base });
+  notifyWorkspace(key);
 }
 
 /** The first `n` pending ops were written as `payload` at `rev`. */
-export function confirmWrite(projectId: string, n: number, rev: number, payload: WorkspaceDoc): void {
-  const s = workspaceState(projectId);
+export function confirmWrite(key: string, n: number, rev: number, payload: WorkspaceDoc): void {
+  const s = workspaceState(key);
   s.base = payload;
   s.rev = rev;
   s.pending = s.pending.slice(n);
-  saveJson(localStorage, storageKeys.workspace(projectId), { rev, payload });
+  saveJson(localStorage, storageKeys.workspace(key), { rev, payload });
+}
+
+/** Forget a document (a deleted comparison). */
+export function dropWorkspace(key: string): void {
+  states.delete(key);
+  try {
+    localStorage.removeItem(storageKeys.workspace(key));
+  } catch {
+    /* ignore */
+  }
+  notifyWorkspace(key);
 }

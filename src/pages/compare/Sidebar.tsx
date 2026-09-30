@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Comparison } from "../../lib/comparisons";
+import type { ComparisonSummary as Comparison } from "../../api/types";
 import { formatRelative } from "../../lib/format";
 
 interface SidebarProps {
@@ -194,9 +194,9 @@ function SidebarRow({
             {comparison.name}
           </div>
           <div className="text-[10px] text-fg-subtle">
-            {comparison.cards.length} card
-            {comparison.cards.length === 1 ? "" : "s"} ·{" "}
-            {formatRelative(comparison.createdAt)}
+            {comparison.run_count} run
+            {comparison.run_count === 1 ? "" : "s"} ·{" "}
+            {formatRelative(comparison.updated_at)}
           </div>
         </button>
       )}

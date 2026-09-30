@@ -17,7 +17,6 @@ import {
   MatrixHeatmap,
 } from "../charts/HistogramChart";
 import { parseNpy, type NpyArray } from "../lib/parse-npy";
-import AddToComparisonButton from "./AddToComparisonButton";
 import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
@@ -364,9 +363,6 @@ export default function TensorCard({
                 artifactFilename(metric.name, current.step, current.artifact_mime, ".npy"),
               )
           : undefined
-      }
-      addToComparisonSlot={
-        <AddToComparisonButton cardType="tensor" series={compSeries} />
       }
       addToReportSlot={<AddToReportButton cardType="tensor" series={compSeries} settingsKey={settingsKey} />}
       settingsPanel={settingsPanel}

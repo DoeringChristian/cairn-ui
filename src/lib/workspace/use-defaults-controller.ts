@@ -23,17 +23,18 @@ import {
 } from "../settings-cascade";
 import { ops } from "./doc";
 import { useWorkspace } from "./use-workspace";
+import type { WorkspaceRef } from "./ref";
 
 export type DefaultsLevel = { level: "workspace" } | { level: "section"; section: string };
 
 const EMPTY: Record<string, unknown> = Object.freeze({}) as Record<string, unknown>;
 
 export function useDefaultsController<T extends object = Record<string, unknown>>(
-  projectId: string | null,
+  wsRef: WorkspaceRef | null,
   type: CardType,
   where: DefaultsLevel,
 ): SettingsController<T> {
-  const ws = useWorkspace(projectId);
+  const ws = useWorkspace(wsRef);
   const meta = metaFor(type);
   const cascadeKeys = meta.cascadeKeys as readonly string[];
   const section = where.level === "section" ? where.section : null;

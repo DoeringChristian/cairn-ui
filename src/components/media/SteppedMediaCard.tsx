@@ -37,7 +37,6 @@ import GridPanes from "../card-kit/GridPanes";
 import { useMediaPanes, useScalarMetricNames } from "../card-kit/use-media-panes";
 import { steppedMediaInstanceDefaults, type SteppedMediaSettings } from "../cards-settings/stepped-media";
 import type { MediaPanelCtx, ReferencePanelCtx } from "../settings-panels/media-panel-kit";
-import AddToComparisonButton from "../AddToComparisonButton";
 import AddToReportButton from "../AddToReportButton";
 import CardShell from "../CardShell";
 import SeriesChipStrip from "../SeriesChipStrip";
@@ -396,7 +395,6 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
       onDownload={current?.artifact_hash ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), artifactFilename(metric.name, current.step, current.artifact_mime ?? defaultMime)) : undefined}
-      addToComparisonSlot={<AddToComparisonButton cardType={kind} series={compSeries} />}
       addToReportSlot={<AddToReportButton cardType={kind} series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}

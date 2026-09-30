@@ -2,7 +2,9 @@
  * Smart Comparison Wizard — create a comparison by filtering runs on parameters.
  *
  * The user picks parameter keys, selects allowed values, chooses a strategy
- * (latest run per param combo, or all matching), previews results, then creates.
+ * (latest run per param combo, or all matching), previews results, then
+ * creates a comparison of the matched runs (a static run set) with a copy
+ * of the project workspace's layout.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -13,15 +15,7 @@ import { qk } from "../api/query-keys";
 import type { Run } from "../api/types";
 import { shortRunId } from "../lib/run-label";
 import Dialog, { DialogFooter } from "./ui/Dialog";
-import {
-  addCardsToComparison,
-  cardsForRuns,
-  createComparison,
-  loadComparisons,
-  saveComparisons,
-  type SmartFilters,
-  type SmartFilterEntry,
-} from "../lib/comparisons";
+import { createComparison } from "../lib/workspace/comparisons";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -60,7 +54,6 @@ export default function SmartComparisonWizard({
   const [filters, setFilters] = useState<ParamFilter[]>([]);
   const [strategy, setStrategy] = useState<Strategy>("latest");
   const [compName, setCompName] = useState("");
-  const [autoCards, setAutoCards] = useState(true);
   const [creating, setCreating] = useState(false);
 
   // Reset on open
@@ -70,7 +63,6 @@ export default function SmartComparisonWizard({
       setFilters([]);
       setStrategy("latest");
       setCompName("");
-      setAutoCards(true);
       setCreating(false);
     }
   }, [open]);
@@ -207,39 +199,9 @@ export default function SmartComparisonWizard({
 
     const name = compName.trim() || `Smart comparison (${matchedRuns.length} runs)`;
 
-    // Persist smart filters so the comparison can be refreshed later.
-    const smartFilters: SmartFilters = {
-      projectId,
-      strategy,
-      filters: filters.map((f): SmartFilterEntry => ({
-        key: f.key,
-        mode: f.mode,
-        values: Array.from(f.values),
-        regex: f.regex,
-      })),
-    };
-
-    // Build every card before touching the comparison store: the store
-    // syncs on each add and decides create-vs-update by `serverId`, which
-    // only arrives once the first create resolves — so a single batched
-    // add below is what keeps this to one server-side comparison.
-    const cards = autoCards ? await cardsForRuns(matchedRuns.map((r) => r.id)) : [];
-
-    // `createComparison` only touches localStorage — it does not sync to
-    // the server by itself. Stash the smart filters onto it (also
-    // localStorage-only) before the single batched `addCardsToComparison`
-    // call below, so that call's one-and-only sync ships smartFilters and
-    // all cards together in the same create payload.
-    const cmp = createComparison(projectId, name);
-    const allComps = loadComparisons(projectId);
-    const updated = allComps.map((c) =>
-      c.id === cmp.id ? { ...c, smartFilters } : c,
-    );
-    saveComparisons(projectId, updated);
-    addCardsToComparison(projectId, cmp.id, cards);
-
+    const id = await createComparison(projectId, name, matchedRuns.map((r) => r.id));
     setCreating(false);
-    onCreated(cmp.id);
+    onCreated(id);
     onClose();
   };
 
@@ -415,15 +377,6 @@ export default function SmartComparisonWizard({
               />
             </div>
 
-            <label className="flex items-center gap-2 text-xs text-fg-muted mb-3 touch:min-h-10">
-              <input
-                type="checkbox"
-                checked={autoCards}
-                onChange={(e) => setAutoCards(e.target.checked)}
-                className="accent-accent"
-              />
-              Auto-populate cards from matched runs' metrics
-            </label>
 
             <h4 className="text-xs uppercase tracking-wide text-fg-muted mb-2">
               Matched runs ({matchedRuns.length})

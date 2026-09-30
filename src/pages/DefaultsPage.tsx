@@ -7,12 +7,15 @@
 import { useParams } from "react-router-dom";
 import DefaultsEditor, { cardTypeLabel } from "../components/DefaultsEditor";
 import type { CardType } from "../lib/cards/card-spec";
+import { useMemo } from "react";
 import { useWorkspace } from "../lib/workspace/use-workspace";
+import { projectRef } from "../lib/workspace/ref";
 
 export default function DefaultsPage() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { doc } = useWorkspace(projectId ?? null);
-  if (!projectId) return null;
+  const wsRef = useMemo(() => (projectId ? projectRef(projectId) : null), [projectId]);
+  const { doc } = useWorkspace(wsRef);
+  if (!projectId || !wsRef) return null;
   const sections = Object.keys(doc.sectionDefaults).sort();
 
   return (
@@ -20,14 +23,15 @@ export default function DefaultsPage() {
       <div>
         <h1 className="text-lg font-semibold">Card defaults</h1>
         <p className="mt-1 text-sm text-fg-muted">
-          Defaults for every card of a type in this project. A section&rsquo;s gear sets defaults for that section
-          only, and a card&rsquo;s own settings win over both. Reports and shared links use the built-in defaults.
+          Defaults for every card of a type in this project&rsquo;s workspace (the run page). A section&rsquo;s gear
+          sets defaults for that section only, and a card&rsquo;s own settings win over both. Each comparison has its
+          own defaults (its sections&rsquo; gears). Reports and shared links use the built-in defaults.
         </p>
       </div>
 
       <section className="card p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-fg-muted">Workspace</h2>
-        <DefaultsEditor projectId={projectId} where={{ level: "workspace" }} />
+        <DefaultsEditor wsRef={wsRef} where={{ level: "workspace" }} />
       </section>
 
       {sections.length > 0 && (
@@ -42,7 +46,7 @@ export default function DefaultsPage() {
                   <span className="ml-2 text-xs text-fg-muted">{types.map(cardTypeLabel).join(", ")}</span>
                 </summary>
                 <div className="mt-3">
-                  <DefaultsEditor projectId={projectId} where={{ level: "section", section: name }} types={types} />
+                  <DefaultsEditor wsRef={wsRef} where={{ level: "section", section: name }} types={types} />
                 </div>
               </details>
             );

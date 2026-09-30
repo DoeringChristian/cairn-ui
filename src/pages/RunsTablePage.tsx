@@ -6,18 +6,9 @@ import type { Run, RunStatus } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
 import { formatDuration, formatRelative, safeJsonParse } from "../lib/format";
 import { formatNum } from "../lib/plot-utils/types";
-import {
-  addCardsToComparison,
-  applyTemplateToRuns,
-  cardsForRuns,
-  createComparison,
-  useTemplates,
-  type ComparisonTemplate,
-} from "../lib/comparisons";
+import { createComparison } from "../lib/workspace/comparisons";
 import { downloadBlob } from "../lib/download";
-import { gcDeletedRunKeys } from "../lib/storage";
 import { api } from "../api/client";
-import SettingsPopover from "../components/SettingsPopover";
 import Popover from "../components/ui/Popover";
 import BulkTagEditor from "../components/BulkTagEditor";
 import ImportRunsDialog from "../components/ImportRunsDialog";
@@ -129,11 +120,6 @@ export default function RunsTablePage() {
   const runView = runViewCtl.view;
   const setRunView = runViewCtl.set!;
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [templatePopoverOpen, setTemplatePopoverOpen] = useState(false);
-  const [templateApplyMessage, setTemplateApplyMessage] = useState<string | null>(null);
-  // The template popover anchors to whichever button opened it: the inline
-  // "From template" button, or "More" on phones.
-  const templateAnchorRef = useRef<HTMLElement | null>(null);
   const moreBtnRef = useRef<HTMLButtonElement | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
@@ -141,7 +127,6 @@ export default function RunsTablePage() {
   const [importOpen, setImportOpen] = useState(false);
   const [showLatestOnly, setShowLatestOnly] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const { templates } = useTemplates(projectId ?? "");
   const [addingTagFor, setAddingTagFor] = useState<string | null>(null);
   const [menuColumn, setMenuColumn] = useState<string | null>(null);
   const menuAnchorRef = useRef<HTMLElement | null>(null);
@@ -220,7 +205,6 @@ export default function RunsTablePage() {
     await bulkDelete(ids);
     // Table data can be paginated/filtered, so it isn't a safe "keep" set —
     // only sweep the ids we know were just deleted.
-    gcDeletedRunKeys(new Set(ids));
     setSelected(new Set());
   }, [selected, bulkDelete]);
 
@@ -283,7 +267,6 @@ export default function RunsTablePage() {
     if (toDelete.length === 0) { alert("No old versions to delete."); return; }
     if (!confirm(`Delete ${toDelete.length} old run(s)? This cannot be undone.`)) return;
     await bulkDelete(toDelete);
-    gcDeletedRunKeys(new Set(toDelete));
   }, [runs, bulkDelete]);
 
   // Run label cache is seeded centrally in `useInfiniteRuns` (api/hooks.ts).
@@ -460,50 +443,12 @@ export default function RunsTablePage() {
   }, [selected]);
 
   const onCompare = async () => {
-    // One card per unique metric across ALL selected runs (union, not
-    // intersection), system metrics left out.
-    const selectedIds = Array.from(selected);
+    // The selected runs, with a copy of the project workspace's layout.
     const now = new Date();
     const label = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
-    const cmp = createComparison(projectId!, `Comparison ${label}`);
-    const cards = (await cardsForRuns(selectedIds)).filter(
-      (card) => !card.series[0]!.name.startsWith("system."),
-    );
-    // One batched add, so only one server sync creates the comparison.
-    addCardsToComparison(projectId!, cmp.id, cards);
-    navigate(`/p/${projectId}/compare?c=${encodeURIComponent(cmp.id)}`);
+    const id = await createComparison(projectId!, `Comparison ${label}`, Array.from(selected));
+    navigate(`/p/${projectId}/compare?c=${encodeURIComponent(id)}&tab=metrics`);
   };
-
-  const onApplyTemplate = useCallback(async (template: ComparisonTemplate) => {
-    if (!projectId) return;
-    setTemplatePopoverOpen(false);
-    const selectedIds = Array.from(selected);
-
-    // Matching happens before any comparison is created (applyTemplateToRuns
-    // returns comparisonId: null on a zero-match apply) — so a template that
-    // shares no metrics with the selected runs never leaves behind an empty
-    // comparison; it just reports why below.
-    const result = await applyTemplateToRuns(projectId, template, selectedIds);
-
-    if (!result.comparisonId) {
-      setTemplateApplyMessage(
-        `"${template.name}" has no cards matching the selected run(s) — no comparison created.`,
-      );
-      return;
-    }
-
-    // Hand the restore feedback to ComparePage via router state, since we're
-    // navigating away right after this (a banner set here would just flash
-    // and unmount before the user can read it).
-    navigate(`/p/${projectId}/compare?c=${encodeURIComponent(result.comparisonId)}`, {
-      state: {
-        templateApplyFeedback:
-          result.matchedCount === result.totalCount
-            ? `Applied "${template.name}" — all ${result.totalCount} card(s) restored.`
-            : `Applied "${template.name}" — restored ${result.matchedCount} of ${result.totalCount} card(s).`,
-      },
-    });
-  }, [projectId, selected, navigate]);
 
   useWindowScrollRestore(
     `runs:${projectId ?? ""}`,
@@ -517,15 +462,6 @@ export default function RunsTablePage() {
     danger?: boolean;
   }[] = [
     {
-      label: "Empty comparison",
-      onClick: () => {
-        if (!projectId) return;
-        const cmp = createComparison(projectId, "New comparison", Array.from(selected));
-        navigate(`/p/${projectId}/compare?c=${cmp.id}`);
-      },
-      disabled: selectedCount === 0,
-    },
-    {
       label: exporting ? "Exporting..." : "Export",
       onClick: onExport,
       disabled: selectedCount === 0 || exporting,
@@ -534,18 +470,6 @@ export default function RunsTablePage() {
     { label: "Archive", onClick: onBulkArchive, disabled: selectedCount === 0 },
     { label: "Unarchive", onClick: onBulkUnarchive, disabled: selectedCount === 0 },
     { label: "Delete", onClick: onBulkDelete, disabled: selectedCount === 0, danger: true },
-    ...(templates.length > 0
-      ? [
-          {
-            label: "From template",
-            onClick: (anchor: HTMLElement | null) => {
-              templateAnchorRef.current = anchor;
-              setTemplatePopoverOpen((v) => !v);
-            },
-            disabled: selectedCount === 0,
-          },
-        ]
-      : []),
   ];
 
   const runControls = (r: Run) => (
@@ -764,19 +688,6 @@ export default function RunsTablePage() {
         </p>
       </div>
 
-      {templateApplyMessage && (
-        <div className="mb-4 flex items-center justify-between gap-2 rounded border border-status-failed/40 bg-status-failed/10 px-3 py-2 text-xs text-status-failed">
-          <span>{templateApplyMessage}</span>
-          <button
-            type="button"
-            onClick={() => setTemplateApplyMessage(null)}
-            className="shrink-0 text-fg-subtle hover:text-fg"
-            aria-label="Dismiss"
-          >
-            {"×"}
-          </button>
-        </div>
-      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1 text-xs text-fg-muted">
@@ -847,8 +758,9 @@ export default function RunsTablePage() {
             className="btn px-2 py-1 text-xs"
             onClick={() => {
               if (!projectId) return;
-              const cmp = createComparison(projectId!, "New comparison");
-              navigate(`/p/${projectId}/compare?c=${cmp.id}`);
+              void createComparison(projectId, "New comparison", []).then((id) =>
+                navigate(`/p/${projectId}/compare?c=${encodeURIComponent(id)}&tab=metrics`),
+              );
             }}
           >
             New comparison
@@ -959,26 +871,6 @@ export default function RunsTablePage() {
           </div>
         </div>
       </div>
-      <SettingsPopover
-        open={templatePopoverOpen}
-        onClose={() => setTemplatePopoverOpen(false)}
-        anchorRef={templateAnchorRef}
-        title="Apply template"
-      >
-        <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
-          {templates.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => onApplyTemplate(t)}
-              className="text-left text-xs text-fg-muted hover:bg-bg-hover rounded px-2 py-1.5 border border-border-subtle"
-            >
-              <div className="truncate">{t.name}</div>
-              <div className="text-[10px] text-fg-subtle">{t.cards.length} card(s)</div>
-            </button>
-          ))}
-        </div>
-      </SettingsPopover>
       <BulkTagEditor
         open={tagPopoverOpen}
         onClose={() => setTagPopoverOpen(false)}

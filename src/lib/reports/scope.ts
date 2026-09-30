@@ -1,7 +1,6 @@
 /**
- * The pseudo-run id under which a report's cards scope their settings —
- * exactly parallel to `compareRunId` in lib/comparisons/types.ts (see
- * lib/storage.ts's `report:`-prefix handling in run-scoped key GC).
+ * The pseudo-run id under which a report's cards scope their settings
+ * (their localStorage working copy, see lib/card-settings.ts).
  */
 
 import type { CardSettingsKey } from "../card-settings";

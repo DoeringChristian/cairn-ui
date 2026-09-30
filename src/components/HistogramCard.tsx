@@ -18,7 +18,6 @@ import {
   StepHistogramHeatmap,
 } from "../charts/HistogramChart";
 import { parseNpz } from "../lib/parse-npz";
-import AddToComparisonButton from "./AddToComparisonButton";
 import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
@@ -256,9 +255,6 @@ export default function HistogramCard({
         if (cardRef.current)
           exportChartPng(cardRef.current, safeName(settings.title ?? metric.name));
       }}
-      addToComparisonSlot={
-        <AddToComparisonButton cardType="histogram" series={compSeries} />
-      }
       addToReportSlot={<AddToReportButton cardType="histogram" series={compSeries} settingsKey={settingsKey} />}
       settingsPanel={settingsPanel}
       modalOpen={expanded}

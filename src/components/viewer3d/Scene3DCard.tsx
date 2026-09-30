@@ -14,7 +14,6 @@ import { useMediaPanes, useScalarMetricNames } from "../card-kit/use-media-panes
 import { scene3dInstanceDefaults, type Scene3DSettings } from "../cards-settings/scene3d";
 import { useOverlaySlot } from "../card-kit/use-overlay-slot";
 import { plotCardPolicy } from "../card-kit/plot-card-policy";
-import AddToComparisonButton from "../AddToComparisonButton";
 import AddToReportButton from "../AddToReportButton";
 import CardShell from "../CardShell";
 import SeriesChipStrip from "../SeriesChipStrip";
@@ -287,7 +286,6 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
             artifactFilename(metric.name, seedCurrent.step, seedCurrent.artifact_mime, ".npz"),
           )
         : undefined}
-      addToComparisonSlot={<AddToComparisonButton cardType={spec.kind} series={compSeries} />}
       addToReportSlot={<AddToReportButton cardType={spec.kind} series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}

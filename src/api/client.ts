@@ -79,6 +79,12 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+function workspaceDocUrl(ref: import("../lib/workspace/ref").WorkspaceRef): string {
+  return ref.kind === "project"
+    ? `/api/projects/${ref.projectId}/workspace`
+    : `/api/projects/${ref.projectId}/comparisons/${ref.id}`;
+}
+
 async function del_<T>(path: string): Promise<T> {
   const res = await checkOk(await fetch(path, { method: "DELETE" }), path);
   return (await res.json()) as T;
@@ -207,49 +213,18 @@ export const api = {
     post<{ name: string; role: string }>("/api/auth/otp", { otp }),
   logout: () => post<{ ok: boolean }>("/api/auth/logout", {}),
 
-  // Comparisons (server-persisted)
+  // Comparisons: workspace documents with a run set (routes/project_docs.py).
   comparisons: (projectId: string) =>
-    get<{ comparisons: Array<{ id: string; name: string; created_at: string; updated_at: string; card_count: number }> }>(
-      `/api/projects/${projectId}/comparisons`,
-    ),
-  comparison: (projectId: string, id: string) =>
-    get<{ id: string; project_id: string; name: string; created_at: string; updated_at: string; payload: Record<string, unknown> }>(
-      `/api/projects/${projectId}/comparisons/${id}`,
-    ),
-  createServerComparison: (projectId: string, name: string, payload: Record<string, unknown>) =>
-    post<{ id: string; name: string; created_at: string }>(
+    get<{ comparisons: import("./types").ComparisonSummary[] }>(`/api/projects/${projectId}/comparisons`),
+  createComparison: (projectId: string, name: string, payload: Record<string, unknown>) =>
+    post<{ id: string; name: string; rev: number; created_at: string }>(
       `/api/projects/${projectId}/comparisons`,
       { name, payload },
     ),
-  updateServerComparison: (projectId: string, id: string, body: { name?: string; payload?: Record<string, unknown> }) =>
-    put<{ id: string; updated_at: string }>(
-      `/api/projects/${projectId}/comparisons/${id}`,
-      body,
-    ),
-  deleteServerComparison: (projectId: string, id: string) =>
+  renameComparison: (projectId: string, id: string, name: string) =>
+    patch<{ id: string; name: string }>(`/api/projects/${projectId}/comparisons/${id}`, { name }),
+  deleteComparison: (projectId: string, id: string) =>
     del_<{ deleted: string }>(`/api/projects/${projectId}/comparisons/${id}`),
-
-  // Comparison templates (server-persisted)
-  comparisonTemplates: (projectId: string) =>
-    get<{ comparison_templates: Array<{ id: string; name: string; created_at: string; updated_at: string; card_count: number }> }>(
-      `/api/projects/${projectId}/comparison-templates`,
-    ),
-  comparisonTemplate: (projectId: string, id: string) =>
-    get<{ id: string; project_id: string; name: string; created_at: string; updated_at: string; payload: Record<string, unknown> }>(
-      `/api/projects/${projectId}/comparison-templates/${id}`,
-    ),
-  createServerComparisonTemplate: (projectId: string, name: string, payload: Record<string, unknown>) =>
-    post<{ id: string; name: string; created_at: string }>(
-      `/api/projects/${projectId}/comparison-templates`,
-      { name, payload },
-    ),
-  updateServerComparisonTemplate: (projectId: string, id: string, body: { name?: string; payload?: Record<string, unknown> }) =>
-    put<{ id: string; updated_at: string }>(
-      `/api/projects/${projectId}/comparison-templates/${id}`,
-      body,
-    ),
-  deleteServerComparisonTemplate: (projectId: string, id: string) =>
-    del_<{ deleted: string }>(`/api/projects/${projectId}/comparison-templates/${id}`),
 
   // Reports (server-persisted)
   reports: (projectId: string, params: { limit?: number; offset?: number } = {}) => {
@@ -418,16 +393,17 @@ export const api = {
   sweepAction: (sweepId: string, action: import("./types").SweepAction) =>
     post<import("./types").SweepDetail>(`/api/sweeps/${sweepId}/${action}`, {}),
 
-  // ── Project workspace + saved views (lib/workspace/*) ──────────────────
-  workspace: (projectId: string) =>
-    get<import("./types").WorkspaceGet>(`/api/projects/${projectId}/workspace`),
+  // ── Workspace documents + saved views (lib/workspace/*) ──────────────
+  /** The project workspace or a comparison: `{rev, payload}` (rev 0 / null payload before the first save). */
+  workspaceDoc: (ref: import("../lib/workspace/ref").WorkspaceRef) =>
+    get<import("./types").WorkspaceGet>(workspaceDocUrl(ref)),
   /** A stale `baseRev` resolves to `{conflict}` (the server's document), not an error. */
-  putWorkspace: async (
-    projectId: string,
+  putWorkspaceDoc: async (
+    ref: import("../lib/workspace/ref").WorkspaceRef,
     baseRev: number,
     payload: Record<string, unknown>,
   ): Promise<import("./types").WorkspacePutResult> => {
-    const path = `/api/projects/${projectId}/workspace`;
+    const path = workspaceDocUrl(ref);
     const res = await fetch(path, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

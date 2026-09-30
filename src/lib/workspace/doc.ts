@@ -1,25 +1,59 @@
 /**
- * The project workspace document (pure): what the run page and comparisons
- * share per project, stored on the server (`/api/projects/{pid}/workspace`)
- * and edited through `WorkspaceOp`s.
+ * The workspace document (pure): a layout written in metric names and
+ * regexes, never in runs, plus the run set a comparison binds.
+ *
+ * Two kinds of workspace share this one type, its ops, the store/sync/undo
+ * machinery and the renderer (components/workspace/WorkspaceView.tsx):
+ *
+ * - the **project workspace** (`runs: null`): the run page's layout, one per
+ *   project, bound to whichever run is being viewed;
+ * - a **comparison** (`runs` set): its own layout plus its run set. Creating
+ *   one copies the project workspace; afterwards the two are independent.
  *
  * Edits are ops, not snapshots, so a write that loses a race (409, see
  * sync.ts) is rebased by replaying the pending ops onto the server's
- * document: `rebase(server, pending)`. The run view (hidden/pinned/baseline
- * runs) is per-browser and does not live here (lib/run-view-store.ts).
+ * document: `rebase(server, pending)`.
+ *
+ * Panels the document does not list are derived automatically from the
+ * bound runs' metrics (lib/workspace/layout.ts). Touching one materializes
+ * it here; removing one records its metric in `removed`.
  */
 
-import type { CardType } from "../cards/card-spec.ts";
+import { CARD_TYPES, type CardType } from "../cards/card-spec.ts";
+import { isRunSelector, type RunSelector } from "../run-selector.ts";
+import { parseRunView } from "../run-view-store.ts";
+import type { RunView } from "../run-view.tsx";
 
 /** Per-card-type default values (the same shape as `settings-scope`'s `CardDefaults`). */
 export type CardDefaults = Partial<Record<CardType, Record<string, unknown>>>;
 
-/** A card built by the quick panel builder: several metrics on one scalar chart. */
-export interface CustomPanel {
+/** Which metrics a panel shows: listed names, or an anchored regex over names. */
+export type MetricSelector = { names: string[] } | { regex: string };
+
+export interface Panel {
+  /** Stable. Automatic panels are `auto:<metric>`, and keep that id when materialized. */
   id: string;
-  title: string;
-  type: "scalar";
-  metrics: string[];
+  type: CardType;
+  selector: MetricSelector;
+  /** The card's own setting overrides (title, height, colSpan, smoothing, …). */
+  settings: Record<string, unknown>;
+}
+
+export interface SectionDef {
+  id: string;
+  name: string;
+  collapsed: boolean;
+  /** Panels shown A–Z by title instead of in their order. */
+  sort: boolean;
+  panels: Panel[];
+}
+
+/** A comparison's runs: fixed ids, or a selector that resolves against the project's runs. */
+export interface RunSet {
+  ids: string[];
+  selector: RunSelector | null;
+  /** Hidden, pinned and baseline runs of this comparison. */
+  view: RunView;
 }
 
 /** The palettes a colour-by samples (charts/colormaps.ts). */
@@ -51,18 +85,15 @@ export interface WorkspaceDoc {
   defaults: CardDefaults;
   /** Per-section card defaults, keyed by section name. */
   sectionDefaults: Record<string, CardDefaults>;
-  /** Card keys (metric names) removed from the run page's view. */
-  hiddenCards: string[];
-  /** Regexes (panel-filter syntax): matching cards are hidden. */
+  /** Regexes (panel-filter syntax): matching panels are hidden. */
   hidePatterns: string[];
-  sections: {
-    /** Sections shown first, in this order. */
-    pinned: string[];
-    /** Sections whose cards are sorted A–Z by name. */
-    sort: string[];
-  };
-  customPanels: CustomPanel[];
+  /** Ordered, named sections holding the materialized panels. */
+  sections: SectionDef[];
+  /** Metric names whose automatic panel was removed. */
+  removed: string[];
   prefs: WorkspacePrefs;
+  /** null: the project workspace (bound to the viewed run). A comparison's run set otherwise. */
+  runs: RunSet | null;
 }
 
 export type WorkspaceOp = (doc: WorkspaceDoc) => WorkspaceDoc;
@@ -71,17 +102,32 @@ export const EMPTY_WORKSPACE: WorkspaceDoc = Object.freeze({
   version: 1,
   defaults: {},
   sectionDefaults: {},
-  hiddenCards: [],
   hidePatterns: [],
-  sections: { pinned: [], sort: [] },
-  customPanels: [],
+  sections: [],
+  removed: [],
   prefs: { syncZoom: false, syncCursor: true, colorBy: null },
+  runs: null,
 }) as WorkspaceDoc;
+
+export const AUTO_PREFIX = "auto:";
+/** The id of a metric's automatic panel. */
+export const autoPanelId = (metric: string) => `${AUTO_PREFIX}${metric}`;
+export const isAutoPanelId = (id: string) => id.startsWith(AUTO_PREFIX);
+
+/** The one metric a panel stands in for (its selector names exactly one), else null. */
+export function claimedMetric(panel: Pick<Panel, "selector">): string | null {
+  return "names" in panel.selector && panel.selector.names.length === 1 ? panel.selector.names[0]! : null;
+}
+
+// ---------------------------------------------------------------------------
+// Normalize
+// ---------------------------------------------------------------------------
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   v != null && typeof v === "object" && !Array.isArray(v);
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+const unique = (xs: string[]) => Array.from(new Set(xs));
 
 function defaultsOf(v: unknown): CardDefaults {
   if (!isObj(v)) return {};
@@ -100,21 +146,54 @@ function colorByOf(v: unknown): ColorBy | null {
   };
 }
 
-function isCustomPanel(v: unknown): v is CustomPanel {
-  return (
-    isObj(v) &&
-    typeof v.id === "string" &&
-    typeof v.title === "string" &&
-    v.type === "scalar" &&
-    Array.isArray(v.metrics) &&
-    v.metrics.every((m) => typeof m === "string")
-  );
+function selectorOf(v: unknown): MetricSelector | null {
+  if (!isObj(v)) return null;
+  if (typeof v.regex === "string") return { regex: v.regex };
+  if (Array.isArray(v.names)) return { names: unique(strings(v.names)) };
+  return null;
+}
+
+function panelOf(v: unknown): Panel | null {
+  if (!isObj(v) || typeof v.id !== "string" || !v.id) return null;
+  if (typeof v.type !== "string" || !(CARD_TYPES as readonly string[]).includes(v.type)) return null;
+  const selector = selectorOf(v.selector);
+  if (!selector) return null;
+  return { id: v.id, type: v.type as CardType, selector, settings: isObj(v.settings) ? v.settings : {} };
+}
+
+function sectionsOf(v: unknown): SectionDef[] {
+  if (!Array.isArray(v)) return [];
+  const seenSections = new Set<string>();
+  const seenPanels = new Set<string>();
+  const out: SectionDef[] = [];
+  for (const s of v) {
+    if (!isObj(s) || typeof s.id !== "string" || typeof s.name !== "string") continue;
+    if (seenSections.has(s.id) || out.some((o) => o.name === s.name)) continue;
+    seenSections.add(s.id);
+    const panels: Panel[] = [];
+    for (const p of Array.isArray(s.panels) ? s.panels : []) {
+      const panel = panelOf(p);
+      if (!panel || seenPanels.has(panel.id)) continue;
+      seenPanels.add(panel.id);
+      panels.push(panel);
+    }
+    out.push({ id: s.id, name: s.name, collapsed: s.collapsed === true, sort: s.sort === true, panels });
+  }
+  return out;
+}
+
+function runsOf(v: unknown): RunSet | null {
+  if (!isObj(v)) return null;
+  return {
+    ids: unique(strings(v.ids)),
+    selector: isRunSelector(v.selector) ? (v.selector as RunSelector) : null,
+    view: parseRunView(v.view),
+  };
 }
 
 /** Coerce anything (a server payload, a saved view, null) into a valid document. */
 export function normalizeWorkspace(raw: unknown): WorkspaceDoc {
   if (!isObj(raw)) return EMPTY_WORKSPACE;
-  const sections = isObj(raw.sections) ? raw.sections : {};
   const prefs = isObj(raw.prefs) ? raw.prefs : {};
   const sectionDefaults: Record<string, CardDefaults> = {};
   if (isObj(raw.sectionDefaults)) {
@@ -124,15 +203,15 @@ export function normalizeWorkspace(raw: unknown): WorkspaceDoc {
     version: 1,
     defaults: defaultsOf(raw.defaults),
     sectionDefaults,
-    hiddenCards: strings(raw.hiddenCards),
-    hidePatterns: strings(raw.hidePatterns),
-    sections: { pinned: strings(sections.pinned), sort: strings(sections.sort) },
-    customPanels: Array.isArray(raw.customPanels) ? raw.customPanels.filter(isCustomPanel) : [],
+    hidePatterns: unique(strings(raw.hidePatterns)),
+    sections: sectionsOf(raw.sections),
+    removed: unique(strings(raw.removed)),
     prefs: {
       syncZoom: typeof prefs.syncZoom === "boolean" ? prefs.syncZoom : EMPTY_WORKSPACE.prefs.syncZoom,
       syncCursor: typeof prefs.syncCursor === "boolean" ? prefs.syncCursor : EMPTY_WORKSPACE.prefs.syncCursor,
       colorBy: colorByOf(prefs.colorBy),
     },
+    runs: runsOf(raw.runs),
   };
 }
 
@@ -160,33 +239,205 @@ export function restoreFields(before: WorkspaceDoc, fields: readonly (keyof Work
   };
 }
 
+/** The layout part of a document: what a saved view stores and a new comparison copies. */
+export type WorkspaceLayout = Omit<WorkspaceDoc, "runs">;
+
+export function layoutOf(doc: WorkspaceDoc): WorkspaceLayout {
+  const { runs: _runs, ...layout } = doc;
+  return layout;
+}
+
 // ---------------------------------------------------------------------------
 // Ops
 // ---------------------------------------------------------------------------
 
+let idCounter = 0;
+/** A short random id for new sections and panels. */
+export function newLayoutId(prefix: string): string {
+  idCounter += 1;
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `${prefix}${rand}${idCounter.toString(36)}`;
+}
+
 const union = (a: string[], b: readonly string[]) => [...a, ...b.filter((x) => !a.includes(x))];
-const toggle = (list: string[], x: string) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
+
+function withType(defaults: CardDefaults, type: CardType, values: Record<string, unknown>): CardDefaults {
+  const next: CardDefaults = { ...defaults };
+  if (Object.keys(values).length === 0) delete next[type];
+  else next[type] = values;
+  return next;
+}
+
+function mapSection(d: WorkspaceDoc, name: string, fn: (s: SectionDef) => SectionDef): WorkspaceDoc {
+  if (!d.sections.some((s) => s.name === name)) return d;
+  return { ...d, sections: d.sections.map((s) => (s.name === name ? fn(s) : s)) };
+}
+
+function mapPanel(d: WorkspaceDoc, id: string, fn: (p: Panel) => Panel): WorkspaceDoc {
+  let hit = false;
+  const sections = d.sections.map((s) => {
+    if (!s.panels.some((p) => p.id === id)) return s;
+    hit = true;
+    return { ...s, panels: s.panels.map((p) => (p.id === id ? fn(p) : p)) };
+  });
+  return hit ? { ...d, sections } : d;
+}
+
+/** Remove panel `id` wherever it is; returns the doc and the panel (if found). */
+function takePanel(d: WorkspaceDoc, id: string): [WorkspaceDoc, Panel | null] {
+  let found: Panel | null = null;
+  const sections = d.sections.map((s) => {
+    const p = s.panels.find((x) => x.id === id);
+    if (!p) return s;
+    found = p;
+    return { ...s, panels: s.panels.filter((x) => x.id !== id) };
+  });
+  return [found ? { ...d, sections } : d, found];
+}
+
+function newSection(name: string): SectionDef {
+  return { id: newLayoutId("s_"), name, collapsed: false, sort: false, panels: [] };
+}
+
+function allPanelIds(d: WorkspaceDoc): Set<string> {
+  return new Set(d.sections.flatMap((s) => s.panels.map((p) => p.id)));
+}
+
+/** Find a panel and the name of its section. */
+export function findPanel(d: WorkspaceDoc, id: string): { panel: Panel; section: string } | null {
+  for (const s of d.sections) {
+    const panel = s.panels.find((p) => p.id === id);
+    if (panel) return { panel, section: s.name };
+  }
+  return null;
+}
 
 export const ops = {
-  hideCards: (keys: readonly string[]): WorkspaceOp => (d) => ({ ...d, hiddenCards: union(d.hiddenCards, keys) }),
-  showCards: (keys: readonly string[]): WorkspaceOp => (d) => ({
+  /** Apply several ops as one. */
+  seq: (...list: WorkspaceOp[]): WorkspaceOp => (d) => list.reduce((doc, op) => op(doc), d),
+
+  // --- sections ------------------------------------------------------------
+  /**
+   * Make sure each of `names` has a section, in this order relative to each
+   * other: a missing one is inserted right after the previous name's section
+   * (or first). Used before touching an automatic section so the page keeps
+   * its arrangement.
+   */
+  ensureSections: (names: readonly string[]): WorkspaceOp => (d) => {
+    let sections = d.sections;
+    let prevIndex = -1;
+    for (const name of names) {
+      const at = sections.findIndex((s) => s.name === name);
+      if (at >= 0) {
+        prevIndex = at;
+        continue;
+      }
+      sections = [...sections.slice(0, prevIndex + 1), newSection(name), ...sections.slice(prevIndex + 1)];
+      prevIndex += 1;
+    }
+    return sections === d.sections ? d : { ...d, sections };
+  },
+  /** Add an empty section (a name already taken is a no-op). `index` null appends. */
+  addSection: (name: string, index: number | null = null): WorkspaceOp => (d) => {
+    const n = name.trim();
+    if (!n || d.sections.some((s) => s.name === n)) return d;
+    const sections = [...d.sections];
+    sections.splice(index == null ? sections.length : Math.max(0, Math.min(index, sections.length)), 0, newSection(n));
+    return { ...d, sections };
+  },
+  /** Rename a section; its section defaults follow. Taking another section's name is a no-op. */
+  renameSection: (from: string, to: string): WorkspaceOp => (d) => {
+    const n = to.trim();
+    if (!n || n === from || d.sections.some((s) => s.name === n)) return d;
+    const next = mapSection(d, from, (s) => ({ ...s, name: n }));
+    if (next === d) return d;
+    const sectionDefaults = { ...next.sectionDefaults };
+    if (sectionDefaults[from]) {
+      sectionDefaults[n] = sectionDefaults[from]!;
+      delete sectionDefaults[from];
+    }
+    return { ...next, sectionDefaults };
+  },
+  /** Move a section by `delta` places (−1 up, +1 down), clamped. */
+  moveSection: (name: string, delta: number): WorkspaceOp => (d) => {
+    const from = d.sections.findIndex((s) => s.name === name);
+    if (from < 0) return d;
+    const to = Math.max(0, Math.min(d.sections.length - 1, from + delta));
+    if (to === from) return d;
+    const sections = [...d.sections];
+    const [s] = sections.splice(from, 1);
+    sections.splice(to, 0, s!);
+    return { ...d, sections };
+  },
+  /** Remove a section that holds no panels. */
+  removeSection: (name: string): WorkspaceOp => (d) => {
+    const s = d.sections.find((x) => x.name === name);
+    if (!s || s.panels.length > 0) return d;
+    return { ...d, sections: d.sections.filter((x) => x.name !== name) };
+  },
+  setSectionCollapsed: (name: string, collapsed: boolean): WorkspaceOp => (d) =>
+    mapSection(d, name, (s) => (s.collapsed === collapsed ? s : { ...s, collapsed })),
+  setSectionSorted: (name: string, sort: boolean): WorkspaceOp => (d) =>
+    mapSection(d, name, (s) => (s.sort === sort ? s : { ...s, sort })),
+
+  // --- panels --------------------------------------------------------------
+  /**
+   * Add panels to section `name` (created at the end if missing), at `index`
+   * (null: the end). Ids already in the document are skipped, so writing an
+   * automatic panel twice (materializing) is idempotent.
+   */
+  addPanels: (name: string, panels: readonly Panel[], index: number | null = null): WorkspaceOp => (d) => {
+    const taken = allPanelIds(d);
+    const fresh = panels.filter((p) => !taken.has(p.id));
+    if (fresh.length === 0) return d;
+    const base = d.sections.some((s) => s.name === name) ? d : ops.addSection(name)(d);
+    // A panel that stands in for a metric brings it back from "removed".
+    const claimed = fresh.map(claimedMetric).filter((m): m is string => m != null);
+    const removed = claimed.length ? base.removed.filter((m) => !claimed.includes(m)) : base.removed;
+    return {
+      ...mapSection(base, name, (s) => {
+        const list = [...s.panels];
+        list.splice(index == null ? list.length : Math.max(0, Math.min(index, list.length)), 0, ...fresh);
+        return { ...s, panels: list };
+      }),
+      removed,
+    };
+  },
+  /**
+   * Remove a panel. `claimed` (the metric it stands in for, see
+   * `claimedMetric`, or an automatic panel's metric) is recorded in
+   * `removed` so its automatic panel does not come back.
+   */
+  removePanel: (id: string, claimed: string | null): WorkspaceOp => (d) => {
+    const [next] = takePanel(d, id);
+    return claimed ? { ...next, removed: union(next.removed, [claimed]) } : next;
+  },
+  /** Bring back removed metrics' automatic panels. */
+  restoreRemoved: (names: readonly string[]): WorkspaceOp => (d) => ({
     ...d,
-    hiddenCards: d.hiddenCards.filter((k) => !keys.includes(k)),
+    removed: d.removed.filter((m) => !names.includes(m)),
   }),
-  showAllCards: (): WorkspaceOp => (d) => ({ ...d, hiddenCards: [] }),
-  addHidePattern: (pattern: string): WorkspaceOp => (d) => ({ ...d, hidePatterns: union(d.hidePatterns, [pattern]) }),
-  removeHidePattern: (pattern: string): WorkspaceOp => (d) => ({
-    ...d,
-    hidePatterns: d.hidePatterns.filter((p) => p !== pattern),
-  }),
-  togglePinned: (section: string): WorkspaceOp => (d) => ({
-    ...d,
-    sections: { ...d.sections, pinned: toggle(d.sections.pinned, section) },
-  }),
-  toggleSorted: (section: string): WorkspaceOp => (d) => ({
-    ...d,
-    sections: { ...d.sections, sort: toggle(d.sections.sort, section) },
-  }),
+  setPanelSettings: (id: string, settings: Record<string, unknown>): WorkspaceOp => (d) =>
+    mapPanel(d, id, (p) => ({ ...p, settings })),
+  setPanelType: (id: string, type: CardType): WorkspaceOp => (d) =>
+    mapPanel(d, id, (p) => (p.type === type ? p : { ...p, type })),
+  setPanelSelector: (id: string, selector: MetricSelector): WorkspaceOp => (d) =>
+    mapPanel(d, id, (p) => ({ ...p, selector })),
+  /** Move a panel to section `to` (created at the end if missing), before `beforeId` (null: the end). */
+  movePanel: (id: string, to: string, beforeId: string | null): WorkspaceOp => (d) => {
+    if (id === beforeId) return d;
+    const [without, panel] = takePanel(d, id);
+    if (!panel) return d;
+    const base = without.sections.some((s) => s.name === to) ? without : ops.addSection(to)(without);
+    return mapSection(base, to, (s) => {
+      const list = [...s.panels];
+      const at = beforeId == null ? -1 : list.findIndex((p) => p.id === beforeId);
+      list.splice(at < 0 ? list.length : at, 0, panel);
+      return { ...s, panels: list };
+    });
+  },
+
+  // --- defaults, hide patterns, prefs --------------------------------------
   /** Replace one card type's workspace defaults (empty removes them). */
   setDefaults: (type: CardType, values: Record<string, unknown>): WorkspaceOp => (d) => ({
     ...d,
@@ -199,22 +450,21 @@ export const ops = {
     if (Object.keys(nextSection).length === 0) delete sectionDefaults[section];
     return { ...d, sectionDefaults };
   },
-  addCustomPanels: (panels: readonly CustomPanel[]): WorkspaceOp => (d) => ({
+  addHidePattern: (pattern: string): WorkspaceOp => (d) => ({ ...d, hidePatterns: union(d.hidePatterns, [pattern]) }),
+  removeHidePattern: (pattern: string): WorkspaceOp => (d) => ({
     ...d,
-    customPanels: [...d.customPanels, ...panels],
-  }),
-  removeCustomPanel: (id: string): WorkspaceOp => (d) => ({
-    ...d,
-    customPanels: d.customPanels.filter((p) => p.id !== id),
+    hidePatterns: d.hidePatterns.filter((p) => p !== pattern),
   }),
   setPrefs: (patch: Partial<WorkspacePrefs>): WorkspaceOp => (d) => ({ ...d, prefs: { ...d.prefs, ...patch } }),
-  /** Replace everything but the version (applying a saved view). */
-  replace: (next: WorkspaceDoc): WorkspaceOp => () => next,
-};
 
-function withType(defaults: CardDefaults, type: CardType, values: Record<string, unknown>): CardDefaults {
-  const next: CardDefaults = { ...defaults };
-  if (Object.keys(values).length === 0) delete next[type];
-  else next[type] = values;
-  return next;
-}
+  // --- runs (comparisons) --------------------------------------------------
+  /** Patch a comparison's run set (no-op on the project workspace). */
+  setRuns: (patch: Partial<RunSet>): WorkspaceOp => (d) => (d.runs ? { ...d, runs: { ...d.runs, ...patch } } : d),
+  addRuns: (ids: readonly string[]): WorkspaceOp => (d) =>
+    d.runs ? { ...d, runs: { ...d.runs, ids: union(d.runs.ids, ids) } } : d,
+  removeRun: (id: string): WorkspaceOp => (d) =>
+    d.runs ? { ...d, runs: { ...d.runs, ids: d.runs.ids.filter((x) => x !== id) } } : d,
+
+  /** Replace the layout (applying a saved view); the run set stays. */
+  replaceLayout: (layout: WorkspaceLayout): WorkspaceOp => (d) => ({ ...layout, runs: d.runs }),
+};

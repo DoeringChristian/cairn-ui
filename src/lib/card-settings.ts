@@ -5,8 +5,13 @@
  * card overrides → instance defaults → section → workspace → builtin, where
  * the builtin defaults and cascade keys come from the card type's registry
  * entry (lib/cards/settings-registry.ts). Only the card's OVERRIDES are
- * stored, in localStorage under `cairn:card-overrides:<runId>:<metricName>`;
- * a value equal to what the card would inherit is never stored.
+ * stored; a value equal to what the card would inherit is never stored.
+ *
+ * Where the overrides live is the enclosing `CardSettingsStoreContext`:
+ * in a workspace (the run page, a comparison) they are the panel's
+ * `settings` in the workspace document (components/workspace/); elsewhere
+ * (report cells, embeds) the default store keeps them in localStorage under
+ * `cairn:card-overrides:<scope>:<cardId>`, the report's working copy.
  *
  * Read-only cards (`CardMutationContext` false: report viewers, embeds) can
  * still be explored: their writes land in an in-memory session layer that
@@ -49,6 +54,7 @@ export const CardMutationContext = createContext<boolean>(true);
  */
 export const CardSettingsChangeContext = createContext<(() => void) | undefined>(undefined);
 
+/** Where a card's overrides live: a scope (`report:<id>`, `ws:<workspace>`) and the card's id in it. */
 export type CardSettingsKey = {
   runId: string;
   metricName: string;
@@ -135,6 +141,37 @@ function writeSession(storageKey: string, overrides: CardOverrides): void {
   notify(storageKey);
 }
 
+/**
+ * A place card overrides live. `read` must return the same object while the
+ * stored value is unchanged (it feeds `useSyncExternalStore`).
+ */
+export interface CardSettingsStore {
+  read: (key: CardSettingsKey) => CardOverrides;
+  subscribe: (key: CardSettingsKey, fn: () => void) => () => void;
+  write: (key: CardSettingsKey, overrides: CardOverrides) => void;
+}
+
+/** The default store: localStorage (report cells' working copy, embeds). */
+export const localCardSettingsStore: CardSettingsStore = {
+  read: (key) => readPersisted(cardOverridesStorageKey(key)),
+  subscribe: (key, fn) => subscribe(cardOverridesStorageKey(key), fn),
+  write: (key, overrides) => writePersisted(cardOverridesStorageKey(key), overrides),
+};
+
+export const CardSettingsStoreContext = createContext<CardSettingsStore>(localCardSettingsStore);
+
+/** Read a card's overrides from the enclosing store (null when it has none). */
+export function useCardOverridesReader(): (key: CardSettingsKey) => CardOverrides | null {
+  const store = useContext(CardSettingsStoreContext);
+  return useCallback(
+    (key: CardSettingsKey) => {
+      const v = store.read(key);
+      return Object.keys(v).length > 0 ? v : null;
+    },
+    [store],
+  );
+}
+
 // ---------------------------------------------------------------------------
 // The controller
 // ---------------------------------------------------------------------------
@@ -212,11 +249,24 @@ export function useCardSettings<T extends object>(
   const layersRef = useRef(layers);
   layersRef.current = layers;
 
+  const store = useContext(CardSettingsStoreContext);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableKey = useMemo(() => key, [storageKey]);
   const read = useCallback(
-    (): CardOverrides => (readOnly ? (session.get(storageKey) ?? readPersisted(storageKey)) : readPersisted(storageKey)),
-    [storageKey, readOnly],
+    (): CardOverrides => (readOnly ? (session.get(storageKey) ?? store.read(stableKey)) : store.read(stableKey)),
+    [storageKey, stableKey, readOnly, store],
   );
-  const sub = useCallback((fn: () => void) => subscribe(storageKey, fn), [storageKey]);
+  const sub = useCallback(
+    (fn: () => void) => {
+      const a = subscribe(storageKey, fn); // session writes
+      const b = store.subscribe(stableKey, fn);
+      return () => {
+        a();
+        b();
+      };
+    },
+    [storageKey, stableKey, store],
+  );
   const overrides = useSyncExternalStore(sub, read);
 
   const value = useMemo(
@@ -229,11 +279,11 @@ export function useCardSettings<T extends object>(
       if (readOnly) {
         writeSession(storageKey, next);
       } else {
-        writePersisted(storageKey, next);
+        store.write(stableKey, next);
         notifyChange?.();
       }
     },
-    [storageKey, readOnly, notifyChange],
+    [storageKey, stableKey, readOnly, notifyChange, store],
   );
 
   const commit = useCallback(

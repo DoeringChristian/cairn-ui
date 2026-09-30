@@ -1,19 +1,19 @@
 /**
- * The workspace toolbar above the run page's cards and a comparison's cards:
- * search (⌘K, a regex over card names), "hide matching" (a sticky hide
- * pattern in the workspace), the quick panel builder, the sync-zoom toggle,
- * colour-by (with its legend) and saved views. Everything but search edits the project workspace, so a
- * read-only surface shows only the search box.
+ * The toolbar of a workspace (the run page and every comparison render the
+ * same one): search (⌘K, a regex over panel labels), "hide matching" (a
+ * sticky hide pattern), the quick panel builder, "+ Section", the sync-zoom
+ * toggle, colour-by (with its legend) and saved views. Everything but search
+ * edits the enclosing workspace (`WorkspaceRefContext`), so a read-only
+ * surface shows only the search box.
  */
 
-import { useContext, useMemo, useRef, useState } from "react";
+import { useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { CardMutationContext } from "../lib/card-settings";
 import { formatShortcut } from "../lib/shortcuts";
 import { IS_MAC, useShortcut } from "../lib/use-shortcut";
-import type { RunLayout } from "../lib/run-layout";
 import { COLOR_BY_BUCKETS, ops, type ColorBy, type ColorByPalette } from "../lib/workspace/doc";
 import { useRunColorBy, type RunColorByValue } from "../lib/run-color-by-context";
 import { useScalarExprs } from "../lib/use-scalar-exprs";
@@ -21,23 +21,24 @@ import { Select, Stepper } from "./settings/palette";
 import ExprField from "./settings-panels/ExprField";
 import { compilePanelFilter } from "../lib/workspace/panel-filter";
 import { buildPanels, type BuiltPanel } from "../lib/workspace/panel-builder";
-import { useWorkspace } from "../lib/workspace/use-workspace";
+import { useCurrentWorkspace } from "../lib/workspace/use-workspace";
 import { parseViewPayload, viewPayload } from "../lib/workspace/views";
 import { HeaderToggle } from "./card-header";
 import Popover from "./ui/Popover";
 
 interface Props {
-  projectId: string;
   query: string;
   onQueryChange: (q: string) => void;
   /** How many cards the query matches (shown on the "hide matching" chip). */
   matchCount?: number;
   /** Scalar metric names the panel builder picks from; omit to hide the builder. */
   builderMetrics?: readonly string[];
-  /** Add the builder's panels (run page: custom panels; comparisons: cards). */
+  /** Add the builder's panels. */
   onBuildPanels?: (panels: BuiltPanel[]) => void;
-  /** The run page's layout: saved into views, restored when applying one. */
-  runLayout?: { value: RunLayout; apply: (layout: RunLayout) => void };
+  /** Add an empty section with this name. */
+  onAddSection?: (name: string) => void;
+  /** Extra buttons at the start of the action group (e.g. "New comparison"). */
+  actions?: ReactNode;
 }
 
 const CHIP =
@@ -46,15 +47,15 @@ const TOOL_BTN =
   "inline-flex items-center gap-1.5 rounded border border-border px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-accent hover:text-fg touch:min-h-10";
 
 export default function WorkspaceToolbar({
-  projectId,
   query,
   onQueryChange,
   matchCount,
   builderMetrics,
   onBuildPanels,
-  runLayout,
+  onAddSection,
+  actions,
 }: Props) {
-  const { doc, readOnly, update } = useWorkspace(projectId);
+  const { doc, readOnly, update } = useCurrentWorkspace();
   const mutable = useContext(CardMutationContext) && !readOnly;
   const searchRef = useRef<HTMLInputElement>(null);
   const filter = useMemo(() => compilePanelFilter(query), [query]);
@@ -103,7 +104,7 @@ export default function WorkspaceToolbar({
             update(ops.addHidePattern(filter.query), { label: `Hide /${filter.query}/` });
             onQueryChange("");
           }}
-          title="Hide every card matching the search, on every run of this project"
+          title="Hide every panel matching the search, for every run of this workspace"
         >
           <i className="fa-solid fa-eye-slash" aria-hidden="true" />
           Hide {matchCount ?? ""} matching
@@ -130,11 +131,25 @@ export default function WorkspaceToolbar({
       <ColorByLegend />
 
       {mutable && (
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {actions}
+          {onAddSection && (
+            <button
+              type="button"
+              className={TOOL_BTN}
+              onClick={() => {
+                const name = prompt("Section name:");
+                if (name && name.trim()) onAddSection(name.trim());
+              }}
+              title="Add an empty section"
+            >
+              <i className="fa-solid fa-plus" aria-hidden="true" /> Section
+            </button>
+          )}
           {builderMetrics && onBuildPanels && (
             <PanelBuilder metrics={builderMetrics} onBuild={onBuildPanels} />
           )}
-          <ColorByControl projectId={projectId} />
+          <ColorByControl />
           <HeaderToggle
             icon="fa-link"
             label={doc.prefs.syncZoom ? "Zoom synced across charts (click to unlink)" : "Sync zoom across charts"}
@@ -145,7 +160,7 @@ export default function WorkspaceToolbar({
               })
             }
           />
-          <ViewsMenu projectId={projectId} runLayout={runLayout} />
+          <ViewsMenu />
         </div>
       )}
     </div>
@@ -275,11 +290,11 @@ function ColorByLegend() {
   );
 }
 
-function ColorByControl({ projectId }: { projectId: string }) {
+function ColorByControl() {
   const cb = useRunColorBy();
   const anchor = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const { doc, update } = useWorkspace(projectId);
+  const { doc, update } = useCurrentWorkspace();
   if (!cb) return null;
   const current = doc.prefs.colorBy;
   const set = (next: ColorBy | null, label: string) => update(ops.setPrefs({ colorBy: next }), { label });
@@ -367,20 +382,15 @@ function ColorByForm({
 // Saved views
 // ---------------------------------------------------------------------------
 
-function ViewsMenu({
-  projectId,
-  runLayout,
-}: {
-  projectId: string;
-  runLayout?: { value: RunLayout; apply: (layout: RunLayout) => void };
-}) {
+function ViewsMenu() {
   const anchor = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const qc = useQueryClient();
-  const { doc, update } = useWorkspace(projectId);
+  const { ref, doc, update } = useCurrentWorkspace();
+  const projectId = ref?.projectId ?? "";
   const views = useQuery({
     queryKey: qk.views(projectId),
     queryFn: () => api.views(projectId),
@@ -403,7 +413,7 @@ function ViewsMenu({
     run(async () => {
       const n = name.trim();
       if (!n) return;
-      await api.createView(projectId, n, viewPayload(doc, runLayout?.value) as unknown as Record<string, unknown>);
+      await api.createView(projectId, n, viewPayload(doc) as unknown as Record<string, unknown>);
       setName("");
       await qc.invalidateQueries({ queryKey: qk.views(projectId) });
     });
@@ -411,9 +421,7 @@ function ViewsMenu({
   const apply = (id: string, viewName: string) =>
     run(async () => {
       const view = await api.view(projectId, id);
-      const { workspace, runLayout: layout } = parseViewPayload(view.payload);
-      update(ops.replace(workspace), { label: `Apply view “${viewName}”` });
-      if (layout && runLayout) runLayout.apply(layout);
+      update(ops.replaceLayout(parseViewPayload(view.payload)), { label: `Apply view “${viewName}”` });
       setOpen(false);
     });
 
@@ -459,7 +467,9 @@ function ViewsMenu({
           </button>
         </form>
         <p className="text-[11px] text-fg-subtle">
-          Saves hidden cards, pinned/sorted sections, defaults, custom panels{runLayout ? " and this run's card layout" : ""}.
+          Saves this workspace&rsquo;s layout: sections, panels and their settings, removed panels, hide patterns,
+          defaults and prefs. Applying one replaces the layout of the workspace you are in (the run page or a
+          comparison); its runs stay.
         </p>
         {error && <p className="text-xs text-status-failed">{error}</p>}
         {views.isLoading ? (

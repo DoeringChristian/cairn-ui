@@ -15,7 +15,7 @@ import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
-import { loadCardOverrides, type CardSettingsKey } from "../lib/card-settings";
+import { useCardOverridesReader, type CardSettingsKey } from "../lib/card-settings";
 import type { CardType } from "../lib/cards/card-spec";
 import type { ComparisonSeriesRef } from "../lib/comparisons";
 import { formatRelative } from "../lib/format";
@@ -54,6 +54,7 @@ async function appendToReport(projectId: string, reportId: string, block: CardsB
 
 export default function AddToReportButton({ cardType, series, settingsKey }: Props) {
   const projectId = useProjectId();
+  const readOverrides = useCardOverridesReader();
   const qc = useQueryClient();
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -87,7 +88,7 @@ export default function AddToReportButton({ cardType, series, settingsKey }: Pro
         runIds: [...new Set(series.map((s) => s.runId))],
         cards: [{ id: cardId, type: cardType, series: series.map((s) => ({ runId: s.runId, name: s.name })) }],
       };
-      const overrides = loadCardOverrides(settingsKey);
+      const overrides = readOverrides(settingsKey);
       await appendToReport(projectId, report.id, block, overrides ? { [cardId]: overrides } : {});
       void qc.invalidateQueries({ queryKey: qk.report(projectId, report.id) });
       void qc.invalidateQueries({ queryKey: qk.reports(projectId) });

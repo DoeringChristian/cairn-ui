@@ -1,8 +1,8 @@
 /**
  * Report documents — public surface.
  *
- * See types.ts (block/payload shapes), scope.ts (settings pseudo-scope,
- * parallel to lib/comparisons' compareRunId), payload.ts (build/restore
+ * See types.ts (block/payload shapes), scope.ts (settings pseudo-scope),
+ * payload.ts (build/restore
  * card settings on save/load), ids.ts (block/card id generation).
  */
 

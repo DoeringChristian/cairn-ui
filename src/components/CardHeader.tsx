@@ -5,6 +5,7 @@ import { useClickOutside } from "../lib/use-click-outside";
 import { useCoarsePointer, useCompactLayout } from "../lib/use-media-query";
 import { ICON_BTN } from "./card-header/icon-btn";
 import { CardCommentsContext } from "./reports/comments-context";
+import { PanelActionsContext } from "../lib/workspace/panel-actions";
 
 interface Props {
   /** Metric name, e.g. "train.loss". */
@@ -37,9 +38,7 @@ interface Props {
   onDownload?: () => void;
   /** Screenshot/export-as-image. Renders camera button. */
   onScreenshot?: () => void;
-  /** Slot for AddToComparisonButton in the standard cluster. */
-  addToComparisonSlot?: ReactNode;
-  /** Slot for AddToReportButton, next to the comparison slot. */
+  /** Slot for AddToReportButton. */
   addToReportSlot?: ReactNode;
   /** Remove the card. Renders close button in upper-right. */
   onRemove?: () => void;
@@ -69,7 +68,6 @@ export default function CardHeader({
   viewModified,
   onDownload,
   onScreenshot,
-  addToComparisonSlot: addToComparisonSlotProp,
   addToReportSlot: addToReportSlotProp,
   onRemove: onRemoveProp,
   interact,
@@ -78,11 +76,13 @@ export default function CardHeader({
   // added elsewhere or dragged.
   const mutable = useContext(CardMutationContext);
   const onTitleChange = mutable ? onTitleChangeProp : undefined;
-  const addToComparisonSlot = mutable ? addToComparisonSlotProp : undefined;
   const addToReportSlot = mutable ? addToReportSlotProp : undefined;
   // A report card's comment threads (provided in editable reports only).
   const comments = useContext(CardCommentsContext);
   const onRemove = mutable ? onRemoveProp : undefined;
+  // A workspace panel: "edit panel" (type, metrics, section).
+  const panelActions = useContext(PanelActionsContext);
+  const onEditPanel = mutable ? panelActions?.onEdit : undefined;
   const dragCtx = useDraggableCard();
   const drag = mutable ? dragCtx : null;
   // Below `md` the standard actions fold into a "⋯" menu so the title keeps
@@ -129,7 +129,7 @@ export default function CardHeader({
 
   const showResetView = !!(onResetView && viewModified);
   const hasStandardActions = !!(
-    showResetView || onDownload || onScreenshot || addToComparisonSlot || addToReportSlot || comments || onSettings || onRemove
+    showResetView || onDownload || onScreenshot || addToReportSlot || comments || onSettings || onEditPanel || onRemove
   );
 
   const menuItems: MenuItem[] = [];
@@ -138,6 +138,7 @@ export default function CardHeader({
     if (onDownload) menuItems.push({ icon: "fa-arrow-down", label: "Save", onClick: onDownload });
     if (onScreenshot) menuItems.push({ icon: "fa-camera", label: "Screenshot", onClick: onScreenshot });
     if (onSettings) menuItems.push({ icon: "fa-gear", label: "Settings", onClick: onSettings });
+    if (onEditPanel) menuItems.push({ icon: "fa-pen-to-square", label: "Edit panel", onClick: onEditPanel });
   }
   if (compact || coarse) {
     if (drag?.onMoveUp) menuItems.push({ icon: "fa-arrow-up-long", label: "Move up", onClick: drag.onMoveUp });
@@ -251,7 +252,6 @@ export default function CardHeader({
                 <i className="fa-solid fa-camera" aria-hidden="true" />
               </button>
             )}
-            {addToComparisonSlot}
             {addToReportSlot}
             {comments && (
               <button
@@ -269,6 +269,11 @@ export default function CardHeader({
             {!compact && onSettings && (
               <button type="button" onClick={onSettings} className={ICON_BTN} aria-label="Settings" title="Settings">
                 <i className="fa-solid fa-gear" aria-hidden="true" />
+              </button>
+            )}
+            {!compact && onEditPanel && (
+              <button type="button" onClick={onEditPanel} className={ICON_BTN} aria-label="Edit panel" title="Edit panel: type, metrics, section">
+                <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
               </button>
             )}
             {menuItems.length > 0 && <OverflowMenu items={menuItems} />}

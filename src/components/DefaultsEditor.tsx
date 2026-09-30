@@ -10,6 +10,7 @@ import { metaFor } from "../lib/cards/settings-registry";
 import { SETTINGS_PANELS } from "../lib/cards/settings-panels";
 import { Select, SettingsAction } from "./settings/palette";
 import { useWorkspace } from "../lib/workspace/use-workspace";
+import type { WorkspaceRef } from "../lib/workspace/ref";
 import { useDefaultsController, type DefaultsLevel } from "../lib/workspace/use-defaults-controller";
 
 /** Card types that take defaults at all (have cascade keys). */
@@ -36,7 +37,8 @@ const TYPE_LABELS: Partial<Record<CardType, string>> = {
 export const cardTypeLabel = (t: CardType) => TYPE_LABELS[t] ?? t[0]!.toUpperCase() + t.slice(1);
 
 interface Props {
-  projectId: string;
+  /** The workspace whose defaults are edited (the project workspace or a comparison). */
+  wsRef: WorkspaceRef;
   where: DefaultsLevel;
   /** Types offered first (e.g. those in the section); the rest follow. */
   types?: readonly CardType[];
@@ -44,8 +46,8 @@ interface Props {
   initialType?: CardType;
 }
 
-export default function DefaultsEditor({ projectId, where, types, initialType }: Props) {
-  const { doc } = useWorkspace(projectId);
+export default function DefaultsEditor({ wsRef, where, types, initialType }: Props) {
+  const { doc } = useWorkspace(wsRef);
   const ordered = useMemo(() => {
     const first = (types ?? []).filter((t) => DEFAULTABLE_TYPES.includes(t));
     return [...first, ...DEFAULTABLE_TYPES.filter((t) => !first.includes(t))];
@@ -62,13 +64,13 @@ export default function DefaultsEditor({ projectId, where, types, initialType }:
     <div className="flex flex-col gap-2">
       <Select<CardType> label="Card type" value={type} onChange={setType} options={options} />
       {/* Keyed: a new controller (and panel state) per type. */}
-      <DefaultsPanel key={`${type}|${where.level === "section" ? where.section : ""}`} projectId={projectId} type={type} where={where} />
+      <DefaultsPanel key={`${type}|${where.level === "section" ? where.section : ""}`} wsRef={wsRef} type={type} where={where} />
     </div>
   );
 }
 
-function DefaultsPanel({ projectId, type, where }: { projectId: string; type: CardType; where: DefaultsLevel }) {
-  const ctl = useDefaultsController(projectId, type, where);
+function DefaultsPanel({ wsRef, type, where }: { wsRef: WorkspaceRef; type: CardType; where: DefaultsLevel }) {
+  const ctl = useDefaultsController(wsRef, type, where);
   const Panel = panelFor(type);
   const anySet = metaFor(type).cascadeKeys.some((k) => ctl.isOverridden(k));
   if (!Panel) {

@@ -1,50 +1,50 @@
-import { useMemo } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
-import { useSequences, useArtifacts } from "../api/hooks";
-import CardGrid from "../components/CardGrid";
-import type { Run, SequenceMeta } from "../api/types";
-import { isInternalName } from "../lib/internal-names";
+import { useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import WorkspaceView from "../components/workspace/WorkspaceView";
+import { useProjectId } from "../lib/project-context";
+import { shortRunLabel } from "../lib/run-label";
+import { createComparison } from "../lib/workspace/comparisons";
+import { projectRef } from "../lib/workspace/ref";
 
-interface Ctx {
-  run: Run;
-}
-
+/**
+ * The run page's Metrics & Media tab: the project workspace bound to this
+ * run. Every layout edit here applies to every run of the project.
+ */
 export default function RunMetricsTab() {
   const { runId } = useParams<{ runId: string }>();
-  useOutletContext<Ctx>();
-  const q = useSequences(runId!);
-  const artifactsQ = useArtifacts(runId!);
+  const projectId = useProjectId();
+  const navigate = useNavigate();
+  const wsRef = useMemo(() => (projectId ? projectRef(projectId) : null), [projectId]);
+  const runIds = useMemo(() => (runId ? [runId] : []), [runId]);
+  const [creating, setCreating] = useState(false);
+  if (!wsRef || !runId) return null;
 
-  // Convert named artifacts (from log_artifact) into SequenceMeta entries
-  // so they appear as cards in the grid alongside sequence-based metrics.
-  // Multiple log_artifact() calls with the same name (different steps) collapse
-  // into ONE card — ArtifactCard renders all steps via the slider.
-  // Internal `_cairn/` attachments (the git diff) never get a card.
-  const allSequences = useMemo(() => {
-    const sequences: SequenceMeta[] = (q.data?.sequences ?? []).filter((s) => !isInternalName(s.name));
-    const named = (artifactsQ.data?.named ?? []).filter((a) => !isInternalName(a.name));
-    if (named.length === 0) return sequences;
-
-    const seqNames = new Set(sequences.map((s) => s.name));
-    // Group by name; aggregate min/max step + count.
-    const byName = new Map<string, { steps: number[] }>();
-    for (const a of named as any[]) {
-      if (seqNames.has(a.name)) continue;
-      const entry = byName.get(a.name) ?? { steps: [] };
-      entry.steps.push(a.step ?? 0);
-      byName.set(a.name, entry);
+  const newComparison = async () => {
+    setCreating(true);
+    try {
+      const id = await createComparison(wsRef.projectId, `Comparison · ${shortRunLabel(runId)}`, [runId]);
+      navigate(`/p/${wsRef.projectId}/compare?c=${encodeURIComponent(id)}&tab=metrics`);
+    } finally {
+      setCreating(false);
     }
-    const artifactMetas: SequenceMeta[] = Array.from(byName.entries()).map(([name, info]) => ({
-      name,
-      object_type: "artifact",
-      min_step: Math.min(...info.steps),
-      max_step: Math.max(...info.steps),
-      count: info.steps.length,
-    }));
-    return [...sequences, ...artifactMetas];
-  }, [q.data, artifactsQ.data]);
+  };
 
-  if (q.isLoading) return <p className="text-fg-muted">Loading metrics…</p>;
-  if (q.isError) return <p className="text-status-failed">Error: {String(q.error)}</p>;
-  return <CardGrid runId={runId!} sequences={allSequences} />;
+  return (
+    <WorkspaceView
+      wsRef={wsRef}
+      runIds={runIds}
+      reportLabel={`run ${shortRunLabel(runId)}`}
+      toolbarActions={
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded border border-border px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-accent hover:text-fg touch:min-h-10 disabled:opacity-50"
+          onClick={() => void newComparison()}
+          disabled={creating}
+          title="New comparison with this run and a copy of this workspace's layout"
+        >
+          <i className="fa-solid fa-code-compare" aria-hidden="true" /> New comparison
+        </button>
+      }
+    />
+  );
 }

@@ -43,6 +43,8 @@ export const qk = {
   sweep: (sweepId: string) => ["sweep", sweepId] as const,
   // Saved workspace views (lib/workspace/views.ts).
   views: (projectId: string) => ["views", projectId] as const,
+  /** The project's comparisons (names + run counts); each one's document lives in lib/workspace/store.ts. */
+  comparisons: (projectId: string) => ["comparisons", projectId] as const,
   // Report share links (wave 3 / I).
   reportShares: (projectId: string, reportId: string) => ["report-shares", projectId, reportId] as const,
   shareContext: () => ["share-context"] as const,
