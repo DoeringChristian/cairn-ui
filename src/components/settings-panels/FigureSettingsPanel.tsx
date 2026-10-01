@@ -1,6 +1,6 @@
 import type { SettingsController } from "../../lib/card-settings";
 import type { FigureMergeabilityResult } from "../../lib/plot-utils/figure-merge";
-import type { DragMode, FigureCompareMode, FigureSettings, HoverMode } from "../cards-settings/figure";
+import type { DragMode, FigureCompareMode, FigureSettings, FigureWebGLMode, HoverMode } from "../cards-settings/figure";
 import { Segmented, Select, SettingsSection, SettingsTabs, Switch } from "../settings/palette";
 import { LayoutSection, SliderSection, bind, type MediaPanelCtx, type PanelSurface } from "./media-panel-kit";
 
@@ -28,6 +28,12 @@ const DRAG_OPTIONS = [
   { value: "lasso", label: "Lasso" },
   { value: "none", label: "None" },
 ] as const satisfies ReadonlyArray<{ value: DragMode; label: string }>;
+
+const WEBGL_OPTIONS = [
+  { value: "auto", label: "Auto" },
+  { value: "on", label: "On" },
+  { value: "off", label: "Off" },
+] as const satisfies ReadonlyArray<{ value: FigureWebGLMode; label: string }>;
 
 export default function FigureSettingsPanel({
   ctl,
@@ -67,6 +73,12 @@ export default function FigureSettingsPanel({
         <Select<HoverMode> {...bind(ctl, "hoverMode")} options={HOVER_OPTIONS} label="Hover mode" />
         <Select<DragMode> {...bind(ctl, "dragMode")} options={DRAG_OPTIONS} label="Drag mode" />
         <Switch {...bind(ctl, "showLegend")} label="Show legend" />
+        <Segmented<FigureWebGLMode>
+          {...bind(ctl, "webgl")}
+          options={WEBGL_OPTIONS}
+          label="WebGL"
+          description="Draw scatter traces with WebGL (scattergl): Auto from 1000 points per figure. Traces scattergl can't draw (spline lines, stacking, fill patterns) stay as they are; 3D always uses WebGL."
+        />
       </SettingsSection>
     </>
   );

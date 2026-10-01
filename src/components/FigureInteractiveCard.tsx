@@ -27,8 +27,10 @@ import {
   applyViewOverrides,
   extractViewState,
   mergeRelayout,
+  sceneCameras,
   type SharedView,
 } from "../lib/plot-utils/view-overrides";
+import { toWebGL } from "../lib/plot-utils/webgl";
 import type { PlotlyFigureLike } from "../lib/plot-utils/types";
 import PlotlyChart from "../charts/PlotlyChart";
 import { readChartTheme, type ChartTheme } from "../charts/theme";
@@ -165,7 +167,10 @@ function figureId(fig: object): number {
 /**
  * One user Plotly figure, styled by the interaction settings, with the
  * shared view (zoom/pan/camera synced across panes) applied on top.
- * `revision` bumps reset the view to the figure's own.
+ * `revision` bumps reset the view to the figure's own. Scatter traces draw
+ * with WebGL per the card's `webgl` setting (the stored figure unchanged).
+ * `fallbackSrc` (the stored PNG) stands in while the plot is paused by the
+ * page's WebGL budget and no live snapshot of it exists yet.
  */
 function InteractiveFigure({
   figure,
@@ -176,8 +181,10 @@ function InteractiveFigure({
   className,
   style,
   liveRelayout,
+  fallbackSrc,
 }: {
   figure: PlotlyFigure;
+  fallbackSrc?: string;
   settings: FigureSettings;
   viewOverrides?: SharedView;
   onRelayout?: (view: SharedView) => void;
@@ -188,7 +195,11 @@ function InteractiveFigure({
   liveRelayout?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const { hoverMode, dragMode, showLegend, displayModeBar, scrollZoom } = settings;
+  const { hoverMode, dragMode, showLegend, displayModeBar, scrollZoom, webgl } = settings;
+  const data = useMemo(
+    () => toWebGL((figure.data ?? []) as Array<Record<string, unknown>>, figure.layout as Record<string, unknown> | undefined, webgl ?? "auto").data,
+    [figure, webgl],
+  );
 
   const layout = useMemo(() => {
     // Deep copy: Plotly writes zoom ranges into the layout's arrays in place,
@@ -223,8 +234,9 @@ function InteractiveFigure({
   return (
     <div ref={hostRef} className={className ?? "rounded bg-bg h-full"} style={style}>
       <PlotlyChart
-        data={(figure.data ?? []) as Array<Record<string, unknown>>}
+        data={data}
         layout={layout}
+        fallbackSrc={fallbackSrc}
         config={config}
         themed={false}
         onRelayout={handleRelayout}
@@ -267,6 +279,7 @@ function FigureItem({ point, label, sync }: { point: SequencePoint; label: strin
         onRelayout={sync.onRelayout}
         revision={sync.revision}
         liveRelayout
+        fallbackSrc={api.artifactUrl(point.artifact_hash!)}
       />
     );
   }
@@ -371,6 +384,7 @@ function FigurePane({
         onRelayout={onRelayout}
         revision={revision}
         liveRelayout
+        fallbackSrc={api.artifactUrl(current.artifact_hash)}
       />
     );
   }
@@ -626,8 +640,13 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     () => [sourceHash ?? current?.artifact_hash ?? "", ...paneCurrents.map((p) => p.sourceHash ?? p.hash ?? "")].join("|"),
     [sourceHash, current?.artifact_hash, paneCurrents],
   );
+  // 3D cameras are kept: a viewpoint applies to the next figure of a series
+  // too, so stepping a 3D series holds the angle.
   useEffect(() => {
-    setSharedView({});
+    setSharedView((prev) => {
+      const kept = sceneCameras(prev);
+      return Object.keys(kept).length === 0 && Object.keys(prev).length === 0 ? prev : kept;
+    });
   }, [figureIdentity]);
 
   const viewModified = Object.keys(sharedView).length > 0;
@@ -714,6 +733,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
             viewOverrides={sharedView}
             onRelayout={handlePaneRelayout}
             revision={plotRevision}
+            fallbackSrc={api.artifactUrl(current.artifact_hash)}
             className={`rounded bg-bg ${heightClass}`}
             style={heightStyle}
           />

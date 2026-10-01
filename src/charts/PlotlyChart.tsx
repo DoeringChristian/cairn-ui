@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 // @ts-expect-error - plotly.js-dist-min ships no types; the runtime API is plotly.js.
 import Plotly from "plotly.js-dist-min";
 
 import { readChartTheme, type ChartTheme } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
 import { onPrintLayout } from "../lib/print-layout.ts";
+import { glContextEstimate } from "../lib/plot-utils/gl-budget.ts";
+import { applyViewOverrides, extractViewState, mergeRelayout, type SharedView } from "../lib/plot-utils/view-overrides.ts";
+import { glBudget, glContextsIn, loseContexts, type GlRegistration } from "./gl-budget-manager.ts";
 
 export type PlotlyData = Array<Record<string, unknown>>;
 export type PlotlyLayout = Record<string, unknown>;
@@ -20,11 +23,57 @@ export interface PlotlyChartProps {
   onHover?: (event: { points: Array<Record<string, unknown>> }) => void;
   onUnhover?: () => void;
   className?: string;
+  /**
+   * A picture of the figure (its stored PNG rendition) shown while a WebGL
+   * plot is paused and no snapshot of the live plot exists yet. A blank
+   * placeholder image (1×1) is ignored.
+   */
+  fallbackSrc?: string;
 }
 
 interface PlotlyDiv extends HTMLDivElement {
   on?: (event: string, handler: (e: never) => void) => void;
   removeAllListeners?: (event: string) => void;
+  _fullLayout?: unknown;
+}
+
+/**
+ * Purge a plot and lose its WebGL contexts (Plotly.purge alone keeps them
+ * until GC). `held` adds contexts collected earlier, before something
+ * detached their canvases.
+ */
+function purgeAndRelease(el: PlotlyDiv, held: ReturnType<typeof glContextsIn> = []): void {
+  const contexts = [...held, ...glContextsIn(el)];
+  try {
+    Plotly.purge(el);
+  } catch {
+    // Already torn down.
+  }
+  loseContexts(contexts);
+}
+
+/**
+ * A picture of the plot as drawn now — its SVG layers with the WebGL layers
+ * embedded as images (Plotly's own exporter, run on the live plot: no second
+ * plot, no extra WebGL context). Returns an object URL, or null.
+ *
+ * The exporter tears the plot's 3D scenes down (it is meant for a throwaway
+ * clone), so the plot must be purged afterwards, with its contexts collected
+ * before this call.
+ */
+async function snapshotPlot(el: PlotlyDiv): Promise<string | null> {
+  if (!el._fullLayout) return null;
+  try {
+    let svg = String(await Promise.resolve(Plotly.Snapshot.toSVG(el)));
+    // The app theme sets fonts to "inherit", which a standalone SVG resolves
+    // to the browser default; pin the font the plot actually shows.
+    const family = getComputedStyle(el).fontFamily.replace(/"/g, "'");
+    svg = svg.replace(/font-family:\s*inherit/g, `font-family: ${family}`);
+    return URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  } catch (err) {
+    console.warn("PlotlyChart: snapshot failed", err);
+    return null;
+  }
 }
 
 function axisTheme(theme: ChartTheme): PlotlyLayout {
@@ -57,15 +106,26 @@ function themedLayout(layout: PlotlyLayout, theme: ChartTheme): PlotlyLayout {
   return out;
 }
 
+
+type GlState = "live" | "pending" | "paused";
+
 /**
  * A Plotly plot that sizes itself to its box. Self-contained: owns the div,
  * the resize observer and the event wiring; each render calls `Plotly.react`
  * (Plotly diffs internally). While not interactive (a touch device with the
  * card's interact toggle off, see lib/use-interact) the plot is static: no
  * drag boxes, hover or scroll zoom, so a finger scrolls the page.
+ *
+ * A plot with WebGL traces (3D, scattergl, splom, parcoords, maps) joins the
+ * page's WebGL budget (charts/gl-budget-manager): it draws only while the
+ * budget lets it; otherwise it is purged, its contexts released, and a
+ * snapshot of it shown — the last live picture, else `fallbackSrc`, else a
+ * note — until it scrolls back into view or is hovered or clicked. Its
+ * camera and zoom survive the pause. A context the browser takes away
+ * (too many on the page) is handled the same way: never a blank plot.
  */
 export default function PlotlyChart({
-  data, layout = {}, config, themed = true, onRelayout, onClick, onHover, onUnhover, className,
+  data, layout = {}, config, themed = true, onRelayout, onClick, onHover, onUnhover, className, fallbackSrc,
 }: PlotlyChartProps) {
   const ref = useRef<PlotlyDiv>(null);
   const handlers = useRef({ onRelayout, onClick, onHover, onUnhover });
@@ -81,13 +141,30 @@ export default function PlotlyChart({
   // not purge a newer successful one.
   const drawSeq = useRef(0);
 
+  // --- WebGL budget -------------------------------------------------------
+  const glEstimate = useMemo(() => glContextEstimate(data), [data]);
+  const managed = glEstimate > 0;
+  const managedRef = useRef(managed);
+  managedRef.current = managed;
+  // Whether the plot may hold WebGL contexts (always, for an SVG-only plot).
+  const liveRef = useRef(!managed);
+  const [glState, setGlState] = useState<GlState>(managed ? "pending" : "live");
+  const reg = useRef<GlRegistration | null>(null);
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  // The last live picture, valid for the data it was taken of.
+  const [snapshot, setSnapshot] = useState<{ url: string; data: PlotlyData } | null>(null);
+  const snapshotUrl = useRef<string | null>(null);
+  const [fallbackBlank, setFallbackBlank] = useState(false);
+  // The user's camera/zoom under the current uirevision, re-applied on every
+  // draw: a plot redrawn after a pause starts from a fresh div, so Plotly's
+  // own uirevision memory is gone.
+  const glView = useRef<{ rev: unknown; view: SharedView }>({ rev: undefined, view: {} });
+  const unmounted = useRef(false);
+
   const fail = (el: PlotlyDiv, err: unknown) => {
     console.warn("PlotlyChart: draw failed; retrying on resize", err);
-    try {
-      Plotly.purge(el);
-    } catch {
-      // Already torn down.
-    }
+    purgeAndRelease(el);
     failedRef.current = true;
     setFailed(true);
   };
@@ -95,12 +172,17 @@ export default function PlotlyChart({
   draw.current = () => {
     const el = ref.current;
     if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
-    const finalLayout = {
+    if (managedRef.current && !liveRef.current) return;
+    let finalLayout: PlotlyLayout = {
       ...(themed ? themedLayout(layout, readChartTheme(el)) : layout),
       autosize: true,
       // Keep zoom/pan across data updates unless the caller changes this.
       uirevision: layout.uirevision ?? "keep",
     };
+    if (managedRef.current) {
+      if (glView.current.rev !== finalLayout.uirevision) glView.current = { rev: finalLayout.uirevision, view: {} };
+      else if (Object.keys(glView.current.view).length > 0) finalLayout = applyViewOverrides(finalLayout, glView.current.view);
+    }
     const finalConfig = {
       displaylogo: false, responsive: false, displayModeBar: false, ...config,
       ...(interactive ? {} : { staticPlot: true, scrollZoom: false }),
@@ -115,16 +197,29 @@ export default function PlotlyChart({
     }
     drawn
       .then(() => {
+        // Unmounted while Plotly was still drawing: whatever it created
+        // (3D scenes) is orphaned; release it.
+        if (!el.isConnected && unmounted.current) {
+          purgeAndRelease(el);
+          return;
+        }
         if (seq !== drawSeq.current) return;
         if (failedRef.current) {
           failedRef.current = false;
           setFailed(false);
         }
+        if (managedRef.current) reg.current?.setWeight(glContextsIn(el).length || glEstimate);
         if (!el.removeAllListeners || !el.on) return;
         for (const event of ["plotly_relayout", "plotly_click", "plotly_hover", "plotly_unhover"]) {
           el.removeAllListeners(event);
         }
-        el.on("plotly_relayout", (e: never) => handlers.current.onRelayout?.(e));
+        el.on("plotly_relayout", (e: never) => {
+          if (managedRef.current) {
+            const v = extractViewState(e as Record<string, unknown>);
+            if (v) glView.current = { ...glView.current, view: mergeRelayout(glView.current.view, v) };
+          }
+          handlers.current.onRelayout?.(e);
+        });
         el.on("plotly_click", (e: never) => handlers.current.onClick?.(e));
         el.on("plotly_hover", (e: never) => handlers.current.onHover?.(e));
         el.on("plotly_unhover", () => handlers.current.onUnhover?.());
@@ -139,6 +234,7 @@ export default function PlotlyChart({
     if (!el) return;
     const resize = () => {
       if (el.clientWidth === 0 || el.clientHeight === 0) return;
+      if (managedRef.current && !liveRef.current) return;
       // Not drawn yet (hidden at mount) or the last draw failed: draw afresh.
       if (failedRef.current || !el.on) {
         draw.current();
@@ -156,20 +252,121 @@ export default function PlotlyChart({
     const ro = new ResizeObserver(resize);
     ro.observe(el);
     const offPrint = onPrintLayout(resize);
+    // The browser took a context away (too many on the page): stop drawing,
+    // show the last picture, and wait to be used or scrolled back into view.
+    // (Contexts released on purpose are lost after `liveRef` drops, and on
+    // canvases already detached from the plot.)
+    const onLost = (e: Event) => {
+      if (!managedRef.current || !liveRef.current) return;
+      // Recovery is ours: keep the event from Plotly's own handler, which
+      // would recreate the scene's context (pushing out another plot) and,
+      // once the plot is purged, throw from its retry loop.
+      e.stopPropagation();
+      liveRef.current = false;
+      drawSeq.current++;
+      reg.current?.lost();
+      setTimeout(() => purgeAndRelease(el), 0);
+      setGlState("paused");
+    };
+    el.addEventListener("webglcontextlost", onLost, true);
     return () => {
       ro.disconnect();
       offPrint();
-      Plotly.purge(el);
+      el.removeEventListener("webglcontextlost", onLost, true);
+      unmounted.current = true;
+      purgeAndRelease(el);
+      if (snapshotUrl.current) URL.revokeObjectURL(snapshotUrl.current);
     };
   }, []);
+
+  // Join (or leave) the WebGL budget as the traces gain (or lose) WebGL.
+  useEffect(() => {
+    const el = ref.current;
+    if (!managed || !el) {
+      liveRef.current = true;
+      setGlState("live");
+      return;
+    }
+    liveRef.current = false;
+    const r = glBudget.register(el, {
+      activate: () => {
+        liveRef.current = true;
+        setGlState("live");
+        draw.current();
+      },
+      deactivate: async () => {
+        const shownData = dataRef.current;
+        const wasLive = liveRef.current;
+        // No draws from here on: the snapshot dismantles the 3D scenes.
+        liveRef.current = false;
+        drawSeq.current++;
+        const held = glContextsIn(el);
+        const url = wasLive ? await snapshotPlot(el) : null;
+        purgeAndRelease(el, held);
+        if (url) {
+          if (snapshotUrl.current) URL.revokeObjectURL(snapshotUrl.current);
+          snapshotUrl.current = url;
+          setSnapshot({ url, data: shownData });
+        }
+        setGlState("paused");
+      },
+    }, glEstimate);
+    reg.current = r;
+    return () => {
+      r.unregister();
+      reg.current = null;
+      liveRef.current = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [managed]);
+
+  useEffect(() => {
+    reg.current?.setWeight(glEstimate);
+  }, [glEstimate]);
+
+  useEffect(() => setFallbackBlank(false), [fallbackSrc]);
 
   useEffect(() => {
     draw.current();
   }, [data, layout, config, themed, interactive]);
 
+  const paused = managed && glState !== "live";
+  const snap = snapshot && snapshot.data === data ? snapshot.url : null;
+  const picture = snap ?? (fallbackSrc && !fallbackBlank ? fallbackSrc : null);
+
   return (
-    <div className={`relative ${className ?? "h-full w-full"}`}>
+    <div
+      className={`relative ${className ?? "h-full w-full"}`}
+      data-cairn-plotly={managed ? glState : undefined}
+      onPointerEnter={() => reg.current?.pin(true)}
+      onPointerLeave={() => reg.current?.pin(false)}
+      onPointerDown={() => reg.current?.touch()}
+      onWheel={() => reg.current?.touch()}
+    >
       <div ref={ref} className="h-full w-full" style={{ touchAction: interactive ? undefined : "pan-y" }} />
+      {paused && (
+        <div
+          className="absolute inset-0 flex cursor-pointer items-center justify-center"
+          data-cairn-gl-paused={glState}
+          title="Paused to stay within the browser's WebGL limit; hover or click to draw it"
+          onClick={() => reg.current?.touch()}
+        >
+          {picture && (
+            <img
+              src={picture}
+              alt=""
+              draggable={false}
+              className="h-full w-full object-contain"
+              onLoad={(e) => {
+                if (picture === fallbackSrc && e.currentTarget.naturalWidth <= 1) setFallbackBlank(true);
+              }}
+            />
+          )}
+          {glState === "paused" && !picture && (
+            <span className="text-xs text-fg-subtle">WebGL plot paused: hover or click to draw it</span>
+          )}
+        </div>
+      )}
       {failed && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-fg-subtle">
           Too small to draw; make the card larger.

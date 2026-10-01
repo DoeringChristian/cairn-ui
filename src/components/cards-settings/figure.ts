@@ -22,6 +22,14 @@ export type DragMode = "zoom" | "pan" | "select" | "lasso" | "none";
  */
 export type FigureCompareMode = "panes" | "overlay";
 
+/**
+ * Draw `scatter` traces with WebGL (`scattergl`): "auto" only for figures
+ * with at least 1000 scatter points, "on" always, "off" never. Traces using
+ * what scattergl lacks stay SVG; the stored figure is never changed (see
+ * lib/plot-utils/webgl.ts). 3D traces always draw with WebGL.
+ */
+export type FigureWebGLMode = "auto" | "on" | "off";
+
 export interface FigureSettings extends BaseCardSettings, MediaSliderSettings, MediaColumnsSettings {
   metrics: SeriesRef[];
   paneWidths?: number[];
@@ -33,6 +41,7 @@ export interface FigureSettings extends BaseCardSettings, MediaSliderSettings, M
   xAxis?: "step" | "relative_time" | "wall_time";
   /** Multi-run display mode. Defaults to "panes" — behavior-preserving. */
   figureCompare?: FigureCompareMode;
+  webgl: FigureWebGLMode;
 }
 
 export const builtin: FigureSettings = {
@@ -46,6 +55,7 @@ export const builtin: FigureSettings = {
   hoverMode: "closest",
   dragMode: "zoom",
   showLegend: true,
+  webgl: "auto",
 };
 
 export function instanceDefaults(seed: { name: string }): Partial<FigureSettings> {
@@ -60,6 +70,7 @@ export const meta: CardSettingsMeta<FigureSettings> = {
     "hoverMode",
     "dragMode",
     "showLegend",
+    "webgl",
     ...MEDIA_SLIDER_CASCADE,
     ...MEDIA_COLUMNS_CASCADE,
   ],

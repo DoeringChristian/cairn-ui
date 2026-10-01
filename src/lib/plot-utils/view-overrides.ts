@@ -165,3 +165,19 @@ export function applyViewOverrides(
   }
   return result;
 }
+
+/**
+ * The 3D cameras of a shared view, without its 2D ranges. A camera is a
+ * viewpoint, meaningful for the next figure of a series too (stepping a 3D
+ * series keeps the angle); axis ranges belong to one figure's data.
+ */
+export function sceneCameras(view: SharedView): SharedView {
+  const out: SharedView = {};
+  for (const [k, v] of Object.entries(view)) {
+    if (/^scene\d*\.camera/.test(k)) out[k] = v;
+    else if (/^scene\d*$/.test(k) && v && typeof v === "object" && "camera" in (v as object)) {
+      out[`${k}.camera`] = (v as Record<string, unknown>).camera;
+    }
+  }
+  return out;
+}

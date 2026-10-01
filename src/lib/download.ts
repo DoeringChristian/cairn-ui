@@ -148,7 +148,9 @@ export async function exportPlotlyChart(
   format: ExportFormat,
 ): Promise<void> {
   const plots = container.querySelectorAll<HTMLElement>(".js-plotly-plot");
-  if (plots.length !== 1) {
+  // A WebGL plot paused by the page's WebGL budget is purged (no
+  // `_fullLayout`): screenshot its snapshot with the rest of the card.
+  if (plots.length !== 1 || !(plots[0] as HTMLElement & { _fullLayout?: unknown })._fullLayout) {
     await exportChartPng(container, filename);
     return;
   }
