@@ -1,14 +1,24 @@
 /**
- * A report as LaTeX: prose cells go through the same remark pipeline the
- * app renders with (GFM + `$$` math, `singleDollarTextMath: false`, see
- * lib/markdown-math.tsx) and the resulting mdast is walked into LaTeX; each
- * cards cell becomes one figure per card, pointing at the PNG the export
- * captured for it.
+ * A report as LaTeX: prose cells are parsed by the same pipeline the app
+ * renders with (lib/markdown/pipeline.ts: GFM + Pandoc Markdown) and the
+ * resulting mdast is walked into LaTeX; each cards cell becomes one figure
+ * per card, pointing at the PNG the export captured for it.
  *
- * Only the things the app renders are converted: math is `$$…$$` (inline
- * inside a line, display on its own lines) and passes through verbatim as
- * `\(…\)` / `\[…\]`. A `\(` in the source is a markdown escape of `(`, not
- * math, in the app too. Raw HTML stays text, as in the app.
+ * Math passes through verbatim: inline `$…$` / `\(…\)` as `\(…\)`, display
+ * (`$$…$$`, `\[…\]`, a `$$` block) as `\[…\]`, and a math environment
+ * (`\begin{align}…`) or any other raw TeX block as written. Macro blocks
+ * (`\newcommand…`) are kept, `\DeclareMathOperator` turned into the
+ * equivalent `\newcommand` so it works outside the preamble. Raw HTML stays
+ * text, as in the app.
+ *
+ * Pandoc extras: footnotes (also inline `^[…]`) → `\footnote`, definition
+ * lists → `description`, `^sup^`/`~sub~` → `\textsuperscript`/`\textsubscript`,
+ * callouts (`> [!NOTE]`, `::: note`) → a quote headed by the title, other
+ * fenced divs → their content, spans → their content (`.smallcaps` →
+ * `\textsc`, `.underline` → `\uline`), implicit figures → `figure` with a
+ * caption, line blocks → lines joined by `\newline`, fancy lists → the
+ * matching `enumerate` labels, citations → `\cite`, header ids → `\label`
+ * and `{-}` → a starred (unnumbered) section.
  *
  * Images: `cairn-asset:<hash>` (a report upload) becomes
  * `\includegraphics{assets/<hash>}`, without an extension (graphicx finds
@@ -17,24 +27,24 @@
  * link, since the zip cannot carry it.
  */
 
-import { unified } from "unified";
-import remarkParse from "remark-parse";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
 import type {
   Blockquote,
   Definition,
   FootnoteDefinition,
+  Heading,
   List,
   ListItem,
   Nodes,
-  Paragraph,
   PhrasingContent,
-  Root,
   RootContent,
   Table,
 } from "mdast";
+import type { ContainerDirective } from "mdast-util-directive";
+import type { DefListNode } from "mdast-util-definition-list";
 import type { ReportBlock } from "./types.ts";
+import { parseMarkdown } from "../markdown/pipeline.ts";
+import { katexMacroSource } from "../markdown/micromark-pandoc.ts";
+import { isDisplayMath, type Figure } from "../markdown/mdast-pandoc.ts";
 
 /** One captured card: its PNG's path in the zip and the caption (the card's title). */
 export interface CardFigure {
@@ -88,12 +98,6 @@ const HEADINGS = ["section", "subsection", "subsubsection", "paragraph", "subpar
 /** Environments that are display math on their own (not wrapped in `\[…\]`). */
 const DISPLAY_ENV = /^\\begin\{(equation|align|alignat|gather|multline|flalign)\*?\}/;
 
-const CALLOUT = /^\[!([A-Za-z]+)\][ \t]*([^\n]*)(?:\n|$)/;
-
-function parseMarkdown(md: string): Root {
-  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath, { singleDollarTextMath: false });
-  return processor.runSync(processor.parse(md)) as Root;
-}
 
 interface Ctx {
   figures: LatexFigures;
@@ -125,11 +129,22 @@ function blocks(nodes: RootContent[], ctx: Ctx): string {
 function block(node: RootContent, ctx: Ctx): string {
   switch (node.type) {
     case "heading":
-      return `\\${HEADINGS[node.depth - 1]}{${inline(node.children, ctx)}}`;
+      return heading(node, ctx);
     case "paragraph":
       return inline(node.children, ctx);
     case "math":
+      if ((node.data as { rawTex?: boolean } | undefined)?.rawTex) return node.value;
       return DISPLAY_ENV.test(node.value.trim()) ? node.value.trim() : `\\[\n${node.value}\n\\]`;
+    case "rawTex":
+      return node.value;
+    case "texMacros":
+      return katexMacroSource(node.value);
+    case "containerDirective":
+      return fencedDiv(node, ctx);
+    case "figure":
+      return figure(node, ctx);
+    case "lineBlock":
+      return `\\noindent ${inline(node.children, ctx)}`;
     case "code":
       return `\\begin{verbatim}\n${node.value}\n\\end{verbatim}`;
     case "blockquote":
@@ -145,35 +160,81 @@ function block(node: RootContent, ctx: Ctx): string {
     case "definition":
     case "footnoteDefinition":
       return "";
-    default:
-      return "children" in node ? blocks(node.children as RootContent[], ctx) : "";
+    default: {
+      const other = node as Nodes;
+      if (other.type === ("defList" as string)) return defList(other as unknown as DefListNode, ctx);
+      return "children" in other ? blocks(other.children as RootContent[], ctx) : "";
+    }
   }
 }
 
-/** `> [!NOTE] Title` (GitHub/Obsidian callout) → a quote headed by its title. */
-function blockquote(node: Blockquote, ctx: Ctx): string {
-  let children = node.children;
-  let title: string | null = null;
-  const first = children[0];
-  const lead = first?.type === "paragraph" ? first.children[0] : undefined;
-  const m = lead?.type === "text" ? CALLOUT.exec(lead.value) : null;
-  if (m && first?.type === "paragraph" && lead?.type === "text") {
-    const kind = m[1]!.toLowerCase();
-    title = m[2]!.trim() ? inline([{ type: "text", value: m[2]!.trim() }], ctx) : escapeLatex(kind[0]!.toUpperCase() + kind.slice(1));
-    const rest = lead.value.slice(m[0].length);
-    const para: Paragraph = { ...first, children: rest ? [{ ...lead, value: rest }, ...first.children.slice(1)] : first.children.slice(1) };
-    children = para.children.length > 0 ? [para, ...children.slice(1)] : children.slice(1);
-  }
-  const body = blocks(children, ctx);
+function heading(node: Heading, ctx: Ctx): string {
+  const starred = (node.data as { unnumbered?: boolean } | undefined)?.unnumbered ? "*" : "";
+  const id = node.data?.hProperties?.id;
+  const label = typeof id === "string" ? `\\label{${escapeUrl(id)}}` : "";
+  return `\\${HEADINGS[node.depth - 1]}${starred}{${inline(node.children, ctx)}}${label}`;
+}
+
+/** A quote headed by `title` (callouts). */
+function quote(title: string | null, body: string): string {
   const head = title !== null ? `\\textbf{${title}}${body ? "\\par\n" : ""}` : "";
   return `\\begin{quote}\n${head}${body}\n\\end{quote}`;
 }
 
+function calloutTitle(props: Record<string, unknown> | undefined): string | null {
+  const kind = props?.dataCallout;
+  if (typeof kind !== "string") return null;
+  const title = typeof props!.dataTitle === "string" ? props!.dataTitle.trim() : "";
+  return escapeLatex(title || kind[0]!.toUpperCase() + kind.slice(1));
+}
+
+/** `::: note` → a callout quote; any other fenced div → its content. */
+function fencedDiv(node: ContainerDirective, ctx: Ctx): string {
+  const title = calloutTitle(node.data?.hProperties as Record<string, unknown> | undefined);
+  const body = blocks(node.children, ctx);
+  return title !== null ? quote(title, body) : body;
+}
+
+function defList(node: DefListNode, ctx: Ctx): string {
+  const items: string[] = [];
+  for (const c of node.children) {
+    if (c.type === "defListTerm") items.push(`\\item[${inline(c.children, ctx)}]`);
+    else items.push(blocks(c.children as RootContent[], ctx));
+  }
+  return `\\begin{description}\n${items.join("\n")}\n\\end{description}`;
+}
+
+function figure(node: Figure, ctx: Ctx): string {
+  const [img, caption] = node.children;
+  return [
+    "\\begin{figure}[htbp]",
+    "\\centering",
+    image(img.url, img.alt ?? "", ctx),
+    `\\caption{${inline(caption.children, ctx)}}`,
+    "\\end{figure}",
+  ].join("\n");
+}
+
+/** A blockquote, or a callout (`> [!NOTE] Title`, marked by remark-callouts) as a quote headed by its title. */
+function blockquote(node: Blockquote, ctx: Ctx): string {
+  return quote(calloutTitle(node.data?.hProperties as Record<string, unknown> | undefined), blocks(node.children, ctx));
+}
+
+/** `enumerate` labels of fancy lists (`a.`, `(ii)`, …), by HTML list type. */
+const ENUM_LABEL: Record<string, string> = {
+  a: "\\alph{enumi}.",
+  A: "\\Alph{enumi}.",
+  i: "\\roman{enumi}.",
+  I: "\\Roman{enumi}.",
+};
+
 function list(node: List, ctx: Ctx): string {
   const env = node.ordered ? "enumerate" : "itemize";
   const start = node.ordered && node.start != null && node.start !== 1 ? `\\setcounter{enumi}{${node.start - 1}}\n` : "";
+  const type = node.data?.hProperties?.type;
+  const label = node.ordered && typeof type === "string" && ENUM_LABEL[type] ? `\\renewcommand{\\labelenumi}{${ENUM_LABEL[type]}}\n` : "";
   const items = node.children.map((item) => listItem(item, ctx)).join("\n");
-  return `\\begin{${env}}\n${start}${items}\n\\end{${env}}`;
+  return `\\begin{${env}}\n${label}${start}${items}\n\\end{${env}}`;
 }
 
 function listItem(item: ListItem, ctx: Ctx): string {
@@ -213,10 +274,22 @@ function phrasing(node: PhrasingContent, ctx: Ctx): string {
     case "inlineCode":
       return `\\texttt{${escapeLatex(node.value)}}`;
     case "inlineMath":
-      return `\\(${node.value}\\)`;
+      return isDisplayMath(node) ? `\\[${node.value}\\]` : `\\(${node.value}\\)`;
+    case "superscript":
+      return `\\textsuperscript{${inline(node.children, ctx)}}`;
+    case "subscript":
+      return `\\textsubscript{${inline(node.children, ctx)}}`;
+    case "span": {
+      const body = inline(node.children, ctx);
+      return node.kind === "smallcaps" ? `\\textsc{${body}}` : node.kind === "underline" ? `\\uline{${body}}` : body;
+    }
+    case "citation":
+      return `\\cite{${node.keys.map(escapeUrl).join(",")}}`;
     case "break":
       return "\\newline\n";
     case "link":
+      // An in-document anchor (`#id`: a heading's `{#id}`) is a cross-reference.
+      if (node.url.startsWith("#") && node.url.length > 1) return `\\hyperref[${escapeUrl(node.url.slice(1))}]{${inline(node.children, ctx)}}`;
       return `\\href{${escapeUrl(node.url)}}{${inline(node.children, ctx)}}`;
     case "linkReference": {
       const def = ctx.definitions.get(node.identifier);
@@ -236,7 +309,7 @@ function phrasing(node: PhrasingContent, ctx: Ctx): string {
     case "html":
       return escapeLatex(node.value);
     default: {
-      // Phrasing added by a plugin (none today): keep its text.
+      // Any other phrasing: keep its text.
       const other = node as Nodes;
       return "children" in other ? inline(other.children as PhrasingContent[], ctx) : "";
     }

@@ -1,0 +1,296 @@
+[
+ {
+  "extension": "tex_math_dollars",
+  "name": "inline math",
+  "markdown": "Energy $E = mc^2$ here.",
+  "html": "<p>Energy <code class=\"language-math math-inline\">E = mc^2</code> here.</p>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "display math inline in a paragraph",
+  "markdown": "So $$\\sum_i x_i$$ holds.",
+  "html": "<p>So <code class=\"language-math math-display\">\\sum_i x_i</code> holds.</p>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "display math block",
+  "markdown": "$$\n\\int_0^1 f(x)\\,dx\n$$",
+  "html": "<pre><code class=\"language-math math-display\">\\int_0^1 f(x)\\,dx</code></pre>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "first line after $$ is math too",
+  "markdown": "$$ a = b\nc = d\n$$",
+  "html": "<pre><code class=\"language-math math-display\">a = b\nc = d</code></pre>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "unclosed $$ line does not swallow the text",
+  "markdown": "$$\na = b $$\n\nNext paragraph.",
+  "html": "<p><code class=\"language-math math-display\">\na = b </code></p>\n<p>Next paragraph.</p>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "prices stay text",
+  "markdown": "It costs $5 and $10.",
+  "html": "<p>It costs $5 and $10.</p>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "opening $ followed by a space is not math",
+  "markdown": "a $ x$ b",
+  "html": "<p>a $ x$ b</p>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "closing $ preceded by a space is not math",
+  "markdown": "a $x $ b",
+  "html": "<p>a $x $ b</p>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "closing $ followed by a digit is not a closer",
+  "markdown": "Between $a$1 stays text.\n\nBut $c$ is math.",
+  "html": "<p>Between $a$1 stays text.</p>\n<p>But <code class=\"language-math math-inline\">c</code> is math.</p>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "the first closing $ decides: an invalid one leaves a plain dollar",
+  "markdown": "Pay $x$5 now, or $y$ later; $a $b$ too.",
+  "html": "<p>Pay $x$5 now, or <code class=\"language-math math-inline\">y</code> later; $a <code class=\"language-math math-inline\">b</code> too.</p>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "a dollar inside display math is content",
+  "markdown": "Before $$a$b$$ after.",
+  "html": "<p>Before <code class=\"language-math math-display\">a$b</code> after.</p>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "escaped dollars",
+  "markdown": "\\$x\\$ and $a\\$b$",
+  "html": "<p>$x$ and <code class=\"language-math math-inline\">a\\$b</code></p>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "dollars in code stay code",
+  "markdown": "`$x$`",
+  "html": "<p><code>$x$</code></p>"
+ },
+ {
+  "extension": "tex_math_dollars",
+  "name": "math in a table cell and a heading",
+  "markdown": "## Loss $\\mathcal{L}$\n\n| f | v |\n|---|---|\n| $x^2$ | 1 |",
+  "html": "<h2 id=\"loss-mathcall\">Loss <code class=\"language-math math-inline\">\\mathcal{L}</code></h2>\n<table><thead><tr><th>f</th><th>v</th></tr></thead><tbody><tr><td><code class=\"language-math math-inline\">x^2</code></td><td>1</td></tr></tbody></table>"
+ },
+ {
+  "extension": "tex_math_single_backslash",
+  "name": "inline and display",
+  "markdown": "Inline \\(a+b\\) and display \\[c+d\\].",
+  "html": "<p>Inline <code class=\"language-math math-inline\">a+b</code> and display <code class=\"language-math math-display\">c+d</code>.</p>"
+ },
+ {
+  "extension": "tex_math_single_backslash",
+  "name": "without a closer they are escapes",
+  "markdown": "\\(not math and \\[not either",
+  "html": "<p>(not math and [not either</p>"
+ },
+ {
+  "extension": "raw_tex",
+  "name": "KaTeX environment renders as math",
+  "markdown": "\\begin{align}\na &= b \\\\\nc &= d\n\\end{align}",
+  "html": "<pre><code class=\"language-math math-display\">\\begin{align}\na &amp;= b \\\\\nc &amp;= d\n\\end{align}</code></pre>"
+ },
+ {
+  "extension": "raw_tex",
+  "name": "other environments show as LaTeX code",
+  "markdown": "\\begin{tikzpicture}\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}",
+  "html": "<pre><code class=\"language-latex\">\\begin{tikzpicture}\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}</code></pre>"
+ },
+ {
+  "extension": "raw_tex",
+  "name": "unclosed environment stays text",
+  "markdown": "\\begin{align}\na = b",
+  "html": "<p>\\begin{align}\na = b</p>"
+ },
+ {
+  "extension": "latex_macros",
+  "name": "macro block feeds later math",
+  "markdown": "\\newcommand{\\R}{\\mathbb{R}}\n\\DeclareMathOperator{\\tr}{tr}\n\n$x \\in \\R$",
+  "html": "<div hidden=\"\" class=\"md-tex-macros\"><code class=\"language-math math-inline\">\\newcommand{\\R}{\\mathbb{R}}\n\\newcommand{\\tr}{\\operatorname{tr}}</code></div>\n<p><code class=\"language-math math-inline\">x \\in \\R</code></p>"
+ },
+ {
+  "extension": "footnotes",
+  "name": "reference footnote",
+  "markdown": "Text[^1].\n\n[^1]: The note.",
+  "html": "<p>Text<sup><a href=\"#md-fn-1\" id=\"md-fnref-1\" data-footnote-ref=\"true\" aria-describedby=\"footnote-label\">1</a></sup>.</p>\n<section data-footnotes=\"true\" class=\"footnotes\"><h2 class=\"sr-only\" id=\"footnote-label\">Footnotes</h2>\n<ol>\n<li id=\"md-fn-1\">\n<p>The note. <a href=\"#md-fnref-1\" data-footnote-backref=\"\" aria-label=\"Back to reference 1\" class=\"data-footnote-backref\">↩</a></p>\n</li>\n</ol>\n</section>"
+ },
+ {
+  "extension": "inline_notes",
+  "name": "inline footnote",
+  "markdown": "Text^[An *inline* note with [a link](https://e.com).] end.",
+  "html": "<p>Text<sup><a href=\"#md-fn-inline-note-1\" id=\"md-fnref-inline-note-1\" data-footnote-ref=\"true\" aria-describedby=\"footnote-label\">1</a></sup> end.</p>\n<section data-footnotes=\"true\" class=\"footnotes\"><h2 class=\"sr-only\" id=\"footnote-label\">Footnotes</h2>\n<ol>\n<li id=\"md-fn-inline-note-1\">\n<p>An <em>inline</em> note with <a href=\"https://e.com\">a link</a>. <a href=\"#md-fnref-inline-note-1\" data-footnote-backref=\"\" aria-label=\"Back to reference 1\" class=\"data-footnote-backref\">↩</a></p>\n</li>\n</ol>\n</section>"
+ },
+ {
+  "extension": "definition_lists",
+  "name": "colon marker",
+  "markdown": "Term\n:   Definition",
+  "html": "<dl>\n<dt>Term</dt>\n<dd>Definition\n</dd>\n</dl>"
+ },
+ {
+  "extension": "definition_lists",
+  "name": "tilde marker and loose definitions",
+  "markdown": "Term\n\n~   First para\n\n    Second para",
+  "html": "<dl>\n<dt>Term</dt>\n<dd>\n<p>First para</p>\n<p>Second para</p>\n</dd>\n</dl>"
+ },
+ {
+  "extension": "fenced_divs",
+  "name": "callout classes become callouts",
+  "markdown": "::: {.warning #w title=\"Careful\"}\nBody *text*.\n:::",
+  "html": "<blockquote id=\"w\" data-callout=\"warning\" data-fold=\"\" data-title=\"Careful\"><p>Body <em>text</em>.</p></blockquote>"
+ },
+ {
+  "extension": "fenced_divs",
+  "name": "bare class word and callout- prefix",
+  "markdown": "::: tip\nA tip.\n:::\n\n::: {.callout-note}\nA note.\n:::",
+  "html": "<blockquote data-callout=\"tip\" data-fold=\"\" data-title=\"\"><p>A tip.</p></blockquote>\n<blockquote data-callout=\"note\" data-fold=\"\" data-title=\"\"><p>A note.</p></blockquote>"
+ },
+ {
+  "extension": "fenced_divs",
+  "name": "other classes are md- prefixed divs; nesting",
+  "markdown": ":::: {.outer}\n::: inner\nx\n:::\n::::",
+  "html": "<div class=\"md-outer\"><div class=\"md-inner\"><p>x</p></div></div>"
+ },
+ {
+  "extension": "bracketed_spans",
+  "name": "classes, id and special classes",
+  "markdown": "[plain]{.a #s} [Small Caps]{.smallcaps} [under]{.underline} [hi]{.mark}",
+  "html": "<p><span id=\"s\" class=\"md-a\">plain</span> <span class=\"smallcaps\">Small Caps</span> <u>under</u> <mark>hi</mark></p>"
+ },
+ {
+  "extension": "header_attributes",
+  "name": "explicit id and class",
+  "markdown": "# Results {#results .big}",
+  "html": "<h1 id=\"results\" class=\"md-big\">Results</h1>"
+ },
+ {
+  "extension": "header_attributes",
+  "name": "unnumbered",
+  "markdown": "## Aside {-}",
+  "html": "<h2 id=\"aside\">Aside</h2>"
+ },
+ {
+  "extension": "auto_identifiers",
+  "name": "GitHub-style ids (gfm_auto_identifiers)",
+  "markdown": "# Hello, World!\n\n# Hello, World!",
+  "html": "<h1 id=\"hello-world\">Hello, World!</h1>\n<h1 id=\"hello-world-1\">Hello, World!</h1>"
+ },
+ {
+  "extension": "superscript",
+  "name": "superscript; spaces forbid it",
+  "markdown": "2^10^ but x^2 and ^a b^",
+  "html": "<p>2<sup>10</sup> but x^2 and ^a b^</p>"
+ },
+ {
+  "extension": "subscript",
+  "name": "subscript",
+  "markdown": "H~2~O",
+  "html": "<p>H<sub>2</sub>O</p>"
+ },
+ {
+  "extension": "strikeout",
+  "name": "strikeout",
+  "markdown": "~~gone~~",
+  "html": "<p><del>gone</del></p>"
+ },
+ {
+  "extension": "pipe_tables",
+  "name": "pipe table with alignment",
+  "markdown": "| a | b |\n|:--|--:|\n| 1 | 2 |",
+  "html": "<table><thead><tr><th style=\"text-align:left\">a</th><th style=\"text-align:right\">b</th></tr></thead><tbody><tr><td style=\"text-align:left\">1</td><td style=\"text-align:right\">2</td></tr></tbody></table>"
+ },
+ {
+  "extension": "task_lists",
+  "name": "task list",
+  "markdown": "- [x] done\n- [ ] todo",
+  "html": "<ul class=\"contains-task-list\">\n<li class=\"task-list-item\"><input type=\"checkbox\" disabled=\"\" checked=\"\"/> done</li>\n<li class=\"task-list-item\"><input type=\"checkbox\" disabled=\"\"/> todo</li>\n</ul>"
+ },
+ {
+  "extension": "smart",
+  "name": "quotes, dashes, ellipsis",
+  "markdown": "\"Double\" and 'single', it's -- an en dash --- an em dash...",
+  "html": "<p>“Double” and ‘single’, it’s – an en dash — an em dash…</p>"
+ },
+ {
+  "extension": "implicit_figures",
+  "name": "image alone in a paragraph",
+  "markdown": "![A *caption*](plot.png)",
+  "html": "<figure><img src=\"plot.png\" alt=\"A caption\"/><figcaption>A caption</figcaption></figure>"
+ },
+ {
+  "extension": "implicit_figures",
+  "name": "inline or alt-less images stay images",
+  "markdown": "See ![x](a.png) here.\n\n![](b.png)",
+  "html": "<p>See <img src=\"a.png\" alt=\"x\"/> here.</p>\n<p><img src=\"b.png\" alt=\"\"/></p>"
+ },
+ {
+  "extension": "link_attributes",
+  "name": "image size and link class",
+  "markdown": "![w](a.png){width=50%} [l](https://e.com){.ext}",
+  "html": "<p><img src=\"a.png\" alt=\"w\" style=\"width:50%\"/> <a href=\"https://e.com\" class=\"md-ext\">l</a></p>"
+ },
+ {
+  "extension": "line_blocks",
+  "name": "line block keeps line breaks and indentation",
+  "markdown": "| The first line\n|    indented second",
+  "html": "<div class=\"line-block\">The first line<br/>\n   indented second</div>"
+ },
+ {
+  "extension": "fancy_lists",
+  "name": "letters",
+  "markdown": "a. one\nb. two",
+  "html": "<ol type=\"a\">\n<li>one</li>\n<li>two</li>\n</ol>"
+ },
+ {
+  "extension": "fancy_lists",
+  "name": "upper-case letters need two spaces after the period",
+  "markdown": "A.  First\nB.  Second\n\nB. Russell wrote it.",
+  "html": "<ol type=\"A\">\n<li>First</li>\n<li>Second</li>\n</ol>\n<p>B. Russell wrote it.</p>"
+ },
+ {
+  "extension": "fancy_lists",
+  "name": "roman numerals with a start",
+  "markdown": "iii) three\niv) four",
+  "html": "<ol start=\"3\" type=\"i\">\n<li>three</li>\n<li>four</li>\n</ol>"
+ },
+ {
+  "extension": "fancy_lists",
+  "name": "parenthesized numbers and #.",
+  "markdown": "(1) a\n(2) b\n\n#. c\n#. d",
+  "html": "<ol type=\"1\">\n<li>a</li>\n<li>b</li>\n</ol>\n<ol type=\"1\">\n<li>c</li>\n<li>d</li>\n</ol>"
+ },
+ {
+  "extension": "example_lists",
+  "name": "numbered across the text, with labelled references",
+  "markdown": "(@) First.\n(@second) Second.\n\nText.\n\n(@) Third, after (@second).",
+  "html": "<ol type=\"1\">\n<li>First.</li>\n<li>Second.</li>\n</ol>\n<p>Text.</p>\n<ol start=\"3\" type=\"1\">\n<li>Third, after (2).</li>\n</ol>"
+ },
+ {
+  "extension": "citations",
+  "name": "bracketed citations",
+  "markdown": "As shown [@doe99; @smith2004, p. 33] and [see -@roe].",
+  "html": "<p>As shown <span class=\"citation\" data-cites=\"doe99 smith2004\">[@doe99; @smith2004, p. 33]</span> and <span class=\"citation\" data-cites=\"roe\">[see -@roe]</span>.</p>"
+ },
+ {
+  "extension": "citations",
+  "name": "e-mail addresses are not citations",
+  "markdown": "[mail a@b.c]",
+  "html": "<p>[mail <a href=\"mailto:a@b.c\">a@b.c</a>]</p>"
+ },
+ {
+  "extension": "callouts",
+  "name": "GitHub callouts still work",
+  "markdown": "> [!NOTE]\n> Body.",
+  "html": "<blockquote data-callout=\"note\" data-fold=\"\" data-title=\"\">\n<p>Body.</p>\n</blockquote>"
+ }
+]

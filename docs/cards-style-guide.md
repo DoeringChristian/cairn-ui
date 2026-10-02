@@ -118,8 +118,11 @@ Use the established libraries; don't write a renderer.
 ## 5. Dependencies
 
 Current drawing stack: `uplot`, `plotly.js-dist-min`, `react-zoom-pan-pinch`,
-`three`; `react-markdown` + `remark-gfm` for markdown (`remark-math`,
-`rehype-katex` + `katex` for math); `shiki` for code highlighting. Anything new needs a
+`three`; `react-markdown` + `remark-gfm` for markdown, with Pandoc's extensions
+from `remark-definition-list`, the container part of `micromark-extension-directive`, the
+`$$` block of `micromark-extension-math` and cairn's own plugins (`src/lib/markdown/`, one
+pipeline for every surface), `rehype-katex` + `katex` (lazy) for math; `shiki` for code
+highlighting. Anything new needs a
 reason in the change description. No second chart library.
 
 ## 6. Verification
