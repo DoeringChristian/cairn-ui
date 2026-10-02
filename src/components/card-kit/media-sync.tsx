@@ -49,9 +49,21 @@ export function MediaSyncProvider({ scopeKey, children }: { scopeKey: string; ch
       load: () => parsePersisted(loadJson<unknown>(localStorage, key)),
       save: (s) => saveJson(localStorage, key, s),
     });
-    return { scopeKey, store, clock: new SharedClock() };
+    // The section clock's loop toggle is remembered with the section's slider (per browser).
+    const clock = new SharedClock();
+    clock.setLoop(loadJson<unknown>(localStorage, `${key}:loop`) === true);
+    return { scopeKey, store, clock };
   }, [scopeKey]);
   useEffect(() => () => value.clock.pause(), [value]);
+  useEffect(() => {
+    const key = `${storageKeys.mediaSync(value.scopeKey)}:loop`;
+    let last = value.clock.loop;
+    return value.clock.subscribe(() => {
+      if (value.clock.loop === last) return;
+      last = value.clock.loop;
+      saveJson(localStorage, key, last);
+    });
+  }, [value]);
   return <MediaSyncContext.Provider value={value}>{children}</MediaSyncContext.Provider>;
 }
 

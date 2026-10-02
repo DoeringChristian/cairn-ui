@@ -113,7 +113,7 @@ interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
   /** `prefetch`'s work for this point is done already (a gallery swaps at once then). */
   peek?: (qc: QueryClient, point: SequencePoint) => boolean;
   /** Extra controls between the panes and the slider (the video transport). */
-  footer?: (args: { settings: S; paneCount: number; following: boolean }) => ReactNode;
+  footer?: (args: { settings: S; paneCount: number; following: boolean; update: (patch: Partial<S>) => void }) => ReactNode;
   /**
    * The reference tag every pane compares against (resolved in the pane's
    * own run), at a pinned step or following the pane's; null for none.
@@ -367,7 +367,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   const renderContent = (inModal: boolean) => (
     <>
       {renderPanes(inModal)}
-      {footer?.({ settings, paneCount, following })}
+      {footer?.({ settings, paneCount, following, update: (patch) => ctl.set(patch) })}
       <StepSlider
         points={slider.sliderPoints}
         currentIndex={safeIdx}

@@ -534,21 +534,36 @@ export default function VideoPlayerCard(props: SteppedMediaCardProps) {
           onTransformChange={setTransform}
         />
       )}
-      footer={({ settings, paneCount, following }) => {
+      footer={({ settings, paneCount, following, update }) => {
         const clock = clockFor(settings, paneCount, following);
-        return clock ? <LoopedTransport clock={clock} loop={settings.loop} autoplay={settings.autoplay && clock === local} /> : null;
+        if (!clock) return null;
+        // Following the section: the section's clock (and its loop) is shared, so the card doesn't set it.
+        if (clock !== local) return <ClockTransport clock={clock} className="mt-2" />;
+        return (
+          <LoopedTransport
+            clock={clock}
+            loop={settings.loop}
+            onLoopChange={(loop) => update({ loop } as Partial<VideoSettings>)}
+            autoplay={settings.autoplay}
+          />
+        );
       }}
     />
   );
 }
 
-/** The card's transport bar; the clock loops when the card's videos do. */
-function LoopedTransport({ clock, loop, autoplay }: { clock: SharedClock; loop: boolean; autoplay: boolean }) {
+/** The card's own transport bar: the clock loops as the card's `loop` setting says; the bar's toggle sets it. */
+function LoopedTransport({ clock, loop, onLoopChange, autoplay }: {
+  clock: SharedClock;
+  loop: boolean;
+  onLoopChange: (loop: boolean) => void;
+  autoplay: boolean;
+}) {
   useEffect(() => clock.setLoop(loop), [clock, loop]);
   useEffect(() => {
     if (autoplay) clock.play();
     // Autoplay starts the card once, when it appears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return <ClockTransport clock={clock} className="mt-2" />;
+  return <ClockTransport clock={clock} className="mt-2" onLoopChange={onLoopChange} />;
 }
