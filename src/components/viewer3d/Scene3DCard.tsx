@@ -22,6 +22,7 @@ import Scene3DSettingsPanel from "../settings-panels/Scene3DSettingsPanel";
 import Viewer3D from "./Viewer3D";
 import { useQuery } from "@tanstack/react-query";
 import { pointCaption } from "../../lib/caption";
+import { RunChip, usePaneLabelInline } from "../card-kit/pane-label";
 import { isGalleryPoint } from "../../lib/media/gallery";
 import { galleryQuery } from "../../lib/media/gallery-query";
 import { useGalleryFrame } from "../media/GalleryView";
@@ -125,12 +126,15 @@ function SceneGallery<V extends object, M extends Scene3DMeta>({
   resetKey: number;
 }) {
   const frame = useGalleryFrame(point);
+  // The tab strip holds the top-left corner: the pane's run chip joins it.
+  const run = usePaneLabelInline(true);
   if (!frame) return <div className="h-full motion-safe:animate-pulse rounded bg-bg-hover" />;
   if (frame.items.length === 0) return <div className="flex h-full items-center justify-center text-xs text-fg-subtle">empty gallery</div>;
   const index = Math.min(item, frame.items.length - 1);
   const caption = pointCaption(frame.point.metadata);
   const tabs = (
     <div className="absolute left-1 right-1 top-1 flex flex-wrap items-center gap-1" data-gallery-step={frame.point.step} data-gallery-count={frame.items.length}>
+      {run && <RunChip {...run} className="max-w-[30%]" />}
       {caption && <span className="max-w-[40%] truncate rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-muted" title={caption}>{caption}</span>}
       {frame.items.map((it, i) => (
         <button
@@ -276,6 +280,7 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
       updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
+      subtitleCollapsedOnly={values.length > 1}
       defaultHeight={plotCardPolicy(spec.kind).defaultHeight}
       onSettings={() => setSettingsOpen(true)}
       onResetView={() => setResetKey((k) => k + 1)}
@@ -319,6 +324,7 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
             <MultiPaneGrid
               paneKeys={paneKeys}
               labels={paneLabels}
+              colors={panes.paneColors}
               inModal={false}
               columns={settings.columns}
               onPaneWidthsChange={() => {}}

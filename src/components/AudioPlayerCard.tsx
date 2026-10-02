@@ -58,7 +58,7 @@ function AudioClip({ point, hash, autoplay }: { point: SequencePoint; hash: stri
       {meta?.peaks && meta.peaks.length > 0 ? <Waveform peaks={meta.peaks} /> : <div className="h-12" />}
       <audio key={hash} controls autoPlay={autoplay} src={api.artifactUrl(hash)} className="mt-2 w-full" />
       {meta && (
-        <div className="mono mt-1 text-xs text-fg-subtle">
+        <div className="mono mt-1 truncate text-xs text-fg-subtle" title={`${meta.sample_rate} Hz · ${meta.duration}s · ${channelLabel(meta.channels)}`}>
           {`${meta.sample_rate} Hz · ${meta.duration}s · ${channelLabel(meta.channels)}`}
         </div>
       )}
@@ -70,6 +70,7 @@ export default function AudioPlayerCard(props: SteppedMediaCardProps) {
   return (
     <SteppedMediaCard<AudioSettings>
       {...props}
+      captionOverlay
       kind="audio"
       noun="audio"
       defaultMime="audio/wav"

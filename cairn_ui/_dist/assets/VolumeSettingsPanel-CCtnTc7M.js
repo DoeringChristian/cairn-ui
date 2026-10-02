@@ -1,0 +1,1 @@
+import{j as s,bQ as i,dc as n,de as o}from"./index-BbT2cFOT.js";function d({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{data:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{d as default};

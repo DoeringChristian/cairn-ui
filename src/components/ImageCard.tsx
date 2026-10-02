@@ -266,6 +266,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       <MultiPaneGrid
         paneKeys={paneKeys}
         labels={settings.showLabels ? labels : new Map()}
+        colors={panes.paneColors}
         inModal={false}
         columns={settings.columns}
         onPaneWidthsChange={() => {}}
@@ -319,6 +320,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
+      subtitleCollapsedOnly={values.length > 1}
       cardKind="image"
       defaultHeight={policy.defaultHeight}
       onRemove={onRemove}

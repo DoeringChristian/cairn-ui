@@ -41,6 +41,9 @@ export default function SeriesChipStrip({
   className,
 }: Props) {
   const multipleRuns = allRunIds.length > 1;
+  // A controlled card (its runs set by the comparison) with one series shows
+  // a single fixed tag: the card's own metric, already its title. No strip.
+  if (controlledSeries && new Set(metrics.map((m) => m.name)).size <= 1) return null;
 
   return (
     <div className={`mt-2 flex flex-wrap gap-1.5${className ? ` ${className}` : ""}`}>

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import SplitPane from "../SplitPane";
+import { LabelledPane } from "./pane-label";
 import { useCompactLayout } from "../../lib/use-media-query";
 import { galleryColumns, type Columns } from "../../lib/media/panel-layout";
 
@@ -10,6 +11,8 @@ interface Props {
   paneKeys: string[];
   /** Run label badge per pane key. Panes without an entry render no badge. */
   labels: Map<string, string>;
+  /** Run colour per pane key, shown as a swatch in the run label. */
+  colors?: Map<string, string>;
   /** Modal → SplitPane (draggable split view). Card → wrapping grid. */
   inModal: boolean;
   /** Fraction widths for the modal SplitPane; defaults to equal split. */
@@ -27,12 +30,14 @@ interface Props {
  *
  * In a modal, panes are laid out with the draggable `SplitPane`. In a card,
  * panes are laid out in a wrapping grid (`columns`, auto: up to 2; one on phones) with
- * an absolute run-label badge in the top-left corner of each pane.
+ * a run chip (swatch + run label) over the top-left corner of each pane —
+ * or in the pane content's own header line, when it has one (see pane-label).
  */
 export default function MultiPaneGrid({
   rowHeight,
   paneKeys,
   labels,
+  colors,
   inModal,
   paneWidths,
   onPaneWidthsChange,
@@ -70,12 +75,9 @@ export default function MultiPaneGrid({
     >
       {paneKeys.map((key, i) => (
         <div key={key} className="relative overflow-hidden">
-          {renderPane(key, i)}
-          {labels.has(key) && (
-            <span className="absolute top-1 left-1 z-10 rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-muted backdrop-blur-sm">
-              {labels.get(key)}
-            </span>
-          )}
+          <LabelledPane label={labels.get(key)} color={colors?.get(key)}>
+            {renderPane(key, i)}
+          </LabelledPane>
         </div>
       ))}
     </div>

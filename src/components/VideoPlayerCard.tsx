@@ -455,7 +455,7 @@ function VideoClip(props: VideoClipProps) {
   const info = (caption || facts.length > 0) && (
     <div className="mt-2 text-xs">
       {caption && <div className="truncate text-fg" title={caption}>{caption}</div>}
-      {facts.length > 0 && <div className="mono text-fg-subtle">{facts.join(" · ")}</div>}
+      {facts.length > 0 && <div className="mono truncate text-fg-subtle" title={facts.join(" · ")}>{facts.join(" · ")}</div>}
     </div>
   );
   // A pane off the card's clock (synced playback off) has its own transport.
@@ -501,6 +501,7 @@ export default function VideoPlayerCard(props: SteppedMediaCardProps) {
   return (
     <SteppedMediaCard<VideoSettings>
       {...props}
+      captionOverlay
       kind="video"
       noun="video"
       defaultMime="video/mp4"

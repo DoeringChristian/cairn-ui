@@ -31,8 +31,9 @@ import {
   type SharedView,
 } from "../lib/plot-utils/view-overrides";
 import { toWebGL } from "../lib/plot-utils/webgl";
+import { createCameraLink, scene3dLayout, type CameraFollower, type CameraLink } from "../lib/plot-utils/scene3d";
 import type { PlotlyFigureLike } from "../lib/plot-utils/types";
-import PlotlyChart from "../charts/PlotlyChart";
+import PlotlyChart, { showSceneCamera } from "../charts/PlotlyChart";
 import { readChartTheme, type ChartTheme } from "../charts/theme";
 import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
@@ -167,7 +168,9 @@ function figureId(fig: object): number {
 /**
  * One user Plotly figure, styled by the interaction settings, with the
  * shared view (zoom/pan/camera synced across panes) applied on top.
- * `revision` bumps reset the view to the figure's own. Scatter traces draw
+ * `revision` bumps reset the view to the figure's own. A drag rotates a 3D
+ * scene whatever the card's 2D drag mode, and every plot on `cameraLink`
+ * follows the camera live while it is dragged. Scatter traces draw
  * with WebGL per the card's `webgl` setting (the stored figure unchanged).
  * `fallbackSrc` (the stored PNG) stands in while the plot is paused by the
  * page's WebGL budget and no live snapshot of it exists yet.
@@ -180,7 +183,7 @@ function InteractiveFigure({
   revision = 0,
   className,
   style,
-  liveRelayout,
+  cameraLink,
   fallbackSrc,
 }: {
   figure: PlotlyFigure;
@@ -191,8 +194,8 @@ function InteractiveFigure({
   revision?: number;
   className?: string;
   style?: React.CSSProperties;
-  /** Also sync on `plotly_relayouting` (fires continuously during a 3D camera drag). */
-  liveRelayout?: boolean;
+  /** The card's 3D camera link: this plot follows the others' drags live, and they follow its. */
+  cameraLink?: CameraLink;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const { hoverMode, dragMode, showLegend, displayModeBar, scrollZoom, webgl } = settings;
@@ -210,8 +213,9 @@ function InteractiveFigure({
     themed.dragmode = dragMode === "none" ? false : dragMode;
     themed.showlegend = showLegend;
     themed.uirevision = `${figureId(figure)}:${revision}`;
-    return viewOverrides && Object.keys(viewOverrides).length > 0 ? applyViewOverrides(themed, viewOverrides) : themed;
-  }, [figure, hoverMode, dragMode, showLegend, revision, viewOverrides]);
+    const out = scene3dLayout(themed, data, dragMode !== "none");
+    return viewOverrides && Object.keys(viewOverrides).length > 0 ? applyViewOverrides(out, viewOverrides) : out;
+  }, [figure, data, hoverMode, dragMode, showLegend, revision, viewOverrides]);
 
   const config = useMemo(() => ({ displayModeBar, scrollZoom }), [displayModeBar, scrollZoom]);
 
@@ -220,16 +224,14 @@ function InteractiveFigure({
     if (view) onRelayout!(view);
   }, [onRelayout]);
 
-  // PlotlyChart creates the plot asynchronously, so re-check every render.
-  useEffect(() => {
-    if (!liveRelayout || !onRelayout) return;
-    const el = hostRef.current?.querySelector(".js-plotly-plot") as
-      | (HTMLElement & { on?: (ev: string, fn: (e: Record<string, unknown>) => void) => void; removeAllListeners?: (ev: string) => void })
-      | null;
-    if (!el?.on) return;
-    el.on("plotly_relayouting", handleRelayout);
-    return () => el.removeAllListeners?.("plotly_relayouting");
-  });
+  const follower = useMemo<CameraFollower>(() => ({
+    showCamera: (sceneId, camera) => showSceneCamera(hostRef.current?.querySelector(".js-plotly-plot") ?? null, sceneId, camera),
+  }), []);
+  useEffect(() => cameraLink?.join(follower), [cameraLink, follower]);
+  const handleRelayouting = useCallback(
+    (e: Record<string, unknown>) => cameraLink?.moved(follower, e),
+    [cameraLink, follower],
+  );
 
   return (
     <div ref={hostRef} className={className ?? "rounded bg-bg h-full"} style={style}>
@@ -240,6 +242,7 @@ function InteractiveFigure({
         config={config}
         themed={false}
         onRelayout={handleRelayout}
+        onRelayouting={handleRelayouting}
       />
     </div>
   );
@@ -264,6 +267,7 @@ interface ViewSync {
   viewOverrides?: SharedView;
   onRelayout?: (view: SharedView) => void;
   revision?: number;
+  cameraLink?: CameraLink;
 }
 
 /** One figure: interactive from its Plotly source, else its PNG. */
@@ -278,7 +282,7 @@ function FigureItem({ point, label, sync }: { point: SequencePoint; label: strin
         viewOverrides={sync.viewOverrides}
         onRelayout={sync.onRelayout}
         revision={sync.revision}
-        liveRelayout
+        cameraLink={sync.cameraLink}
         fallbackSrc={api.artifactUrl(point.artifact_hash!)}
       />
     );
@@ -324,6 +328,7 @@ function FigurePane({
   viewOverrides,
   onRelayout,
   revision,
+  cameraLink,
   galleryFrame,
 }: {
   /** This pane's gallery frame, settled by the card with every other pane's. */
@@ -336,6 +341,7 @@ function FigurePane({
   viewOverrides?: SharedView;
   onRelayout?: (view: SharedView) => void;
   revision?: number;
+  cameraLink?: CameraLink;
 }) {
   const rid = m.runId ?? runId;
   const q = useSequence(rid, m.name);
@@ -371,7 +377,7 @@ function FigurePane({
   if (isGalleryPoint(current)) {
     return (
       <div className="h-full overflow-auto">
-        <FigureGallery point={current} frame={galleryFrame} name={m.name} sync={{ settings, viewOverrides, onRelayout, revision }} />
+        <FigureGallery point={current} frame={galleryFrame} name={m.name} sync={{ settings, viewOverrides, onRelayout, revision, cameraLink }} />
       </div>
     );
   }
@@ -383,7 +389,7 @@ function FigurePane({
         viewOverrides={viewOverrides}
         onRelayout={onRelayout}
         revision={revision}
-        liveRelayout
+        cameraLink={cameraLink}
         fallbackSrc={api.artifactUrl(current.artifact_hash)}
       />
     );
@@ -650,16 +656,16 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   }, [figureIdentity]);
 
   const viewModified = Object.keys(sharedView).length > 0;
-  const updatingRef = useRef(false);
+  // Live 3D camera sync while a plot is dragged (the shared view above gets
+  // the camera when the drag ends).
+  const cameraLink = useMemo(createCameraLink, []);
   const handlePaneRelayout = useCallback((view: SharedView) => {
-    if (updatingRef.current) return;
-    updatingRef.current = true;
     // Replace an axis's (or scene's) previous keys with the ones this event
     // carries: a reset (`autorange: true`) and a later zoom (`range[0/1]`) must
     // never coexist, or Plotly resolves the pair to autorange (see
     // `mergeRelayout`).
+    // An echo of the current view returns `prev` (no re-render, no loop).
     setSharedView((prev) => mergeRelayout(prev, view));
-    requestAnimationFrame(() => { updatingRef.current = false; });
   }, []);
   // A revision bump gives every plot a fresh `uirevision`, so Plotly drops
   // the user's zoom/pan/camera and falls back to the figure's own view.
@@ -690,26 +696,25 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   const cardRef = useRef<HTMLDivElement>(null);
   const cardWidth = useElementWidth(cardRef);
 
-  // Auto-height for figure containers
-  const { figAutoHeight, figRowHeight } = useMemo(() => {
-    if (resolveCardHeight(settings, undefined, FIGURE_MIN_HEIGHT) != null) return { figAutoHeight: undefined, figRowHeight: undefined };
-    if (cardWidth <= 0) return { figAutoHeight: "320px", figRowHeight: undefined };
-    if (!isMulti) {
-      const h = Math.max(200, Math.min(500, Math.round(cardWidth * 0.75)));
-      return { figAutoHeight: `${h}px`, figRowHeight: undefined };
-    }
+  // The card always has a height (its own or the default): figures fill it.
+  // Panes of many runs keep a readable row height and scroll instead of
+  // squashing into it.
+  const cardHeight = resolveCardHeight(settings, FIGURE_POLICY.defaultHeight, FIGURE_MIN_HEIGHT);
+  const figRowHeight = useMemo(() => {
+    if (!isMulti || cardWidth <= 0) return undefined;
     const n = effectiveMetrics.length;
     const minPaneW = 200;
     const cols = Math.min(n, Math.max(1, Math.floor(cardWidth / minPaneW)));
     const rows = Math.ceil(n / cols);
-    const paneW = cardWidth / cols;
+    const minRowH = 150;
+    // Header, slider and gaps take about this much of the card.
+    if (cardHeight == null || rows * minRowH <= cardHeight - 120) return undefined;
     // 4:3 landscape ratio per row
-    const rowH = Math.max(150, Math.min(400, Math.round(paneW * 0.75)));
-    const total = Math.min(800, rows * rowH);
-    return { figAutoHeight: `${total}px`, figRowHeight: `${rowH}px` };
-  }, [settings.height, settings.colSpan, cardWidth, effectiveMetrics.length, isMulti]);
+    const rowH = Math.max(minRowH, Math.min(400, Math.round((cardWidth / cols) * 0.75)));
+    return `${rowH}px`;
+  }, [cardHeight, cardWidth, effectiveMetrics.length, isMulti]);
 
-  const renderSingleFigure = (heightClass: string, heightStyle?: React.CSSProperties) => {
+  const renderSingleFigure = (heightClass: string) => {
     if (q.isLoading) {
       return <div className="h-48 motion-safe:animate-pulse rounded bg-bg-hover" />;
     }
@@ -719,11 +724,11 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     return (
       <>
         {isGalleryPoint(current) ? (
-          <div className={`${heightClass} overflow-auto`} style={heightStyle}>
+          <div className={`${heightClass} overflow-auto`}>
             <FigureGallery
               point={current}
               name={metric.name}
-              sync={{ settings, viewOverrides: sharedView, onRelayout: handlePaneRelayout, revision: plotRevision }}
+              sync={{ settings, viewOverrides: sharedView, onRelayout: handlePaneRelayout, revision: plotRevision, cameraLink }}
             />
           </div>
         ) : showPlotly ? (
@@ -733,9 +738,9 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
             viewOverrides={sharedView}
             onRelayout={handlePaneRelayout}
             revision={plotRevision}
+            cameraLink={cameraLink}
             fallbackSrc={api.artifactUrl(current.artifact_hash)}
             className={`rounded bg-bg ${heightClass}`}
-            style={heightStyle}
           />
         ) : sourceHash && sourceQ.isLoading ? (
           <div className="h-48 motion-safe:animate-pulse rounded bg-bg-hover" />
@@ -772,12 +777,24 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     return map;
   }, [multipleRuns, effectiveMetrics, allRunIds, runId, runMetaVersion]);
 
+  const paneColors = useMemo(() => {
+    const map = new Map<string, string>();
+    if (multipleRuns) {
+      for (const m of effectiveMetrics) {
+        const c = runColors.get(m.runId ?? runId);
+        if (c) map.set(seriesKey(m), c);
+      }
+    }
+    return map;
+  }, [multipleRuns, effectiveMetrics, runColors, runId]);
+
   const renderPaneGrid = (inModal: boolean) => (
     <MultiPaneGrid
       rowHeight={figRowHeight}
       columns={settings.columns}
       paneKeys={paneKeys}
       labels={paneLabels}
+      colors={paneColors}
       inModal={inModal}
       paneWidths={settings.paneWidths}
       onPaneWidthsChange={(w) => ctl.set({ paneWidths: w })}
@@ -793,6 +810,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
             viewOverrides={sharedView}
             onRelayout={handlePaneRelayout}
             revision={plotRevision}
+            cameraLink={cameraLink}
             galleryFrame={paneGalleries?.get(String(i))}
           />
         );
@@ -818,7 +836,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       {inModal ? (
         overlayActive ? renderOverlayPlot() : renderPaneGrid(true)
       ) : (
-        <div ref={figContainerRef} className="flex-1 min-h-0 overflow-auto" style={{ height: resolveCardHeight(settings, undefined, FIGURE_MIN_HEIGHT) != null ? undefined : figAutoHeight }}>
+        <div ref={figContainerRef} className="flex-1 min-h-0 overflow-auto">
           {overlayActive ? renderOverlayPlot() : renderPaneGrid(false)}
         </div>
       )}
@@ -843,10 +861,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
 
   const renderContent = (inModal: boolean) => {
     if (isMulti) return renderMultiFigure(inModal);
-    return renderSingleFigure(
-      inModal ? "h-[calc(100vh-12rem)]" : "flex-1 min-h-0",
-      inModal ? undefined : { height: resolveCardHeight(settings, undefined, FIGURE_MIN_HEIGHT) != null ? undefined : figAutoHeight },
-    );
+    return renderSingleFigure(inModal ? "h-[calc(100vh-12rem)]" : "flex-1 min-h-0");
   };
 
 
@@ -870,6 +885,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
+      subtitleCollapsedOnly={sliderValues.length > 1}
       defaultHeight={FIGURE_POLICY.defaultHeight}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}

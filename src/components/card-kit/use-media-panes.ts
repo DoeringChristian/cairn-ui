@@ -20,6 +20,8 @@ export interface MediaPanes<T> {
   labels: Map<string, string>;
   /** Run colour per run id. */
   colors: Map<string, string>;
+  /** Run colour per key (only when several runs are shown), for the pane run chips. */
+  paneColors: Map<string, string>;
 }
 
 /**
@@ -52,8 +54,15 @@ export function useMediaPanes<T extends { runId?: string; name: string }>(
     const multiRun = new Set(runIds).size > 1;
     const keys = shown.map((s) => seriesKey({ runId: runOf(s), name: s.name }));
     const labels = new Map<string, string>();
-    if (multiRun) keys.forEach((k, i) => labels.set(k, shortRunLabel(runIds[i]!, allRunIds)));
-    return { shown, keys, runIds, allRunIds, multiRun, labels, colors };
+    const paneColors = new Map<string, string>();
+    if (multiRun) {
+      keys.forEach((k, i) => {
+        labels.set(k, shortRunLabel(runIds[i]!, allRunIds));
+        const c = colors.get(runIds[i]!);
+        if (c) paneColors.set(k, c);
+      });
+    }
+    return { shown, keys, runIds, allRunIds, multiRun, labels, colors, paneColors };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, fallbackRunId, maxRuns, visibleRuns, allRunIds, colors, runMetaVersion]);
 }

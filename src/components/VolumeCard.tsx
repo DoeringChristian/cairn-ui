@@ -111,6 +111,7 @@ export default function VolumeCard({
         <MultiPaneGrid
           paneKeys={panes.keys}
           labels={panes.labels}
+          colors={panes.paneColors}
           inModal={false}
           columns={settings.columns}
           onPaneWidthsChange={() => {}}
@@ -139,6 +140,7 @@ export default function VolumeCard({
       updateSettings={ctl.set}
       title={metric.name}
       subtitle={values.length > 0 ? `${keyName} ${formatKeyValue(currentValue)} (${safeIdx + 1}/${values.length})` : `${metric.count} pts`}
+      subtitleCollapsedOnly={values.length > 1}
       defaultHeight={plotCardPolicy("volume").defaultHeight}
       onRemove={onRemove}
       onSettings={() => setSettingsOpen(true)}

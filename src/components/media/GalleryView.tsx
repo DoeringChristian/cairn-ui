@@ -1,8 +1,11 @@
 /**
  * One gallery point (a tracked list of media of one kind, see
- * lib/media/gallery.ts) as a grid of its items: the point's caption on top,
- * each item under its own caption, each rendered by the card's own renderer
- * for a plain point of its kind.
+ * lib/media/gallery.ts) as a grid of its items: the point's caption on top
+ * (sharing its line with the pane's run chip in a multi-run card), each item
+ * with its own caption — a chip over its top-right corner for pictures
+ * (`captionOverlay`: video, audio), else one small line above it (text and
+ * charts, whose corners hold content) — each rendered by the card's own
+ * renderer for a plain point of its kind.
  *
  * Stepping never blanks or mixes steps: the grid swaps to a new step's
  * items in one commit, once its manifest is in and every item is warm
@@ -19,6 +22,7 @@ import { pointCaption } from "../../lib/caption";
 import { galleryGridColumns, isGalleryPoint } from "../../lib/media/gallery";
 import { loadGalleryItems, peekGalleryItems, type GalleryFrame } from "../../lib/media/gallery-query";
 import { useSettledFrame } from "../../lib/media/use-settled-frame";
+import { ItemCaption, RunChip, usePaneLabelInline } from "../card-kit/pane-label";
 
 export interface GalleryItemLoaders {
   /** Warm what rendering one item needs; omitted: items need nothing ahead. */
@@ -105,16 +109,19 @@ interface Props extends GalleryItemLoaders {
    * room than its pane scrolls instead of squashing charts unreadably.
    */
   minItemHeight?: number;
+  /** Item captions as chips over the items' corner (pictures), not a line above them. */
+  captionOverlay?: boolean;
 }
 
-export default function GalleryView({ point, frame: given, renderItem, columns = "auto", fill = false, minItemHeight = 0, prefetchItem, peekItem }: Props) {
+export default function GalleryView({ point, frame: given, renderItem, columns = "auto", fill = false, minItemHeight = 0, captionOverlay = false, prefetchItem, peekItem }: Props) {
   const own = useGalleryFrame(given ? null : point, { prefetchItem, peekItem });
   const frame = given ?? own;
+  const caption = frame ? pointCaption(frame.point.metadata) : null;
+  const run = usePaneLabelInline(!!caption);
   if (!frame) return <div className={`${fill ? "h-full" : "h-32"} motion-safe:animate-pulse rounded bg-bg-hover`} />;
   if (frame.items.length === 0) {
     return <div className="text-xs text-fg-subtle">empty gallery</div>;
   }
-  const caption = pointCaption(frame.point.metadata);
   const count = frame.items.length;
   const cols = galleryGridColumns(count, columns);
   return (
@@ -124,8 +131,11 @@ export default function GalleryView({ point, frame: given, renderItem, columns =
       data-gallery-count={count}
     >
       {caption && (
-        <div className="truncate px-1 pb-1 text-center text-xs text-fg-muted" title={caption}>
-          {caption}
+        <div className="flex min-w-0 items-center gap-2 px-1 pb-1 text-xs text-fg-muted" data-pane-header>
+          {run && <RunChip {...run} className="shrink-0" />}
+          <span className="min-w-0 flex-1 truncate text-center" title={caption}>{caption}</span>
+          {/* Balances the chip so the caption stays centred over the grid. */}
+          {run && <span aria-hidden="true" className="invisible shrink-0"><RunChip {...run} /></span>}
         </div>
       )}
       <div
@@ -138,15 +148,16 @@ export default function GalleryView({ point, frame: given, renderItem, columns =
         {frame.itemPoints.map((item, i) => {
           const itemCaption = frame.items[i]!.caption;
           return (
-            <div key={i} className="flex min-h-0 min-w-0 flex-col" data-gallery-item={i}>
-              {itemCaption && (
-                <div className="truncate pb-0.5 text-[11px] text-fg-muted" title={itemCaption}>
+            <div key={i} className="group/item relative flex min-h-0 min-w-0 flex-col" data-gallery-item={i}>
+              {itemCaption && !captionOverlay && (
+                <div className="truncate px-1 text-center text-[10px] leading-[14px] text-fg-muted" title={itemCaption} data-item-caption>
                   {itemCaption}
                 </div>
               )}
               <div className={fill ? "flex min-h-0 flex-1 flex-col" : "flex min-w-0 flex-col"}>
                 {renderItem(item, i, count)}
               </div>
+              {itemCaption && captionOverlay && <ItemCaption text={itemCaption} />}
             </div>
           );
         })}

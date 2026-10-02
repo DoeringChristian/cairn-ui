@@ -181,3 +181,40 @@ export function sceneCameras(view: SharedView): SharedView {
   }
   return out;
 }
+
+/** The value a relayout key (`"scene.camera"`, `"xaxis.range[0]"`) addresses in a layout. */
+function valueAt(layout: Record<string, unknown> | undefined, key: string): unknown {
+  let obj: unknown = layout;
+  for (const part of key.split(".")) {
+    const m = part.match(/^(.+)\[(\d+)]$/);
+    for (const p of m ? [m[1]!, Number(m[2])] : [part]) {
+      if (obj == null || typeof obj !== "object") return undefined;
+      obj = (obj as Record<string | number, unknown>)[p];
+    }
+  }
+  return obj;
+}
+
+/**
+ * A plot's own view (the zoom/camera its user set, kept so a plot redrawn
+ * from a fresh div does not lose it) reconciled with the layout it is about
+ * to draw: wherever the layout's own value for a view key changed since the
+ * last draw — the host moved the view (a camera synced from another pane, a
+ * reset) — the layout wins and the plot's own entries for that axis/scene
+ * are dropped; elsewhere the plot's own view still stands. (Plotly's
+ * `uirevision` makes the same call for a live plot.)
+ */
+export function reconcileOwnView(
+  prevLayout: Record<string, unknown> | undefined,
+  nextLayout: Record<string, unknown>,
+  own: SharedView,
+): SharedView {
+  const moved = new Set<string>();
+  for (const k of Object.keys(own)) {
+    if (!sameValue(valueAt(prevLayout, k), valueAt(nextLayout, k))) moved.add(viewKeyPrefix(k));
+  }
+  if (moved.size === 0) return own;
+  const out: SharedView = {};
+  for (const [k, v] of Object.entries(own)) if (!moved.has(viewKeyPrefix(k))) out[k] = v;
+  return out;
+}

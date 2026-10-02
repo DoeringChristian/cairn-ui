@@ -6,7 +6,7 @@ import { readChartTheme, type ChartTheme } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
 import { onPrintLayout } from "../lib/print-layout.ts";
 import { glContextEstimate } from "../lib/plot-utils/gl-budget.ts";
-import { applyViewOverrides, extractViewState, mergeRelayout, type SharedView } from "../lib/plot-utils/view-overrides.ts";
+import { applyViewOverrides, extractViewState, mergeRelayout, reconcileOwnView, type SharedView } from "../lib/plot-utils/view-overrides.ts";
 import { glBudget, glContextsIn, loseContexts, type GlRegistration } from "./gl-budget-manager.ts";
 
 export type PlotlyData = Array<Record<string, unknown>>;
@@ -19,6 +19,8 @@ export interface PlotlyChartProps {
   /** Merge the app theme (fonts, grid, transparent background) under `layout`. Off for user figures that style themselves. */
   themed?: boolean;
   onRelayout?: (event: Record<string, unknown>) => void;
+  /** Fires continuously while the user drags the view (a 3D camera, a 2D pan). */
+  onRelayouting?: (event: Record<string, unknown>) => void;
   onClick?: (event: { points: Array<Record<string, unknown>> }) => void;
   onHover?: (event: { points: Array<Record<string, unknown>> }) => void;
   onUnhover?: () => void;
@@ -76,6 +78,52 @@ async function snapshotPlot(el: PlotlyDiv): Promise<string | null> {
   }
 }
 
+/**
+ * Show `camera` on a drawn plot's 3D scene right away, without a relayout:
+ * no event, no redraw, nothing written to the plot's layout. For following
+ * another plot's camera while its user drags it; the final camera arrives
+ * through the layout as usual. A paused or undrawn plot is left alone.
+ */
+export function showSceneCamera(el: HTMLElement | null, sceneId: string, camera: Record<string, unknown>): void {
+  const scene = ((el as PlotlyDiv | null)?._fullLayout as Record<string, { _scene?: PlotlyScene } | undefined> | undefined)?.[sceneId]?._scene;
+  if (!scene?.setViewport || !scene.glplot) return;
+  try {
+    const current = scene.getCamera();
+    scene.setViewport({ camera: { ...current, ...camera, projection: current.projection }, aspectratio: scene.glplot.getAspectratio() });
+  } catch {
+    // Scene mid-teardown.
+  }
+}
+
+/** The current camera of every drawn 3D scene, as relayout keys; null without any. */
+function liveSceneCameras(el: PlotlyDiv): Record<string, unknown> | null {
+  const fl = el._fullLayout as Record<string, { _scene?: PlotlyScene } | undefined> | undefined;
+  if (!fl) return null;
+  let out: Record<string, unknown> | null = null;
+  for (const k of Object.keys(fl)) {
+    const scene = /^scene\d*$/.test(k) ? fl[k]?._scene : undefined;
+    if (!scene?.glplot) continue;
+    try {
+      (out ??= {})[`${k}.camera`] = scene.getCamera();
+    } catch {
+      // Scene mid-teardown.
+    }
+  }
+  return out;
+}
+
+/** A relayout event that only touches 3D scenes. */
+function isSceneOnly(e: Record<string, unknown>): boolean {
+  const keys = Object.keys(e);
+  return keys.length > 0 && keys.every((k) => /^scene\d*(\.|$)/.test(k));
+}
+
+interface PlotlyScene {
+  setViewport?: (v: { camera: Record<string, unknown>; aspectratio: unknown }) => void;
+  getCamera: () => Record<string, unknown> & { projection: unknown };
+  glplot?: { getAspectratio: () => unknown };
+}
+
 function axisTheme(theme: ChartTheme): PlotlyLayout {
   return {
     gridcolor: theme.grid,
@@ -125,11 +173,11 @@ type GlState = "live" | "pending" | "paused";
  * (too many on the page) is handled the same way: never a blank plot.
  */
 export default function PlotlyChart({
-  data, layout = {}, config, themed = true, onRelayout, onClick, onHover, onUnhover, className, fallbackSrc,
+  data, layout = {}, config, themed = true, onRelayout, onRelayouting, onClick, onHover, onUnhover, className, fallbackSrc,
 }: PlotlyChartProps) {
   const ref = useRef<PlotlyDiv>(null);
-  const handlers = useRef({ onRelayout, onClick, onHover, onUnhover });
-  handlers.current = { onRelayout, onClick, onHover, onUnhover };
+  const handlers = useRef({ onRelayout, onRelayouting, onClick, onHover, onUnhover });
+  handlers.current = { onRelayout, onRelayouting, onClick, onHover, onUnhover };
   const interactive = useInteract();
   // Plotly throws ("Something went wrong with axis scaling") when a colour
   // bar or 3D scene gets a box too small to lay out. Such a draw is dropped
@@ -160,6 +208,14 @@ export default function PlotlyChart({
   // draw: a plot redrawn after a pause starts from a fresh div, so Plotly's
   // own uirevision memory is gone.
   const glView = useRef<{ rev: unknown; view: SharedView }>({ rev: undefined, view: {} });
+  // The layout of the last draw: a view key whose layout value changed since
+  // (the host moved the view) overrides the plot's own view above.
+  const drawnLayout = useRef<PlotlyLayout | undefined>(undefined);
+  // A pointer is down on the plot (a drag in progress): redraws wait for its
+  // release. Plotly.react mid-drag resets a 3D scene to the layout's camera,
+  // snapping the rotation back.
+  const dragging = useRef(false);
+  const drawDeferred = useRef(false);
   const unmounted = useRef(false);
 
   const fail = (el: PlotlyDiv, err: unknown) => {
@@ -169,10 +225,25 @@ export default function PlotlyChart({
     setFailed(true);
   };
 
+  const viewChanged = (e: Record<string, unknown>) => {
+    if (managedRef.current) {
+      const v = extractViewState(e);
+      if (v) glView.current = { ...glView.current, view: mergeRelayout(glView.current.view, v) };
+    }
+    handlers.current.onRelayout?.(e);
+  };
+  // Within a wheel event's dispatch (see the wheel watcher below).
+  const inWheel = useRef(false);
+
   draw.current = () => {
     const el = ref.current;
     if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
     if (managedRef.current && !liveRef.current) return;
+    if (dragging.current) {
+      drawDeferred.current = true;
+      return;
+    }
+    drawDeferred.current = false;
     let finalLayout: PlotlyLayout = {
       ...(themed ? themedLayout(layout, readChartTheme(el)) : layout),
       autosize: true,
@@ -181,7 +252,11 @@ export default function PlotlyChart({
     };
     if (managedRef.current) {
       if (glView.current.rev !== finalLayout.uirevision) glView.current = { rev: finalLayout.uirevision, view: {} };
-      else if (Object.keys(glView.current.view).length > 0) finalLayout = applyViewOverrides(finalLayout, glView.current.view);
+      else if (Object.keys(glView.current.view).length > 0) {
+        glView.current = { ...glView.current, view: reconcileOwnView(drawnLayout.current, layout, glView.current.view) };
+        finalLayout = applyViewOverrides(finalLayout, glView.current.view);
+      }
+      drawnLayout.current = layout;
     }
     const finalConfig = {
       displaylogo: false, responsive: false, displayModeBar: false, ...config,
@@ -210,16 +285,17 @@ export default function PlotlyChart({
         }
         if (managedRef.current) reg.current?.setWeight(glContextsIn(el).length || glEstimate);
         if (!el.removeAllListeners || !el.on) return;
-        for (const event of ["plotly_relayout", "plotly_click", "plotly_hover", "plotly_unhover"]) {
+        for (const event of ["plotly_relayout", "plotly_relayouting", "plotly_click", "plotly_hover", "plotly_unhover"]) {
           el.removeAllListeners(event);
         }
         el.on("plotly_relayout", (e: never) => {
-          if (managedRef.current) {
-            const v = extractViewState(e as Record<string, unknown>);
-            if (v) glView.current = { ...glView.current, view: mergeRelayout(glView.current.view, v) };
-          }
-          handlers.current.onRelayout?.(e);
+          // A 3D scene reports a wheel zoom before applying it (the camera it
+          // sends is the one before this wheel tick); the wheel watcher below
+          // reports the real camera instead.
+          if (inWheel.current && isSceneOnly(e)) return;
+          viewChanged(e);
         });
+        el.on("plotly_relayouting", (e: never) => handlers.current.onRelayouting?.(e));
         el.on("plotly_click", (e: never) => handlers.current.onClick?.(e));
         el.on("plotly_hover", (e: never) => handlers.current.onHover?.(e));
         el.on("plotly_unhover", () => handlers.current.onUnhover?.());
@@ -269,7 +345,72 @@ export default function PlotlyChart({
       setGlState("paused");
     };
     el.addEventListener("webglcontextlost", onLost, true);
+    // Wheel zoom on 3D scenes: Plotly applies the zoom over the next frames
+    // but reports it early (stale), so follow the scenes' real cameras while
+    // the wheel turns (live, to linked plots) and report the settled camera
+    // once it stops.
+    let wheelUntil = 0;
+    let wheelFrame = 0;
+    let wheelLast = "";
+    let wheelBase = "";
+    const wheelTick = () => {
+      wheelFrame = 0;
+      const cams = liveSceneCameras(el);
+      if (!cams) return;
+      const key = JSON.stringify(cams);
+      const settled = performance.now() > wheelUntil;
+      if (key !== wheelLast) {
+        wheelLast = key;
+        handlers.current.onRelayouting?.(cams);
+      }
+      if (settled) {
+        if (key !== wheelBase) viewChanged(cams);
+        return;
+      }
+      wheelFrame = requestAnimationFrame(wheelTick);
+    };
+    const onWheel = () => {
+      const cams = liveSceneCameras(el);
+      if (!cams) return;
+      inWheel.current = true;
+      setTimeout(() => { inWheel.current = false; }, 0);
+      wheelUntil = performance.now() + 250;
+      if (!wheelFrame) {
+        wheelLast = wheelBase = JSON.stringify(cams);
+        wheelFrame = requestAnimationFrame(wheelTick);
+      }
+    };
+    el.addEventListener("wheel", onWheel, { capture: true, passive: true });
+    const onDown = (e: PointerEvent) => {
+      dragging.current = true;
+      // A 3D scene's camera controls read the held button from every mouse
+      // move over their own canvas: a drag that strays onto a neighbouring
+      // 3D plot (a gallery cell, the next pane) would start rotating that one
+      // too, and stop rotating this one. Capture the pointer so the whole
+      // drag goes to the scene it started on.
+      const t = e.target as Element | null;
+      if (t?.tagName === "CANVAS" && e.button === 0) {
+        try {
+          t.setPointerCapture(e.pointerId);
+        } catch {
+          // Pointer already gone.
+        }
+      }
+    };
+    const onUp = () => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      if (drawDeferred.current) draw.current();
+    };
+    el.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("pointerup", onUp, true);
+    window.addEventListener("pointercancel", onUp, true);
     return () => {
+      el.removeEventListener("wheel", onWheel, { capture: true });
+      cancelAnimationFrame(wheelFrame);
+      el.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("pointercancel", onUp, true);
       ro.disconnect();
       offPrint();
       el.removeEventListener("webglcontextlost", onLost, true);

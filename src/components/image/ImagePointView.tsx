@@ -4,6 +4,7 @@ import { api } from "../../api/client";
 import { describeEncoding, isBrowserDisplayable } from "../../lib/artifact-format";
 import { artifactFilename } from "../../lib/download";
 import { pointCaption } from "../../lib/caption";
+import { ItemCaption, RunChip, usePaneLabelInline } from "../card-kit/pane-label";
 import UnsupportedArtifact from "../UnsupportedArtifact";
 import {
   maskClassIds,
@@ -138,7 +139,7 @@ export default function ImagePointView({
     // Keyed by position with one tree shape, so a step change reuses the
     // pane (and its zoom state) instead of remounting it.
     return (
-      <div key={i} className="relative h-full w-full">
+      <div key={i} className="group/item relative h-full w-full">
         {pane}
         {item.caption && <Caption text={item.caption} />}
       </div>
@@ -162,23 +163,25 @@ export default function ImagePointView({
   );
   return (
     <div className="flex h-full w-full flex-col">
-      {galleryCaption && (
-        <div className="truncate px-1 pb-1 text-center text-xs text-fg-muted" title={galleryCaption}>
-          {galleryCaption}
-        </div>
-      )}
+      {galleryCaption && <GalleryCaption text={galleryCaption} />}
       {grid}
     </div>
   );
 }
 
-/** A caption over the top of an image, clear of the A/B labels at the bottom. */
-function Caption({ text }: { text: string }) {
+/** A gallery's caption line, shared with the pane's run chip in a multi-run card. */
+function GalleryCaption({ text }: { text: string }) {
+  const run = usePaneLabelInline(true);
   return (
-    <span
-      className="pointer-events-none absolute left-1/2 top-1 z-10 max-w-[90%] -translate-x-1/2 truncate rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg"
-    >
-      {text}
-    </span>
+    <div className="flex min-w-0 items-center gap-2 px-1 pb-1 text-xs text-fg-muted" data-pane-header>
+      {run && <RunChip {...run} className="shrink-0" />}
+      <span className="min-w-0 flex-1 truncate text-center" title={text}>{text}</span>
+      {run && <span aria-hidden="true" className="invisible shrink-0"><RunChip {...run} /></span>}
+    </div>
   );
+}
+
+/** A caption over an image's top-right corner (the run chip owns top-left, the A/B labels the bottom). */
+function Caption({ text }: { text: string }) {
+  return <ItemCaption text={text} />;
 }

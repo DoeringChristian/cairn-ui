@@ -91,6 +91,8 @@ interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
   kind: "markdown" | "html" | "audio" | "video";
   /** Word in the empty state: "no {noun} logged yet". */
   noun: string;
+  /** Gallery item captions as chips over the items (pictures: video, audio) rather than a line above. */
+  captionOverlay?: boolean;
   /** MIME type for the download filename when the point carries none. */
   defaultMime: string;
   defaultHeight?: number;
@@ -146,6 +148,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   footer,
   reference: referenceOf,
   viewReset,
+  captionOverlay,
 }: Props<S>) {
   const { ctl, effectiveMetrics, allRunIds } =
     useCardSeries<S>({
@@ -281,6 +284,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
         <GalleryView
           point={point}
           frame={galleryFrames?.get(paneId)}
+          captionOverlay={captionOverlay}
           prefetchItem={prefetchItem}
           peekItem={peekItem}
           renderItem={(item, j) => renderArtifact({
@@ -350,6 +354,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       <MultiPaneGrid
         paneKeys={paneKeys}
         labels={panes.labels}
+        colors={panes.paneColors}
         inModal={inModal}
         columns={settings.columns}
         paneWidths={settings.paneWidths}
@@ -391,6 +396,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       updateSettings={updateShared}
       title={metric.name}
       subtitle={subtitle}
+      subtitleCollapsedOnly={values.length > 1}
       defaultHeight={defaultHeight}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}

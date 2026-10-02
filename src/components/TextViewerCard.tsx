@@ -113,6 +113,7 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
       updateSettings={ctl.set}
       title={metric.name}
       subtitle={subtitle}
+      subtitleCollapsedOnly={points.length > 1}
       defaultHeight={250}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
