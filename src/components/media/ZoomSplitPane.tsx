@@ -20,6 +20,7 @@ import {
   type PaneTransform,
   type PixelRendering,
 } from "../../lib/media/split-geometry";
+import { transformToView, viewToTransform, type ZoomView, type Size } from "../../lib/media/view-geometry";
 
 export interface ZoomSplitPaneProps {
   /**
@@ -38,9 +39,13 @@ export interface ZoomSplitPaneProps {
   /** Divider position as a fraction of the pane width. */
   split: number;
   onSplitChange?: (split: number, final: boolean) => void;
-  /** Shared zoom/pan: applied when it differs from the pane's own. */
-  transform: PaneTransform;
-  onTransformChange: (t: PaneTransform) => void;
+  /**
+   * The shared zoom/pan, independent of the pane's size (see
+   * lib/media/view-geometry.ts): this pane shows it through its own size and
+   * fit, and reports its user's gestures as one.
+   */
+  view: ZoomView;
+  onViewChange: (view: ZoomView) => void;
   rendering?: PixelRendering;
   /**
    * The reference, rendered inside the zoomed layer (left of the divider).
@@ -66,6 +71,14 @@ export const PANE_MEDIA_CLASS = "absolute inset-0 h-full w-full object-contain s
  * from the same `split` as the divider bar (see lib/media/split-geometry.ts):
  * the bar is always exactly on the clip edge.
  *
+ * The zoom/pan comes in and goes out as a size-independent {@link ZoomView}
+ * (zoom over the fit, and the media point at the pane's centre; see
+ * lib/media/view-geometry.ts). The library's pixel transform is derived from
+ * it and the pane's current size here, on mount and on every resize, and
+ * never leaves this component: a pane of any size (a resized card, the
+ * settings view, a narrower compare pane, a gallery cell) shows the same
+ * point at the same zoom.
+ *
  * Wheel zoom is multiplicative and cursor-anchored, drag pans, pinch zooms,
  * double-click resets to the fitted view; ← / → flip the divider. While not
  * interactive (a touch device with the card's interact toggle off, see
@@ -76,7 +89,7 @@ export const PANE_MEDIA_CLASS = "absolute inset-0 h-full w-full object-contain s
  * pixel), for overlays that keep their strokes a constant screen width.
  */
 export default function ZoomSplitPane({
-  contentSize, compare, referenceLabel, label, noun = "image", split, onSplitChange, transform, onTransformChange,
+  contentSize, compare, referenceLabel, label, noun = "image", split, onSplitChange, view, onViewChange,
   rendering = "auto", reference, children,
 }: ZoomSplitPaneProps) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -85,9 +98,18 @@ export default function ZoomSplitPane({
   /** Inside `fgRef`: carries the zoom library's transform. */
   const fgContentRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef<ReactZoomPanPinchRef | null>(null);
+  /** The pixel transform applied right now (the zoom library's state); never leaves this pane. */
   const own = useRef<PaneTransform>({ scale: 1, x: 0, y: 0 });
   const sizeRef = useRef(contentSize);
   sizeRef.current = contentSize;
+  /** The view this pane shows: the prop, or the one it just reported (until the prop catches up). */
+  const viewRef = useRef(view);
+  /** The pane size `own` was derived for. */
+  const paneRef = useRef<Size>({ w: 0, h: 0 });
+  /** Set while this pane applies a view itself: those transforms are not the user's. */
+  const applying = useRef(false);
+  const onViewChangeRef = useRef(onViewChange);
+  onViewChangeRef.current = onViewChange;
   /** Auto rendering's verdict: a source pixel covers more than ~1.5 screen pixels. */
   const [upscaled, setUpscaled] = useState(false);
   const interactive = useInteract();
@@ -114,23 +136,62 @@ export default function ZoomSplitPane({
     fgRef.current?.style.setProperty("--overlay-px", String(1 / ratio));
   }, []);
 
-  // New content of a different size changes the screen-per-source-pixel ratio.
-  useLayoutEffect(updateScreenPerPx, [contentSize?.w, contentSize?.h, updateScreenPerPx]);
+  /** The pane's size now (fractional, like the media's fit inside it). */
+  const measure = useCallback((): Size => {
+    const r = boxRef.current?.getBoundingClientRect();
+    return r ? { w: r.width, h: r.height } : { w: 0, h: 0 };
+  }, []);
 
-  // Apply the shared transform from sibling panes.
-  useEffect(() => {
+  /**
+   * Show `viewRef` at the pane's current size and content: the only way a
+   * view becomes pixels. Runs on mount, on a new view or content size, and on
+   * every resize, so a resize keeps the media point at the centre.
+   */
+  const sync = useCallback(() => {
     const ref = zoomRef.current;
-    if (!ref) return;
-    if (!sameTransform(own.current, transform)) ref.setTransform(transform.x, transform.y, transform.scale, 0);
-  }, [transform]);
+    const pane = measure();
+    if (!ref || !(pane.w > 0) || !(pane.h > 0)) return;
+    paneRef.current = pane;
+    const t = viewToTransform(viewRef.current, pane, sizeRef.current);
+    if (!sameTransform(own.current, t)) {
+      applying.current = true;
+      try {
+        ref.setTransform(t.x, t.y, t.scale, 0);
+      } finally {
+        applying.current = false;
+      }
+    }
+    updateScreenPerPx();
+  }, [measure, updateScreenPerPx]);
+
+  // Before paint: a pane mounting into a bigger box (the settings view) shows the view at once.
+  useLayoutEffect(() => {
+    viewRef.current = view;
+    sync();
+  }, [view, contentSize?.w, contentSize?.h, sync]);
 
   useEffect(() => {
     const box = boxRef.current;
     if (!box) return;
-    const ro = new ResizeObserver(updateScreenPerPx);
+    const ro = new ResizeObserver(sync);
     ro.observe(box);
     return () => ro.disconnect();
-  }, [updateScreenPerPx]);
+  }, [sync]);
+
+  /** The zoom library moved: the user's gesture becomes the shared view; anything else is re-derived. */
+  const onLibraryTransform = useCallback(() => {
+    updateScreenPerPx();
+    if (applying.current) return;
+    const pane = measure();
+    if (Math.abs(pane.w - paneRef.current.w) > 0.01 || Math.abs(pane.h - paneRef.current.h) > 0.01) {
+      // The library's own alignment after a resize (in pixels): the view wins.
+      sync();
+      return;
+    }
+    const next = transformToView(own.current, pane, sizeRef.current);
+    viewRef.current = next;
+    onViewChangeRef.current(next);
+  }, [measure, sync, updateScreenPerPx]);
 
   // Non-passive, so the page doesn't scroll while zooming.
   useEffect(() => {
@@ -208,10 +269,7 @@ export default function ZoomSplitPane({
         // Double-click is ours (onDoubleClick above): reset to the fitted view.
         doubleClick={{ disabled: true }}
         customTransform={applyTransform}
-        onTransform={() => {
-          updateScreenPerPx();
-          onTransformChange(own.current);
-        }}
+        onTransform={onLibraryTransform}
       >
         <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%" }}>
           <div className="relative h-full w-full">
