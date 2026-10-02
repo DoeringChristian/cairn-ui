@@ -20,14 +20,62 @@ test("headings map to sectioning commands", () => {
 });
 
 test("math passes through verbatim", () => {
-  assert.equal(tex("inline $$a_1^2$$ here"), "inline \\(a_1^2\\) here");
+  assert.equal(tex("inline $a_1^2$ here"), "inline \\(a_1^2\\) here");
+  assert.equal(tex("and \\(x\\) or \\[y\\]"), "and \\(x\\) or \\[y\\]");
+  // `$$…$$` is display math wherever it is (pandoc).
+  assert.equal(tex("inline $$a_1^2$$ here"), "inline \\[a_1^2\\] here");
   assert.equal(tex("$$\n\\frac{a}{b} + \\% x\n$$"), "\\[\n\\frac{a}{b} + \\% x\n\\]");
   assert.equal(
     tex("$$\n\\begin{align}\na &= b\n\\end{align}\n$$"),
     "\\begin{align}\na &= b\n\\end{align}",
   );
-  // A single dollar is a dollar sign, as in the app.
-  assert.equal(tex("$x$"), "\\$x\\$");
+  // A bare math environment (raw TeX) is kept as written, as is any other environment.
+  assert.equal(tex("\\begin{align*}\na &= b \\\\\nc &= d\n\\end{align*}"), "\\begin{align*}\na &= b \\\\\nc &= d\n\\end{align*}");
+  assert.equal(tex("\\begin{tikzpicture}\n\\draw (0,0);\n\\end{tikzpicture}"), "\\begin{tikzpicture}\n\\draw (0,0);\n\\end{tikzpicture}");
+  // Macro blocks stay; `\DeclareMathOperator` (preamble-only) becomes a `\newcommand`.
+  assert.equal(
+    tex("\\newcommand{\\R}{\\mathbb{R}}\n\\DeclareMathOperator{\\tr}{tr}"),
+    "\\newcommand{\\R}{\\mathbb{R}}\n\\newcommand{\\tr}{\\operatorname{tr}}",
+  );
+  // Dollars that aren't math (pandoc's rules) stay dollar signs.
+  assert.equal(tex("$5 and $10"), "\\$5 and \\$10");
+  assert.equal(tex("$ x$"), "\\$ x\\$");
+});
+
+test("pandoc inline extensions", () => {
+  assert.equal(tex("H~2~O and 2^10^"), "H\\textsubscript{2}O and 2\\textsuperscript{10}");
+  assert.equal(tex("text^[an *inline* note] end"), "text\\footnote{an \\emph{inline} note} end");
+  assert.equal(tex("[Small]{.smallcaps} [u]{.underline} [plain]{.x #y}"), "\\textsc{Small} \\uline{u} plain");
+  assert.equal(tex("as shown [@doe99; @roe_2]"), "as shown \\cite{doe99,roe_2}");
+  assert.equal(tex("\"Quoted\" -- and --- so..."), "\u201cQuoted\u201d \u2013 and \u2014 so\u2026");
+  assert.equal(tex("see [the intro](#intro)"), "see \\hyperref[intro]{the intro}");
+});
+
+test("pandoc block extensions", () => {
+  assert.equal(tex("# Intro {#intro .x}\n\n## Aside {-}"), "\\section{Intro}\\label{intro}\n\n\\subsection*{Aside}");
+  assert.equal(
+    tex("Term\n:   Its *definition*\n\nOther\n:   Two"),
+    "\\begin{description}\n\\item[Term]\nIts \\emph{definition}\n\\item[Other]\nTwo\n\\end{description}",
+  );
+  assert.equal(
+    tex("::: {.warning title=\"Careful & slow\"}\nBody.\n:::"),
+    "\\begin{quote}\n\\textbf{Careful \\& slow}\\par\nBody.\n\\end{quote}",
+  );
+  assert.equal(tex("::: tip\nT.\n:::"), "\\begin{quote}\n\\textbf{Tip}\\par\nT.\n\\end{quote}");
+  assert.equal(tex("::: {.custom}\nJust *content*.\n:::"), "Just \\emph{content}.");
+  assert.equal(tex("| one\n|   two"), "\\noindent one\\newline\n\u00a0\u00a0two");
+  assert.equal(
+    tex("a. first\nb. second"),
+    "\\begin{enumerate}\n\\renewcommand{\\labelenumi}{\\alph{enumi}.}\n\\item first\n\\item second\n\\end{enumerate}",
+  );
+  assert.equal(
+    tex("ii. two\niii. three"),
+    "\\begin{enumerate}\n\\renewcommand{\\labelenumi}{\\roman{enumi}.}\n\\setcounter{enumi}{1}\n\\item two\n\\item three\n\\end{enumerate}",
+  );
+  assert.equal(
+    tex("(@) one\n(@two) two\n\nAs (@two) shows."),
+    "\\begin{enumerate}\n\\item one\n\\item two\n\\end{enumerate}\n\nAs (2) shows.",
+  );
 });
 
 test("emphasis, strong, strikethrough, inline code", () => {
@@ -86,10 +134,26 @@ test("blockquotes and callouts become quotes; a callout keeps its title", () => 
 test("cairn-asset images are recorded for the zip; other images become links", () => {
   const figures = emptyFigures();
   assert.equal(
-    markdownToLatex("![plot](cairn-asset:ab12cd)\n\n![web](https://x.org/a.png)", figures),
-    "\\includegraphics[width=\\linewidth,height=0.6\\textheight,keepaspectratio]{assets/ab12cd}\n\n\\href{https://x.org/a.png}{web}",
+    markdownToLatex("see ![plot](cairn-asset:ab12cd) and ![web](https://x.org/a.png)", figures),
+    "see \\includegraphics[width=\\linewidth,height=0.6\\textheight,keepaspectratio]{assets/ab12cd} and \\href{https://x.org/a.png}{web}",
   );
   assert.deepEqual([...figures.assets], ["ab12cd"]);
+});
+
+test("an image alone in its paragraph is a figure captioned by its alt text", () => {
+  const figures = emptyFigures();
+  assert.equal(
+    markdownToLatex("![Loss *curve*](cairn-asset:ab12cd)", figures),
+    [
+      "\\begin{figure}[htbp]",
+      "\\centering",
+      "\\includegraphics[width=\\linewidth,height=0.6\\textheight,keepaspectratio]{assets/ab12cd}",
+      "\\caption{Loss curve}",
+      "\\end{figure}",
+    ].join("\n"),
+  );
+  // Without alt text it stays an image.
+  assert.equal(tex("![](cairn-asset:ab12cd)"), "\\includegraphics[width=\\linewidth,height=0.6\\textheight,keepaspectratio]{assets/ab12cd}");
 });
 
 test("thematic break, footnote and raw html", () => {

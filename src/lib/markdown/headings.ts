@@ -10,8 +10,12 @@
  * Slugs follow github-slugger: lower-case, punctuation dropped, spaces to
  * `-`, and a repeat of an earlier slug gets `-1`, `-2`, … . Pass one
  * `Slugger` across several texts (a report's cells) to de-duplicate them
- * together.
+ * together. A Pandoc header attribute `# Title {#my-id}` sets the slug
+ * outright (the same id remark-pandoc.ts renders), and its `{…}` is not part
+ * of the heading text.
  */
+
+import { safeProperties, splitTrailingAttributes } from "./attributes.ts";
 
 export interface MdHeading {
   /** 1–6. */
@@ -27,6 +31,8 @@ export interface MdHeading {
 export interface Slugger {
   /** A unique slug for `text`; repeats get `-1`, `-2`, … . */
   slug: (text: string) => string;
+  /** Claim an explicit id as is; later automatic slugs avoid it. */
+  claim: (id: string) => string;
 }
 
 /** The GitHub slug of one heading text, without de-duplication. */
@@ -50,6 +56,10 @@ export function createSlugger(): Slugger {
       }
       seen.set(slug, 0);
       return slug;
+    },
+    claim(id) {
+      if (!seen.has(id)) seen.set(id, 0);
+      return id;
     },
   };
 }
@@ -91,9 +101,11 @@ export function extractHeadings(md: string, slugger: Slugger = createSlugger()):
     }
     const m = ATX.exec(line);
     if (!m) continue;
-    const text = inlinePlainText(m[2] ?? "");
+    const split = splitTrailingAttributes(m[2] ?? "");
+    const text = inlinePlainText(split ? split.text : m[2] ?? "");
     if (!text) continue;
-    out.push({ level: m[1]!.length, text, line: i, slug: slugger.slug(text) });
+    const id = split ? safeProperties(split.attrs).id : undefined;
+    out.push({ level: m[1]!.length, text, line: i, slug: typeof id === "string" ? slugger.claim(id) : slugger.slug(text) });
   }
   return out;
 }

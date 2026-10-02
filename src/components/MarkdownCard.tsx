@@ -1,6 +1,6 @@
 /**
- * Markdown card — renders `cairn.Markdown` blobs with GitHub-flavored
- * markdown (tables, task lists, strikethrough, ...).
+ * Markdown card — renders `cairn.Markdown` blobs through the shared markdown
+ * renderer (lib/markdown.tsx: GFM + Pandoc Markdown, KaTeX math).
  *
  * Raw HTML in the source text is NEVER rendered as markup: react-markdown's
  * default escaping stays on (no rehype-raw plugin), so `<script>` or any

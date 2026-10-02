@@ -9,6 +9,7 @@ import { summaryRuleFor } from "../lib/metric-defs";
 import { formatNum } from "../lib/plot-utils/types";
 import { useProjectTags } from "../lib/use-project-tags";
 import TagInput from "../components/TagInput";
+import Markdown from "../lib/markdown";
 import { GIT_DIFF_ARTIFACT } from "../lib/internal-names";
 
 interface Ctx {
@@ -364,9 +365,14 @@ function RunArtifactsSection({ run }: { run: Run }) {
   );
 }
 
+/**
+ * The run's notes: rendered as markdown (the shared pipeline, lib/markdown.tsx),
+ * edited as text. Empty notes open straight in the editor.
+ */
 function NotesEditor({ runId, notes }: { runId: string; notes: string }) {
   const mutation = useSetNotes(runId);
   const [draft, setDraft] = useState(notes);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     setDraft(notes);
@@ -374,23 +380,51 @@ function NotesEditor({ runId, notes }: { runId: string; notes: string }) {
 
   const dirty = draft !== notes;
 
+  if (!editing && notes.trim()) {
+    return (
+      <div className="group/notes relative rounded border border-border px-3 py-2 text-sm" data-testid="run-notes">
+        <button
+          type="button"
+          className="btn absolute right-1.5 top-1.5 px-2 py-0.5 text-xs can-hover:opacity-0 can-hover:group-hover/notes:opacity-100 focus-visible:opacity-100"
+          onClick={() => setEditing(true)}
+        >
+          edit
+        </button>
+        <Markdown>{notes}</Markdown>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <textarea
         className="input min-h-[4rem] resize-y text-sm"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        placeholder="(no notes)"
+        placeholder="(no notes — markdown, with $math$)"
+        autoFocus={editing}
       />
       <div className="flex items-center gap-2">
         {dirty && (
           <button
             type="button"
             className="btn px-2 py-0.5 text-xs"
-            onClick={() => mutation.mutate(draft)}
+            onClick={() => mutation.mutate(draft, { onSuccess: () => setEditing(false) })}
             disabled={mutation.isPending}
           >
             {mutation.isPending ? "saving…" : "save"}
+          </button>
+        )}
+        {editing && (
+          <button
+            type="button"
+            className="btn px-2 py-0.5 text-xs"
+            onClick={() => {
+              setDraft(notes);
+              setEditing(false);
+            }}
+          >
+            {dirty ? "cancel" : "done"}
           </button>
         )}
         {mutation.isError && (

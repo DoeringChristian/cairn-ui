@@ -31,6 +31,12 @@ test("quotes match rendered text, preferring the anchored section", () => {
   assert.equal(locateAnchor(blocks, { anchor_kind: "quote", anchor_id: "#gone", quote: "loss drops" }), 2);
 });
 
+test("a quote of smart-punctuated rendered text matches its straight source", () => {
+  const md: ReportBlock[] = [{ id: "m", type: "markdown", text: "He said \"it's fast\" -- twice --- or more..." }];
+  const quote = "said \u201cit\u2019s fast\u201d \u2013 twice \u2014 or more\u2026";
+  assert.equal(locateAnchor(md, { anchor_kind: "quote", anchor_id: "#", quote }), 0);
+});
+
 test("anchors made for cells and selections locate back to them", () => {
   for (let i = 0; i < blocks.length; i++) {
     assert.equal(locateAnchor(blocks, cellAnchor(blocks, i)), i);

@@ -1,36 +1,39 @@
 /**
- * Shared GitHub-flavored markdown rendering surface.
+ * The markdown renderer every markdown surface uses (MarkdownCard for
+ * `cairn.Markdown`, report cells, run notes). The parsing — GFM plus Pandoc
+ * Markdown: math, footnotes, definition lists, fenced divs, spans,
+ * sub/superscript, figures, … — is the shared pipeline in
+ * ./markdown/pipeline.ts, which the report LaTeX export parses with too.
  *
  * Sanitization contract: raw HTML in the source is NEVER rendered as markup
  * — react-markdown's default escaping stays on (no rehype-raw plugin), so a
  * `<script>` or any other tag in the source renders as inert text. Do not
- * add rehype-raw.
+ * add rehype-raw. URLs go through the safe-protocol `urlTransform`, Pandoc
+ * attribute blocks through an allowlist (./markdown/attributes.ts), and
+ * KaTeX runs with `trust` off.
  *
- * Shared by MarkdownCard (run-logged markdown blobs) and report markdown
- * cells so both surfaces render GFM identically.
+ * Math: KaTeX is loaded lazily (./markdown-katex.ts), only for text that may
+ * contain math; until it arrives, formulas show as their TeX source.
  *
- * Math: text containing `$$` renders through the lazy KaTeX chunk
- * (./markdown-math.tsx). Inline math is `$$…$$` inside a line, display math
- * is `$$` on its own lines; a single `$` stays a dollar sign.
- *
- * Callouts: `> [!NOTE]` and friends (./markdown/remark-callouts.ts).
+ * Callouts: `> [!NOTE]` and friends (./markdown/remark-callouts.ts), and
+ * pandoc fenced divs `::: note` (./markdown/remark-pandoc.ts).
  *
  * Report extras, off unless their context is provided:
- * - `headingSlugs` (line → slug) gives headings their anchor ids, and
+ * - `headingSlugs` (line → slug) gives headings the report outline's anchor
+ *   ids (without it, the text's own GitHub-style slugs), and
  *   `HeadingControlsContext` adds a collapse chevron to collapsible ones.
  * - `AssetUrlContext` resolves `cairn-asset:<hash>` image URLs (uploaded
  *   report images); without it they are dropped. Any other URL goes through
  *   react-markdown's default (safe-protocol) transform.
  */
 
-import { createContext, lazy, Suspense, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform, type Options } from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkCallouts, { type CalloutKind } from "./markdown/remark-callouts";
-import remarkHeadingIds from "./markdown/heading-ids";
+import type rehypeKatex from "rehype-katex";
+import { type CalloutKind } from "./markdown/remark-callouts";
+import { extractHeadings } from "./markdown/headings";
+import { mayContainMath, prepareMarkdown, rehypeMath, remarkPlugins, remarkRehypeOptions } from "./markdown/pipeline";
 import { useReportExporting } from "./reports/export-context";
-
-const MathMarkdown = lazy(() => import("./markdown-math"));
 
 /** `cairn-asset:<sha256>` → the URL serving it, or null to drop it. */
 export const AssetUrlContext = createContext<((hash: string) => string) | null>(null);
@@ -102,7 +105,7 @@ const CALLOUT_STYLE: Record<CalloutKind, { label: string; icon: string; box: str
   caution: { label: "Caution", icon: "fa-hand", box: "border-status-failed bg-status-failed/5", head: "text-status-failed" },
 };
 
-/** A blockquote, or a callout when remark-callouts marked it. */
+/** A blockquote, or a callout when remark-callouts / a fenced div marked it. */
 function Blockquote({ node: _node, children, ...rest }: React.ComponentProps<"blockquote"> & { node?: unknown }) {
   const props = rest as Record<string, unknown>;
   const kind = props["data-callout"] as CalloutKind | undefined;
@@ -112,12 +115,12 @@ function Blockquote({ node: _node, children, ...rest }: React.ComponentProps<"bl
   }
   const fold = props["data-fold"] as string;
   const title = (props["data-title"] as string) || style.label;
-  return <Callout kind={kind!} style={style} title={title} fold={fold}>{children}</Callout>;
+  return <Callout id={rest.id} kind={kind!} style={style} title={title} fold={fold}>{children}</Callout>;
 }
 
 function Callout({
-  kind, style, title, fold, children,
-}: { kind: CalloutKind; style: (typeof CALLOUT_STYLE)[CalloutKind]; title: string; fold: string; children: ReactNode }) {
+  id, kind, style, title, fold, children,
+}: { id?: string; kind: CalloutKind; style: (typeof CALLOUT_STYLE)[CalloutKind]; title: string; fold: string; children: ReactNode }) {
   const [openState, setOpen] = useState(fold !== "-");
   // A report export shows folded callouts open.
   const exporting = useReportExporting();
@@ -130,7 +133,7 @@ function Callout({
     </span>
   );
   return (
-    <div role="note" data-callout={kind} className={`my-2 rounded-r border-l-4 px-3 py-2 ${style.box}`}>
+    <div id={id} role="note" data-callout={kind} className={`my-2 rounded-r border-l-4 px-3 py-2 ${style.box}`}>
       {fold ? (
         <button
           type="button"
@@ -151,6 +154,52 @@ function Callout({
   );
 }
 
+const OL_STYLE: Record<string, string> = {
+  "1": "list-decimal",
+  a: "list-[lower-alpha]",
+  A: "list-[upper-alpha]",
+  i: "list-[lower-roman]",
+  I: "list-[upper-roman]",
+};
+
+/** Links open in a new tab; in-page anchors (`#id`: headings, footnotes) scroll instead. */
+function Anchor({ node: _node, href, ...p }: React.ComponentProps<"a"> & { node?: unknown }) {
+  if (href?.startsWith("#")) {
+    return (
+      <a
+        className="text-accent hover:underline"
+        href={href}
+        {...p}
+        onClick={(e) => {
+          const el = document.getElementById(decodeURIComponent(href.slice(1)));
+          if (!el) return;
+          e.preventDefault();
+          e.stopPropagation();
+          el.scrollIntoView({ block: "center", behavior: "smooth" });
+        }}
+      />
+    );
+  }
+  return <a className="text-accent hover:underline" target="_blank" rel="noreferrer noopener" href={href} {...p} />;
+}
+
+function hasClass(className: string | undefined, c: string): boolean {
+  return !!className && className.split(" ").includes(c);
+}
+
+/** Fenced divs, line blocks, macro blocks (hidden). */
+function Div({ node: _node, className, ...p }: React.ComponentProps<"div"> & { node?: unknown }) {
+  if (hasClass(className, "line-block")) return <div className="line-block my-1.5 leading-relaxed text-fg" {...p} />;
+  return <div className={className} {...p} />;
+}
+
+/** Bracketed spans, citations, small caps. */
+function Span({ node: _node, className, ...p }: React.ComponentProps<"span"> & { node?: unknown }) {
+  if (hasClass(className, "citation")) return <span className="citation rounded bg-bg-hover px-1 text-[0.9em] text-fg-muted" {...p} />;
+  if (hasClass(className, "smallcaps")) return <span className={`[font-variant:small-caps] ${className}`} {...p} />;
+  return <span className={className} {...p} />;
+}
+
 /** `components` override map for react-markdown — theme tokens, no raw HTML. */
 export const MD_COMPONENTS = {
   h1: (p: React.ComponentProps<"h1">) => <Heading tag="h1" {...p} />,
@@ -160,14 +209,31 @@ export const MD_COMPONENTS = {
   h5: (p: React.ComponentProps<"h5">) => <Heading tag="h5" {...p} />,
   h6: (p: React.ComponentProps<"h6">) => <Heading tag="h6" {...p} />,
   p: (p: React.ComponentProps<"p">) => <p className="my-1.5 leading-relaxed text-fg" {...p} />,
-  a: (p: React.ComponentProps<"a">) => <a className="text-accent hover:underline" target="_blank" rel="noreferrer noopener" {...p} />,
+  a: Anchor,
   ul: (p: React.ComponentProps<"ul">) => <ul className="my-1.5 ml-5 list-disc space-y-0.5" {...p} />,
-  ol: (p: React.ComponentProps<"ol">) => <ol className="my-1.5 ml-5 list-decimal space-y-0.5" {...p} />,
+  ol: ({ node: _node, type, ...p }: React.ComponentProps<"ol"> & { node?: unknown }) => (
+    <ol className={`my-1.5 ml-5 space-y-0.5 ${OL_STYLE[type ?? "1"] ?? "list-decimal"}`} type={type} {...p} />
+  ),
   li: (p: React.ComponentProps<"li">) => <li className="text-fg" {...p} />,
   blockquote: Blockquote,
-  img: ({ node: _node, alt, ...p }: React.ComponentProps<"img"> & { node?: unknown }) => (
+  img: ({ node: _node, alt, className: _c, ...p }: React.ComponentProps<"img"> & { node?: unknown }) => (
     <img {...p} alt={alt ?? ""} loading="lazy" className="my-2 inline-block max-w-full rounded" />
   ),
+  figure: (p: React.ComponentProps<"figure">) => <figure className="my-2 flex flex-col items-center [&>img]:my-0" {...p} />,
+  figcaption: (p: React.ComponentProps<"figcaption">) => (
+    <figcaption className="mt-1 text-center text-[0.9em] text-fg-muted" {...p} />
+  ),
+  sup: (p: React.ComponentProps<"sup">) => <sup className="[&>a]:no-underline" {...p} />,
+  dl: (p: React.ComponentProps<"dl">) => <dl className="my-1.5" {...p} />,
+  dt: (p: React.ComponentProps<"dt">) => <dt className="font-semibold text-fg" {...p} />,
+  dd: (p: React.ComponentProps<"dd">) => <dd className="mb-1.5 ml-5 text-fg [&>p]:my-0.5" {...p} />,
+  section: ({ node: _node, className, ...p }: React.ComponentProps<"section"> & { node?: unknown }) => (
+    // GFM footnotes: the only section markdown produces.
+    <section className={`${className ?? ""} mt-3 border-t border-border pt-1 text-[0.85em] text-fg-muted [&_li>p]:my-0.5`} {...p} />
+  ),
+  div: Div,
+  span: Span,
+  mark: (p: React.ComponentProps<"mark">) => <mark className="rounded-sm bg-status-running/25 px-0.5 text-fg" {...p} />,
   hr: (p: React.ComponentProps<"hr">) => <hr className="my-3 border-border" {...p} />,
   strong: (p: React.ComponentProps<"strong">) => <strong className="font-semibold text-fg" {...p} />,
   em: (p: React.ComponentProps<"em">) => <em className="italic" {...p} />,
@@ -196,9 +262,28 @@ export const MD_COMPONENTS = {
   ),
 };
 
+let katexPlugin: typeof rehypeKatex | null = null;
+let katexLoading: Promise<typeof rehypeKatex> | null = null;
+
+/** rehype-katex once `needed` (loading it on first use), else null. */
+function useKatex(needed: boolean): typeof rehypeKatex | null {
+  const [plugin, setPlugin] = useState(() => katexPlugin);
+  useEffect(() => {
+    if (!needed || plugin) return;
+    let live = true;
+    katexLoading ??= import("./markdown-katex").then((m) => (katexPlugin = m.default));
+    void katexLoading.then((p) => live && setPlugin(() => p));
+    return () => {
+      live = false;
+    };
+  }, [needed, plugin]);
+  return needed ? plugin : null;
+}
+
 /**
- * Render GFM markdown text with the shared theme + sanitization contract.
- * Renders no wrapper element of its own, so call sites control the layout.
+ * Render markdown text (GFM + Pandoc, see ./markdown/pipeline.ts) with the
+ * shared theme + sanitization contract. Renders no wrapper element of its
+ * own, so call sites control the layout.
  */
 export default function Markdown({
   children,
@@ -210,20 +295,26 @@ export default function Markdown({
 }) {
   const resolveAsset = useContext(AssetUrlContext);
   const urlTransform = useMemo(() => makeUrlTransform(resolveAsset), [resolveAsset]);
-  const remarkPlugins = useMemo<NonNullable<Options["remarkPlugins"]>>(
-    () => [remarkGfm, remarkCallouts, ...(headingSlugs?.size ? [[remarkHeadingIds, headingSlugs] as [typeof remarkHeadingIds, ReadonlyMap<number, string>]] : [])],
-    [headingSlugs],
+  const slugs = useMemo(
+    () => headingSlugs ?? new Map(extractHeadings(children).map((h) => [h.line, h.slug])),
+    [headingSlugs, children],
   );
-  const plain = (
-    <ReactMarkdown remarkPlugins={remarkPlugins} components={MD_COMPONENTS} urlTransform={urlTransform}>
-      {children}
-    </ReactMarkdown>
-  );
-  if (!children.includes("$$")) return plain;
-  // Until the KaTeX chunk loads, show the source text rather than nothing.
+  const remark = useMemo(() => remarkPlugins({ headingSlugs: slugs }), [slugs]);
+  // Footnote ids unique per text: several texts share a page.
+  const uid = useId().replace(/[^\w-]/g, "");
+  const toHast = useMemo(() => remarkRehypeOptions(`md${uid}-`), [uid]);
+  const katex = useKatex(mayContainMath(children));
+  const rehype = useMemo<Options["rehypePlugins"]>(() => (katex ? [rehypeMath(katex)] : []), [katex]);
+  const source = useMemo(() => prepareMarkdown(children), [children]);
   return (
-    <Suspense fallback={plain}>
-      <MathMarkdown remarkPlugins={remarkPlugins} urlTransform={urlTransform}>{children}</MathMarkdown>
-    </Suspense>
+    <ReactMarkdown
+      remarkPlugins={remark}
+      remarkRehypeOptions={toHast}
+      rehypePlugins={rehype}
+      components={MD_COMPONENTS}
+      urlTransform={urlTransform}
+    >
+      {source}
+    </ReactMarkdown>
   );
 }

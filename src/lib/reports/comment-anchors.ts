@@ -29,9 +29,20 @@ export interface CommentAnchor {
   quote: string | null;
 }
 
-/** Collapse whitespace so a selection matches its source across line breaks. */
+/**
+ * Collapse whitespace so a selection matches its source across line breaks,
+ * and undo smart punctuation (the renderer's curly quotes, dashes and
+ * ellipses) so rendered text matches the straight source characters.
+ */
 export function normalizeText(s: string): string {
-  return s.replace(/\s+/g, " ").trim();
+  return s
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/\u2014/g, "---")
+    .replace(/\u2013/g, "--")
+    .replace(/\u2026/g, "...")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** A markdown cell's text as it roughly reads rendered: block markers and inline markup dropped. */
