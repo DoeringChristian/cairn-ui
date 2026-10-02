@@ -1,10 +1,11 @@
 import { useState } from "react";
 import type { ImageOverlays, OverlayView } from "../../lib/overlays";
-import type { PaneTransform, PixelRendering } from "../../lib/media/split-geometry";
+import type { PixelRendering } from "../../lib/media/split-geometry";
+import type { ZoomView } from "../../lib/media/view-geometry";
 import ZoomSplitPane, { PANE_MEDIA_CLASS } from "../media/ZoomSplitPane";
 import ImageOverlay from "./ImageOverlay";
 
-export type { PaneTransform } from "../../lib/media/split-geometry";
+export type { ZoomView } from "../../lib/media/view-geometry";
 
 export interface ImageSource {
   src: string;
@@ -25,9 +26,9 @@ interface Props {
   /** Divider position as a fraction of the pane width. */
   split: number;
   onSplitChange?: (split: number, final: boolean) => void;
-  /** Shared zoom/pan: applied when it differs from the pane's own. */
-  transform: PaneTransform;
-  onTransformChange: (t: PaneTransform) => void;
+  /** Shared zoom/pan, independent of the pane's size (see lib/media/view-geometry.ts). */
+  view: ZoomView;
+  onViewChange: (view: ZoomView) => void;
   /** Annotations drawn over the pane's own image (never over the reference). */
   overlays?: ImageOverlays | null;
   overlayView?: OverlayView;
@@ -46,7 +47,7 @@ export type ImageRendering = PixelRendering;
  * sits in the foreground with the image, so it is clipped and zoomed with it.
  */
 export default function ImagePane({
-  image, imageSize, reference, split, onSplitChange, transform, onTransformChange, overlays, overlayView, rendering = "auto",
+  image, imageSize, reference, split, onSplitChange, view, onViewChange, overlays, overlayView, rendering = "auto",
 }: Props) {
   // Keyed by src: a new image's overlay waits for that image's size.
   const [loaded, setLoaded] = useState<{ src: string; w: number; h: number } | null>(null);
@@ -62,8 +63,8 @@ export default function ImagePane({
       label={image.label}
       split={split}
       onSplitChange={onSplitChange}
-      transform={transform}
-      onTransformChange={onTransformChange}
+      view={view}
+      onViewChange={onViewChange}
       rendering={rendering}
       reference={(imageRendering) => reference && (
         <img src={reference.src} alt={reference.label ?? "reference"} draggable={false} decoding="sync" className={PANE_MEDIA_CLASS} style={{ imageRendering }} />

@@ -9,7 +9,7 @@ import { decodeImage, peekDecoded } from "../lib/media/decoded-image";
 import SteppedMediaCard, { type MediaView, type SteppedMediaCardProps } from "./media/SteppedMediaCard";
 import type { VideoSettings } from "./cards-settings/video";
 import { SharedClock, driftCorrection, mediaTargetTime, type DriftOptions } from "../lib/media/shared-clock";
-import type { PaneTransform } from "../lib/media/split-geometry";
+import { FIT_VIEW, isFitView, type ZoomView } from "../lib/media/view-geometry";
 import {
   FrameLock,
   SwapBarrier,
@@ -296,8 +296,8 @@ interface VideoClipProps extends MediaView<VideoSettings> {
   frameLock: CardFrameLock;
   split: number;
   onSplitChange: (split: number, final: boolean) => void;
-  transform: PaneTransform;
-  onTransformChange: (t: PaneTransform) => void;
+  zoomView: ZoomView;
+  onZoomViewChange: (view: ZoomView) => void;
 }
 
 const playable = (p: SequencePoint | null) => !!p && (!p.artifact_mime || PLAYABLE.has(p.artifact_mime));
@@ -434,8 +434,8 @@ function VideoClip(props: VideoClipProps) {
         referenceLabel={shown.refPoint ? `${props.referenceName ?? "reference"} · ${shown.refPoint.step}` : undefined}
         split={props.split}
         onSplitChange={props.onSplitChange}
-        transform={props.transform}
-        onTransformChange={props.onTransformChange}
+        view={props.zoomView}
+        onViewChange={props.onZoomViewChange}
         rendering={settings.rendering}
         reference={(r) => videos("ref", r)}
       >
@@ -478,8 +478,6 @@ function VideoClip(props: VideoClipProps) {
   );
 }
 
-const IDENTITY: PaneTransform = { scale: 1, x: 0, y: 0 };
-
 export default function VideoPlayerCard(props: SteppedMediaCardProps) {
   // Panes of this card play together on `local`; a card following the
   // section's media sync uses the section's clock instead. With synced
@@ -494,8 +492,8 @@ export default function VideoPlayerCard(props: SteppedMediaCardProps) {
   // Every pane swaps steps together, and all share one zoom/pan.
   const barrier = useMemo(() => new SwapBarrier(), []);
   const frameLock = useMemo(() => new CardFrameLock(), []);
-  const [transform, setTransform] = useState<PaneTransform>(IDENTITY);
-  const viewModified = transform.scale !== 1 || transform.x !== 0 || transform.y !== 0;
+  const [zoomView, setZoomView] = useState<ZoomView>(FIT_VIEW);
+  const viewModified = !isFitView(zoomView);
   // Divider drags stay local until release; arrow keys persist immediately.
   const [dragSplit, setDragSplit] = useState<number | null>(null);
   return (
@@ -514,7 +512,7 @@ export default function VideoPlayerCard(props: SteppedMediaCardProps) {
         return !poster || !!peekDecoded(poster);
       }}
       reference={(s) => (s.reference ? { name: s.reference.name, step: s.referenceStep } : null)}
-      viewReset={{ modified: viewModified, reset: () => setTransform(IDENTITY) }}
+      viewReset={{ modified: viewModified, reset: () => setZoomView(FIT_VIEW) }}
       renderArtifact={(view) => (
         <VideoClip
           {...view}
@@ -530,8 +528,8 @@ export default function VideoPlayerCard(props: SteppedMediaCardProps) {
               setDragSplit(value);
             }
           }}
-          transform={transform}
-          onTransformChange={setTransform}
+          zoomView={zoomView}
+          onZoomViewChange={setZoomView}
         />
       )}
       footer={({ settings, paneCount, following, update }) => {

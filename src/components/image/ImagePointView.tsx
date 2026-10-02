@@ -14,7 +14,7 @@ import {
   type OverlaySummary,
   type OverlayView,
 } from "../../lib/overlays";
-import ImagePane, { type ImageRendering, type PaneTransform } from "./ImagePane";
+import ImagePane, { type ImageRendering, type ZoomView } from "./ImagePane";
 import { decodeMask } from "./decode-mask";
 import type { ImageFrame, ImageItem } from "./image-frame";
 import { galleryGridColumns } from "../../lib/media/gallery";
@@ -32,8 +32,8 @@ interface Props {
   refLabel?: string;
   split: number;
   onSplitChange: (split: number, final: boolean) => void;
-  transform: PaneTransform;
-  onTransformChange: (t: PaneTransform) => void;
+  view: ZoomView;
+  onViewChange: (view: ZoomView) => void;
   loadingHint: boolean;
   overlayView: OverlayView;
   /** Reports the overlays this point's images carry (for the card's overlay settings). */
@@ -81,7 +81,7 @@ function useItemOverlays(items: ImageItem[], onOverlays?: (summary: OverlaySumma
  * renders the frame it is handed; the card decides when frames swap.
  */
 export default function ImagePointView({
-  metricName, frame, refLabel, split, onSplitChange, transform, onTransformChange, loadingHint,
+  metricName, frame, refLabel, split, onSplitChange, view, onViewChange, loadingHint,
   overlayView, onOverlays, rendering,
 }: Props) {
   const items = frame?.items ?? EMPTY_ITEMS;
@@ -129,8 +129,8 @@ export default function ImagePointView({
         reference={refShown}
         split={split}
         onSplitChange={onSplitChange}
-        transform={transform}
-        onTransformChange={onTransformChange}
+        view={view}
+        onViewChange={onViewChange}
         overlays={overlays[i]}
         overlayView={overlayView}
         rendering={rendering}

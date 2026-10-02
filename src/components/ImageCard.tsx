@@ -24,7 +24,7 @@ import { plotCardPolicy } from "./card-kit/plot-card-policy";
 import { resolveAtStep, resolveReference } from "./card-kit/resolve-at-step";
 import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
 import { useStepSlider } from "./card-kit/use-step-slider";
-import { type PaneTransform } from "./image/ImagePane";
+import { FIT_VIEW, isFitView, type ZoomView } from "../lib/media/view-geometry";
 import ImagePointView from "./image/ImagePointView";
 import { imageFrameKey, peekImageFrame, resolveImageFrame, type ImageFrame } from "./image/image-frame";
 import ImageSettingsPanel from "./settings-panels/ImageSettingsPanel";
@@ -38,7 +38,6 @@ interface Props {
   autoOpenSettings?: boolean;
 }
 
-const IDENTITY: PaneTransform = { scale: 1, x: 0, y: 0 };
 
 type Series = { runId: string; name: string };
 
@@ -101,9 +100,9 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
   });
   const { globalSteps, values, safeIdx, currentValue, currentStep, stepFor, keyName } = slider;
 
-  // Zoom/pan shared by every pane.
-  const [transform, setTransform] = useState<PaneTransform>(IDENTITY);
-  const viewModified = transform.scale !== 1 || transform.x !== 0 || transform.y !== 0;
+  // Zoom/pan shared by every pane: size-independent, each pane maps it through its own size.
+  const [view, setView] = useState<ZoomView>(FIT_VIEW);
+  const viewModified = !isFitView(view);
 
   // Divider drags stay local until release; arrow keys persist immediately.
   const [dragSplit, setDragSplit] = useState<number | null>(null);
@@ -213,8 +212,8 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       refLabel={reference?.name}
       split={split}
       onSplitChange={onSplitChange}
-      transform={transform}
-      onTransformChange={setTransform}
+      view={view}
+      onViewChange={setView}
       loadingHint={anyLoading}
       overlayView={overlayView}
       onOverlays={reporterFor(id)}
@@ -325,7 +324,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       defaultHeight={policy.defaultHeight}
       onRemove={onRemove}
       onSettings={() => setSettingsOpen(true)}
-      onResetView={() => setTransform(IDENTITY)}
+      onResetView={() => setView(FIT_VIEW)}
       viewModified={viewModified}
       settingsPanel={settingsPanel}
       modalContent={body}
