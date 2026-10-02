@@ -80,9 +80,10 @@ export default function CardHeader({
   // A report card's comment threads (provided in editable reports only).
   const comments = useContext(CardCommentsContext);
   const onRemove = mutable ? onRemoveProp : undefined;
-  // A workspace panel: "edit panel" (type, metrics, section).
+  // A workspace card: "edit card" (data, type, settings, section) and "duplicate".
   const panelActions = useContext(PanelActionsContext);
   const onEditPanel = mutable ? panelActions?.onEdit : undefined;
+  const onDuplicate = mutable ? panelActions?.onDuplicate : undefined;
   const dragCtx = useDraggableCard();
   const drag = mutable ? dragCtx : null;
   // Below `md` the standard actions fold into a "⋯" menu so the title keeps
@@ -129,7 +130,7 @@ export default function CardHeader({
 
   const showResetView = !!(onResetView && viewModified);
   const hasStandardActions = !!(
-    showResetView || onDownload || onScreenshot || addToReportSlot || comments || onSettings || onEditPanel || onRemove
+    showResetView || onDownload || onScreenshot || addToReportSlot || comments || onSettings || onEditPanel || onDuplicate || onRemove
   );
 
   const menuItems: MenuItem[] = [];
@@ -138,7 +139,8 @@ export default function CardHeader({
     if (onDownload) menuItems.push({ icon: "fa-arrow-down", label: "Save", onClick: onDownload });
     if (onScreenshot) menuItems.push({ icon: "fa-camera", label: "Screenshot", onClick: onScreenshot });
     if (onSettings) menuItems.push({ icon: "fa-gear", label: "Settings", onClick: onSettings });
-    if (onEditPanel) menuItems.push({ icon: "fa-pen-to-square", label: "Edit panel", onClick: onEditPanel });
+    if (onEditPanel) menuItems.push({ icon: "fa-pen-to-square", label: "Edit card", onClick: onEditPanel });
+    if (onDuplicate) menuItems.push({ icon: "fa-clone", label: "Duplicate card", onClick: onDuplicate });
   }
   if (compact || coarse) {
     if (drag?.onMoveUp) menuItems.push({ icon: "fa-arrow-up-long", label: "Move up", onClick: drag.onMoveUp });
@@ -272,8 +274,13 @@ export default function CardHeader({
               </button>
             )}
             {!compact && onEditPanel && (
-              <button type="button" onClick={onEditPanel} className={ICON_BTN} aria-label="Edit panel" title="Edit panel: type, metrics, section">
+              <button type="button" onClick={onEditPanel} className={ICON_BTN} aria-label="Edit card" title="Edit card: data, type, settings, section">
                 <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
+              </button>
+            )}
+            {!compact && onDuplicate && (
+              <button type="button" onClick={onDuplicate} className={ICON_BTN} aria-label="Duplicate card" title="Duplicate card (then change its type or settings)">
+                <i className="fa-solid fa-clone" aria-hidden="true" />
               </button>
             )}
             {menuItems.length > 0 && <OverflowMenu items={menuItems} />}

@@ -156,8 +156,8 @@ export default function SectionBlock({
                     type="button"
                     onClick={onAddPanel}
                     className={ICON_BTN}
-                    aria-label={`Add a panel to ${sectionName}`}
-                    title="Add a panel to this section"
+                    aria-label={`Add a card to ${sectionName}`}
+                    title="Add a card to this section (card builder)"
                     data-testid="section-add-panel"
                   >
                     <i className="fa-solid fa-plus" aria-hidden="true" />

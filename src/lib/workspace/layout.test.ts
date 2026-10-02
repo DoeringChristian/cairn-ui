@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EMPTY_WORKSPACE, ops, type Panel } from "./doc.ts";
-import { deriveLayout, panelsToMaterialize, type MetricInfo } from "./layout.ts";
+import { autoPanelsOp, deriveLayout, panelsToMaterialize, type MetricInfo } from "./layout.ts";
 
 const M = (name: string, object_type = "scalar", runIds = ["r1"]): MetricInfo => ({ name, object_type, count: 5, runIds });
 const P = (id: string, sel: Panel["selector"], type: Panel["type"] = "scalar", settings = {}): Panel => ({ id, type, selector: sel, settings });
@@ -81,4 +81,36 @@ test("an edited automatic panel keeps its metric claimed (no duplicate id)", () 
   const doc = ops.addPanels("Charts", [P("auto:loss", { names: ["loss", "val.loss"] })])(EMPTY_WORKSPACE);
   const ids = deriveLayout(doc, METRICS).flatMap((s) => s.panels.map((p) => p.panel.id));
   assert.equal(ids.filter((i) => i === "auto:loss").length, 1);
+});
+
+test("autoPanels off renders only listed panels; hidden panels render nowhere but still claim", () => {
+  const doc = ops.seq(
+    ops.addPanels("val", [P("mine", { names: ["val.loss"] })]),
+    ops.addPanels("val", [P("h", { names: ["train.loss"] })]),
+    ops.setPanelHidden("h", true),
+  )(EMPTY_WORKSPACE);
+  assert.deepEqual(shape(deriveLayout(doc, METRICS)), [
+    "val:mine",
+    "Charts*:auto:loss",
+    "train*:auto:train.acc",
+    "Media*:auto:samples",
+    "system*:auto:system.cpu",
+  ]);
+  assert.deepEqual(shape(deriveLayout(ops.setAutoPanels(false)(doc), METRICS)), ["val:mine"]);
+});
+
+test("autoPanelsOp off materializes what is shown, so nothing disappears; later metrics stay out", () => {
+  const doc = ops.seq(ops.addPanels("val", [P("mine", { names: ["val.loss"] })]), ops.addHidePattern("cpu"))(EMPTY_WORKSPACE);
+  const before = deriveLayout(doc, METRICS);
+  const off = autoPanelsOp(false, before)(doc);
+  assert.equal(off.autoPanels, false);
+  assert.deepEqual(shape(deriveLayout(off, METRICS)), shape(before).map((s) => s.replace("*", "")));
+  // system.cpu was not shown (hide pattern): it stays out, like a metric logged later.
+  assert.ok(!off.sections.some((s) => s.panels.some((p) => p.id === "auto:system.cpu")));
+  const later = [...METRICS, M("val.new"), M("brand.new")];
+  assert.deepEqual(shape(deriveLayout(off, later)), shape(deriveLayout(off, METRICS)));
+  // Back on: the new metrics come back as automatic panels.
+  const on = autoPanelsOp(true, [])(off);
+  assert.ok(shape(deriveLayout(on, later)).some((s) => s.includes("auto:val.new")));
+  assert.ok(shape(deriveLayout(on, later)).some((s) => s.includes("auto:brand.new")));
 });

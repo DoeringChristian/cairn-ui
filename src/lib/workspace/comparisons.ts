@@ -1,7 +1,8 @@
 /**
  * Comparisons are workspaces with a run set (doc.ts `runs`). Creating one
  * copies the project workspace's layout — sections, panels and their
- * settings, removed panels, hide patterns, defaults, prefs — and binds the
+ * settings, hidden and removed panels, "include unlisted metrics", hide
+ * patterns, defaults, prefs — and binds the
  * given runs; afterwards the two documents are independent.
  */
 

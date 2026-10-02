@@ -21,6 +21,11 @@ export function UndoProvider({ children }: { children: ReactNode }) {
   return <UndoContext.Provider value={stack}>{children}</UndoContext.Provider>;
 }
 
+/** Edits below record no undo entries (the card builder's draft previews). */
+export function NoUndo({ children }: { children: ReactNode }) {
+  return <UndoContext.Provider value={null}>{children}</UndoContext.Provider>;
+}
+
 /** The project's undo stack, or null outside `UndoProvider`. */
 export function useUndoStack(): UndoStack | null {
   return useContext(UndoContext);

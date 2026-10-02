@@ -91,3 +91,17 @@ export function isComparisonCard(x: unknown): x is ComparisonCard {
     );
   });
 }
+
+/** Runs a multi-run card needs before it can show anything (others: 1). */
+const MULTI_RUN_MIN_RUNS: Partial<Record<MultiRunCardType, number>> = {
+  parallel: 2,
+  scatter: 2,
+  importance: 2,
+  "run-compare": 2,
+  "code-diff": 2,
+};
+
+/** The fewest bound runs a card of `type` can show anything with. */
+export function minRunsFor(type: string): number {
+  return isMultiRunCardType(type) ? (MULTI_RUN_MIN_RUNS[type] ?? 1) : 1;
+}

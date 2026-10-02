@@ -1,20 +1,21 @@
 /**
  * The toolbar of a workspace (the run page and every comparison render the
  * same one): search (⌘K, a regex over panel labels), "hide matching" (a
- * sticky hide pattern), the quick panel builder, "+ Section", the sync-zoom
- * toggle, colour-by (with its legend) and saved views. Everything but search
- * edits the enclosing workspace (`WorkspaceRefContext`), so a read-only
- * surface shows only the search box.
+ * sticky hide pattern), "Add cards" and "Manage cards" (the card builder),
+ * the quick panel builder, "+ Section", "include unlisted metrics", the
+ * sync-zoom toggle, colour-by (with its legend) and saved views. Everything
+ * but search edits the enclosing workspace (`WorkspaceRefContext`), so a
+ * read-only surface shows only the search box.
  */
 
 import { useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { CardMutationContext } from "../lib/card-settings";
 import { formatShortcut } from "../lib/shortcuts";
 import { IS_MAC, useShortcut } from "../lib/use-shortcut";
-import { COLOR_BY_BUCKETS, ops, type ColorBy, type ColorByPalette } from "../lib/workspace/doc";
+import { COLOR_BY_BUCKETS, normalizeWorkspace, ops, type ColorBy, type ColorByPalette, type WorkspaceDoc } from "../lib/workspace/doc";
 import { useRunColorBy, type RunColorByValue } from "../lib/run-color-by-context";
 import { useScalarExprs } from "../lib/use-scalar-exprs";
 import { Select, Stepper } from "./settings/palette";
@@ -37,6 +38,13 @@ interface Props {
   onBuildPanels?: (panels: BuiltPanel[]) => void;
   /** Add an empty section with this name. */
   onAddSection?: (name: string) => void;
+  /** Open the card builder / its "Manage cards" view. */
+  onAddCards?: () => void;
+  onManageCards?: () => void;
+  /** Flip "include unlisted metrics" (turning it off writes the automatic cards shown now). */
+  onToggleAutoPanels?: () => void;
+  /** The document a saved view stores, with "include unlisted metrics" on or off. */
+  viewDoc?: (autoPanels: boolean) => WorkspaceDoc;
   /** Extra buttons at the start of the action group (e.g. "New comparison"). */
   actions?: ReactNode;
 }
@@ -53,6 +61,10 @@ export default function WorkspaceToolbar({
   builderMetrics,
   onBuildPanels,
   onAddSection,
+  onAddCards,
+  onManageCards,
+  onToggleAutoPanels,
+  viewDoc,
   actions,
 }: Props) {
   const { doc, readOnly, update } = useCurrentWorkspace();
@@ -133,6 +145,16 @@ export default function WorkspaceToolbar({
       {mutable && (
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {actions}
+          {onAddCards && (
+            <button type="button" className={TOOL_BTN} onClick={onAddCards} title="Card builder: pick data, card types and settings">
+              <i className="fa-solid fa-plus" aria-hidden="true" /> Add cards
+            </button>
+          )}
+          {onManageCards && (
+            <button type="button" className={TOOL_BTN} onClick={onManageCards} title="Every card of this workspace: show, hide, edit, duplicate, move, delete">
+              <i className="fa-solid fa-table-list" aria-hidden="true" /> Manage cards
+            </button>
+          )}
           {onAddSection && (
             <button
               type="button"
@@ -150,6 +172,23 @@ export default function WorkspaceToolbar({
             <PanelBuilder metrics={builderMetrics} onBuild={onBuildPanels} />
           )}
           <ColorByControl />
+          {onToggleAutoPanels && (
+            <button
+              type="button"
+              className={`${TOOL_BTN} ${doc.autoPanels ? "" : "!border-accent !text-fg"}`}
+              onClick={onToggleAutoPanels}
+              aria-pressed={doc.autoPanels}
+              data-testid="toggle-auto-panels"
+              title={
+                doc.autoPanels
+                  ? "Unlisted metrics get automatic cards. Click to show only listed cards (the cards shown now are kept)."
+                  : "Only listed cards are shown; new metrics wait in Manage cards. Click to include unlisted metrics again."
+              }
+            >
+              <i className={`fa-solid ${doc.autoPanels ? "fa-layer-group" : "fa-thumbtack"}`} aria-hidden="true" />
+              {doc.autoPanels ? "Unlisted metrics: on" : "Unlisted metrics: off"}
+            </button>
+          )}
           <HeaderToggle
             icon="fa-link"
             label={doc.prefs.syncZoom ? "Zoom synced across charts (click to unlink)" : "Sync zoom across charts"}
@@ -160,7 +199,7 @@ export default function WorkspaceToolbar({
               })
             }
           />
-          <ViewsMenu />
+          <ViewsMenu viewDoc={viewDoc} />
         </div>
       )}
     </div>
@@ -382,10 +421,12 @@ function ColorByForm({
 // Saved views
 // ---------------------------------------------------------------------------
 
-function ViewsMenu() {
+function ViewsMenu({ viewDoc }: { viewDoc?: (autoPanels: boolean) => WorkspaceDoc }) {
   const anchor = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  // Whether the saved view includes unlisted metrics; follows the workspace until changed.
+  const [autoChoice, setAutoChoice] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const qc = useQueryClient();
@@ -396,6 +437,19 @@ function ViewsMenu() {
     queryFn: () => api.views(projectId),
     enabled: open,
   });
+  // Each view's "include unlisted metrics" (views are few; fetched while the menu is open).
+  const payloads = useQueries({
+    queries: (open ? (views.data?.views ?? []) : []).map((v) => ({
+      queryKey: [...qk.views(projectId), v.id, v.rev],
+      queryFn: () => api.view(projectId, v.id),
+      staleTime: Infinity,
+    })),
+  });
+  const autoOf = (id: string): boolean | null => {
+    const p = payloads.find((q) => q.data?.id === id)?.data?.payload;
+    return p ? normalizeWorkspace((p as { layout?: unknown }).layout).autoPanels : null;
+  };
+  const includeUnlisted = autoChoice ?? doc.autoPanels;
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -413,8 +467,10 @@ function ViewsMenu() {
     run(async () => {
       const n = name.trim();
       if (!n) return;
-      await api.createView(projectId, n, viewPayload(doc) as unknown as Record<string, unknown>);
+      const snapshot = viewDoc ? viewDoc(includeUnlisted) : doc;
+      await api.createView(projectId, n, viewPayload(snapshot) as unknown as Record<string, unknown>);
       setName("");
+      setAutoChoice(null);
       await qc.invalidateQueries({ queryKey: qk.views(projectId) });
     });
 
@@ -466,9 +522,21 @@ function ViewsMenu() {
             Save
           </button>
         </form>
+        {viewDoc && (
+          <label className="inline-flex items-center gap-1.5 text-xs text-fg-muted">
+            <input
+              type="checkbox"
+              checked={includeUnlisted}
+              onChange={(e) => setAutoChoice(e.target.checked)}
+              data-testid="view-include-unlisted"
+            />
+            Include unlisted metrics
+          </label>
+        )}
         <p className="text-[11px] text-fg-subtle">
-          Saves this workspace&rsquo;s layout: sections, panels and their settings, removed panels, hide patterns,
-          defaults and prefs. Applying one replaces the layout of the workspace you are in (the run page or a
+          Saves this workspace&rsquo;s layout: sections, cards and their settings, removed and hidden cards, hide
+          patterns, defaults, prefs and whether unlisted metrics get automatic cards (off: the automatic cards shown
+          now are saved as cards). Applying one replaces the layout of the workspace you are in (the run page or a
           comparison); its runs stay.
         </p>
         {error && <p className="text-xs text-status-failed">{error}</p>}
@@ -489,6 +557,15 @@ function ViewsMenu() {
                 >
                   {v.name}
                 </button>
+                {autoOf(v.id) != null && (
+                  <span
+                    className="shrink-0 text-[10px] text-fg-subtle"
+                    title={autoOf(v.id) ? "Includes unlisted metrics" : "Only its listed cards"}
+                    data-view-auto={autoOf(v.id) ? "on" : "off"}
+                  >
+                    {autoOf(v.id) ? "+ unlisted" : "listed only"}
+                  </span>
+                )}
                 <button
                   type="button"
                   className="h-6 w-6 shrink-0 rounded text-fg-subtle hover:bg-bg-hover hover:text-status-failed touch:h-10 touch:w-10"

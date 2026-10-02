@@ -1,0 +1,1 @@
+import{j as s,bS as i,de as n,dg as o}from"./index-DE3YfrSY.js";function d({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{data:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{d as default};

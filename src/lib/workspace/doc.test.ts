@@ -150,3 +150,36 @@ test("prefs.colorBy: null by default, clamped and defaulted when set", () => {
     palette: "turbo",
   });
 });
+
+test("autoPanels defaults on and round-trips; hidden panels normalize", () => {
+  assert.equal(normalizeWorkspace({}).autoPanels, true);
+  assert.equal(normalizeWorkspace({ autoPanels: false }).autoPanels, false);
+  assert.equal(normalizeWorkspace({ autoPanels: "no" }).autoPanels, true);
+  const d = normalizeWorkspace({ sections: [{ id: "s", name: "a", panels: [{ ...P("p", ["x"]), hidden: true }, { ...P("q", ["y"]), hidden: "yes" }] }] });
+  assert.equal(d.sections[0]!.panels[0]!.hidden, true);
+  assert.equal("hidden" in d.sections[0]!.panels[1]!, false);
+  assert.equal(ops.setAutoPanels(true)(EMPTY_WORKSPACE), EMPTY_WORKSPACE);
+  assert.equal(ops.setAutoPanels(false)(EMPTY_WORKSPACE).autoPanels, false);
+});
+
+test("duplicatePanel copies type, selector and settings right after the original", () => {
+  const a = ops.addPanels("s", [P("p1", ["x"], "image"), P("p2", ["y"])])(EMPTY_WORKSPACE);
+  const withSettings = ops.setPanelSettings("p1", { fit: "cover", nested: { a: 1 } })(a);
+  const d = ops.duplicatePanel("p1", "p1b")(ops.setPanelHidden("p1", true)(withSettings));
+  assert.deepEqual(names(d), ["s:p1,p1b,p2"]);
+  const copy = findPanel(d, "p1b")!.panel;
+  assert.deepEqual(copy, { id: "p1b", type: "image", selector: { names: ["x"] }, settings: { fit: "cover", nested: { a: 1 } } });
+  assert.notEqual(copy.settings.nested, findPanel(d, "p1")!.panel.settings.nested);
+  assert.equal(ops.duplicatePanel("nope", "z")(a), a);
+  assert.equal(ops.duplicatePanel("p1", "p2")(a), a);
+});
+
+test("setPanelHidden and replacePanel", () => {
+  const a = ops.addPanels("s", [P("p1", ["x"])])(EMPTY_WORKSPACE);
+  const h = ops.setPanelHidden("p1", true)(a);
+  assert.equal(findPanel(h, "p1")!.panel.hidden, true);
+  assert.equal(ops.setPanelHidden("p1", true)(h), h);
+  assert.equal("hidden" in findPanel(ops.setPanelHidden("p1", false)(h), "p1")!.panel, false);
+  const r = ops.replacePanel("p1", { type: "tile", selector: { names: [] }, settings: { metric: { src: "last(x)" } } })(a);
+  assert.deepEqual(findPanel(r, "p1")!.panel, { id: "p1", type: "tile", selector: { names: [] }, settings: { metric: { src: "last(x)" } } });
+});

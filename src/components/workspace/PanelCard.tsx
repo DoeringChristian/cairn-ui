@@ -16,25 +16,12 @@ import { useContext, useMemo } from "react";
 import CardRenderer from "../CardRenderer";
 import CardHeader from "../CardHeader";
 import { CardMutationContext, useCardOverridesReader, type CardSettingsKey } from "../../lib/card-settings";
-import { isMultiRunCardType, type ComparisonSeriesRef, type MultiRunCardType } from "../../lib/comparisons/types";
+import { isMultiRunCardType, minRunsFor, type ComparisonSeriesRef } from "../../lib/comparisons/types";
 import type { RenderedPanel } from "../../lib/workspace/layout";
 import { PanelTitleContext } from "../../lib/workspace/panel-actions";
 import { claimedMetric } from "../../lib/workspace/doc";
 import { useVisibleRuns } from "../../lib/run-view";
 import type { SequenceMeta } from "../../api/types";
-
-/** Runs a multi-run panel needs before it can show anything. */
-const MIN_RUNS: Partial<Record<MultiRunCardType, number>> = {
-  parallel: 2,
-  scatter: 2,
-  importance: 2,
-  "run-compare": 2,
-  "code-diff": 2,
-};
-
-export function minRunsFor(type: string): number {
-  return isMultiRunCardType(type) ? (MIN_RUNS[type] ?? 1) : 1;
-}
 
 interface Props {
   rendered: RenderedPanel;

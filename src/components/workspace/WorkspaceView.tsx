@@ -1,8 +1,9 @@
 /**
  * The workspace renderer: one layout document + a bound run set. The run
  * page (`runIds = [the run]`) and every comparison (`runIds = its runs`)
- * render exactly this component — toolbar, sections, panels, the add/edit
- * panel dialog, removed panels — and differ only in the ref and the runs.
+ * render exactly this component — toolbar, sections, panels, the card
+ * builder (add / edit / manage cards, components/workspace/CardBuilder.tsx)
+ * — and differ only in the ref and the runs.
  *
  * Every edit is an op on the workspace document (lib/workspace/doc.ts), so
  * it carries over to every run the workspace is bound to. Touching an
@@ -13,10 +14,11 @@
  * Read-only surfaces (`CardMutationContext` false) render the same page;
  * `useWorkspace(...).update` is then a no-op and card settings go to the
  * session layer (lib/card-settings.ts), so a viewer can explore without
- * persisting anything.
+ * persisting anything. Viewers get no card builder, manage view or
+ * duplicate: those only edit the layout.
  */
 
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import CardErrorBoundary from "../card-kit/CardErrorBoundary";
 import ReorderableCardGrid from "../ReorderableCardGrid";
@@ -24,7 +26,7 @@ import SectionBlock from "../SectionBlock";
 import WorkspaceToolbar from "../WorkspaceToolbar";
 import RunColorByProvider from "../RunColorByProvider";
 import PanelCard from "./PanelCard";
-import PanelDialog, { type PanelDialogResult } from "./PanelDialog";
+import CardBuilder, { DEFAULT_NEW_SECTION, type BuilderCard, type BuilderMode, type ManageActions } from "./CardBuilder";
 import { useWorkspaceMetrics } from "./use-workspace-metrics";
 import { useSession } from "../../api/hooks";
 import { CardMutationContext, CardSettingsStoreContext, type CardOverrides, type CardSettingsKey, type CardSettingsStore } from "../../lib/card-settings";
@@ -35,12 +37,14 @@ import { ChartSyncProvider } from "../../lib/chart-sync";
 import { WorkspaceDefaultsProvider } from "../../lib/settings-scope";
 import { claimedMetric, findPanel, newLayoutId, ops, type Panel, type WorkspaceOp } from "../../lib/workspace/doc";
 import {
+  autoPanelsOp,
   deriveLayout,
   panelsToMaterialize,
   sectionAutoPanels,
   type RenderedPanel,
   type RenderedSection,
 } from "../../lib/workspace/layout";
+import { autoSectionOfPanel, cardCatalogue, seriesShownBy, type CatalogueEntry } from "../../lib/workspace/card-builder";
 import { compilePanelFilter } from "../../lib/workspace/panel-filter";
 import type { BuiltPanel } from "../../lib/workspace/panel-builder";
 import { PanelActionsContext } from "../../lib/workspace/panel-actions";
@@ -50,7 +54,7 @@ import { getWorkspace, subscribeWorkspace } from "../../lib/workspace/store";
 import { useWorkspace } from "../../lib/workspace/use-workspace";
 
 /** Where the quick panel builder puts its panels. */
-export const BUILDER_SECTION = "Custom panels";
+export const BUILDER_SECTION = DEFAULT_NEW_SECTION;
 
 const EMPTY_SETTINGS: CardOverrides = Object.freeze({}) as CardOverrides;
 const identity: WorkspaceOp = (d) => d;
@@ -156,37 +160,63 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
     [update, sectionOp],
   );
 
-  // --- the add / edit panel dialog ------------------------------------------
-  const [dialog, setDialog] = useState<{ section: string; panel: Panel | null } | null>(null);
-  const [autoFocusId, setAutoFocusId] = useState<string | null>(null);
-  useEffect(() => {
-    if (autoFocusId != null) setAutoFocusId(null);
-  }, [autoFocusId]);
+  // --- the card builder -------------------------------------------------------
+  const metricsRef = useRef(metrics);
+  metricsRef.current = metrics;
+  const [builder, setBuilder] = useState<BuilderMode | null>(null);
 
-  const submitDialog = useCallback(
-    (r: PanelDialogResult) => {
-      if (!dialog) return;
-      if (dialog.panel) {
-        const id = dialog.panel.id;
-        update(
-          sectionOp(
-            ops.seq(
-              materializeOp(id),
-              ops.setPanelType(id, r.type),
-              ops.setPanelSelector(id, r.selector),
-              r.section !== dialog.section ? ops.movePanel(id, r.section, null) : identity,
-            ),
-          ),
-          { label: "Edit panel" },
-        );
-        return;
-      }
-      const panel: Panel = { id: newLayoutId("p_"), type: r.type, selector: r.selector, settings: {} };
-      update(sectionOp(ops.addPanels(r.section, [panel])), { label: "Add panel" });
-      setAutoFocusId(panel.id);
+  const addCards = useCallback(
+    (section: string, cards: BuilderCard[]) => {
+      const panels: Panel[] = cards.map((c) => ({ id: newLayoutId("p_"), ...c }));
+      update(sectionOp(ops.addPanels(section, panels)), { label: `Add ${panels.length} card${panels.length === 1 ? "" : "s"}` });
     },
-    [dialog, update, sectionOp, materializeOp],
+    [update, sectionOp],
   );
+  const saveCard = useCallback(
+    (id: string, card: BuilderCard, section: string) => {
+      const from = findPanel(getWorkspace(key), id)?.section ?? allRef.current.find((s) => s.panels.some((p) => p.panel.id === id))?.name;
+      update(
+        sectionOp(
+          ops.seq(materializeOp(id), ops.replacePanel(id, card), section !== from ? ops.movePanel(id, section, null) : identity),
+        ),
+        { label: "Edit card" },
+      );
+    },
+    [key, update, sectionOp, materializeOp],
+  );
+  /** Copy a card (an automatic one is written first) right after itself. */
+  const duplicate = useCallback(
+    (id: string) => {
+      const copy = newLayoutId("p_");
+      update(sectionOp(ops.seq(materializeOp(id), ops.duplicatePanel(id, copy))), { label: "Duplicate card" });
+    },
+    [update, sectionOp, materializeOp],
+  );
+  const toggleAutoPanels = useCallback(() => {
+    const on = !getWorkspace(key).autoPanels;
+    update(autoPanelsOp(on, allRef.current), { label: on ? "Include unlisted metrics" : "Only listed cards" });
+  }, [key, update]);
+
+  const manage = useMemo<ManageActions>(
+    () => ({
+      toggle: (e: CatalogueEntry) => {
+        const id = e.panel.id;
+        if (e.status === "listed") update(ops.setPanelHidden(id, true), { label: `Hide ${e.label}` });
+        else if (e.status === "hidden") update(ops.setPanelHidden(id, false), { label: `Show ${e.label}` });
+        else if (e.status === "auto") update(ops.removePanel(id, claimedMetric(e.panel)), { label: `Hide ${e.label}` });
+        else if (e.status === "removed") update(ops.restoreRemoved([claimedMetric(e.panel) ?? ""]), { label: `Show ${e.label}` });
+        else update(sectionOp(ops.addPanels(autoSectionOfPanel(e.panel, metricsRef.current), [e.panel])), { label: `Show ${e.label}` });
+      },
+      duplicate: (e: CatalogueEntry) => duplicate(e.panel.id),
+      remove: (e: CatalogueEntry) =>
+        update(ops.removePanel(e.panel.id, claimedMetric(e.panel)), { label: `Delete ${e.label}` }),
+      move: (e: CatalogueEntry, to: string) =>
+        update(sectionOp(ops.seq(materializeOp(e.panel.id), ops.movePanel(e.panel.id, to, null))), { label: `Move ${e.label}` }),
+    }),
+    [update, sectionOp, materializeOp, duplicate],
+  );
+  const shownBy = useMemo(() => seriesShownBy(all), [all]);
+  const catalogue = useMemo(() => (builder?.kind === "manage" ? cardCatalogue(doc, metrics) : []), [builder, doc, metrics]);
 
   // --- toolbar ---------------------------------------------------------------
   const matchCount = useMemo(() => {
@@ -233,9 +263,26 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
     [wsRef.projectId, key, runIds, reportLabel, navigate],
   );
 
-  const [managingRemoved, setManagingRemoved] = useState(false);
-  const removed = useMemo(() => [...doc.removed].sort(), [doc.removed]);
   const sectionNames = all.map((s) => s.name);
+  /** With unlisted metrics off: how many series have no card. */
+  const unlisted = useMemo(
+    () =>
+      doc.autoPanels
+        ? 0
+        : deriveLayout({ ...doc, autoPanels: true }, metrics, { hidePatterns: false }).reduce(
+            (n, s) => n + s.panels.filter((p) => p.auto).length,
+            0,
+          ),
+    [doc, metrics],
+  );
+  /** The document a saved view stores, with "include unlisted metrics" as chosen. */
+  const viewDoc = useCallback(
+    (autoPanels: boolean) => {
+      const d = getWorkspace(key);
+      return d.autoPanels === autoPanels ? d : autoPanelsOp(autoPanels, allRef.current)(d);
+    },
+    [key],
+  );
 
   return (
     <WorkspaceRefContext.Provider value={wsRef}>
@@ -252,29 +299,25 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
           builderMetrics={scalarNames}
           onBuildPanels={buildPanels}
           onAddSection={(name) => update(sectionOp(ops.addSection(name)), { label: `Add section ${name}` })}
+          onAddCards={() => setBuilder({ kind: "add", section: null })}
+          onManageCards={() => setBuilder({ kind: "manage" })}
+          onToggleAutoPanels={toggleAutoPanels}
+          viewDoc={viewDoc}
           actions={toolbarActions}
         />
-        {removed.length > 0 && (
+        {unlisted > 0 && (
           <div className="flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => setManagingRemoved((v) => !v)}
-              className="text-xs text-fg-muted underline underline-offset-2 hover:text-fg"
-              title="Automatic panels removed from this workspace"
+              onClick={() => setBuilder({ kind: "manage" })}
+              disabled={!mutable}
+              className="text-xs text-fg-muted underline underline-offset-2 hover:text-fg disabled:no-underline"
+              title="Unlisted metrics are off: these series have no card"
+              data-testid="unlisted-count"
             >
-              {removed.length} removed · manage
+              {unlisted} series without a card{mutable ? " · manage" : ""}
             </button>
           </div>
-        )}
-        {managingRemoved && removed.length > 0 && (
-          <RemovedPanels
-            names={removed}
-            editable={mutable}
-            onRestore={(names) => {
-              update(ops.restoreRemoved(names), { label: names.length === 1 ? `Restore ${names[0]}` : "Restore all panels" });
-              if (names.length === removed.length) setManagingRemoved(false);
-            }}
-          />
         )}
         {error != null && <p className="text-sm text-status-failed">Error: {String(error)}</p>}
         {!loading && metrics.length === 0 && all.length === 0 && (
@@ -308,7 +351,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
               }
               onMove={(delta) => update(sectionOp(ops.moveSection(section.name, delta)), { label: "Move section" })}
               onRename={(name) => update(sectionOp(ops.renameSection(section.name, name)), { label: `Rename section to ${name}` })}
-              onAddPanel={() => setDialog({ section: section.name, panel: null })}
+              onAddPanel={mutable ? () => setBuilder({ kind: "add", section: section.name }) : undefined}
               onSendToReport={section.panels.length > 0 ? () => sendSection(section) : undefined}
               onDelete={
                 section.inDoc && (full?.panels.length ?? 0) === 0
@@ -326,7 +369,14 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
                     key: rp.panel.id,
                     content: (
                       <PanelActionsContext.Provider
-                        value={mutable ? { onEdit: () => setDialog({ section: section.name, panel: rp.panel }) } : null}
+                        value={
+                          mutable
+                            ? {
+                                onEdit: () => setBuilder({ kind: "edit", panel: rp.panel, section: section.name, returnTo: null }),
+                                onDuplicate: () => duplicate(rp.panel.id),
+                              }
+                            : null
+                        }
                       >
                         <CardErrorBoundary variant="card">
                           <PanelCard
@@ -334,7 +384,6 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
                             runIds={runIds}
                             settingsKey={settingsKeyOf(rp.panel.id)}
                             onRemove={mutable ? () => removePanel(rp) : undefined}
-                            autoOpenSettings={rp.panel.id === autoFocusId}
                           />
                         </CardErrorBoundary>
                       </PanelActionsContext.Provider>
@@ -347,15 +396,20 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
           );
         })}
       </div>
-      {dialog && (
-        <PanelDialog
-          open
-          onClose={() => setDialog(null)}
+      {builder && mutable && (
+        <CardBuilder
+          mode={builder}
+          onModeChange={setBuilder}
           metrics={metrics}
+          runIds={runIds}
+          shownBy={shownBy}
           sections={sectionNames}
-          section={dialog.section}
-          panel={dialog.panel}
-          onSubmit={submitDialog}
+          catalogue={catalogue}
+          autoPanels={doc.autoPanels}
+          onToggleAutoPanels={toggleAutoPanels}
+          onAdd={addCards}
+          onSave={saveCard}
+          manage={manage}
         />
       )}
     </CardNavProvider>
@@ -364,49 +418,5 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
     </WorkspaceDefaultsProvider>
     </CardSettingsStoreContext.Provider>
     </WorkspaceRefContext.Provider>
-  );
-}
-
-/** The removed automatic panels, each restorable. */
-function RemovedPanels({
-  names,
-  editable,
-  onRestore,
-}: {
-  names: string[];
-  editable: boolean;
-  onRestore: (names: string[]) => void;
-}) {
-  return (
-    <div className="card p-3">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Removed from this workspace</span>
-        {editable && (
-          <button
-            type="button"
-            onClick={() => onRestore(names)}
-            className="text-xs text-fg-muted underline underline-offset-2 hover:text-fg"
-          >
-            restore all
-          </button>
-        )}
-      </div>
-      <ul className="flex flex-wrap gap-1.5">
-        {names.map((name) => (
-          <li key={name}>
-            <button
-              type="button"
-              disabled={!editable}
-              onClick={() => onRestore([name])}
-              className="mono inline-flex items-center gap-1 rounded bg-bg-hover px-1.5 py-0.5 text-xs text-fg-muted hover:text-fg disabled:cursor-default"
-              title={`Restore ${name}`}
-            >
-              <span aria-hidden="true">+</span>
-              {name}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }

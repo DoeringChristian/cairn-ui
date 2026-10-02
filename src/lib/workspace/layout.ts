@@ -8,17 +8,19 @@
  *   renders an empty state, so the layout holds still while flipping runs.
  * - A metric is claimed by a panel whose selector names exactly that metric
  *   (`claimedMetric`). Multi-metric and regex panels are extra views.
- * - Every unclaimed metric that is not in `removed` gets an automatic panel
- *   `auto:<name>`, in the doc section named by the automatic rule
- *   (lib/sections.ts) after its own panels, or in an automatic section after
- *   the doc's sections.
+ * - While `autoPanels` is on, every unclaimed metric that is not in
+ *   `removed` gets an automatic panel `auto:<name>`, in the doc section
+ *   named by the automatic rule (lib/sections.ts) after its own panels, or
+ *   in an automatic section after the doc's sections. Off: none.
+ * - A hidden panel (`panel.hidden`) still claims its metric but renders
+ *   nowhere.
  * - Hide patterns and the search query filter the rendered panels by label.
  */
 
 import { isMultiRunCardType, MULTI_RUN_CARD_LABELS } from "../comparisons/types.ts";
 import type { CardType } from "../cards/card-spec.ts";
 import { autoSectionOf, compareAutoSections } from "../sections.ts";
-import { AUTO_PREFIX, autoPanelId, claimedMetric, isAutoPanelId, type Panel, type WorkspaceDoc } from "./doc.ts";
+import { AUTO_PREFIX, autoPanelId, claimedMetric, isAutoPanelId, ops, type Panel, type WorkspaceDoc, type WorkspaceOp } from "./doc.ts";
 import { compilePanelFilter } from "./panel-filter.ts";
 
 /** One metric across the bound runs. */
@@ -87,12 +89,14 @@ export function autoPanel(m: MetricInfo): Panel {
 export interface DeriveOptions {
   /** The search box (panel-filter syntax). */
   query?: string;
+  /** Apply the document's hide patterns (default true). */
+  hidePatterns?: boolean;
 }
 
 export function deriveLayout(doc: WorkspaceDoc, metrics: readonly MetricInfo[], opts: DeriveOptions = {}): RenderedSection[] {
   const byName = new Map(metrics.map((m) => [m.name, m]));
   const search = compilePanelFilter(opts.query ?? "");
-  const hide = doc.hidePatterns.map(compilePanelFilter).filter((f) => f.query !== "");
+  const hide = opts.hidePatterns === false ? [] : doc.hidePatterns.map(compilePanelFilter).filter((f) => f.query !== "");
   const visible = (label: string) => !hide.some((f) => f.test(label)) && search.test(label);
 
   const claimed = new Set<string>();
@@ -106,7 +110,7 @@ export function deriveLayout(doc: WorkspaceDoc, metrics: readonly MetricInfo[], 
 
   // Automatic panels, bucketed by their automatic section.
   const autoBuckets = new Map<string, MetricInfo[]>();
-  for (const m of [...metrics].sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const m of doc.autoPanels ? [...metrics].sort((a, b) => a.name.localeCompare(b.name)) : []) {
     if (claimed.has(m.name) || removed.has(m.name)) continue;
     const s = autoSectionOf(m.name, m.object_type);
     const list = autoBuckets.get(s) ?? [];
@@ -128,7 +132,7 @@ export function deriveLayout(doc: WorkspaceDoc, metrics: readonly MetricInfo[], 
 
   const out: RenderedSection[] = [];
   for (const s of doc.sections) {
-    const own = s.panels.map((p) => render(p, false, s.name));
+    const own = s.panels.filter((p) => !p.hidden).map((p) => render(p, false, s.name));
     const autos = (autoBuckets.get(s.name) ?? []).map((m) => render(autoPanel(m), true, s.name));
     autoBuckets.delete(s.name);
     out.push({ name: s.name, inDoc: true, collapsed: s.collapsed, sort: s.sort, panels: finish([...own, ...autos], s.sort) });
@@ -159,6 +163,27 @@ export function panelsToMaterialize(sections: readonly RenderedSection[], panelI
 /** Every automatic panel of a section, in rendered order (materializing a whole section). */
 export function sectionAutoPanels(sections: readonly RenderedSection[], name: string): Panel[] {
   return sections.find((s) => s.name === name)?.panels.filter((p) => p.auto).map((p) => p.panel) ?? [];
+}
+
+/**
+ * Write every automatic panel of `sections` (a `deriveLayout` result) into
+ * the document, in rendered order, giving every rendered section its place.
+ */
+export function materializeAllOp(sections: readonly RenderedSection[]): WorkspaceOp {
+  return ops.seq(
+    ops.ensureSections(sections.map((s) => s.name)),
+    ...sections.map((s) => ops.addPanels(s.name, s.panels.filter((p) => p.auto).map((p) => p.panel))),
+  );
+}
+
+/**
+ * Turn "include unlisted metrics" on or off. Off first materializes the
+ * automatic panels `sections` shows (the unsearched layout): nothing on
+ * screen disappears. Metrics logged afterwards — and those a hide pattern
+ * hides at that moment — stay out until added.
+ */
+export function autoPanelsOp(on: boolean, sections: readonly RenderedSection[]): WorkspaceOp {
+  return on ? ops.setAutoPanels(true) : ops.seq(materializeAllOp(sections), ops.setAutoPanels(false));
 }
 
 export { isAutoPanelId };

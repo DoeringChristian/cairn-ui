@@ -15,8 +15,11 @@
  * document: `rebase(server, pending)`.
  *
  * Panels the document does not list are derived automatically from the
- * bound runs' metrics (lib/workspace/layout.ts). Touching one materializes
- * it here; removing one records its metric in `removed`.
+ * bound runs' metrics (lib/workspace/layout.ts) while `autoPanels` is on.
+ * Touching one materializes it here; removing one records its metric in
+ * `removed`. Several panels may show the same metric (a line chart and a
+ * value tile of `loss`, two image cards of `samples` with different
+ * settings).
  */
 
 import { CARD_TYPES, type CardType } from "../cards/card-spec.ts";
@@ -35,8 +38,14 @@ export interface Panel {
   id: string;
   type: CardType;
   selector: MetricSelector;
-  /** The card's own setting overrides (title, height, colSpan, smoothing, …). */
+  /**
+   * The card's own setting overrides (title, height, colSpan, smoothing, …).
+   * Multi-run cards (bar, value tile, scatter, …) keep the series they show
+   * here too (their expressions), with an empty selector.
+   */
   settings: Record<string, unknown>;
+  /** Kept in the layout (and still claiming its metric) but not rendered. */
+  hidden?: boolean;
 }
 
 export interface SectionDef {
@@ -91,6 +100,13 @@ export interface WorkspaceDoc {
   sections: SectionDef[];
   /** Metric names whose automatic panel was removed. */
   removed: string[];
+  /**
+   * Include unlisted metrics: metrics no panel claims get automatic panels.
+   * Off: only the listed panels render; a metric logged later shows up in
+   * "Manage cards" until added. Turning it off first writes the automatic
+   * panels shown at that moment into the layout (layout.ts `autoPanelsOp`).
+   */
+  autoPanels: boolean;
   prefs: WorkspacePrefs;
   /** null: the project workspace (bound to the viewed run). A comparison's run set otherwise. */
   runs: RunSet | null;
@@ -105,6 +121,7 @@ export const EMPTY_WORKSPACE: WorkspaceDoc = Object.freeze({
   hidePatterns: [],
   sections: [],
   removed: [],
+  autoPanels: true,
   prefs: { syncZoom: false, syncCursor: true, colorBy: null },
   runs: null,
 }) as WorkspaceDoc;
@@ -158,7 +175,9 @@ function panelOf(v: unknown): Panel | null {
   if (typeof v.type !== "string" || !(CARD_TYPES as readonly string[]).includes(v.type)) return null;
   const selector = selectorOf(v.selector);
   if (!selector) return null;
-  return { id: v.id, type: v.type as CardType, selector, settings: isObj(v.settings) ? v.settings : {} };
+  const panel: Panel = { id: v.id, type: v.type as CardType, selector, settings: isObj(v.settings) ? v.settings : {} };
+  if (v.hidden === true) panel.hidden = true;
+  return panel;
 }
 
 function sectionsOf(v: unknown): SectionDef[] {
@@ -206,6 +225,7 @@ export function normalizeWorkspace(raw: unknown): WorkspaceDoc {
     hidePatterns: unique(strings(raw.hidePatterns)),
     sections: sectionsOf(raw.sections),
     removed: unique(strings(raw.removed)),
+    autoPanels: raw.autoPanels !== false,
     prefs: {
       syncZoom: typeof prefs.syncZoom === "boolean" ? prefs.syncZoom : EMPTY_WORKSPACE.prefs.syncZoom,
       syncCursor: typeof prefs.syncCursor === "boolean" ? prefs.syncCursor : EMPTY_WORKSPACE.prefs.syncCursor,
@@ -417,6 +437,40 @@ export const ops = {
     ...d,
     removed: d.removed.filter((m) => !names.includes(m)),
   }),
+  /**
+   * Copy panel `id` (type, selector, settings) right after it as `newId`.
+   * An automatic panel must be materialized first.
+   */
+  duplicatePanel: (id: string, newId: string): WorkspaceOp => (d) => {
+    if (allPanelIds(d).has(newId)) return d;
+    let hit = false;
+    const sections = d.sections.map((s) => {
+      const at = s.panels.findIndex((p) => p.id === id);
+      if (at < 0) return s;
+      hit = true;
+      const src = s.panels[at]!;
+      const copy: Panel = { ...src, id: newId, settings: structuredClone(src.settings) };
+      delete copy.hidden;
+      const panels = [...s.panels];
+      panels.splice(at + 1, 0, copy);
+      return { ...s, panels };
+    });
+    return hit ? { ...d, sections } : d;
+  },
+  /** Hide a listed panel (it keeps its place, settings and claim) or show it again. */
+  setPanelHidden: (id: string, hidden: boolean): WorkspaceOp => (d) => {
+    const found = findPanel(d, id);
+    if (!found || !!found.panel.hidden === hidden) return d;
+    return mapPanel(d, id, (p) => {
+      const next = { ...p };
+      if (hidden) next.hidden = true;
+      else delete next.hidden;
+      return next;
+    });
+  },
+  /** Replace a panel's type, selector and settings at once (the card builder's "save"). */
+  replacePanel: (id: string, patch: Pick<Panel, "type" | "selector" | "settings">): WorkspaceOp => (d) =>
+    mapPanel(d, id, (p) => ({ ...p, type: patch.type, selector: patch.selector, settings: patch.settings })),
   setPanelSettings: (id: string, settings: Record<string, unknown>): WorkspaceOp => (d) =>
     mapPanel(d, id, (p) => ({ ...p, settings })),
   setPanelType: (id: string, type: CardType): WorkspaceOp => (d) =>
@@ -456,6 +510,8 @@ export const ops = {
     hidePatterns: d.hidePatterns.filter((p) => p !== pattern),
   }),
   setPrefs: (patch: Partial<WorkspacePrefs>): WorkspaceOp => (d) => ({ ...d, prefs: { ...d.prefs, ...patch } }),
+  /** Only the flag; turning it off from the UI goes through layout.ts `autoPanelsOp` (materializes first). */
+  setAutoPanels: (on: boolean): WorkspaceOp => (d) => (d.autoPanels === on ? d : { ...d, autoPanels: on }),
 
   // --- runs (comparisons) --------------------------------------------------
   /** Patch a comparison's run set (no-op on the project workspace). */
