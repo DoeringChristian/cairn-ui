@@ -295,6 +295,7 @@ export interface ArtifactVersionInfo {
   created_at: string;
   /** `latest` first, then the user aliases. */
   aliases: string[];
+  tags: string[];
   created_by_run: string | null;
   producer: ArtifactRunRef | null;
   consumer_count: number;
@@ -331,6 +332,8 @@ interface LineageNodeBase {
   id: string;
   label: string;
   degree: { in: number; out: number };
+  /** Produced/consumed edges in the whole repo (more than `degree`: there is more to expand). */
+  full_degree?: { in: number; out: number };
   group_key: string | null;
 }
 
