@@ -3,6 +3,10 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { LiveUpdatesProvider } from "./api/live-updates";
+import { setSeriesSizeHint } from "./api/client";
+import { qk } from "./api/query-keys";
+import { catalogueSizeHint } from "./api/series-batch";
+import type { SequenceMeta } from "./api/types";
 import App from "./App";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProjectLayout from "./pages/ProjectLayout";
@@ -31,6 +35,9 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Batched sequence reads size their requests by the run catalogues already loaded.
+setSeriesSizeHint(catalogueSizeHint((runId) => queryClient.getQueryData<{ sequences: SequenceMeta[] }>(qk.sequences(runId))));
 
 const router = createBrowserRouter([
   // Outside <App>'s Outlet on purpose: it must render usefully even when

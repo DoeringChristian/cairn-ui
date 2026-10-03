@@ -74,7 +74,11 @@ export function applyLocal(key: string, op: WorkspaceOp): void {
 /** Adopt a server document (a fetch or a 409) and replay the pending ops on it. */
 export function adoptServer(key: string, rev: number, payload: unknown): void {
   const s = workspaceState(key);
-  s.base = normalizeWorkspace(payload);
+  const base = normalizeWorkspace(payload);
+  // The document this tab already has (a refetch, or the cached copy a reload
+  // painted from): keep it, so nothing re-renders.
+  if (rev === s.rev && JSON.stringify(base) === JSON.stringify(s.base)) return;
+  s.base = base;
   s.rev = rev;
   s.doc = rebase(s.base, s.pending);
   saveJson(localStorage, storageKeys.workspace(key), { rev, payload: s.base });

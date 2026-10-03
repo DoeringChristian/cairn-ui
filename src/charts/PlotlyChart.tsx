@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-// @ts-expect-error - plotly.js-dist-min ships no types; the runtime API is plotly.js.
-import Plotly from "plotly.js-dist-min";
 
 import { readChartTheme, type ChartTheme } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
@@ -8,6 +6,27 @@ import { onPrintLayout } from "../lib/print-layout.ts";
 import { glContextEstimate } from "../lib/plot-utils/gl-budget.ts";
 import { applyViewOverrides, extractViewState, mergeRelayout, reconcileOwnView, type SharedView } from "../lib/plot-utils/view-overrides.ts";
 import { glBudget, glContextsIn, loseContexts, type GlRegistration } from "./gl-budget-manager.ts";
+
+// plotly.js-dist-min ships no types; the runtime API is plotly.js.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PlotlyApi = any;
+
+/**
+ * Plotly, once loaded. It is ~4.6 MB of script, so it loads on first use
+ * (the first plot drawn, or an export) rather than with the app: pages
+ * without a Plotly plot never parse it.
+ */
+let Plotly: PlotlyApi | null = null;
+let plotlyLoading: Promise<PlotlyApi> | null = null;
+
+/** Load Plotly (once); resolves to its API. */
+export function loadPlotly(): Promise<PlotlyApi> {
+  plotlyLoading ??= import(
+    // @ts-expect-error - no types (see PlotlyApi)
+    "plotly.js-dist-min"
+  ).then((m: { default: PlotlyApi }) => (Plotly = m.default));
+  return plotlyLoading;
+}
 
 export type PlotlyData = Array<Record<string, unknown>>;
 export type PlotlyLayout = Record<string, unknown>;
@@ -47,7 +66,7 @@ interface PlotlyDiv extends HTMLDivElement {
 function purgeAndRelease(el: PlotlyDiv, held: ReturnType<typeof glContextsIn> = []): void {
   const contexts = [...held, ...glContextsIn(el)];
   try {
-    Plotly.purge(el);
+    Plotly?.purge(el);
   } catch {
     // Already torn down.
   }
@@ -64,7 +83,7 @@ function purgeAndRelease(el: PlotlyDiv, held: ReturnType<typeof glContextsIn> = 
  * before this call.
  */
 async function snapshotPlot(el: PlotlyDiv): Promise<string | null> {
-  if (!el._fullLayout) return null;
+  if (!el._fullLayout || !Plotly) return null;
   try {
     let svg = String(await Promise.resolve(Plotly.Snapshot.toSVG(el)));
     // The app theme sets fonts to "inherit", which a standalone SVG resolves
@@ -235,9 +254,20 @@ export default function PlotlyChart({
   // Within a wheel event's dispatch (see the wheel watcher below).
   const inWheel = useRef(false);
 
+  // Draws wait for Plotly to load (the first plot of the page loads it).
+  const [plotlyReady, setPlotlyReady] = useState(Plotly != null);
+  useEffect(() => {
+    if (plotlyReady) return;
+    let live = true;
+    void loadPlotly().then(() => live && setPlotlyReady(true));
+    return () => {
+      live = false;
+    };
+  }, [plotlyReady]);
+
   draw.current = () => {
     const el = ref.current;
-    if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
+    if (!el || el.clientWidth === 0 || el.clientHeight === 0 || !Plotly) return;
     if (managedRef.current && !liveRef.current) return;
     if (dragging.current) {
       drawDeferred.current = true;
@@ -312,6 +342,7 @@ export default function PlotlyChart({
       if (el.clientWidth === 0 || el.clientHeight === 0) return;
       if (managedRef.current && !liveRef.current) return;
       // Not drawn yet (hidden at mount) or the last draw failed: draw afresh.
+      if (!Plotly) return;
       if (failedRef.current || !el.on) {
         draw.current();
         return;
@@ -469,7 +500,7 @@ export default function PlotlyChart({
 
   useEffect(() => {
     draw.current();
-  }, [data, layout, config, themed, interactive]);
+  }, [data, layout, config, themed, interactive, plotlyReady]);
 
   const paused = managed && glState !== "live";
   const snap = snapshot && snapshot.data === data ? snapshot.url : null;
@@ -517,4 +548,4 @@ export default function PlotlyChart({
   );
 }
 
-export { Plotly };
+

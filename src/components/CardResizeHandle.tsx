@@ -37,26 +37,19 @@ function snapToValidSpan(raw: number): number {
 }
 
 /**
- * Corner resize handle for cards. Drag to resize both width (column span)
- * and height simultaneously. ColSpan changes are broadcast to all sibling
- * cards in the same grid (section) via a custom DOM event.
+ * Follow the size changes a sibling card's resize handle broadcasts on the
+ * grid: every card adopts the new column span (never below its own minimum),
+ * and those in the resized card's row its height. `anchorRef` is the card
+ * root or an element inside it. Lazily mounted cards' placeholders follow
+ * too, so a card mounted later has the span its section was given.
  */
-export default function CardResizeHandle({
-  onHeightChange,
-  colSpan,
-  onColSpanChange,
-  gridCols = 6,
-  minHeight = 150,
-}: Props) {
-  const handleRef = useRef<HTMLDivElement>(null);
-  const colSpanCbRef = useRef(onColSpanChange);
-  colSpanCbRef.current = onColSpanChange;
-  const heightCbRef = useRef(onHeightChange);
-  heightCbRef.current = onHeightChange;
-
-  // Listen for colSpan/height changes broadcast by sibling CardResizeHandles.
+export function useGridSizeSync(
+  anchorRef: React.RefObject<HTMLElement>,
+  colSpanCbRef: React.MutableRefObject<(span: number) => void>,
+  heightCbRef: React.MutableRefObject<(h: number | undefined) => void>,
+): void {
   useEffect(() => {
-    const el = handleRef.current;
+    const el = anchorRef.current;
     if (!el) return;
     let grid = el.closest("[data-cairn-card]")?.parentElement;
     while (grid && getComputedStyle(grid).display === "contents") grid = grid.parentElement;
@@ -83,7 +76,30 @@ export default function CardResizeHandle({
       gridEl.removeEventListener("cairn:colSpanChange", onColSpan);
       gridEl.removeEventListener("cairn:heightChange", onHeight);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+}
+
+/**
+ * Corner resize handle for cards. Drag to resize both width (column span)
+ * and height simultaneously. ColSpan changes are broadcast to all sibling
+ * cards in the same grid (section) via a custom DOM event.
+ */
+export default function CardResizeHandle({
+  onHeightChange,
+  colSpan,
+  onColSpanChange,
+  gridCols = 6,
+  minHeight = 150,
+}: Props) {
+  const handleRef = useRef<HTMLDivElement>(null);
+  const colSpanCbRef = useRef(onColSpanChange);
+  colSpanCbRef.current = onColSpanChange;
+  const heightCbRef = useRef(onHeightChange);
+  heightCbRef.current = onHeightChange;
+
+  // Follow colSpan/height changes broadcast by sibling cards' handles.
+  useGridSizeSync(handleRef, colSpanCbRef, heightCbRef);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {

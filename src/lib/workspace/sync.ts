@@ -17,6 +17,8 @@ const REFETCH_AFTER_MS = 15_000;
 const MAX_CONFLICT_RETRIES = 5;
 
 const timers = new Map<string, number>();
+/** Fetches in flight, so views mounting together share one. */
+const fetching = new Map<string, Promise<void>>();
 const refs = new Map<string, WorkspaceRef>();
 
 /** Apply an op locally and schedule the write. */
@@ -45,6 +47,16 @@ export async function fetchWorkspace(ref: WorkspaceRef, { force = false } = {}):
   const key = refKey(ref);
   const s = workspaceState(key);
   if (!force && s.loaded && Date.now() - s.lastFetch < REFETCH_AFTER_MS) return;
+  const running = fetching.get(key);
+  if (running && !force) return running;
+  const p = fetchNow(ref, key, s).finally(() => {
+    if (fetching.get(key) === p) fetching.delete(key);
+  });
+  fetching.set(key, p);
+  return p;
+}
+
+async function fetchNow(ref: WorkspaceRef, key: string, s: ReturnType<typeof workspaceState>): Promise<void> {
   s.lastFetch = Date.now();
   try {
     const res = await api.workspaceDoc(ref);

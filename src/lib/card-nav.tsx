@@ -91,13 +91,7 @@ export function useCardNavEntry(
 ): { prev?: () => void; next?: () => void } {
   const nav = useContext(CardNavContext);
   const id = useContext(CardNavIdContext);
-  const openRef = useRef(open);
-  openRef.current = open;
-  const canRegister = !!nav && !!id && enabled && !!open;
-  useEffect(() => {
-    if (!canRegister) return;
-    return nav!.registerCard(id!, () => openRef.current?.());
-  }, [canRegister, nav, id]);
+  useCardNavRegistration(enabled ? open : undefined);
 
   const go = useCallback((target: string) => nav?.open(target), [nav]);
   if (!nav || !id || !modalOpen) return {};
@@ -106,4 +100,36 @@ export function useCardNavEntry(
     prev: prev ? () => go(prev) : undefined,
     next: next ? () => go(next) : undefined,
   };
+}
+
+/**
+ * Make the card being rendered a stop for ←/→: `open` opens its detail
+ * modal (undefined: not a stop). A lazily mounted card's placeholder
+ * registers one that mounts the card first.
+ */
+export function useCardNavRegistration(open: (() => void) | undefined): void {
+  const nav = useContext(CardNavContext);
+  const id = useContext(CardNavIdContext);
+  const openRef = useRef(open);
+  openRef.current = open;
+  const canRegister = !!nav && !!id && !!open;
+  useEffect(() => {
+    if (!canRegister) return;
+    return nav!.registerCard(id!, () => openRef.current?.());
+  }, [canRegister, nav, id]);
+}
+
+/** True while a card is being mounted to open its detail modal (workspace/LazyPanel). */
+export const OpenOnMountContext = createContext(false);
+
+/** For CardShell: open the detail modal once, on mount, when the card was mounted to open it. */
+export function useOpenOnMount(open: (() => void) | undefined): void {
+  const want = useContext(OpenOnMountContext);
+  const done = useRef(false);
+  useEffect(() => {
+    if (want && open && !done.current) {
+      done.current = true;
+      open();
+    }
+  }, [want, open]);
 }

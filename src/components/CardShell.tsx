@@ -8,7 +8,7 @@ import CardHeader from "./CardHeader";
 import CardResizeHandle from "./CardResizeHandle";
 import CardDetailModal from "./CardDetailModal";
 import CardErrorBoundary from "./card-kit/CardErrorBoundary";
-import { useCardNavEntry } from "../lib/card-nav";
+import { useCardNavEntry, useOpenOnMount } from "../lib/card-nav";
 import { useReportExporting } from "../lib/reports/export-context";
 import { CardSettingsSlotContext, PanelTitleContext } from "../lib/workspace/panel-actions";
 
@@ -108,6 +108,8 @@ export default function CardShell({
   const mutable = useContext(CardMutationContext);
   // ←/→ in the detail modal: close this card's modal, open the neighbour's.
   const nav = useCardNavEntry(onSettings, modalContent !== undefined && !collapsed, !!modalOpen);
+  // Mounted by ←/→ from a neighbour's modal (workspace/LazyPanel): open ours.
+  useOpenOnMount(modalContent !== undefined && !collapsed ? onSettings : undefined);
   const step = (go?: () => void) =>
     go &&
     (() => {

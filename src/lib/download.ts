@@ -88,7 +88,7 @@ export async function renderChartPng(container: HTMLElement, scale = 2): Promise
   const layers: { rect: DOMRect; source: CanvasImageSource }[] = [];
   const plots = Array.from(container.querySelectorAll<HTMLElement>(".js-plotly-plot"));
   if (plots.length > 0) {
-    const { Plotly } = await import("../charts/PlotlyChart");
+    const Plotly = await (await import("../charts/PlotlyChart")).loadPlotly();
     for (const plot of plots) {
       const url: string = await Plotly.toImage(plot, {
         format: "png",
@@ -155,7 +155,7 @@ export async function exportPlotlyChart(
     return;
   }
   const plot = plots[0]!;
-  const { Plotly } = await import("../charts/PlotlyChart");
+  const Plotly = await (await import("../charts/PlotlyChart")).loadPlotly();
   await Plotly.downloadImage(plot, {
     format: format === "jpg" ? "jpeg" : format === "pdf" ? "svg" : format,
     filename,

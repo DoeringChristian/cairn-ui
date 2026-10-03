@@ -12,6 +12,7 @@
 // `.catch`/error boundary ever sees it.
 
 import { seedRunCursor, seedRunEpoch } from "./live-updates-core";
+import { SeriesBatcher, type SeriesBatchResponse } from "./series-batch";
 
 function redirectToLogin(): void {
   if (typeof window === "undefined") return;
@@ -115,6 +116,21 @@ async function del_<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** Estimated points of a series; set by the app from the run catalogues it holds. */
+let seriesSize: (runId: string, name: string) => number = () => 0;
+export function setSeriesSizeHint(fn: (runId: string, name: string) => number): void {
+  seriesSize = fn;
+}
+
+const seriesBatcher = new SeriesBatcher({
+  fetchBatch: (runId, names) => {
+    const q = new URLSearchParams();
+    for (const n of names) q.append("name", n);
+    return get<SeriesBatchResponse>(`/api/runs/${runId}/series?${q.toString()}`);
+  },
+  size: (runId, name) => seriesSize(runId, name),
+});
+
 export const api = {
   health: () => get<import("./types").Health>("/api/health"),
   projects: () =>
@@ -151,10 +167,9 @@ export const api = {
     for (const s of res.sequences) if (s.object_type === "pickle") s.object_type = "artifact";
     return res;
   },
+  /** One series, read through the batcher: the series asked for in the same task share a request per run. */
   sequence: async (runId: string, name: string) => {
-    const res = await get<import("./types").SequenceResponse>(
-      `/api/runs/${runId}/sequences/${encodeURIComponent(name)}`,
-    );
+    const res = await seriesBatcher.load(runId, name);
     // A full read tells the live-updates poller how far this run's append
     // stream had got, so it can resume with deltas instead of having every
     // card re-download its whole sequence every two seconds.

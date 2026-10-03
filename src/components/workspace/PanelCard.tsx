@@ -8,6 +8,9 @@
  * - A panel none of whose metrics the bound runs log shows an empty state,
  *   so the layout holds still while flipping runs.
  *
+ * Cards mount when on or near the screen (LazyPanel); until then a
+ * placeholder of the card's size holds its place.
+ *
  * Settings: the card's key is `{runId: "ws:<workspace>", metricName: panel.id}`;
  * the enclosing workspace's settings store maps it to the panel's settings.
  */
@@ -15,6 +18,7 @@
 import { useContext, useMemo } from "react";
 import CardRenderer from "../CardRenderer";
 import CardHeader from "../CardHeader";
+import LazyPanel from "./LazyPanel";
 import { CardMutationContext, useCardOverridesReader, type CardSettingsKey } from "../../lib/card-settings";
 import { isMultiRunCardType, minRunsFor, type ComparisonSeriesRef } from "../../lib/comparisons/types";
 import type { RenderedPanel } from "../../lib/workspace/layout";
@@ -55,14 +59,16 @@ export default function PanelCard({ rendered, runIds, settingsKey, onRemove, aut
       );
     }
     return (
-      <CardRenderer
-        kind="multi-run"
-        cardType={panel.type}
-        runIds={visible}
-        settingsKey={settingsKey}
-        onRemove={onRemove}
-        autoOpenSettings={autoOpenSettings}
-      />
+      <LazyPanel type={panel.type} settingsKey={settingsKey} title={label} eager={autoOpenSettings}>
+        <CardRenderer
+          kind="multi-run"
+          cardType={panel.type}
+          runIds={visible}
+          settingsKey={settingsKey}
+          onRemove={onRemove}
+          autoOpenSettings={autoOpenSettings}
+        />
+      </LazyPanel>
     );
   }
 
@@ -96,7 +102,9 @@ export default function PanelCard({ rendered, runIds, settingsKey, onRemove, aut
     // The single-run, single-metric scalar with one point renders as a value.
     count: single ? first.count : 0,
   };
+  const valueCard = panel.type === "scalar" && seed.count === 1;
   return (
+    <LazyPanel type={panel.type} settingsKey={settingsKey} title={label} valueCard={valueCard} eager={autoOpenSettings}>
     <PanelTitleContext.Provider value={claimedMetric(panel) == null ? label : null}>
     <CardRenderer
       runId={primary.runId}
@@ -108,6 +116,7 @@ export default function PanelCard({ rendered, runIds, settingsKey, onRemove, aut
       autoOpenSettings={autoOpenSettings}
     />
     </PanelTitleContext.Provider>
+    </LazyPanel>
   );
 }
 
