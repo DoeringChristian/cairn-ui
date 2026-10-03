@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { TextSettings } from "./cards-settings/text";
@@ -11,8 +11,9 @@ import CardShell from "./CardShell";
 import TextSettingsPanel from "./settings-panels/TextSettingsPanel";
 import StepSlider from "./StepSlider";
 import GalleryView from "./media/GalleryView";
-import { artifactTextQuery } from "../lib/media/artifact-text";
+import { artifactTextQuery } from "../lib/viewers/source";
 import { isGalleryPoint } from "../lib/media/gallery";
+import TextViewer, { TextView } from "./viewers/TextViewer";
 
 interface Props {
   runId: string;
@@ -20,22 +21,6 @@ interface Props {
   settingsKeyOverride?: CardSettingsKey;
   onRemove?: () => void;
   autoOpenSettings?: boolean;
-}
-
-const FONT_SIZE_CLASS: Record<TextSettings["fontSize"], string> = {
-  xs: "text-xs",
-  sm: "text-sm",
-  base: "text-base",
-};
-
-/**
- * One text artifact. The previous step's text stays while the next one
- * loads (no empty flash).
- */
-function TextBody({ hash, className }: { hash: string; className: string }) {
-  const q = useQuery({ ...artifactTextQuery(hash), placeholderData: keepPreviousData });
-  const content = q.isError && !q.isPlaceholderData ? `<fetch error: ${(q.error as Error).message}>` : q.data ?? "";
-  return <pre className={className}>{content}</pre>;
 }
 
 export default function TextViewerCard({ runId, metric, settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
@@ -69,11 +54,7 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
       ? `step ${current?.step ?? "\u2014"}`
       : `${metric.count} pts`;
 
-  const wrapClass = settings.wordWrap
-    ? "whitespace-pre-wrap break-all"
-    : "whitespace-pre overflow-x-auto";
-
-  const textClass = `mono overflow-auto ${wrapClass} rounded bg-bg p-3 ${FONT_SIZE_CLASS[settings.fontSize]} text-fg-muted`;
+  const textView = { wrap: settings.wordWrap, fontSize: settings.fontSize };
 
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -86,14 +67,14 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
             prefetchItem={(p) => qc.prefetchQuery(artifactTextQuery(p.artifact_hash!))}
             peekItem={(p) => qc.getQueryData(artifactTextQuery(p.artifact_hash!).queryKey) !== undefined}
             renderItem={(item) => (
-              <TextBody hash={item.artifact_hash!} className={`${textClass} max-h-64`} />
+              <TextViewer source={{ hash: item.artifact_hash!, size: item.artifact_size ?? null }} {...textView} className="max-h-64" />
             )}
           />
         </div>
       ) : current?.artifact_hash ? (
-        <TextBody hash={current.artifact_hash} className={`${textClass} flex-1 min-h-0`} />
+        <TextViewer source={{ hash: current.artifact_hash, size: current.artifact_size ?? null }} {...textView} className="flex-1 min-h-0" />
       ) : (
-        <pre className={`${textClass} flex-1 min-h-0`} />
+        <TextView text="" {...textView} className="flex-1 min-h-0" />
       )}
       <StepSlider
         points={points}

@@ -1,25 +1,36 @@
 import { useState, type ReactNode } from "react";
 
 /**
- * A collapsible JSON tree. Objects and arrays fold (open to `openDepth`);
- * leaves render typed (strings quoted, numbers tabular). `renderKeyActions`
- * adds controls after a top-level key (the Metadata tab's edit button).
+ * The one collapsible JSON tree: an artifact's metadata, a run's config, a
+ * JSON file. Objects and arrays fold (open to `openDepth`); leaves render
+ * typed (strings quoted, numbers tabular). `renderKeyActions` adds controls
+ * after a top-level key (the Metadata tab's edit button).
  */
 export default function JsonTree({
   value,
   openDepth = 2,
   renderKeyActions,
+  emptyText = "Empty.",
 }: {
-  value: Record<string, unknown>;
+  value: unknown;
   openDepth?: number;
   renderKeyActions?: (key: string) => ReactNode;
+  /** Shown for an empty object or list. */
+  emptyText?: string;
 }) {
-  const keys = Object.keys(value);
-  if (keys.length === 0) return <p className="text-sm text-fg-subtle">No metadata.</p>;
+  if (typeof value !== "object" || value === null) {
+    return (
+      <div className="mono text-[12.5px] leading-6" data-viewer="json">
+        <Leaf value={value} />
+      </div>
+    );
+  }
+  const entries = Object.entries(value);
+  if (entries.length === 0) return <p className="text-sm text-fg-subtle">{emptyText}</p>;
   return (
-    <ul className="mono text-[12.5px] leading-6" role="tree">
-      {keys.map((k) => (
-        <Node key={k} name={k} value={value[k]} depth={0} openDepth={openDepth} actions={renderKeyActions?.(k)} />
+    <ul className="mono text-[12.5px] leading-6" role="tree" data-viewer="json">
+      {entries.map(([k, v]) => (
+        <Node key={k} name={k} value={v} depth={0} openDepth={openDepth} actions={renderKeyActions?.(k)} />
       ))}
     </ul>
   );

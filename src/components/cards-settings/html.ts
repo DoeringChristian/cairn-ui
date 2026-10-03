@@ -6,6 +6,10 @@ import {
   type SteppedMediaSettings,
 } from "./stepped-media.ts";
 
+/** The iframe's height bounds (auto height and the fixed-height slider). */
+export const HTML_MIN_HEIGHT = 80;
+export const HTML_MAX_HEIGHT = 2000;
+
 export interface HtmlSettings extends SteppedMediaSettings {
   /** Auto-size the iframe to its content height via the resize shim. */
   autoHeight: boolean;

@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useCanEdit, useVersionEdits } from "../../api/artifact-hooks";
 import { errorText } from "../../api/client";
 import type { ArtifactVersionInfo } from "../../api/types";
-import CodeBlock from "../../components/artifacts/CodeBlock";
-import JsonTree from "../../components/artifacts/JsonTree";
+import CodeBlock from "../../components/viewers/CodeBlock";
+import JsonTree from "../../components/viewers/JsonTree";
 
 /** A typed value from the editor: JSON when it parses, else the text as a string. */
 export function parseValue(text: string): unknown {
@@ -104,6 +104,7 @@ export default function MetadataTab({ version }: { version: ArtifactVersionInfo 
         ) : (
           <JsonTree
             value={meta}
+            emptyText="No metadata."
             renderKeyActions={
               canEdit
                 ? (key) => (

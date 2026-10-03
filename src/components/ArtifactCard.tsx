@@ -6,7 +6,6 @@
  */
 
 import { useMemo, useRef, useState } from "react";
-import { isBrowserDisplayable } from "../lib/artifact-format";
 import { useSequence, useRunOutputArtifacts } from "../api/hooks";
 import { api } from "../api/client";
 import { formatBytes, safeJsonParse } from "../lib/format";
@@ -18,7 +17,9 @@ import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import ArtifactSettingsPanel from "./settings-panels/ArtifactSettingsPanel";
 import { useStepSlider, resolveAtStep } from "./card-kit";
-import SettledImg from "./media/SettledImg";
+import { viewerKind } from "../lib/viewers/kind";
+import { hashSource } from "../lib/viewers/source";
+import ContentViewer from "./viewers/ContentViewer";
 
 interface Props {
   runId: string;
@@ -36,6 +37,8 @@ interface ArtifactPoint {
   artifact_size?: number | null;
   artifact_metadata?: string | null;
   object_type: string;
+  /** A one-file version's file name. */
+  filename?: string;
   /** The logged version this point stands for; null for a series point. */
   version: ArtifactVersionInfo | null;
 }
@@ -103,7 +106,8 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
           artifact_mime: single?.mime ?? null,
           artifact_size: single ? single.size : v.size,
           artifact_metadata: JSON.stringify({ ...(single?.meta ?? {}), ...v.metadata }),
-          object_type: "artifact",
+          object_type: single?.object_type ?? "artifact",
+          filename: single ? single.path.slice(single.path.lastIndexOf("/") + 1) : undefined,
           version: v,
         };
       })
@@ -134,6 +138,20 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
       ? ".pkl"
       : "";
   const downloadName = current ? artifactFilename(metric.name, current.step, null, ext) : "";
+  // The artifact in the viewer every surface shares (an image zooms, a table sorts, …).
+  const source = useMemo(
+    () => current?.artifact_hash
+      ? hashSource(current.artifact_hash, {
+          name: current.filename ?? meta.filename ?? downloadName,
+          mime: mime || null,
+          size: current.artifact_size ?? meta.size_bytes ?? null,
+          objectType: current.object_type === "artifact" ? null : current.object_type,
+          meta,
+        })
+      : null,
+    [current, meta, mime, downloadName],
+  );
+  const kind = source ? viewerKind({ path: source.name, mime: source.mime, object_type: source.objectType }) : "binary";
 
   const subtitle = points.length > 0
     ? `${current?.version ? `${current.version.ref} · ` : ""}step ${current?.step ?? 0} (${safeIdx + 1}/${points.length})`
@@ -150,27 +168,13 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
         </div>
       ) : current?.artifact_hash ? (
         <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-auto">
-          {/* Image preview for image MIME types */}
-          {isBrowserDisplayable(mime) && (
-            <div className="flex justify-center items-center rounded bg-bg p-2 min-h-[6rem]">
-              <SettledImg
-                src={api.artifactUrl(current.artifact_hash!)}
-                alt={`${metric.name} @ step ${current.step}`}
-                className="max-w-full max-h-full object-contain"
-                style={{ maxHeight: "320px" }}
-              />
+          {kind !== "binary" && (
+            <div className={kind === "pickle" || kind === "audio" ? "" : "min-h-[12rem] flex-1"}>
+              <ContentViewer key={current.artifact_hash} source={source!} kind={kind} fill={kind !== "pickle" && kind !== "audio"} />
             </div>
           )}
           <div className="rounded border border-border bg-bg p-3 text-xs">
             <div className="flex flex-col gap-1">
-              {meta.python_type && (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-fg-subtle">Type:</span>
-                  <span className="mono text-fg">
-                    {meta.python_module && meta.python_module !== "builtins" ? `${meta.python_module}.` : ""}{meta.python_type}
-                  </span>
-                </div>
-              )}
               {meta.size_bytes != null && (
                 <div className="flex items-baseline gap-2">
                   <span className="text-fg-subtle">Size:</span>
@@ -187,8 +191,8 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
                 <span className="text-fg-subtle">Hash:</span>
                 <span className="mono text-fg-muted">{current.artifact_hash!.slice(0, 16)}...</span>
               </div>
-              {/* Show any extra metadata keys */}
-              {Object.entries(meta).filter(([k]) => !["filename", "size_bytes", "mime_type", "python_type", "python_module"].includes(k)).map(([k, v]) => (
+              {/* Any other metadata keys (a pickle's are in its viewer). */}
+              {kind !== "pickle" && Object.entries(meta).filter(([k]) => !["filename", "size_bytes", "mime_type", "python_type", "python_module"].includes(k)).map(([k, v]) => (
                 <div key={k} className="flex items-baseline gap-2">
                   <span className="text-fg-subtle">{k}:</span>
                   <span className="mono text-fg">{String(v)}</span>

@@ -3,8 +3,7 @@ import assert from "node:assert/strict";
 import { allDirPaths, breadcrumbs, buildFileTree, findNode } from "./file-tree.ts";
 import { diffFiles, diffMetadata, flattenMetadata, jsonEqual } from "./version-diff.ts";
 import { defaultDownloadDir, usageSnippets, versionRef } from "./usage.ts";
-import { csvDelimiter, parseCsv, prettyJson, previewKind } from "./preview.ts";
-import { aliasError, explorerPath, isRemovableAlias, parseVersionSegment, tagError } from "./refs.ts";
+import { aliasError, explorerPath, isBrowsableUri, isRemovableAlias, parseVersionSegment, tagError } from "./refs.ts";
 
 const f = (path: string, size: number, digest: string | null = `d-${path}`, uri: string | null = null) => ({
   path, size, digest, uri, mime: null, object_type: null, etag: null,
@@ -109,36 +108,6 @@ test("refs from another project are qualified", () => {
   assert.equal(defaultDownloadDir(v), "./artifacts/cifar10-v3/");
 });
 
-// ---- previews ---------------------------------------------------------------
-
-test("previewKind by object type, mime and extension", () => {
-  const k = (path: string, mime: string | null = null, object_type: string | null = null, digest: string | null = "h") =>
-    previewKind({ path, mime, object_type, digest });
-  assert.equal(k("a.bin", null, null, null), "reference");
-  assert.equal(k("m.pkl", "application/octet-stream", "pickle"), "pickle");
-  assert.equal(k("x.png"), "image");
-  assert.equal(k("x", "image/jpeg"), "image");
-  assert.equal(k("README.md"), "markdown");
-  assert.equal(k("c.json"), "json");
-  assert.equal(k("t.csv"), "csv");
-  assert.equal(k("t.tsv"), "csv");
-  assert.equal(k("run.log"), "text");
-  assert.equal(k("x", "text/plain"), "text");
-  assert.equal(k("w.bin", "application/octet-stream"), "binary");
-});
-
-test("parseCsv: quotes, escapes, newlines in fields, CRLF, row cap", () => {
-  const { rows, truncated } = parseCsv('a,b\r\n"x, y","he said ""hi"""\n"multi\nline",2\n');
-  assert.deepEqual(rows, [["a", "b"], ["x, y", 'he said "hi"'], ["multi\nline", "2"]]);
-  assert.equal(truncated, false);
-  const capped = parseCsv("1\n2\n3\n4\n", { maxRows: 2 });
-  assert.deepEqual(capped.rows, [["1"], ["2"]]);
-  assert.equal(capped.truncated, true);
-  assert.deepEqual(parseCsv("a\tb\n1\t2", { delimiter: csvDelimiter("x.tsv") }).rows, [["a", "b"], ["1", "2"]]);
-  assert.equal(prettyJson('{"a":1}'), '{\n  "a": 1\n}');
-  assert.equal(prettyJson("{"), null);
-});
-
 // ---- refs -------------------------------------------------------------------
 
 test("explorer paths and alias rules", () => {
@@ -155,4 +124,9 @@ test("explorer paths and alias rules", () => {
   assert.ok(tagError(" "));
   assert.equal(isRemovableAlias("latest"), false);
   assert.equal(isRemovableAlias("best"), true);
+});
+
+test("only http(s) URIs are links", () => {
+  assert.equal(isBrowsableUri("https://x/y"), true);
+  assert.equal(isBrowsableUri("s3://b/k"), false);
 });

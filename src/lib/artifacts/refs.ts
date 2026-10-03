@@ -60,3 +60,8 @@ export function tagError(tag: string): string | null {
 export function isRemovableAlias(alias: string): boolean {
   return !RESERVED_ALIAS.test(alias);
 }
+
+/** An external reference's URI is a link only when a browser can open it. */
+export function isBrowsableUri(uri: string): boolean {
+  return /^https?:\/\//i.test(uri);
+}

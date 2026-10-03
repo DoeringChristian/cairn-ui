@@ -253,6 +253,7 @@ export default function ZoomSplitPane({
         if (interactive) zoomRef.current?.setTransform(0, 0, 1, 0);
       }}
       className="cairn-checkerboard relative h-full w-full overflow-hidden outline-none focus-visible:ring-1 focus-visible:ring-accent"
+      data-zoom-pane={noun}
       title={compare ? `Drag the divider; ← / → flip to the reference / the ${noun}` : undefined}
     >
       <TransformWrapper

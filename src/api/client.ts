@@ -417,13 +417,6 @@ export const api = {
   /** One uploaded entry's bytes, served with the entry's mime type (Range aware). */
   artifactVersionFileUrl: (versionId: string, path: string) =>
     `/api/artifact-versions/${versionId}/file?path=${encodeURIComponent(path)}`,
-  /** The first `bytes` of an entry as text (a Range request). */
-  artifactVersionFileText: async (versionId: string, path: string, bytes: number) => {
-    const url = `/api/artifact-versions/${versionId}/file?path=${encodeURIComponent(path)}`;
-    const res = await checkOk(await fetch(url, { headers: { Range: `bytes=0-${bytes - 1}` } }), url);
-    const buf = new Uint8Array(await res.arrayBuffer());
-    return new TextDecoder("utf-8", { fatal: false }).decode(buf.subarray(0, bytes));
-  },
   /** Every uploaded entry as `<name>-v<N>.zip` (references are left out). */
   artifactVersionDownloadUrl: (versionId: string) => `/api/artifact-versions/${versionId}/download`,
   artifactVersionConsumers: (versionId: string) =>

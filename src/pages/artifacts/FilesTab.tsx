@@ -1,17 +1,16 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useArtifactFileText, useArtifactVersionFiles } from "../../api/artifact-hooks";
+import { useArtifactVersionFiles } from "../../api/artifact-hooks";
 import { api, errorText } from "../../api/client";
 import type { ArtifactEntryInfo, ArtifactVersionInfo } from "../../api/types";
-import CodeBlock from "../../components/artifacts/CodeBlock";
 import CopyButton from "../../components/artifacts/CopyButton";
-import Markdown from "../../lib/markdown";
-import { isBrowsableUri } from "../../lib/artifact-manifest";
+import ContentViewer from "../../components/viewers/ContentViewer";
 import { breadcrumbs, buildFileTree, findNode, type FileTreeDir, type FileTreeNode } from "../../lib/artifacts/file-tree";
-import { csvDelimiter, parseCsv, PREVIEW_BYTES, prettyJson, previewKind } from "../../lib/artifacts/preview";
+import { isBrowsableUri } from "../../lib/artifacts/refs";
 import { py } from "../../lib/artifacts/usage";
 import { formatBytes } from "../../lib/format";
-import { langFromPath } from "../../lib/syntax-highlight";
+import { kindIcon, viewerKind } from "../../lib/viewers/kind";
+import { entrySource } from "../../lib/viewers/source";
 
 type Node = FileTreeNode<ArtifactEntryInfo>;
 type Dir = FileTreeDir<ArtifactEntryInfo>;
@@ -148,21 +147,7 @@ function TreeView({ root, selected, onSelect }: { root: Dir; selected: string; o
 }
 
 function fileIcon(e: ArtifactEntryInfo): string {
-  switch (previewKind(e)) {
-    case "image":
-      return "fa-image";
-    case "markdown":
-    case "text":
-      return "fa-file-lines";
-    case "json":
-      return "fa-file-code";
-    case "csv":
-      return "fa-table";
-    case "pickle":
-      return "fa-box";
-    default:
-      return "fa-file";
-  }
+  return kindIcon(viewerKind({ path: e.path, mime: e.mime, object_type: e.object_type, digest: e.digest }));
 }
 
 function DirListing({ dir, onSelect }: { dir: Dir; onSelect: (p: string) => void }) {
@@ -205,7 +190,6 @@ function DirListing({ dir, onSelect }: { dir: Dir; onSelect: (p: string) => void
 }
 
 function FileDetail({ version, entry }: { version: ArtifactVersionInfo; entry: ArtifactEntryInfo }) {
-  const kind = previewKind(entry);
   const url = api.artifactVersionFileUrl(version.id, entry.path);
   const name = entry.path.slice(entry.path.lastIndexOf("/") + 1);
   return (
@@ -260,147 +244,21 @@ function FileDetail({ version, entry }: { version: ArtifactVersionInfo; entry: A
           )}
         </dl>
       </div>
-      <Preview version={version} entry={entry} kind={kind} url={url} />
-    </div>
-  );
-}
-
-function Preview({
-  version,
-  entry,
-  kind,
-  url,
-}: {
-  version: ArtifactVersionInfo;
-  entry: ArtifactEntryInfo;
-  kind: ReturnType<typeof previewKind>;
-  url: string;
-}) {
-  const textual = kind === "markdown" || kind === "json" || kind === "csv" || kind === "text";
-  const text = useArtifactFileText(version.id, entry.path, PREVIEW_BYTES, textual && (entry.size ?? 1) > 0);
-  const cut = (entry.size ?? 0) > PREVIEW_BYTES;
-  const truncatedNote = cut && (
-    <p className="text-xs text-fg-muted">
-      Showing the first {formatBytes(PREVIEW_BYTES)} of {formatBytes(entry.size ?? 0)}; download for the rest.
-    </p>
-  );
-
-  if (kind === "reference")
-    return (
-      <div className="card px-4 py-3 text-sm text-fg-muted" data-testid="preview-reference">
-        This entry is a reference: cairn records its URI{entry.size != null ? " and size" : ""} but does not store its
-        bytes. <code className="mono">art.download()</code> copies it when cairn can read the URI (a local path,{" "}
-        <code className="mono">file://</code>, or an fsspec filesystem).
-      </div>
-    );
-  if (kind === "image")
-    return (
-      <div className="card cairn-checkerboard flex items-center justify-center overflow-auto p-3" data-testid="preview-image">
-        <img src={url} alt={entry.path} className="max-h-[60vh] max-w-full object-contain" />
-      </div>
-    );
-  if (kind === "pickle") {
-    const m = entry.meta as Record<string, unknown>;
-    return (
-      <div className="card flex flex-col gap-2 px-4 py-3 text-sm" data-testid="preview-pickle">
-        <p>
-          A pickled Python object
-          {typeof m.python_type === "string" && (
-            <>
-              {" "}
-              of type <code className="mono">{String(m.python_module ?? "")}.{m.python_type}</code>
-            </>
-          )}
-          . Browsers cannot unpickle it; load it in Python:
-        </p>
-        <CodeBlock code={`value = art.get(${py(entry.path)})`} />
-        {Object.keys(m).length > 0 && (
-          <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-0.5 text-xs">
-            {Object.entries(m).map(([k, v]) => (
-              <div key={k} className="contents">
-                <dt className="text-fg-muted">{k}</dt>
-                <dd className="mono break-all">{typeof v === "string" ? v : JSON.stringify(v)}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-      </div>
-    );
-  }
-  if (kind === "binary")
-    return (
-      <div className="card px-4 py-3 text-sm text-fg-muted" data-testid="preview-binary">
-        No preview for this file type. Download it, or read it in Python with{" "}
-        <code className="mono">art.open({py(entry.path)}, "rb")</code>.
-      </div>
-    );
-  if ((entry.size ?? 1) === 0) return <p className="text-sm text-fg-muted">Empty file.</p>;
-  if (text.isLoading) return <div className="h-24 motion-safe:animate-pulse rounded bg-bg-hover" />;
-  if (text.isError) return <p className="text-sm text-status-failed">{errorText(text.error)}</p>;
-  const body = text.data ?? "";
-  if (kind === "markdown")
-    return (
-      <div className="card px-5 py-4" data-testid="preview-markdown">
-        {truncatedNote}
-        <div className="text-sm">
-          <Markdown>{body}</Markdown>
+      {entry.digest === null ? (
+        <div className="card px-4 py-3 text-sm text-fg-muted" data-testid="preview-reference">
+          This entry is a reference: cairn records its URI{entry.size != null ? " and size" : ""} but does not store its
+          bytes. <code className="mono">art.download()</code> copies it when cairn can read the URI (a local path,{" "}
+          <code className="mono">file://</code>, or an fsspec filesystem).
         </div>
-      </div>
-    );
-  if (kind === "json") {
-    const pretty = cut ? null : prettyJson(body);
-    return (
-      <div className="flex flex-col gap-1" data-testid="preview-json">
-        {truncatedNote}
-        <CodeBlock code={pretty ?? body} lang="json" />
-      </div>
-    );
-  }
-  if (kind === "csv") {
-    // A cut file ends mid-row: drop the partial last line.
-    const usable = cut ? body.slice(0, body.lastIndexOf("\n") + 1) : body;
-    const { rows, truncated } = parseCsv(usable, { delimiter: csvDelimiter(entry.path), maxRows: 501 });
-    const [head, ...rest] = rows;
-    return (
-      <div className="flex flex-col gap-1" data-testid="preview-csv">
-        {(truncatedNote || truncated) && (
-          <p className="text-xs text-fg-muted">Showing the first {rest.length} rows; download for the rest.</p>
-        )}
-        <div className="max-h-[60vh] overflow-auto rounded-lg border border-border">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-bg-elevated text-left">
-              <tr>
-                {(head ?? []).map((h, i) => (
-                  <th key={i} className="mono whitespace-nowrap border-b border-border px-2 py-1.5 font-semibold">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rest.map((r, i) => (
-                <tr key={i} className="border-t border-border-subtle">
-                  {r.map((c, j) => (
-                    <td key={j} className="mono num whitespace-nowrap px-2 py-1">
-                      {c}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-  const lang = langFromPath(entry.path);
-  return (
-    <div className="flex flex-col gap-1" data-testid="preview-text">
-      {truncatedNote}
-      {lang && body.length < 100_000 ? (
-        <CodeBlock code={body} lang={lang} />
+      ) : (entry.size ?? 1) === 0 ? (
+        <p className="text-sm text-fg-muted">Empty file.</p>
       ) : (
-        <pre className="card mono max-h-[60vh] overflow-auto whitespace-pre-wrap px-3 py-2 text-xs">{body}</pre>
+        <div data-testid="file-preview">
+          <ContentViewer
+            source={entrySource(version.id, entry)}
+            loadSnippet={entry.object_type || /\.(pkl|pickle)$/i.test(entry.path) ? `value = art.get(${py(entry.path)})` : `art.open(${py(entry.path)}, "rb")`}
+          />
+        </div>
       )}
     </div>
   );

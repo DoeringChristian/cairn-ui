@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extensionOf, isTextKind, kindIcon, tableFormat, viewerKind } from "./kind.ts";
+import { extensionOf, isTextKind, kindIcon, npzSceneKind, tableFormat, viewerKind } from "./kind.ts";
 import { csvToTable, csvValue, isPlotlyFigure, jsonlToTable, parseCsv, prettyJson, recordsToTable } from "./table-source.ts";
 import { audioPeaks, channelLabel } from "./audio-peaks.ts";
 
@@ -127,4 +127,11 @@ test("audioPeaks: max |sample| per bin over every channel", () => {
   assert.equal(channelLabel(1), "mono");
   assert.equal(channelLabel(2), "stereo");
   assert.equal(channelLabel(6), "6ch");
+});
+
+test("npzSceneKind by member names", () => {
+  assert.equal(npzSceneKind(["positions", "faces", "normals"]), "mesh");
+  assert.equal(npzSceneKind(["points", "values_t"]), "pointcloud");
+  assert.equal(npzSceneKind(["mins", "maxs", "depth"]), "boxes3d");
+  assert.equal(npzSceneKind(["weights", "bias"]), null);
 });

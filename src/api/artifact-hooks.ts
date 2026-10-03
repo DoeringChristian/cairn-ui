@@ -81,15 +81,6 @@ export function useArtifactVersionConsumers(versionId: string | null | undefined
   });
 }
 
-/** The first `bytes` of an entry as text (immutable). */
-export function useArtifactFileText(versionId: string, path: string, bytes: number, enabled = true) {
-  return useQuery({
-    queryKey: qk.artifactFileText(versionId, path),
-    queryFn: () => api.artifactVersionFileText(versionId, path, bytes),
-    enabled,
-    staleTime: Infinity,
-  });
-}
 
 /** Alias / tag / description / metadata edits of one version; each resolves to the updated version. */
 export function useVersionEdits(versionId: string) {
@@ -134,13 +125,5 @@ export function useUpdateArtifactFamily(familyId: string) {
   return useMutation({
     mutationFn: (description: string) => api.updateArtifactFamily(familyId, { description }),
     onSuccess: () => invalidateArtifacts(qc),
-  });
-}
-
-export function useProjectLineage(projectId: string, familyId?: string | null) {
-  return useQuery({
-    queryKey: qk.lineage(projectId, familyId),
-    queryFn: () => api.lineage(projectId, familyId),
-    enabled: !!projectId,
   });
 }

@@ -11,7 +11,7 @@ import { errorText } from "../../api/client";
 import type { ArtifactFamilyDetail, ArtifactVersionInfo, RunStatus } from "../../api/types";
 import CopyButton from "../../components/artifacts/CopyButton";
 import RunStatusBadge from "../../components/RunStatusBadge";
-import CodeBlock from "../../components/artifacts/CodeBlock";
+import CodeBlock from "../../components/viewers/CodeBlock";
 import {
   AliasesEditor,
   DeleteFamilyDialog,

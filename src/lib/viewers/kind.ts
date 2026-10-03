@@ -144,3 +144,12 @@ export function kindIcon(kind: ViewerKind): string {
       return "fa-file";
   }
 }
+
+/** Which 3D viewer an `.npz` archive's members are laid out for (the 3D handlers' layouts), if any. */
+export function npzSceneKind(members: readonly string[]): "mesh" | "pointcloud" | "boxes3d" | null {
+  const has = new Set(members);
+  if (has.has("positions") && has.has("faces")) return "mesh";
+  if (has.has("points")) return "pointcloud";
+  if (has.has("mins") && has.has("maxs")) return "boxes3d";
+  return null;
+}

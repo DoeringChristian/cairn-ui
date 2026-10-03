@@ -10,6 +10,9 @@ const SHIKI_LANGS = [
   "markdown",
   "ini",
   "bash",
+  "html",
+  "css",
+  "diff",
 ] as const;
 
 let highlighterPromise: Promise<Highlighter> | null = null;
@@ -45,6 +48,12 @@ export function langFromPath(path: string): string | null {
     cfg: "ini",
     sh: "bash",
     bash: "bash",
+    html: "html",
+    htm: "html",
+    css: "css",
+    diff: "diff",
+    patch: "diff",
+    jsonl: "json",
   };
   return map[ext] ?? null;
 }

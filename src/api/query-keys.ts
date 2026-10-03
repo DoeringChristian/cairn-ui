@@ -21,12 +21,13 @@ export const qk = {
   logs: (runId: string, opts: unknown) => ["logs", runId, opts] as const,
   sourceTree: (runId: string) => ["source-tree", runId] as const,
   sourceFile: (runId: string, path: string | null) => ["source-file", runId, path] as const,
-  highlight: (selected: string | null, content: string | undefined) => ["highlight", selected, content] as const,
   plotlySource: (sourceHash: string | null | undefined) => ["plotly-source", sourceHash] as const,
   /** A gallery point's manifest (lib/media/gallery.ts); content addressed, so never stale. */
   gallery: (hash: string | null | undefined) => ["gallery", hash] as const,
   /** An artifact's bytes as text (markdown, HTML); content addressed, so never stale. */
   artifactText: (hash: string | null | undefined) => ["artifact-text", hash] as const,
+  /** The first `bytes` of an artifact as text (a file too big to show whole). */
+  artifactTextHead: (hash: string, bytes: number) => ["artifact-text", hash, "head", bytes] as const,
   // Artifact registry: every key starts with "artifact-" or "lineage" (see
   // invalidateArtifacts in api/artifact-hooks.ts).
   artifactFamilies: (projectId: string) => ["artifact-families", projectId] as const,
@@ -34,7 +35,6 @@ export const qk = {
   artifactVersion: (versionId: string) => ["artifact-version", versionId] as const,
   artifactVersionFiles: (versionId: string) => ["artifact-version-files", versionId] as const,
   artifactVersionConsumers: (versionId: string) => ["artifact-version-consumers", versionId] as const,
-  artifactFileText: (versionId: string, path: string) => ["artifact-file-text", versionId, path] as const,
   runInputArtifacts: (runId: string) => ["run-input-artifacts", runId] as const,
   runOutputArtifacts: (runId: string) => ["run-output-artifacts", runId] as const,
   lineage: (projectId: string, familyId?: string | null) => ["lineage", projectId, familyId ?? null] as const,

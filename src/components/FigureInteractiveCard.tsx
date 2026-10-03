@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
-import { keepPreviousData, useQuery, useQueries, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import SettledImg from "./media/SettledImg";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
+import { hashSource } from "../lib/viewers/source";
 import { safeJsonParse } from "../lib/format";
 import { downloadArtifact, artifactFilename, exportPlotlyChart, safeName } from "../lib/download";
 import { cardOverridesStorageKey, resolveCardHeight, type CardSettingsKey } from "../lib/card-settings";
@@ -16,25 +16,23 @@ import type { SequenceMeta, SequencePoint, SequenceResponse } from "../api/types
 import GalleryView, { useSettledGalleries } from "./media/GalleryView";
 import type { GalleryFrame } from "../lib/media/gallery-query";
 import { isGalleryPoint } from "../lib/media/gallery";
-import { decodeImage, peekDecoded } from "../lib/media/decoded-image";
 import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid } from "./card-kit";
 import {
   instanceDefaults,
   type FigureSettings,
 } from "./cards-settings/figure";
 import { checkFigureMergeable, mergeFigures, type FigureMergeEntry } from "../lib/plot-utils/figure-merge";
-import {
-  applyViewOverrides,
-  extractViewState,
-  mergeRelayout,
-  sceneCameras,
-  type SharedView,
-} from "../lib/plot-utils/view-overrides";
-import { toWebGL } from "../lib/plot-utils/webgl";
-import { createCameraLink, scene3dLayout, type CameraFollower, type CameraLink } from "../lib/plot-utils/scene3d";
-import type { PlotlyFigureLike } from "../lib/plot-utils/types";
-import PlotlyChart, { showSceneCamera } from "../charts/PlotlyChart";
-import { readChartTheme, type ChartTheme } from "../charts/theme";
+import { mergeRelayout, sceneCameras, type SharedView } from "../lib/plot-utils/view-overrides";
+import { createCameraLink, type CameraLink } from "../lib/plot-utils/scene3d";
+import FigureViewer, {
+  InteractiveFigure,
+  peekFigure,
+  plotlySourceQuery,
+  pointPlotlySource,
+  prefetchFigure,
+  type FigureSync,
+  type PlotlyFigure,
+} from "./viewers/FigureViewer";
 import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
@@ -59,194 +57,17 @@ interface Props {
   autoOpenSettings?: boolean;
 }
 
-interface FigureMetadata {
-  has_source?: boolean;
-  source_format?: string | null;
-  source_hash?: string | null;
-}
-
-type PlotlyFigure = PlotlyFigureLike;
-
 
 const EMPTY_FIGURE: PlotlyFigure = { data: [], layout: {} };
 
-const plotlySourceQuery = (sourceHash: string) => ({
-  queryKey: qk.plotlySource(sourceHash),
-  queryFn: async (): Promise<PlotlyFigure> => {
-    const res = await fetch(api.artifactUrl(sourceHash));
-    if (!res.ok) {
-      throw new Error(`${res.status} ${res.statusText}`);
-    }
-    return (await res.json()) as PlotlyFigure;
-  },
-  // Content addressed: never stale.
-  staleTime: Infinity,
-  retry: false,
-});
-
-function usePlotlySource(sourceHash: string | null | undefined) {
-  return useQuery({
-    ...plotlySourceQuery(sourceHash ?? ""),
-    enabled: !!sourceHash,
-    // The previous step's figure stays on screen while the next one loads
-    // (no placeholder flash).
-    placeholderData: keepPreviousData,
+/** A figure point as the figure viewer's source. */
+const figureSource = (point: SequencePoint) =>
+  hashSource(point.artifact_hash!, {
+    mime: point.artifact_mime ?? "image/png",
+    size: point.artifact_size,
+    objectType: "figure",
+    meta: safeJsonParse<Record<string, unknown>>(point.artifact_metadata ?? null),
   });
-}
-
-/** The point's interactive Plotly source, when it has one. */
-function plotlySourceHash(point: SequencePoint): string | null {
-  const meta = safeJsonParse<FigureMetadata>(point.artifact_metadata ?? null);
-  return meta?.has_source && meta.source_format === "plotly_json" ? meta.source_hash ?? null : null;
-}
-
-/** Warm one figure: its Plotly source, or its PNG decoded. */
-function prefetchFigure(qc: QueryClient, point: SequencePoint, signal: AbortSignal): Promise<unknown> {
-  const source = plotlySourceHash(point);
-  return source ? qc.prefetchQuery(plotlySourceQuery(source)) : decodeImage(api.artifactUrl(point.artifact_hash!), signal);
-}
-
-function peekFigure(qc: QueryClient, point: SequencePoint): boolean {
-  const source = plotlySourceHash(point);
-  return source ? qc.getQueryData(qk.plotlySource(source)) !== undefined : !!peekDecoded(api.artifactUrl(point.artifact_hash!));
-}
-
-// ---------------------------------------------------------------------------
-// User figure renderer.
-// ---------------------------------------------------------------------------
-
-/** Shallow-merge `defaults` UNDER `authored` — the figure author's keys win. */
-function under(authored: unknown, defaults: Record<string, unknown>): Record<string, unknown> {
-  return { ...defaults, ...((authored ?? {}) as Record<string, unknown>) };
-}
-
-/**
- * The author's layout with app-theme colours filled in underneath: the
- * figure's backgrounds are transparent so it sits on the card, which means
- * every foreground colour must come from the app theme too. Fixed
- * width/height are dropped so the figure fills its pane.
- */
-function themeFigureLayout(base: Record<string, unknown>, t: ChartTheme): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...base };
-  out.paper_bgcolor = base.paper_bgcolor ?? "transparent";
-  out.plot_bgcolor = base.plot_bgcolor ?? "transparent";
-  delete out.width;
-  delete out.height;
-  out.font = under(base.font, { color: t.fg });
-  const axis = { gridcolor: t.grid, zerolinecolor: t.grid, linecolor: t.grid };
-  const axisKeys = new Set(["xaxis", "yaxis"]);
-  for (const k of Object.keys(base)) if (/^[xyz]axis\d*$/.test(k)) axisKeys.add(k);
-  for (const k of axisKeys) out[k] = under(base[k], axis);
-  if (base.scene != null) {
-    const scene = { ...(base.scene as Record<string, unknown>) };
-    for (const k of ["xaxis", "yaxis", "zaxis"]) {
-      scene[k] = under(scene[k], { ...axis, backgroundcolor: "transparent", showbackground: false });
-    }
-    out.scene = scene;
-  }
-  out.legend = under(base.legend, { bgcolor: "transparent", bordercolor: t.grid });
-  // Hover labels float over the data, so they must be opaque.
-  out.hoverlabel = under(base.hoverlabel, {
-    bgcolor: t.bg,
-    bordercolor: t.grid,
-    font: under((base.hoverlabel as Record<string, unknown> | undefined)?.font, { color: t.fg }),
-  });
-  out.modebar = under(base.modebar, { bgcolor: "transparent", color: t.fgMuted, activecolor: t.fg });
-  return out;
-}
-
-// A new figure object (a different artifact) gets a fresh `uirevision`, so
-// Plotly drops the previous figure's zoom instead of carrying it over.
-const figureIds = new WeakMap<object, number>();
-let nextFigureId = 0;
-function figureId(fig: object): number {
-  let id = figureIds.get(fig);
-  if (id === undefined) figureIds.set(fig, (id = nextFigureId++));
-  return id;
-}
-
-/**
- * One user Plotly figure, styled by the interaction settings, with the
- * shared view (zoom/pan/camera synced across panes) applied on top.
- * `revision` bumps reset the view to the figure's own. A drag rotates a 3D
- * scene whatever the card's 2D drag mode, and every plot on `cameraLink`
- * follows the camera live while it is dragged. Scatter traces draw
- * with WebGL per the card's `webgl` setting (the stored figure unchanged).
- * `fallbackSrc` (the stored PNG) stands in while the plot is paused by the
- * page's WebGL budget and no live snapshot of it exists yet.
- */
-function InteractiveFigure({
-  figure,
-  settings,
-  viewOverrides,
-  onRelayout,
-  revision = 0,
-  className,
-  style,
-  cameraLink,
-  fallbackSrc,
-}: {
-  figure: PlotlyFigure;
-  fallbackSrc?: string;
-  settings: FigureSettings;
-  viewOverrides?: SharedView;
-  onRelayout?: (view: SharedView) => void;
-  revision?: number;
-  className?: string;
-  style?: React.CSSProperties;
-  /** The card's 3D camera link: this plot follows the others' drags live, and they follow its. */
-  cameraLink?: CameraLink;
-}) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const { hoverMode, dragMode, showLegend, displayModeBar, scrollZoom, webgl } = settings;
-  const data = useMemo(
-    () => toWebGL((figure.data ?? []) as Array<Record<string, unknown>>, figure.layout as Record<string, unknown> | undefined, webgl ?? "auto").data,
-    [figure, webgl],
-  );
-
-  const layout = useMemo(() => {
-    // Deep copy: Plotly writes zoom ranges into the layout's arrays in place,
-    // and `figure` is the react-query-cached artifact shared by every pane.
-    const authored = structuredClone((figure.layout ?? {}) as Record<string, unknown>);
-    const themed = themeFigureLayout(authored, readChartTheme(document.documentElement));
-    themed.hovermode = hoverMode === "none" ? false : hoverMode;
-    themed.dragmode = dragMode === "none" ? false : dragMode;
-    themed.showlegend = showLegend;
-    themed.uirevision = `${figureId(figure)}:${revision}`;
-    const out = scene3dLayout(themed, data, dragMode !== "none");
-    return viewOverrides && Object.keys(viewOverrides).length > 0 ? applyViewOverrides(out, viewOverrides) : out;
-  }, [figure, data, hoverMode, dragMode, showLegend, revision, viewOverrides]);
-
-  const config = useMemo(() => ({ displayModeBar, scrollZoom }), [displayModeBar, scrollZoom]);
-
-  const handleRelayout = useCallback((e: Record<string, unknown>) => {
-    const view = onRelayout && extractViewState(e);
-    if (view) onRelayout!(view);
-  }, [onRelayout]);
-
-  const follower = useMemo<CameraFollower>(() => ({
-    showCamera: (sceneId, camera) => showSceneCamera(hostRef.current?.querySelector(".js-plotly-plot") ?? null, sceneId, camera),
-  }), []);
-  useEffect(() => cameraLink?.join(follower), [cameraLink, follower]);
-  const handleRelayouting = useCallback(
-    (e: Record<string, unknown>) => cameraLink?.moved(follower, e),
-    [cameraLink, follower],
-  );
-
-  return (
-    <div ref={hostRef} className={className ?? "rounded bg-bg h-full"} style={style}>
-      <PlotlyChart
-        data={data}
-        layout={layout}
-        fallbackSrc={fallbackSrc}
-        config={config}
-        themed={false}
-        onRelayout={handleRelayout}
-        onRelayouting={handleRelayouting}
-      />
-    </div>
-  );
-}
 
 /** Observed content-box width of `ref`'s element (0 until measured). */
 function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
@@ -261,48 +82,8 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
   return width;
 }
 
-/** Shared view (zoom/pan/camera) wiring, handed down to every figure. */
-interface ViewSync {
-  settings: FigureSettings;
-  viewOverrides?: SharedView;
-  onRelayout?: (view: SharedView) => void;
-  revision?: number;
-  cameraLink?: CameraLink;
-}
-
-/** One figure: interactive from its Plotly source, else its PNG. */
-function FigureItem({ point, label, sync }: { point: SequencePoint; label: string; sync: ViewSync }) {
-  const sourceHash = plotlySourceHash(point);
-  const sourceQ = usePlotlySource(sourceHash);
-  if (sourceHash && sourceQ.isSuccess && sourceQ.data?.data) {
-    return (
-      <InteractiveFigure
-        figure={sourceQ.data}
-        settings={sync.settings}
-        viewOverrides={sync.viewOverrides}
-        onRelayout={sync.onRelayout}
-        revision={sync.revision}
-        cameraLink={sync.cameraLink}
-        fallbackSrc={api.artifactUrl(point.artifact_hash!)}
-      />
-    );
-  }
-  if (sourceHash && sourceQ.isLoading) {
-    return <div className="h-full min-h-[8rem] motion-safe:animate-pulse rounded bg-bg-hover" />;
-  }
-  return (
-    <div className="flex h-full justify-center items-center rounded bg-bg p-2 overflow-hidden">
-      <SettledImg
-        src={api.artifactUrl(point.artifact_hash!)}
-        alt={label}
-        className="max-h-full max-w-full object-contain"
-      />
-    </div>
-  );
-}
-
 /** A gallery point's figures in a grid filling the pane, swapped as a whole per step. */
-function FigureGallery({ point, frame, name, sync }: { point: SequencePoint; frame?: GalleryFrame; name: string; sync: ViewSync }) {
+function FigureGallery({ point, frame, name, sync }: { point: SequencePoint; frame?: GalleryFrame; name: string; sync: FigureSync }) {
   const qc = useQueryClient();
   return (
     <GalleryView
@@ -312,7 +93,7 @@ function FigureGallery({ point, frame, name, sync }: { point: SequencePoint; fra
       minItemHeight={180}
       prefetchItem={(p, signal) => prefetchFigure(qc, p, signal)}
       peekItem={(p) => peekFigure(qc, p)}
-      renderItem={(item, i) => <FigureItem point={item} label={`${name} @ step ${item.step} #${i}`} sync={sync} />}
+      renderItem={(item, i) => <FigureViewer source={figureSource(item)} label={`${name} @ step ${item.step} #${i}`} sync={sync} />}
     />
   );
 }
@@ -355,57 +136,21 @@ function FigurePane({
     [points, targetStep],
   );
 
-  const meta = useMemo(
-    () => safeJsonParse<FigureMetadata>(current?.artifact_metadata ?? null),
-    [current],
-  );
-  const sourceHash =
-    meta?.has_source && meta?.source_format === "plotly_json"
-      ? meta.source_hash ?? null
-      : null;
-
-  const sourceQ = usePlotlySource(sourceHash);
-
-  const showPlotly = !!sourceHash && sourceQ.isSuccess && !!sourceQ.data?.data;
-
   if (q.isLoading) {
     return <div className="h-48 motion-safe:animate-pulse rounded bg-bg-hover" />;
   }
   if (!current?.artifact_hash) {
     return <div className="text-sm text-fg-muted">no figure logged yet</div>;
   }
+  const sync = { settings, viewOverrides, onRelayout, revision, cameraLink };
   if (isGalleryPoint(current)) {
     return (
       <div className="h-full overflow-auto">
-        <FigureGallery point={current} frame={galleryFrame} name={m.name} sync={{ settings, viewOverrides, onRelayout, revision, cameraLink }} />
+        <FigureGallery point={current} frame={galleryFrame} name={m.name} sync={sync} />
       </div>
     );
   }
-  if (showPlotly) {
-    return (
-      <InteractiveFigure
-        figure={sourceQ.data!}
-        settings={settings}
-        viewOverrides={viewOverrides}
-        onRelayout={onRelayout}
-        revision={revision}
-        cameraLink={cameraLink}
-        fallbackSrc={api.artifactUrl(current.artifact_hash)}
-      />
-    );
-  }
-  if (sourceHash && sourceQ.isLoading) {
-    return <div className="h-full min-h-[12rem] motion-safe:animate-pulse rounded bg-bg-hover" />;
-  }
-  return (
-    <div className="flex h-full justify-center items-center rounded bg-bg p-2 overflow-hidden">
-      <SettledImg
-        src={api.artifactUrl(current.artifact_hash)}
-        alt={`${m.name} @ step ${current.step}`}
-        className="max-h-full max-w-full object-contain"
-      />
-    </div>
-  );
+  return <FigureViewer source={figureSource(current)} label={`${m.name} @ step ${current.step}`} sync={sync} />;
 }
 
 export default function FigureInteractiveCard({ runId, metric, extraSeries, controlledSeries, settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
@@ -513,11 +258,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       const filtered = pts.filter((p) => p.artifact_hash);
       const paneStep = stepFor(idx + 1);
       const paneCurrent = paneStep == null ? null : resolveAtStep(filtered, paneStep);
-      const paneMeta = safeJsonParse<FigureMetadata>(paneCurrent?.artifact_metadata ?? null);
-      const paneSourceHash =
-        paneMeta?.has_source && paneMeta?.source_format === "plotly_json"
-          ? paneMeta.source_hash ?? null
-          : null;
+      const paneSourceHash = paneCurrent ? pointPlotlySource(paneCurrent) : null;
       return { m, runId: rid, sourceHash: paneSourceHash, hash: paneCurrent?.artifact_hash ?? null, point: paneCurrent };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -537,15 +278,8 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
 
   const overlaySourceQueries = useQueries({
     queries: paneCurrents.map((p) => ({
-      queryKey: qk.plotlySource(p.sourceHash),
-      queryFn: async (): Promise<PlotlyFigure> => {
-        const res = await fetch(api.artifactUrl(p.sourceHash as string));
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        return (await res.json()) as PlotlyFigure;
-      },
+      ...plotlySourceQuery(p.sourceHash ?? ""),
       enabled: !!p.sourceHash,
-      staleTime: 60_000,
-      retry: false,
     })),
   });
 
@@ -619,17 +353,8 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   );
 
 
-  // Single-metric path: Plotly source for the current figure.
-  const meta = useMemo(
-    () => safeJsonParse<FigureMetadata>(current?.artifact_metadata ?? null),
-    [current],
-  );
-  const sourceHash =
-    meta?.has_source && meta?.source_format === "plotly_json"
-      ? meta.source_hash ?? null
-      : null;
-
-  const sourceQ = usePlotlySource(sourceHash);
+  // Single-metric path: the current figure's Plotly source (its identity below).
+  const sourceHash = current ? pointPlotlySource(current) : null;
 
   // Shared view state for syncing zoom/pan/camera across comparison panes.
   // Also used in single-pane mode to track whether zoom has been modified.
@@ -673,8 +398,6 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     setSharedView({});
     setPlotRevision((r) => r + 1);
   }, []);
-
-  const showPlotly = !!sourceHash && sourceQ.isSuccess && !!sourceQ.data?.data;
 
   useRunInfo(allRunIds);
 
@@ -731,27 +454,13 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
               sync={{ settings, viewOverrides: sharedView, onRelayout: handlePaneRelayout, revision: plotRevision, cameraLink }}
             />
           </div>
-        ) : showPlotly ? (
-          <InteractiveFigure
-            figure={sourceQ.data!}
-            settings={settings}
-            viewOverrides={sharedView}
-            onRelayout={handlePaneRelayout}
-            revision={plotRevision}
-            cameraLink={cameraLink}
-            fallbackSrc={api.artifactUrl(current.artifact_hash)}
+        ) : (
+          <FigureViewer
+            source={figureSource(current)}
+            label={`${metric.name} @ step ${current.step}`}
+            sync={{ settings, viewOverrides: sharedView, onRelayout: handlePaneRelayout, revision: plotRevision, cameraLink }}
             className={`rounded bg-bg ${heightClass}`}
           />
-        ) : sourceHash && sourceQ.isLoading ? (
-          <div className="h-48 motion-safe:animate-pulse rounded bg-bg-hover" />
-        ) : (
-          <div className={`flex justify-center items-center rounded bg-bg p-2 ${heightClass}`}>
-            <SettledImg
-              src={api.artifactUrl(current.artifact_hash)}
-              alt={`${metric.name} @ step ${current.step}`}
-              className="max-w-full max-h-full object-contain"
-            />
-          </div>
         )}
         <StepSlider
           points={slider.sliderPoints}

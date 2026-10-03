@@ -1,32 +1,15 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { useSourceFile, useSourceTree } from "../api/hooks";
-import { qk } from "../api/query-keys";
 import { formatBytes } from "../lib/format";
-import { getHighlighter, langFromPath } from "../lib/syntax-highlight";
+import { langFromPath } from "../lib/syntax-highlight";
+import { TextView } from "../components/viewers/TextViewer";
 
 export default function RunSourceTab() {
   const { runId } = useParams<{ runId: string }>();
   const tree = useSourceTree(runId!);
   const [selected, setSelected] = useState<string | null>(null);
   const file = useSourceFile(runId!, selected);
-
-  const highlighted = useQuery({
-    queryKey: qk.highlight(selected, file.data?.content),
-    enabled: !!file.data && file.data.encoding === "utf-8",
-    queryFn: async () => {
-      const lang = langFromPath(selected!);
-      if (!lang) return null;
-      const h = await getHighlighter();
-      return h.codeToHtml(file.data!.content, {
-        lang,
-        theme: "github-dark",
-      });
-    },
-    retry: false,
-    staleTime: Infinity,
-  });
 
   if (tree.isLoading) return <p className="text-fg-muted">Loading source…</p>;
   if (tree.isError)
@@ -68,15 +51,8 @@ export default function RunSourceTab() {
           <p className="text-fg-muted">
             Binary file ({formatBytes(file.data.content.length)} base64).
           </p>
-        ) : highlighted.data ? (
-          <div
-            className="text-xs overflow-auto"
-            dangerouslySetInnerHTML={{ __html: highlighted.data }}
-          />
         ) : (
-          <pre className="mono whitespace-pre-wrap text-xs">
-            {file.data?.content ?? ""}
-          </pre>
+          <TextView text={file.data?.content ?? ""} lang={langFromPath(selected)} />
         )}
       </main>
     </div>

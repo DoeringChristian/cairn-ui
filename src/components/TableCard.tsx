@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQueries } from "@tanstack/react-query";
 import { useSequencesForRuns } from "../api/hooks";
-import { api } from "../api/client";
 import { downloadCsv, safeName } from "../lib/download";
 import { type CardSettingsKey } from "../lib/card-settings";
 import { useCardDrop } from "../lib/use-series-drop";
@@ -21,6 +20,7 @@ import { applyTableOps, type TableOpsResult } from "../lib/table/pipeline";
 import { concatTables, defaultJoinKey, joinTables, suffixedPairs } from "../lib/table/combine";
 import { alignReference } from "../lib/table/text-diff";
 import DataTable from "./table/DataTable";
+import { tableBlobQuery } from "./viewers/TableViewer";
 import QueryBar from "./table/QueryBar";
 import TableSettingsPanel, { type TablePanelCtx } from "./settings-panels/TableSettingsPanel";
 
@@ -50,16 +50,10 @@ const skey = (s: Series) => `${s.runId}::${s.name}`;
 function useTableBlobs(hashes: Array<string | null | undefined>) {
   return useQueries({
     queries: hashes.map((hash) => ({
-      queryKey: ["table-blob", hash],
+      ...tableBlobQuery(hash ?? ""),
       enabled: !!hash,
-      staleTime: Infinity,
       // The previous step stays on screen while the next one loads (no placeholder flash).
       placeholderData: keepPreviousData,
-      queryFn: async () => {
-        const r = await fetch(api.artifactUrl(hash!));
-        if (!r.ok) throw new Error(`fetch failed (${r.status})`);
-        return (await r.json()) as TableData;
-      },
     })),
   });
 }

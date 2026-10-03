@@ -1,11 +1,8 @@
 import type { SettingsController } from "../../lib/card-settings";
-import type { HtmlSettings } from "../cards-settings/html";
+import { HTML_MAX_HEIGHT, HTML_MIN_HEIGHT, type HtmlSettings } from "../cards-settings/html";
 import type { SteppedMediaPanelCtx } from "../media/SteppedMediaCard";
 import { SettingsSection, Slider, Switch } from "../settings/palette";
 import { LayoutSection, SliderSection, bind, type PanelSurface } from "./media-panel-kit";
-
-export const HTML_MIN_HEIGHT = 80;
-export const HTML_MAX_HEIGHT = 2000;
 
 /** HTML is a simple card: its sections without tabs. */
 export default function HtmlSettingsPanel({

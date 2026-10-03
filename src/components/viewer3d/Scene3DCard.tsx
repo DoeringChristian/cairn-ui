@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type * as THREE from "three";
+import { useMemo, useRef, useState } from "react";
 import { useSequencesForRuns } from "../../api/hooks";
 import { api } from "../../api/client";
 import type { SequenceMeta, SequencePoint } from "../../api/types";
@@ -19,7 +18,7 @@ import CardShell from "../CardShell";
 import SeriesChipStrip from "../SeriesChipStrip";
 import StepSlider from "../StepSlider";
 import Scene3DSettingsPanel from "../settings-panels/Scene3DSettingsPanel";
-import Viewer3D from "./Viewer3D";
+import { SceneView, type Scene3DKind } from "../viewers/Scene3DViewer";
 import { useQuery } from "@tanstack/react-query";
 import { pointCaption } from "../../lib/caption";
 import { RunChip, usePaneLabelInline } from "../card-kit/pane-label";
@@ -27,7 +26,10 @@ import { isGalleryPoint } from "../../lib/media/gallery";
 import { galleryQuery } from "../../lib/media/gallery-query";
 import { useGalleryFrame } from "../media/GalleryView";
 import { CameraLink } from "./camera-link";
-import { disposeObject, propertyNames, useArtifactArrays, type ArtifactArrays, type Scene3DMeta } from "./artifact-arrays";
+import { propertyNames, type Scene3DMeta } from "./artifact-arrays";
+
+/** A point's handler metadata. */
+const sceneMeta = <M,>(point: SequencePoint): M | null => safeJsonParse<M>(point.artifact_metadata);
 
 /** Props every 3D card takes — the same shape CardRenderer passes to series cards. */
 export interface Scene3DCardProps {
@@ -38,71 +40,6 @@ export interface Scene3DCardProps {
   settingsKeyOverride?: CardSettingsKey;
   onRemove?: () => void;
   autoOpenSettings?: boolean;
-}
-
-/** What differs between the pointcloud / mesh / boxes3d cards. */
-export interface Scene3DKind<V extends object, M extends Scene3DMeta> {
-  kind: "pointcloud" | "mesh" | "boxes3d";
-  /** Noun for the empty state ("no point cloud logged yet"). */
-  noun: string;
-  defaultView: V;
-  build: (arrays: ArtifactArrays, view: V) => THREE.Object3D;
-  caption: (meta: M) => string;
-  viewSettings: (args: {
-    view: V;
-    setView: (patch: Partial<V>) => void;
-    meta: M | null;
-    properties: string[];
-  }) => ReactNode;
-}
-
-/** One 3D artifact in one viewer (a plain point, or one gallery item). */
-function SceneView<V extends object, M extends Scene3DMeta>({
-  spec,
-  current,
-  view,
-  link,
-  resetKey,
-  overlay,
-}: {
-  spec: Scene3DKind<V, M>;
-  current: SequencePoint;
-  view: V;
-  link: CameraLink | null;
-  resetKey: number;
-  overlay?: ReactNode;
-}) {
-  const metaJson = current.artifact_metadata;
-  const meta = useMemo(() => safeJsonParse<M>(metaJson), [metaJson]);
-  const q = useArtifactArrays(current.artifact_hash ?? null);
-
-  const built = useMemo(() => {
-    if (!q.data) return { objects: [] as THREE.Object3D[], error: null };
-    try {
-      return { objects: [spec.build(q.data, view)], error: null };
-    } catch (err) {
-      return { objects: [] as THREE.Object3D[], error: err instanceof Error ? err.message : String(err) };
-    }
-  }, [spec, q.data, view]);
-  useEffect(() => () => built.objects.forEach(disposeObject), [built]);
-
-  const error = q.error ? String(q.error) : built.error;
-  return (
-    <div className="relative h-full w-full overflow-hidden rounded bg-bg">
-      <Viewer3D objects={built.objects} link={link} resetKey={resetKey} />
-      {error ? (
-        <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-red-500">{error}</div>
-      ) : q.isFetching ? (
-        <div className="absolute right-1 top-1 rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-muted">loading…</div>
-      ) : null}
-      {overlay}
-      {meta && (
-        <div className="mono pointer-events-none absolute bottom-1 left-1 rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-subtle">
-          {spec.caption(meta)}
-        </div>
-      )}
-    </div>
-  );
 }
 
 /**
@@ -153,7 +90,8 @@ function SceneGallery<V extends object, M extends Scene3DMeta>({
       ))}
     </div>
   );
-  return <SceneView {...rest} current={frame.itemPoints[index]!} overlay={tabs} />;
+  const shown = frame.itemPoints[index]!;
+  return <SceneView {...rest} hash={shown.artifact_hash!} meta={sceneMeta<M>(shown)} overlay={tabs} />;
 }
 
 function ScenePane<V extends object, M extends Scene3DMeta>({
@@ -182,7 +120,7 @@ function ScenePane<V extends object, M extends Scene3DMeta>({
   if (isGalleryPoint(current)) {
     return <SceneGallery {...rest} spec={spec} point={current} item={item} onItem={onItem} />;
   }
-  return <SceneView {...rest} spec={spec} current={current} />;
+  return <SceneView {...rest} spec={spec} hash={current.artifact_hash!} meta={sceneMeta<M>(current)} />;
 }
 
 /** One pane per series (run), a shared step slider, and orbit cameras that follow each other. */
