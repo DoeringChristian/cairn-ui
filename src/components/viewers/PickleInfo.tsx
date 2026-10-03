@@ -1,5 +1,7 @@
 import CodeBlock from "./CodeBlock";
 
+const SHOWN_ELSEWHERE = new Set(["python_type", "python_module", "size_bytes", "mime_type", "filename"]);
+
 /**
  * A pickled Python object: browsers cannot unpickle it, so this says what it
  * is (the SDK's recorded type) and, when given, how to load it in Python.
@@ -8,7 +10,8 @@ export default function PickleInfo({ meta, loadSnippet }: { meta: Record<string,
   const m = meta ?? {};
   const type = typeof m.python_type === "string" ? m.python_type : null;
   const module = typeof m.python_module === "string" && m.python_module !== "builtins" ? m.python_module : null;
-  const rest = Object.entries(m).filter(([k]) => k !== "python_type" && k !== "python_module");
+  // Size, mime type and file name are the surface's own facts (the file details, the card's info box).
+  const rest = Object.entries(m).filter(([k]) => !SHOWN_ELSEWHERE.has(k));
   return (
     <div className="flex flex-col gap-2 rounded border border-border bg-bg px-4 py-3 text-sm" data-viewer="pickle">
       <p>

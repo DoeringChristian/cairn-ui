@@ -37,8 +37,10 @@ export default function MediaCellView({ media }: { media: MediaCell }) {
         )}
       </button>
       <Dialog open={open} onClose={() => setOpen(false)} title={<span className="mono">{media.hash.slice(0, 12)}</span>} size="3xl">
-        <DialogBody className="h-[75vh] p-4">
-          <ContentViewer source={source} kind={kind} fill />
+        <DialogBody className="p-4">
+          <div className="h-[70vh]">
+            <ContentViewer source={source} kind={kind} fill />
+          </div>
         </DialogBody>
       </Dialog>
     </>

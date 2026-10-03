@@ -12,7 +12,8 @@
  * mesh / 3D boxes → Scene3DViewer, tensor → TensorViewer, JSON → JsonViewer
  * (figure / table / the JSON tree), text and code → TextViewer.
  *
- * Heavy viewers (Plotly, three.js, the markdown pipeline) load on demand.
+ * Heavy viewers (three.js, the markdown pipeline, the Plotly figure) load on
+ * demand; the rest are in the cards' chunk already.
  */
 
 import { lazy, Suspense, useState, type ReactNode } from "react";
@@ -24,6 +25,7 @@ import AudioViewer from "./AudioViewer";
 import HtmlViewer from "./HtmlViewer";
 import ImageViewer from "./ImageViewer";
 import PickleInfo from "./PickleInfo";
+import TensorViewer from "./TensorViewer";
 import TextViewer from "./TextViewer";
 import { ViewerLoading } from "./use-viewer-text";
 import VideoViewer from "./VideoViewer";
@@ -35,7 +37,6 @@ const JsonViewer = lazy(() => import("./JsonViewer"));
 const FigureViewer = lazy(() => import("./FigureViewer"));
 const Scene3DViewer = lazy(() => import("./Scene3DViewer"));
 const NpzViewer = lazy(() => import("./NpzViewer"));
-const TensorViewer = lazy(() => import("./TensorViewer"));
 
 /** Text-like viewers read at most this much of a file (its head, by a Range request). */
 export const VIEWER_TEXT_BYTES = 256 * 1024;
