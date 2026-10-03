@@ -47,10 +47,11 @@ export function useGridSizeSync(
   anchorRef: React.RefObject<HTMLElement>,
   colSpanCbRef: React.MutableRefObject<(span: number) => void>,
   heightCbRef: React.MutableRefObject<(h: number | undefined) => void>,
+  enabled = true,
 ): void {
   useEffect(() => {
     const el = anchorRef.current;
-    if (!el) return;
+    if (!el || !enabled) return;
     let grid = el.closest("[data-cairn-card]")?.parentElement;
     while (grid && getComputedStyle(grid).display === "contents") grid = grid.parentElement;
     if (!grid || !grid.closest("[data-cairn-grid]")) grid = el.closest("[data-cairn-grid]")?.parentElement ?? grid;
@@ -77,7 +78,7 @@ export function useGridSizeSync(
       gridEl.removeEventListener("cairn:heightChange", onHeight);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [enabled]);
 }
 
 /**

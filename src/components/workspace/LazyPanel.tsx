@@ -13,8 +13,8 @@
  *   the card's modal (`OpenOnMountContext`).
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useCardSettings, resolveCardHeight, type CardSettingsKey } from "../../lib/card-settings";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { CardMutationContext, useCardSettings, resolveCardHeight, type CardSettingsKey } from "../../lib/card-settings";
 import type { CardType } from "../../lib/cards/card-spec";
 import { OpenOnMountContext, useCardNavRegistration } from "../../lib/card-nav";
 import { whenNearViewport } from "../../lib/near-viewport";
@@ -90,7 +90,7 @@ function Placeholder({
   const ref = useRef<HTMLDivElement>(null);
   const ctl = useCardSettings<{ colSpan?: number; height?: number; collapsed?: boolean; title?: string }>(settingsKey, type);
   const s = ctl.value;
-  const min = cardMinSize(type);
+  const min = cardMinSize(valueCard ? "scalar-value" : type);
   const collapsed = !!s.collapsed;
   const height = collapsed
     ? COLLAPSED_HEIGHT
@@ -109,7 +109,8 @@ function Placeholder({
   setRef.current = ctl.set;
   const spanCb = useRef((span: number) => setRef.current({ colSpan: span }, { mergeKey: "resize", label: "Resize card" }));
   const heightCb = useRef((h: number | undefined) => setRef.current({ height: h }, { mergeKey: "resize", label: "Resize card" }));
-  useGridSizeSync(ref, spanCb, heightCb);
+  // Only where CardShell would have a resize handle (an editable card).
+  useGridSizeSync(ref, spanCb, heightCb, useContext(CardMutationContext));
 
   // A detail modal stepping onto this card mounts it, open.
   useCardNavRegistration(!collapsed && !valueCard ? () => onMountRef.current(true) : undefined);
