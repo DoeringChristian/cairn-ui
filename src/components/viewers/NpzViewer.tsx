@@ -11,8 +11,13 @@ import { ViewerError, ViewerLoading } from "./use-viewer-text";
  * cloud or 3D boxes (the 3D handlers' layouts), else a table of its arrays
  * (shape, dtype, range, mean).
  */
+/** Archives above this are not read in the browser. */
+const READ_CAP = 64 * 1024 * 1024;
+
 export default function NpzViewer({ source }: { source: Pick<ViewerSource, "hash" | "size" | "meta"> }) {
-  const q = useArtifactArrays(source.hash);
+  const tooBig = (source.size ?? 0) > READ_CAP;
+  const q = useArtifactArrays(tooBig ? null : source.hash);
+  if (tooBig) return <p className="text-xs text-fg-subtle">Larger than 64 MB: download it to inspect.</p>;
   if (q.isLoading) return <ViewerLoading className="h-48" />;
   if (q.isError || !q.data) return <ViewerError error={q.error ?? "could not read the archive"} />;
   const scene = npzSceneKind(Object.keys(q.data));

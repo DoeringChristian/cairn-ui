@@ -148,7 +148,9 @@ export function TensorView({ hash, meta: logged, size = null, settings }: {
   settings: TensorSettings;
 }) {
   const facts = tensorFacts(logged, settings);
-  const needsBlob = !logged || facts.effectiveView !== "stats";
+  // A file without the handler's facts is read for them, unless it is too big to read at all.
+  const unreadable = !logged && (size ?? 0) > SIZE_CAP;
+  const needsBlob = !unreadable && (!logged || facts.effectiveView !== "stats");
   const npyQuery = useQuery({
     ...npyQueryOf(hash),
     enabled: needsBlob,
@@ -177,6 +179,7 @@ export function TensorView({ hash, meta: logged, size = null, settings }: {
   const statsGrid = meta && <StatsGrid meta={meta} shapeLabel={shapeLabel} />;
   const renderBody = () => {
     if (!meta) {
+      if (unreadable) return <p className="text-xs text-fg-subtle">Larger than 10 MB: download it to inspect.</p>;
       if (npyQuery.isLoading) return <div className="flex-1 min-h-0 motion-safe:animate-pulse rounded bg-bg-hover" />;
       if (npyQuery.isError) return <div className="flex-1 min-h-0 text-xs text-fg-muted">could not read tensor blob</div>;
       return <div className="text-sm text-fg-muted">no tensor logged yet</div>;
