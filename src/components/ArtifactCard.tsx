@@ -1,17 +1,19 @@
 /**
- * Artifact card — displays generic tracked artifacts with download links.
- * Shows file metadata (name, size, MIME type) and a step slider.
+ * Artifact card — a `pickle` series (`run.track(cairn.Pickle(...))`) or the
+ * versions of an artifact the run logged (`run.log_artifact`), with download
+ * links. Shows file metadata (name, size, MIME type) and a step slider; a
+ * version sits at its logged `step` (its version number when it has none).
  */
 
 import { useMemo, useRef, useState } from "react";
 import { isBrowserDisplayable } from "../lib/artifact-format";
-import { useSequence, useArtifacts } from "../api/hooks";
+import { useSequence, useRunOutputArtifacts } from "../api/hooks";
 import { api } from "../api/client";
 import { formatBytes, safeJsonParse } from "../lib/format";
 import { downloadArtifact, artifactFilename } from "../lib/download";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { ArtifactSettings } from "./cards-settings/artifact";
-import type { SequenceMeta } from "../api/types";
+import type { ArtifactEntryInfo, ArtifactVersionInfo, SequenceMeta } from "../api/types";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import ArtifactSettingsPanel from "./settings-panels/ArtifactSettingsPanel";
@@ -26,6 +28,53 @@ interface Props {
   autoOpenSettings?: boolean;
 }
 
+interface ArtifactPoint {
+  step: number;
+  wall_time: string;
+  artifact_hash: string | null;
+  artifact_mime?: string | null;
+  artifact_size?: number | null;
+  artifact_metadata?: string | null;
+  object_type: string;
+  /** The logged version this point stands for; null for a series point. */
+  version: ArtifactVersionInfo | null;
+}
+
+/** A version's entries, each a download link (references link nowhere). */
+function VersionFiles({ version }: { version: ArtifactVersionInfo }) {
+  const files: ArtifactEntryInfo[] = version.files ?? [];
+  return (
+    <div className="rounded border border-border bg-bg p-3 text-xs">
+      <div className="mb-2 flex flex-wrap items-baseline gap-2">
+        <span className="mono text-fg">{version.ref}</span>
+        <span className="text-fg-subtle">{version.type}</span>
+        {version.aliases.map((a) => (
+          <span key={a} className="rounded border border-border px-1 text-[10px] text-fg-muted">{a}</span>
+        ))}
+        <span className="mono num text-fg-muted">{formatBytes(version.size)}</span>
+      </div>
+      <ul className="flex flex-col gap-0.5">
+        {files.map((f) => (
+          <li key={f.path} className="flex items-baseline gap-2">
+            {f.digest ? (
+              <a
+                className="mono text-accent hover:underline break-all"
+                href={api.artifactVersionFileUrl(version.id, f.path)}
+                download={f.path.split("/").pop()}
+              >
+                {f.path}
+              </a>
+            ) : (
+              <span className="mono break-all text-fg-muted" title={f.uri ?? undefined}>{f.path} → {f.uri}</span>
+            )}
+            {f.size != null && <span className="mono num text-fg-subtle">{formatBytes(f.size)}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 interface ArtifactMeta {
   filename?: string;
   size_bytes?: number;
@@ -37,27 +86,29 @@ interface ArtifactMeta {
 
 export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
   const q = useSequence(runId, metric.name);
-  // Also fetch named artifacts (from log_artifact) as fallback.
-  const artifactsQ = useArtifacts(runId);
-  const points = useMemo(() => {
+  // The versions of the artifact of this name the run logged.
+  const outputsQ = useRunOutputArtifacts(runId);
+  const points = useMemo<ArtifactPoint[]>(() => {
     const seqPoints = (q.data?.points ?? []).filter((p) => p.artifact_hash);
-    if (seqPoints.length > 0) return seqPoints;
-    // Fall back to named artifacts matching this metric name.
-    // Sort by step ascending so the slider goes 0 → max left-to-right.
-    const named = (artifactsQ.data?.named ?? [])
-      .filter((a: any) => a.name === metric.name)
-      .slice()
-      .sort((a: any, b: any) => (a.step ?? 0) - (b.step ?? 0));
-    return named.map((a: any) => ({
-      step: a.step ?? 0,
-      wall_time: a.created_at,
-      artifact_hash: a.hash,
-      artifact_mime: a.mime_type,
-      artifact_size: a.size_bytes,
-      artifact_metadata: a.metadata,
-      object_type: "artifact",
-    }));
-  }, [q.data, artifactsQ.data, metric.name]);
+    if (seqPoints.length > 0) return seqPoints.map((p) => ({ ...p, version: null }));
+    // Sorted by step so the slider goes 0 → max left-to-right.
+    return (outputsQ.data?.outputs ?? [])
+      .filter((v) => v.name === metric.name)
+      .map((v) => {
+        const single = v.files?.length === 1 ? v.files[0]! : null;
+        return {
+          step: v.step ?? v.version,
+          wall_time: v.created_at,
+          artifact_hash: single?.digest ?? null,
+          artifact_mime: single?.mime ?? null,
+          artifact_size: single ? single.size : v.size,
+          artifact_metadata: JSON.stringify({ ...(single?.meta ?? {}), ...v.metadata }),
+          object_type: "artifact",
+          version: v,
+        };
+      })
+      .sort((a, b) => a.step - b.step);
+  }, [q.data, outputsQ.data, metric.name]);
 
   const ctl = useCardSettings<ArtifactSettings>(
     settingsKeyOverride ?? { runId, metricName: metric.name },
@@ -71,7 +122,7 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
     persistedIdx: settings.sliderStep,
     updateSettings: ctl.set,
   });
-  const current = useMemo(() => resolveAtStep<(typeof points)[number]>(points, currentStep), [points, currentStep]);
+  const current = useMemo(() => resolveAtStep<ArtifactPoint>(points, currentStep), [points, currentStep]);
   const meta = useMemo(
     () => safeJsonParse<ArtifactMeta>(current?.artifact_metadata ?? null) ?? {},
     [current],
@@ -85,7 +136,7 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
   const downloadName = current ? artifactFilename(metric.name, current.step, null, ext) : "";
 
   const subtitle = points.length > 0
-    ? `step ${current?.step ?? 0} (${safeIdx + 1}/${points.length})`
+    ? `${current?.version ? `${current.version.ref} · ` : ""}step ${current?.step ?? 0} (${safeIdx + 1}/${points.length})`
     : `${metric.count} pts`;
 
   const cardRef = useRef<HTMLDivElement>(null);
@@ -93,7 +144,11 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
 
   const renderContent = () => (
     <>
-      {current?.artifact_hash ? (
+      {current?.version && !current.artifact_hash ? (
+        <div className="flex-1 min-h-0 overflow-auto">
+          <VersionFiles version={current.version} />
+        </div>
+      ) : current?.artifact_hash ? (
         <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-auto">
           {/* Image preview for image MIME types */}
           {isBrowserDisplayable(mime) && (

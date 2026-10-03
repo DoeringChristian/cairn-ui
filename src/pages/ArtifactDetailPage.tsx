@@ -5,9 +5,11 @@ import { useArtifactFamily } from "../api/hooks";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { formatBytes, formatRelative } from "../lib/format";
-import { MANIFEST_MIME } from "../lib/artifact-manifest";
 import type { ArtifactVersionInfo } from "../api/types";
 import ManifestTree from "../components/ManifestTree";
+
+/** `latest` and `vN` are system-maintained, never set by hand. */
+const RESERVED_ALIAS = /^(latest|v\d+)$/;
 
 function typeBadgeColor(type: string): string {
   switch (type) {
@@ -22,19 +24,7 @@ function typeBadgeColor(type: string): string {
   }
 }
 
-const isManifest = (v: ArtifactVersionInfo) => v.mime_type === MANIFEST_MIME;
-
-/** "3 files" from a manifest version's metadata, when it says. */
-function fileCount(v: ArtifactVersionInfo): string {
-  try {
-    const n = (JSON.parse(v.metadata ?? "{}") as { n_files?: number }).n_files;
-    return typeof n === "number" ? `${n} file${n === 1 ? "" : "s"}` : "files";
-  } catch {
-    return "files";
-  }
-}
-
-/** Expands a multi-file version into its file tree. */
+/** Expands a version into its file tree. */
 function FilesToggle({ v, open, onToggle }: { v: ArtifactVersionInfo; open: boolean; onToggle: () => void }) {
   return (
     <button
@@ -44,8 +34,27 @@ function FilesToggle({ v, open, onToggle }: { v: ArtifactVersionInfo; open: bool
       className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
     >
       <i className={`fa-solid ${open ? "fa-chevron-down" : "fa-chevron-right"} text-[10px]`} aria-hidden="true" />
-      {fileCount(v)}
+      {v.file_count} file{v.file_count === 1 ? "" : "s"}
     </button>
+  );
+}
+
+function Producer({ v, projectId }: { v: ArtifactVersionInfo; projectId: string }) {
+  if (!v.created_by_run) return <span className="text-fg-subtle">{"\u2014"}</span>;
+  return (
+    <Link to={`/p/${v.producer?.project_id ?? projectId}/r/${v.created_by_run}`} className="mono text-accent hover:underline text-xs">
+      {v.producer?.name ?? v.created_by_run.slice(0, 8)}
+    </Link>
+  );
+}
+
+function AliasChips({ v }: { v: ArtifactVersionInfo }) {
+  return (
+    <span className="flex flex-wrap gap-1">
+      {v.aliases.map((a) => (
+        <span key={a} className="mono rounded border border-border bg-bg px-1.5 py-0.5 text-[10px] text-fg-muted">{a}</span>
+      ))}
+    </span>
   );
 }
 
@@ -56,23 +65,6 @@ export default function ArtifactDetailPage() {
   }>();
   const q = useArtifactFamily(projectId!, familyId!);
   const queryClient = useQueryClient();
-
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
-
-  const renameMutation = useMutation({
-    mutationFn: (name: string) =>
-      api.updateArtifactFamily(familyId!, { name }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: qk.artifactFamily(projectId!, familyId!),
-      });
-      queryClient.invalidateQueries({
-        queryKey: qk.artifactFamilies(projectId!),
-      });
-      setEditingName(false);
-    },
-  });
 
   const [openVersions, setOpenVersions] = useState<Set<string>>(new Set());
   const toggleVersion = (id: string) =>
@@ -86,26 +78,32 @@ export default function ArtifactDetailPage() {
   const [aliasInput, setAliasInput] = useState("");
   const [aliasVersionInput, setAliasVersionInput] = useState("");
 
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: qk.artifactFamily(projectId!, familyId!) });
+    queryClient.invalidateQueries({ queryKey: qk.artifactFamilies(projectId!) });
+  };
+  const versionId = (version: number) => q.data?.versions.find((v) => v.version === version)?.id;
+
   const aliasMutation = useMutation({
-    mutationFn: ({ alias, version }: { alias: string; version: number }) =>
-      api.setArtifactAlias(familyId!, alias, version),
+    mutationFn: ({ alias, version }: { alias: string; version: number }) => {
+      const id = versionId(version);
+      if (!id) throw new Error(`no version ${version}`);
+      return api.addArtifactAlias(id, alias);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: qk.artifactFamily(projectId!, familyId!),
-      });
+      invalidate();
       setAliasInput("");
       setAliasVersionInput("");
     },
   });
 
   const deleteAliasMutation = useMutation({
-    mutationFn: (alias: string) =>
-      api.deleteArtifactAlias(familyId!, alias),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: qk.artifactFamily(projectId!, familyId!),
-      });
+    mutationFn: ({ alias, version }: { alias: string; version: number }) => {
+      const id = versionId(version);
+      if (!id) throw new Error(`no version ${version}`);
+      return api.removeArtifactAlias(id, alias);
     },
+    onSuccess: invalidate,
   });
 
   if (!projectId || !familyId) return null;
@@ -120,43 +118,7 @@ export default function ArtifactDetailPage() {
     <div>
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-baseline gap-3">
-        {editingName ? (
-          <form
-            className="flex items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (nameDraft.trim()) renameMutation.mutate(nameDraft.trim());
-            }}
-          >
-            <input
-              className="input mono text-xl font-semibold"
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              autoFocus
-            />
-            <button type="submit" className="btn px-2 py-1 text-xs">
-              Save
-            </button>
-            <button
-              type="button"
-              className="btn px-2 py-1 text-xs"
-              onClick={() => setEditingName(false)}
-            >
-              Cancel
-            </button>
-          </form>
-        ) : (
-          <h1
-            className="mono min-w-0 break-all text-xl font-semibold cursor-pointer hover:text-accent"
-            onClick={() => {
-              setNameDraft(family.name);
-              setEditingName(true);
-            }}
-            title="Click to rename"
-          >
-            {family.name}
-          </h1>
-        )}
+        <h1 className="mono min-w-0 break-all text-xl font-semibold">{family.name}</h1>
         <span
           className={`rounded border px-2 py-0.5 text-xs font-medium ${typeBadgeColor(family.type)}`}
         >
@@ -173,23 +135,23 @@ export default function ArtifactDetailPage() {
           Aliases
         </h2>
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          {family.aliases.length === 0 && (
-            <span className="text-sm text-fg-subtle">No aliases set.</span>
-          )}
-          {family.aliases.map((a) => (
+          {Object.entries(family.aliases).map(([a, version]) => (
             <span
               key={a}
               className="group mono inline-flex items-center gap-1 rounded border border-border bg-bg px-2 py-0.5 text-xs text-fg-muted"
             >
-              {a}
-              <button
-                type="button"
-                className="ml-0.5 transition-opacity hover:text-status-failed can-hover:opacity-0 can-hover:group-hover:opacity-100"
-                onClick={() => deleteAliasMutation.mutate(a)}
-                aria-label={`delete alias ${a}`}
-              >
-                {"\u00D7"}
-              </button>
+              {a} {"\u2192"} v{version}
+              {/* `latest` always names the newest version: it cannot be moved or removed. */}
+              {a !== "latest" && (
+                <button
+                  type="button"
+                  className="ml-0.5 transition-opacity hover:text-status-failed can-hover:opacity-0 can-hover:group-hover:opacity-100"
+                  onClick={() => deleteAliasMutation.mutate({ alias: a, version })}
+                  aria-label={`delete alias ${a}`}
+                >
+                  {"\u00D7"}
+                </button>
+              )}
             </span>
           ))}
         </div>
@@ -198,7 +160,8 @@ export default function ArtifactDetailPage() {
           onSubmit={(e) => {
             e.preventDefault();
             const ver = parseInt(aliasVersionInput, 10);
-            if (aliasInput.trim() && !isNaN(ver)) {
+            const alias = aliasInput.trim();
+            if (alias && !isNaN(ver) && !RESERVED_ALIAS.test(alias)) {
               aliasMutation.mutate({ alias: aliasInput.trim(), version: ver });
             }
           }}
@@ -220,6 +183,14 @@ export default function ArtifactDetailPage() {
           <button type="submit" className="btn px-2 py-1 text-xs">
             Set alias
           </button>
+          {RESERVED_ALIAS.test(aliasInput.trim()) && (
+            <span className="text-xs text-status-failed">"latest" and "vN" are reserved</span>
+          )}
+          {(aliasMutation.isError || deleteAliasMutation.isError) && (
+            <span className="text-xs text-status-failed">
+              {String(aliasMutation.error ?? deleteAliasMutation.error)}
+            </span>
+          )}
         </form>
       </section>
 
@@ -238,26 +209,19 @@ export default function ArtifactDetailPage() {
                 <li key={v.id} className="rounded-lg border border-border bg-bg-elevated p-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="mono font-semibold">v{v.version}</span>
-                    {isManifest(v) ? <FilesToggle v={v} open={openVersions.has(v.id)} onToggle={() => toggleVersion(v.id)} /> : <a
-                      href={api.artifactUrl(v.hash)}
-                      className="btn px-2 py-0.5 text-xs inline-flex items-center gap-1"
-                      download
-                    >
-                      <i className="fa-solid fa-arrow-down" aria-hidden="true" /> Download
-                    </a>}
+                    <AliasChips v={v} />
+                    <FilesToggle v={v} open={openVersions.has(v.id)} onToggle={() => toggleVersion(v.id)} />
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
-                    <span className="mono" title={v.hash}>{v.hash.slice(0, 12)}</span>
-                    <span>{formatBytes(v.size_bytes)}</span>
+                    <span className="mono" title={v.digest}>{v.digest.slice(0, 12)}</span>
+                    <span>{formatBytes(v.size)}</span>
+                    {v.step != null && <span>step {v.step}</span>}
                     <span>{formatRelative(v.created_at)}</span>
-                    {v.created_by_run && (
-                      <Link to={`/p/${projectId}/r/${v.created_by_run}`} className="mono text-accent hover:underline">
-                        run {v.created_by_run.slice(0, 8)}
-                      </Link>
-                    )}
+                    <Producer v={v} projectId={projectId} />
+                    <span>{v.consumer_count} consumer{v.consumer_count === 1 ? "" : "s"}</span>
                   </div>
-                  {isManifest(v) && openVersions.has(v.id) && (
-                    <div className="mt-2 border-t border-border-subtle pt-2"><ManifestTree hash={v.hash} /></div>
+                  {openVersions.has(v.id) && (
+                    <div className="mt-2 border-t border-border-subtle pt-2"><ManifestTree hash={v.digest} /></div>
                   )}
                 </li>
               ))}
@@ -269,10 +233,13 @@ export default function ArtifactDetailPage() {
                 <thead className="bg-bg-elevated text-left text-xs uppercase tracking-wide text-fg-muted">
                   <tr>
                     <th className="px-3 py-2">Version</th>
-                    <th className="px-3 py-2">Hash</th>
+                    <th className="px-3 py-2">Aliases</th>
+                    <th className="px-3 py-2">Digest</th>
                     <th className="px-3 py-2">Size</th>
+                    <th className="px-3 py-2">Step</th>
                     <th className="px-3 py-2">Created</th>
-                    <th className="px-3 py-2">Produced by</th>
+                    <th className="px-3 py-2">Logged by</th>
+                    <th className="px-3 py-2">Used by</th>
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>
@@ -281,44 +248,26 @@ export default function ArtifactDetailPage() {
                     <Fragment key={v.id}>
                     <tr className="border-t border-border-subtle hover:bg-bg-elevated">
                       <td className="mono num px-3 py-2">v{v.version}</td>
-                      <td className="mono px-3 py-2 text-fg-muted" title={v.hash}>
-                        {v.hash.slice(0, 12)}
+                      <td className="px-3 py-2"><AliasChips v={v} /></td>
+                      <td className="mono px-3 py-2 text-fg-muted" title={v.digest}>
+                        {v.digest.slice(0, 12)}
                       </td>
                       <td className="mono num px-3 py-2 text-fg-muted">
-                        {formatBytes(v.size_bytes)}
+                        {formatBytes(v.size)}
                       </td>
+                      <td className="mono num px-3 py-2 text-fg-muted">{v.step ?? "\u2014"}</td>
                       <td className="px-3 py-2 text-fg-muted">
                         {formatRelative(v.created_at)}
                       </td>
+                      <td className="px-3 py-2"><Producer v={v} projectId={projectId} /></td>
+                      <td className="mono num px-3 py-2 text-fg-muted">{v.consumer_count}</td>
                       <td className="px-3 py-2">
-                        {v.created_by_run ? (
-                          <Link
-                            to={`/p/${projectId}/r/${v.created_by_run}`}
-                            className="mono text-accent hover:underline text-xs"
-                          >
-                            {v.created_by_run.slice(0, 8)}
-                          </Link>
-                        ) : (
-                          <span className="text-fg-subtle">{"\u2014"}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {isManifest(v) ? (
-                          <FilesToggle v={v} open={openVersions.has(v.id)} onToggle={() => toggleVersion(v.id)} />
-                        ) : (
-                          <a
-                            href={api.artifactUrl(v.hash)}
-                            className="btn px-2 py-0.5 text-xs inline-flex items-center gap-1"
-                            download
-                          >
-                            <i className="fa-solid fa-arrow-down" aria-hidden="true" /> Download
-                          </a>
-                        )}
+                        <FilesToggle v={v} open={openVersions.has(v.id)} onToggle={() => toggleVersion(v.id)} />
                       </td>
                     </tr>
-                    {isManifest(v) && openVersions.has(v.id) && (
+                    {openVersions.has(v.id) && (
                       <tr className="border-t border-border-subtle">
-                        <td colSpan={6} className="px-3 py-2"><ManifestTree hash={v.hash} /></td>
+                        <td colSpan={9} className="px-3 py-2"><ManifestTree hash={v.digest} /></td>
                       </tr>
                     )}
                     </Fragment>

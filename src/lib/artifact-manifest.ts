@@ -1,7 +1,7 @@
 /**
- * Multi-file artifacts: a version whose blob is a manifest naming its files
+ * Artifact versions: every version's blob is a manifest naming its files
  * (uploaded, by hash) and external references (by URI). Same wire constant as
- * the SDK's `cairn.sdk.artifact_dir.MANIFEST_MIME`.
+ * the SDK's `cairn.sdk.artifacts.MANIFEST_MIME`.
  */
 
 export const MANIFEST_MIME = "application/vnd.cairn.artifact-manifest+json";

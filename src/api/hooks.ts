@@ -198,13 +198,6 @@ export function useSequencesForRuns(
   });
 }
 
-export function useArtifacts(runId: string) {
-  return useQuery({
-    queryKey: qk.artifacts(runId),
-    queryFn: () => api.artifactsForRun(runId),
-  });
-}
-
 export function useLogs(
   runId: string,
   opts: { offset?: number; limit?: number; stream?: string; search?: string },

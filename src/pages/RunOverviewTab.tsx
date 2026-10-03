@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
-import { useArtifacts, useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArtifacts } from "../api/hooks";
-import type { MetricDef, Param, Run } from "../api/types";
+import { useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArtifacts, useSourceTree } from "../api/hooks";
+import type { ArtifactVersionInfo, MetricDef, Param, Run } from "../api/types";
 import { formatBytes, safeJsonParse } from "../lib/format";
 import { remoteHref } from "../lib/git-remote";
 import { summaryRuleFor } from "../lib/metric-defs";
@@ -10,7 +10,6 @@ import { formatNum } from "../lib/plot-utils/types";
 import { useProjectTags } from "../lib/use-project-tags";
 import TagInput from "../components/TagInput";
 import Markdown from "../lib/markdown";
-import { GIT_DIFF_ARTIFACT } from "../lib/internal-names";
 
 interface Ctx {
   run: Run;
@@ -133,18 +132,14 @@ function GitRemote({ remote }: { remote: string | null }) {
   );
 }
 
-/** The ``_cairn/git.diff`` artifact the SDK uploads for a dirty tree, as a download. */
+/** The `git diff HEAD` the SDK stores with the source snapshot of a dirty tree, as a download. */
 function GitDiffLink({ runId }: { runId: string }) {
-  const q = useArtifacts(runId);
-  const diff = q.data?.named.find((a) => a.name === GIT_DIFF_ARTIFACT);
-  if (!diff) return <>—</>;
+  const q = useSourceTree(runId);
+  const hash = q.data?.diff_hash;
+  if (!hash) return <>—</>;
   return (
-    <a
-      href={api.artifactUrl(diff.hash)}
-      download={`${runId}.diff`}
-      className="text-accent hover:underline"
-    >
-      diff ({formatBytes(diff.size_bytes)})
+    <a href={api.artifactUrl(hash)} download={`${runId}.diff`} className="text-accent hover:underline">
+      diff
     </a>
   );
 }
@@ -314,51 +309,37 @@ function RunArtifactsSection({ run }: { run: Run }) {
   if (inputsQ.isLoading || outputsQ.isLoading) return null;
   if (inputs.length === 0 && outputs.length === 0) return null;
 
+  const row = (v: ArtifactVersionInfo, role?: string) => (
+    <li key={v.id} className="flex flex-wrap items-center gap-2 text-sm">
+      <Link to={`/p/${v.project_id}/artifacts/${v.family_id}`} className="mono text-accent hover:underline">
+        {v.project_id !== run.project_id ? v.qualified_ref : v.ref}
+      </Link>
+      <span className="text-fg-muted text-xs">{v.type}</span>
+      {v.step != null && <span className="mono text-fg-muted text-xs">step {v.step}</span>}
+      <span className="mono num text-fg-muted text-xs">
+        {v.file_count} file{v.file_count === 1 ? "" : "s"} · {formatBytes(v.size)}
+      </span>
+      {v.aliases.map((a) => (
+        <span key={a} className="rounded border border-border bg-bg px-1.5 py-0.5 text-[10px] text-fg-muted">{a}</span>
+      ))}
+      {role && (
+        <span className="rounded border border-accent/40 bg-bg px-1.5 py-0.5 text-[10px] text-accent">{role}</span>
+      )}
+    </li>
+  );
+
   return (
     <Section title="Artifacts" className="lg:col-span-2">
       {outputs.length > 0 && (
         <div className="mb-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-muted mb-1">
-            Produced
-          </h3>
-          <ul className="flex flex-col gap-1">
-            {outputs.map((o) => (
-              <li key={o.artifact_version_id} className="flex items-center gap-2 text-sm">
-                <Link
-                  to={`/p/${run.project_id}/artifacts/${o.family_id}`}
-                  className="mono text-accent hover:underline"
-                >
-                  {o.family_name}
-                </Link>
-                <span className="mono text-fg-muted text-xs">v{o.version}</span>
-              </li>
-            ))}
-          </ul>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-muted mb-1">Logged</h3>
+          <ul className="flex flex-col gap-1">{outputs.map((o) => row(o))}</ul>
         </div>
       )}
       {inputs.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-muted mb-1">
-            Consumed
-          </h3>
-          <ul className="flex flex-col gap-1">
-            {inputs.map((inp) => (
-              <li key={inp.artifact_version_id} className="flex items-center gap-2 text-sm">
-                <Link
-                  to={`/p/${run.project_id}/artifacts/${inp.family_id}`}
-                  className="mono text-accent hover:underline"
-                >
-                  {inp.family_name}
-                </Link>
-                <span className="mono text-fg-muted text-xs">v{inp.version}</span>
-                {inp.role && (
-                  <span className="rounded border border-border bg-bg px-1.5 py-0.5 text-[10px] text-fg-muted">
-                    {inp.role}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-muted mb-1">Used</h3>
+          <ul className="flex flex-col gap-1">{inputs.map((i) => row(i, i.role))}</ul>
         </div>
       )}
     </Section>

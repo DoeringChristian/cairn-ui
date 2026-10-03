@@ -103,7 +103,7 @@ function RunSummaryCard({ run, label }: { run: Run; label: string }) {
     <div className="card p-3 text-sm">
       <div className="mb-2 flex items-center gap-2">
         <span className="mono font-semibold truncate">{label}</span>
-        <RunStatusBadge status={run.status} />
+        <RunStatusBadge status={run.status} archived={run.archived} />
       </div>
       <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs">
         <dt className="text-fg-muted">Branch</dt>

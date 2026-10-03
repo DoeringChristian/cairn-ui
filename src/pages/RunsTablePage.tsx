@@ -55,7 +55,10 @@ import { useProjectRunView } from "../lib/run-view-store";
 import { newId } from "../lib/reports/ids";
 import "./runs-table.css";
 
-const STATUS_OPTIONS: Array<{ value: "all" | RunStatus; label: string }> = [
+/** The status filter: a status, every non-archived run ("all"), or the archived runs. */
+type StatusFilter = "all" | "archived" | RunStatus;
+
+const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "running", label: "running" },
   { value: "completed", label: "completed" },
@@ -113,7 +116,7 @@ export default function RunsTablePage() {
   const q = useInfiniteRuns({ project: projectId, include: ["params", "stats"] });
   const { bulkDelete, bulkArchive, bulkStop } = useBulkRunMutation();
 
-  const [statusFilter, setStatusFilter] = useState<"all" | RunStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState<string>("");
   const [filterState, setFilterState] = useRunsFilterState(projectId);
   const runViewCtl = useProjectRunView(projectId);
@@ -232,7 +235,7 @@ export default function RunsTablePage() {
   const onArchiveOldVersions = useCallback(async () => {
     const groups = new Map<string, Run[]>();
     for (const r of runs) {
-      if (r.status === "archived") continue;
+      if (r.archived) continue;
       const name = r.display_name ?? r.id;
       const arr = groups.get(name) ?? [];
       arr.push(r);
@@ -252,7 +255,7 @@ export default function RunsTablePage() {
   const onDeleteOldVersions = useCallback(async () => {
     const groups = new Map<string, Run[]>();
     for (const r of runs) {
-      if (r.status === "archived") continue;
+      if (r.archived) continue;
       const name = r.display_name ?? r.id;
       const arr = groups.get(name) ?? [];
       arr.push(r);
@@ -284,9 +287,14 @@ export default function RunsTablePage() {
   const filtered = useMemo(() => {
     return runs.filter((r) => {
       if (showLatestOnly && !latestIds.has(r.id)) return false;
-      // Hide archived runs by default; only show when explicitly filtered.
-      if (statusFilter === "all" && r.status === "archived") return false;
-      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      // Archived runs show only under the "archived" filter.
+      if (statusFilter === "archived") {
+        if (!r.archived) return false;
+      } else if (r.archived) {
+        return false;
+      } else if (statusFilter !== "all" && r.status !== statusFilter) {
+        return false;
+      }
       if (!matchesFilter(r, filterState.filter)) return false;
       if (searchRegex) {
         const tags = (safeJsonParse<string[]>(r.tags) ?? []).join(" ");
@@ -508,7 +516,7 @@ export default function RunsTablePage() {
             {r.display_name ?? r.id}
           </Link>
           {runControls(r)}
-          <RunStatusBadge status={r.status} />
+          <RunStatusBadge status={r.status} archived={r.archived} />
         </div>
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
           <span>{formatCreated(r.created_at)}</span>
@@ -585,7 +593,7 @@ export default function RunsTablePage() {
           );
         }
         case "status":
-          return <span className="dim"><RunStatusBadge status={r.status} /></span>;
+          return <span className="dim"><RunStatusBadge status={r.status} archived={r.archived} /></span>;
         case "created_at":
           return <span className="dim whitespace-nowrap text-fg-muted">{formatCreated(r.created_at)}</span>;
         case "duration":
@@ -696,7 +704,7 @@ export default function RunsTablePage() {
             className="input py-1 text-xs"
             value={statusFilter}
             onChange={(e) =>
-              setStatusFilter(e.target.value as "all" | RunStatus)
+              setStatusFilter(e.target.value as StatusFilter)
             }
           >
             {STATUS_OPTIONS.map((o) => (

@@ -6,7 +6,7 @@ import type { MetricInfo } from "../../lib/workspace/layout";
 import { mergeRunMetrics } from "../../lib/workspace/metrics";
 
 /**
- * The metrics the bound runs log (sequences + named artifacts), merged by
+ * The metrics the bound runs log (sequences + the artifacts they produced), merged by
  * name. A running run's roster is polled, so a metric first logged mid-run
  * gets its panel.
  */
@@ -25,7 +25,7 @@ export function useWorkspaceMetrics(runIds: readonly string[]): { metrics: Metri
     }),
   });
   const artQs = useQueries({
-    queries: runIds.map((id) => ({ queryKey: qk.artifacts(id), queryFn: () => api.artifactsForRun(id) })),
+    queries: runIds.map((id) => ({ queryKey: qk.runOutputArtifacts(id), queryFn: () => api.runOutputArtifacts(id) })),
   });
   const key = [...seqQs, ...artQs].map((q) => q.dataUpdatedAt).join("|");
   const metrics = useMemo(
@@ -34,7 +34,7 @@ export function useWorkspaceMetrics(runIds: readonly string[]): { metrics: Metri
         runIds.map((runId, i) => ({
           runId,
           sequences: seqQs[i]?.data?.sequences ?? [],
-          artifactNames: (artQs[i]?.data?.named ?? []).map((a) => a.name),
+          artifactNames: (artQs[i]?.data?.outputs ?? []).map((a) => a.name),
         })),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps

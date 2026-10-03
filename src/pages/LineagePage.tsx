@@ -97,7 +97,7 @@ function layoutGraph(graph: LineageGraph) {
 
 function nodeColor(node: LineageNode): { fill: string; stroke: string } {
   if (node.type === "run") {
-    const status = node.metadata?.status as string | undefined;
+    const status = node.status ?? undefined;
     switch (status) {
       case "completed":
         return { fill: "rgba(34,197,94,0.12)", stroke: "rgba(34,197,94,0.5)" };
@@ -110,7 +110,7 @@ function nodeColor(node: LineageNode): { fill: string; stroke: string } {
     }
   }
   // artifact_version
-  const atype = (node.metadata?.artifact_type ?? node.metadata?.type) as string | undefined;
+  const atype = node.artifact_type;
   switch (atype) {
     case "dataset":
       return { fill: "rgba(59,130,246,0.12)", stroke: "rgba(59,130,246,0.5)" };
@@ -232,8 +232,8 @@ export default function LineagePage() {
                 >
                   {(() => {
                     const lbl = p.node.type === "artifact_version"
-                      ? `${p.node.family_name ?? "?"} v${p.node.version ?? "?"}`
-                      : p.node.label ?? p.node.id.slice(0, 8);
+                      ? p.node.ref
+                      : p.node.name ?? p.node.id.slice(0, 8);
                     return lbl.length > 20 ? lbl.slice(0, 18) + "..." : lbl;
                   })()}
                 </text>

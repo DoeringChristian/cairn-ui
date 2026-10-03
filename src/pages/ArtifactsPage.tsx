@@ -23,6 +23,13 @@ function typeBadgeColor(type: string): string {
   }
 }
 
+/** `alias:vN` labels, `latest` first. */
+function aliasLabels(aliases: Record<string, number>): string[] {
+  return Object.entries(aliases)
+    .sort(([a], [b]) => (a === "latest" ? -1 : b === "latest" ? 1 : a.localeCompare(b)))
+    .map(([a, v]) => `${a}:v${v}`);
+}
+
 export default function ArtifactsPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const q = useArtifactFamilies(projectId!);
@@ -55,7 +62,7 @@ export default function ArtifactsPage() {
       <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h1 className="mono min-w-0 break-all text-xl font-semibold">{projectId} / artifacts</h1>
         <p className="text-sm text-fg-muted">
-          {families.length} famil{families.length === 1 ? "y" : "ies"}
+          {families.length} artifact{families.length === 1 ? "" : "s"}
         </p>
       </div>
 
@@ -88,8 +95,8 @@ export default function ArtifactsPage() {
       {families.length === 0 ? (
         <p className="text-fg-muted">
           {(q.data?.families ?? []).length === 0
-            ? "No artifact families in this project yet."
-            : "No families match the filters."}
+            ? "No artifacts in this project yet."
+            : "No artifacts match the filters."}
         </p>
       ) : (
         <>
@@ -114,13 +121,13 @@ export default function ArtifactsPage() {
                   </span>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
-                  <span>v{f.latest_version ?? 0}</span>
+                  <span>v{f.latest_version} · {f.version_count} version{f.version_count === 1 ? "" : "s"}</span>
                   <span>{formatBytes(f.total_size)}</span>
                   <span>{formatRelative(f.updated_at)}</span>
                 </div>
-                {f.aliases.length > 0 && (
+                {aliasLabels(f.aliases).length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {f.aliases.map((a) => (
+                    {aliasLabels(f.aliases).map((a) => (
                       <span
                         key={a}
                         className="mono rounded border border-border bg-bg px-1.5 py-0.5 text-[10px] text-fg-muted"
@@ -169,14 +176,14 @@ export default function ArtifactsPage() {
                       </span>
                     </td>
                     <td className="mono num px-3 py-2 text-fg-muted">
-                      {f.latest_version != null ? `v${f.latest_version}` : "\u2014"}
+                      {f.latest_version ? `v${f.latest_version}` : "\u2014"}
                     </td>
                     <td className="mono num px-3 py-2 text-fg-muted">
                       {formatBytes(f.total_size)}
                     </td>
                     <td className="px-3 py-2">
                       <span className="flex flex-wrap gap-1">
-                        {f.aliases.map((a) => (
+                        {aliasLabels(f.aliases).map((a) => (
                           <span
                             key={a}
                             className="mono rounded border border-border bg-bg px-1.5 py-0.5 text-[10px] text-fg-muted"

@@ -45,6 +45,8 @@ function detail(over: Partial<RunDetailResponse["run"]> = {}, extra: Partial<Run
       job_type: null,
       sweep_id: null,
       stop_requested: null,
+      archived_at: null,
+      archived: false,
       stats: {
         "val.loss": { count: 3, first: 3, last: 1.5, min: 1, max: 3, mean: 2, first_step: 0, last_step: 2, rule: "min" },
         acc: { count: 3, first: 0.1, last: 0.9, min: 0.1, max: 0.9, mean: 0.5, first_step: 0, last_step: 2, rule: null },

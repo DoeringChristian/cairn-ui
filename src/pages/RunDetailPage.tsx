@@ -34,7 +34,7 @@ export default function RunDetailPage() {
         <h1 className="mono min-w-0 break-all text-xl font-semibold">
           {run.display_name ?? run.id}
         </h1>
-        <RunStatusBadge status={run.status} />
+        <RunStatusBadge status={run.status} archived={run.archived} />
         {run.status === "running" && <StopButton run={run} />}
         {run.display_name ? (
           <span className="mono break-all text-xs text-fg-subtle">{run.id}</span>

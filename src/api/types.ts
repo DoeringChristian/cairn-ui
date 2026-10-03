@@ -1,7 +1,7 @@
 // Types mirroring the Cairn server's response shapes.
 // Keep loose: these are what the frontend needs, not full schema validation.
 
-export type RunStatus = "running" | "completed" | "failed" | "killed" | "stopped" | "archived";
+export type RunStatus = "running" | "completed" | "failed" | "killed" | "stopped";
 
 export interface Health {
   status: string;
@@ -52,6 +52,9 @@ export interface Run {
   sweep_id: string | null;
   /** When a stop was requested from the UI; null when none is pending. */
   stop_requested: string | null;
+  /** When the run was archived; null when it is not. Archiving never changes `status`. */
+  archived_at: string | null;
+  archived: boolean;
   /**
    * The run's config as `{key: value}` (dotted keys, values JSON-decoded).
    * Only present when the list was fetched with `include: ["params"]`.
@@ -174,6 +177,11 @@ export interface RunsQuery {
   /** Only these runs (the runs list's live poll). */
   ids?: string[];
   include?: RunInclude[];
+  /** Archived runs: "all" (the default here; the runs table hides them itself), "false" or "true". */
+  archived?: "all" | "false" | "true";
+  /** Order key (server default `created_at`) and direction (default here: newest first). */
+  sort?: string;
+  desc?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -183,17 +191,6 @@ export interface RunsListResponse {
   total: number;
   limit: number;
   offset: number;
-}
-
-export interface ArtifactSummary {
-  name: string;
-  hash: string;
-  step: number | null;
-  created_at?: string;
-  mime_type: string;
-  size_bytes: number;
-  metadata: string | null;
-  object_type?: string;
 }
 
 export type AlertLevel = "info" | "warn" | "error";
@@ -209,11 +206,6 @@ export interface Alert {
   created_at: string;
   /** When the server's webhook task claimed it; null = not (yet) sent. */
   delivered_at: string | null;
-}
-
-export interface ArtifactsResponse {
-  named: ArtifactSummary[];
-  from_sequences: ArtifactSummary[];
 }
 
 export interface LogLine {
@@ -242,6 +234,8 @@ export interface SourceTreeResponse {
   files: SourceTreeFile[];
   skipped: Array<{ path: string; reason: string }>;
   marker?: string | null;
+  /** Blob of the `git diff HEAD` of a dirty working tree (`/api/artifacts/{hash}`). */
+  diff_hash?: string | null;
 }
 
 export interface SourceFileResponse {
@@ -258,67 +252,121 @@ export interface ArtifactFamily {
   description: string | null;
   created_at: string;
   updated_at: string;
-  latest_version: number | null;
-  total_versions: number;
+  latest_version: number;
+  version_count: number;
+  /** Bytes of the uploaded entries of every version (references excluded). */
   total_size: number;
-  aliases: string[];
+  /** alias -> version number; `latest` always names the newest version. */
+  aliases: Record<string, number>;
 }
 
+/** A run as the registry and lineage graphs reference it. */
+export interface ArtifactRunRef {
+  id: string;
+  /** Null when the run was deleted. */
+  name: string | null;
+  status: RunStatus | null;
+  project_id: string | null;
+  created_at: string | null;
+  archived: boolean;
+}
+
+/** One artifact version (`GET /api/artifact-versions/{id}`). */
 export interface ArtifactVersionInfo {
   id: string;
   family_id: string;
+  project_id: string;
+  name: string;
+  type: string;
   version: number;
-  hash: string;
-  size_bytes: number;
-  metadata: string | null;
+  /** `name:vN`. */
+  ref: string;
+  /** `project/name:vN`. */
+  qualified_ref: string;
+  /** The manifest's sha256. */
+  digest: string;
+  /** Bytes of the uploaded entries (references excluded). */
+  size: number;
+  file_count: number;
+  ref_count: number;
+  metadata: Record<string, unknown>;
+  description: string | null;
+  step: number | null;
   created_at: string;
+  /** `latest` first, then the user aliases. */
+  aliases: string[];
   created_by_run: string | null;
-  /** The blob's mime type; a multi-file version's is `MANIFEST_MIME` (lib/artifact-manifest). */
-  mime_type?: string | null;
+  producer: ArtifactRunRef | null;
+  consumer_count: number;
+  /** Present when asked for (`/runs/{id}/outputs?include=files`). */
+  files?: ArtifactEntryInfo[];
+}
+
+/** One entry of a version: an uploaded file (`digest`) or a reference (`uri`). */
+export interface ArtifactEntryInfo {
+  path: string;
+  size: number | null;
+  digest: string | null;
+  mime: string | null;
+  /** The cairn type a reader decodes it with (`pickle`, `image`, ...); null for a plain file. */
+  object_type: string | null;
+  uri: string | null;
+  etag: string | null;
+  meta: Record<string, unknown>;
+}
+
+export interface ArtifactConsumer {
+  run: ArtifactRunRef;
+  role: string;
+  used_at: string;
 }
 
 export interface ArtifactFamilyDetail extends ArtifactFamily {
   versions: ArtifactVersionInfo[];
 }
 
-export interface LineageNode {
+export interface LineageVersionNode {
+  type: "artifact_version";
   id: string;
-  type: "artifact_version" | "run";
-  // Artifact version fields (present when type === "artifact_version")
-  family_id?: string;
-  family_name?: string;
-  version?: number;
-  // Run fields: label is the display name (absent for a deleted run — the
-  // page falls back to the id), metadata.status the run status.
-  label?: string;
-  metadata?: Record<string, unknown>;
+  family_id: string;
+  project_id: string;
+  name: string;
+  artifact_type: string;
+  version: number;
+  ref: string;
+  qualified_ref: string;
+  aliases: string[];
+  step: number | null;
+  created_at: string;
+  file_count: number;
+  size: number;
 }
+
+export interface LineageRunNode extends ArtifactRunRef {
+  type: "run";
+}
+
+export type LineageNode = LineageVersionNode | LineageRunNode;
 
 export interface LineageEdge {
   source: string;
   target: string;
-  /** `forked`: run → run, the target was forked from the source. */
+  /** produced: run -> version; consumed: version -> run (with `role`); forked: run -> run. */
   relation: "produced" | "consumed" | "forked";
+  role?: string;
 }
 
 export interface LineageGraph {
   nodes: LineageNode[];
   edges: LineageEdge[];
+  /** The id the graph is centred on (version- and run-centred queries). */
+  center?: string;
 }
 
-export interface RunArtifactInput {
-  artifact_version_id: string;
-  family_id: string;
-  family_name: string;
-  version: number;
-  role: string | null;
-}
-
-export interface RunArtifactOutput {
-  artifact_version_id: string;
-  family_id: string;
-  family_name: string;
-  version: number;
+/** A consumed version, with how it was used. */
+export interface RunArtifactInput extends ArtifactVersionInfo {
+  role: string;
+  used_at: string;
 }
 
 // ---- Sweeps ------------------------------------------------------------------

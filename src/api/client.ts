@@ -105,6 +105,9 @@ export const api = {
     if (params.sweep_id) q.set("sweep_id", params.sweep_id);
     if (params.ids) q.set("ids", params.ids.join(","));
     if (params.include?.length) q.set("include", params.include.join(","));
+    q.set("archived", params.archived ?? "all");
+    if (params.sort) q.set("sort", params.sort);
+    q.set("desc", params.desc === false ? "false" : "true");
     if (params.limit != null) q.set("limit", String(params.limit));
     if (params.offset != null) q.set("offset", String(params.offset));
     const qs = q.toString();
@@ -114,10 +117,15 @@ export const api = {
   },
   run: (runId: string) =>
     get<import("./types").RunDetailResponse>(`/api/runs/${runId}`),
-  sequences: (runId: string) =>
-    get<{ sequences: import("./types").SequenceMeta[] }>(
+  sequences: async (runId: string) => {
+    const res = await get<{ sequences: import("./types").SequenceMeta[] }>(
       `/api/runs/${runId}/sequences`,
-    ),
+    );
+    // A series' object_type picks its card; a `pickle` series renders as the
+    // artifact card (the card kind keeps its name).
+    for (const s of res.sequences) if (s.object_type === "pickle") s.object_type = "artifact";
+    return res;
+  },
   sequence: async (runId: string, name: string) => {
     const res = await get<import("./types").SequenceResponse>(
       `/api/runs/${runId}/sequences/${encodeURIComponent(name)}`,
@@ -135,8 +143,6 @@ export const api = {
     get<import("./types").UpdatesResponse>(
       `/api/runs/${runId}/updates?since=${since}`,
     ),
-  artifactsForRun: (runId: string) =>
-    get<import("./types").ArtifactsResponse>(`/api/runs/${runId}/artifacts`),
   artifactUrl: (hash: string) => `/api/artifacts/${hash}`,
   logs: (
     runId: string,
@@ -165,9 +171,9 @@ export const api = {
   deleteRun: (runId: string) =>
     del_<{ deleted: string }>(`/api/runs/${runId}`),
   archiveRun: (runId: string) =>
-    post<{ run_id: string; status: string }>(`/api/runs/${runId}/archive`, {}),
+    post<{ run_id: string; archived: boolean; archived_at: string | null }>(`/api/runs/${runId}/archive`, {}),
   unarchiveRun: (runId: string) =>
-    post<{ run_id: string; status: string }>(`/api/runs/${runId}/unarchive`, {}),
+    post<{ run_id: string; archived: boolean; archived_at: string | null }>(`/api/runs/${runId}/unarchive`, {}),
   alerts: (projectId: string, opts: { since?: string; runId?: string; limit?: number } = {}) => {
     const q = new URLSearchParams();
     if (opts.since) q.set("since", opts.since);
@@ -358,27 +364,41 @@ export const api = {
     get<import("./types").ArtifactFamilyDetail>(
       `/api/artifact-families/${familyId}`,
     ),
-  updateArtifactFamily: (familyId: string, body: { name?: string; description?: string | null }) =>
-    patch<import("./types").ArtifactFamily>(
+  updateArtifactFamily: (familyId: string, body: { description?: string | null }) =>
+    patch<import("./types").ArtifactFamilyDetail>(
       `/api/artifact-families/${familyId}`,
       body,
     ),
-  setArtifactAlias: (familyId: string, alias: string, version: number) =>
-    put<{ alias: string; version: number }>(
-      `/api/artifact-families/${familyId}/aliases`,
-      { alias, version },
+  artifactVersion: (versionId: string) =>
+    get<import("./types").ArtifactVersionInfo>(`/api/artifact-versions/${versionId}`),
+  artifactVersionFiles: (versionId: string) =>
+    get<{ files: import("./types").ArtifactEntryInfo[] }>(
+      `/api/artifact-versions/${versionId}/files`,
     ),
-  deleteArtifactAlias: (familyId: string, alias: string) =>
-    del_<{ deleted: string }>(
-      `/api/artifact-families/${familyId}/aliases/${encodeURIComponent(alias)}`,
+  /** One uploaded entry's bytes, served with the entry's mime type. */
+  artifactVersionFileUrl: (versionId: string, path: string) =>
+    `/api/artifact-versions/${versionId}/file?path=${encodeURIComponent(path)}`,
+  artifactVersionConsumers: (versionId: string) =>
+    get<{ consumers: import("./types").ArtifactConsumer[]; count: number }>(
+      `/api/artifact-versions/${versionId}/consumers`,
+    ),
+  /** Point a user alias at a version (moving it within the family). */
+  addArtifactAlias: (versionId: string, alias: string) =>
+    post<import("./types").ArtifactVersionInfo>(
+      `/api/artifact-versions/${versionId}/aliases`,
+      { alias },
+    ),
+  removeArtifactAlias: (versionId: string, alias: string) =>
+    del_<import("./types").ArtifactVersionInfo>(
+      `/api/artifact-versions/${versionId}/aliases/${encodeURIComponent(alias)}`,
     ),
   runInputArtifacts: (runId: string) =>
     get<{ inputs: import("./types").RunArtifactInput[] }>(
       `/api/runs/${runId}/inputs`,
     ),
   runOutputArtifacts: (runId: string) =>
-    get<{ outputs: import("./types").RunArtifactOutput[] }>(
-      `/api/runs/${runId}/outputs`,
+    get<{ outputs: import("./types").ArtifactVersionInfo[] }>(
+      `/api/runs/${runId}/outputs?include=files`,
     ),
   lineage: (projectId: string) =>
     get<import("./types").LineageGraph>(

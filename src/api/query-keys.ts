@@ -18,7 +18,6 @@ export const qk = {
   run: (runId: string) => ["run", runId] as const,
   sequences: (runId: string) => ["sequences", runId] as const,
   sequence: (runId: string, name: string) => ["sequence", runId, name] as const,
-  artifacts: (runId: string) => ["artifacts", runId] as const,
   logs: (runId: string, opts: unknown) => ["logs", runId, opts] as const,
   sourceTree: (runId: string) => ["source-tree", runId] as const,
   sourceFile: (runId: string, path: string | null) => ["source-file", runId, path] as const,

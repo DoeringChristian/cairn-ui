@@ -27,6 +27,8 @@ export function makeRun(id: string, extra: Partial<Run> = {}): Run {
     job_type: null,
     sweep_id: null,
     stop_requested: null,
+    archived_at: null,
+    archived: false,
     ...extra,
   };
 }

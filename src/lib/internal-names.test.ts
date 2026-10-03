@@ -1,11 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GIT_DIFF_ARTIFACT, isInternalName } from "./internal-names.ts";
+import { isInternalName } from "./internal-names.ts";
 import { buildMetricIndex } from "./reports/metric-index.ts";
 
 test("only the _cairn/ prefix is internal", () => {
   assert.equal(isInternalName("_cairn/git.diff"), true);
-  assert.equal(isInternalName(GIT_DIFF_ARTIFACT), true);
   assert.equal(isInternalName("_cairn/"), true);
   assert.equal(isInternalName("git.diff"), false);
   assert.equal(isInternalName("_cairn"), false);

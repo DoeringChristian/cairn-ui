@@ -1,7 +1,8 @@
 /**
  * The metrics a workspace's bound runs log (pure): each run's sequences plus
- * its named artifacts (one entry per name, however many steps), merged by
- * name across runs. Internal `_cairn/` names never get a panel.
+ * the artifacts it logged (one entry per artifact name, however many
+ * versions), merged by name across runs. Internal `_cairn/` names never get
+ * a panel.
  */
 
 import { isInternalName } from "../internal-names.ts";
@@ -10,7 +11,8 @@ import type { MetricInfo } from "./layout.ts";
 export interface RunMetricsInput {
   runId: string;
   sequences: ReadonlyArray<{ name: string; object_type: string; count: number }>;
-  /** Named artifacts (`log_artifact`); names that are also sequences are ignored. */
+  /** Names of the artifact versions the run logged (`log_artifact`), one per
+   * version; names that are also sequences are ignored. */
   artifactNames: readonly string[];
 }
 
