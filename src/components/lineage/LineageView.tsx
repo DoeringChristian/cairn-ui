@@ -33,6 +33,7 @@ import {
   clusterGraph,
   emptyModel,
   filterGraph,
+  groupNodeId,
   hiddenNeighbours,
   lineagePath,
   mergeGraphs,
@@ -54,6 +55,8 @@ export interface LineageCenter {
 export const CLUSTER_THRESHOLD = 5;
 /** Hops loaded around the centre on open. */
 export const INITIAL_DEPTH = 2;
+/** Automatic fits never zoom out past this (labels stay readable; pan for the rest). */
+const FIT_MIN_ZOOM = 0.6;
 
 interface Expansion {
   kind: "artifact_version" | "run";
@@ -98,17 +101,19 @@ function LineageCanvas({
       queryFn: () => api.lineageAround({ kind: x.kind, id: x.id }, { depth: 1, direction: x.direction }),
     })),
   });
-  const expansionData = expansionQs.map((q) => q.data);
   const expanding = expansionQs.some((q) => q.isFetching && !q.data);
+  // A fixed-size dependency standing for every expansion's current data.
+  const expansionStamp = expansionQs.map((q) => q.dataUpdatedAt).join(",");
+  const expansionQsRef = useRef(expansionQs);
+  expansionQsRef.current = expansionQs;
 
   // Every graph fetched so far, merged (refetches after edits keep it fresh).
   const model: ModelGraph = useMemo(() => {
     let m = emptyModel();
-    const all = [base.data, ...expansionData].filter((g): g is LineageGraph => !!g);
+    const all = [base.data, ...expansionQsRef.current.map((q) => q.data)].filter((g): g is LineageGraph => !!g);
     for (const g of all) m = mergeGraphs(m, g);
     return m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base.data, ...expansionData]);
+  }, [base.data, expansionStamp]);
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [hiddenKinds, setHiddenKinds] = useState<Set<"run" | "artifact_version">>(new Set());
@@ -129,11 +134,14 @@ function LineageCanvas({
 
   const layout = useMemo(() => layoutGraph(view), [view]);
   const types = useMemo(() => artifactTypes(model), [model]);
-  const path = useMemo(() => (selectedId ? lineagePath(view.edges, selectedId) : null), [view, selectedId]);
+  const path = useMemo(
+    () => (selectedId && view.nodes.some((n) => n.id === selectedId) ? lineagePath(view.edges, selectedId) : null),
+    [view, selectedId],
+  );
 
   // Dragged positions: this visit only.
   const dragged = useRef(new Map<string, { x: number; y: number }>());
-  const { fitView } = useReactFlow();
+  const { fitView, getZoom, setCenter } = useReactFlow();
 
   const expand = useCallback(
     (id: string, direction: "upstream" | "downstream") => {
@@ -145,7 +153,10 @@ function LineageCanvas({
     },
     [model],
   );
-  const expandGroup = useCallback((key: string) => setExpandedGroups((s) => new Set(s).add(key)), []);
+  const expandGroup = useCallback((key: string) => {
+    setExpandedGroups((s) => new Set(s).add(key));
+    setSelectedId((sel) => (sel === groupNodeId(key) ? null : sel));
+  }, []);
   const collapseGroup = useCallback(
     (key: string) =>
       setExpandedGroups((s) => {
@@ -195,18 +206,30 @@ function LineageCanvas({
     [view, path],
   );
 
+  // Fit the graph; when it is too wide to fit readably, keep the centre node in view.
+  const autoFit = useCallback(() => {
+    void fitView({ padding: 0.12, duration: 250, maxZoom: 1.1, minZoom: FIT_MIN_ZOOM }).then(() => {
+      if (!center || getZoom() > FIT_MIN_ZOOM + 1e-3) return;
+      const p = dragged.current.get(center.id) ?? layout.get(center.id);
+      const n = view.nodes.find((x) => x.id === center.id);
+      if (p && n) void setCenter(p.x + 118, p.y + nodeHeight(n) / 2, { zoom: getZoom(), duration: 200 });
+    });
+  }, [fitView, getZoom, setCenter, center, layout, view]);
+
   // Fit once the first graph is laid out, and whenever expansions add nodes.
   const nodeCount = view.nodes.length;
+  const autoFitRef = useRef(autoFit);
+  autoFitRef.current = autoFit;
   useEffect(() => {
     if (nodeCount === 0) return;
-    const t = setTimeout(() => fitView({ padding: 0.15, duration: 250, maxZoom: 1.1 }), 30);
+    const t = setTimeout(() => autoFitRef.current(), 30);
     return () => clearTimeout(t);
-  }, [nodeCount, fitView]);
+  }, [nodeCount]);
 
   const resetLayout = () => {
     dragged.current.clear();
     setNodes(buildNodes());
-    setTimeout(() => fitView({ padding: 0.15, duration: 250, maxZoom: 1.1 }), 30);
+    setTimeout(() => autoFitRef.current(), 30);
   };
 
   const selected: ViewNode | null = useMemo(
@@ -308,22 +331,31 @@ function LineageCanvas({
               />
             ))}
             <span className="mx-0.5 h-4 w-px bg-border" />
-            <button type="button" className="rounded px-1.5 py-0.5 text-fg-muted hover:bg-bg-hover hover:text-fg" onClick={() => fitView({ padding: 0.15, duration: 250 })}>
+            <button type="button" className="rounded px-1.5 py-0.5 text-fg-muted hover:bg-bg-hover hover:text-fg" onClick={() => fitView({ padding: 0.12, duration: 250, minZoom: 0.1 })}>
               <i className="fa-solid fa-expand" aria-hidden="true" /> Fit
             </button>
             <button type="button" className="rounded px-1.5 py-0.5 text-fg-muted hover:bg-bg-hover hover:text-fg" onClick={resetLayout}>
               <i className="fa-solid fa-rotate-left" aria-hidden="true" /> Reset layout
             </button>
-            {foldable.length > 0 && (
+            {foldable.some((g) => !expandedGroups.has(g.group_key)) && (
               <button
                 type="button"
                 className="rounded px-1.5 py-0.5 text-fg-muted hover:bg-bg-hover hover:text-fg"
-                onClick={() =>
-                  setExpandedGroups(foldable.every((g) => expandedGroups.has(g.group_key)) ? new Set() : new Set(foldable.map((g) => g.group_key)))
-                }
+                onClick={() => {
+                  setExpandedGroups(new Set(foldable.map((g) => g.group_key)));
+                  setSelectedId((sel) => (sel?.startsWith("group:") ? null : sel));
+                }}
               >
-                <i className="fa-solid fa-layer-group" aria-hidden="true" />{" "}
-                {foldable.every((g) => expandedGroups.has(g.group_key)) ? "Collapse groups" : "Expand groups"}
+                <i className="fa-solid fa-layer-group" aria-hidden="true" /> Expand groups
+              </button>
+            )}
+            {foldable.some((g) => expandedGroups.has(g.group_key)) && (
+              <button
+                type="button"
+                className="rounded px-1.5 py-0.5 text-fg-muted hover:bg-bg-hover hover:text-fg"
+                onClick={() => setExpandedGroups(new Set())}
+              >
+                <i className="fa-solid fa-compress" aria-hidden="true" /> Collapse groups
               </button>
             )}
             {expanding && <span className="text-fg-subtle">loading…</span>}

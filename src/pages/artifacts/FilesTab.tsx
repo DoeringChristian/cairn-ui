@@ -4,7 +4,7 @@ import { useArtifactFileText, useArtifactVersionFiles } from "../../api/artifact
 import { api, errorText } from "../../api/client";
 import type { ArtifactEntryInfo, ArtifactVersionInfo } from "../../api/types";
 import CodeBlock from "../../components/artifacts/CodeBlock";
-import CopyId from "../../components/CopyId";
+import CopyButton from "../../components/artifacts/CopyButton";
 import Markdown from "../../lib/markdown";
 import { isBrowsableUri } from "../../lib/artifact-manifest";
 import { breadcrumbs, buildFileTree, findNode, type FileTreeDir, type FileTreeNode } from "../../lib/artifacts/file-tree";
@@ -191,7 +191,7 @@ function DirListing({ dir, onSelect }: { dir: Dir; onSelect: (p: string) => void
                 {c.kind === "dir" ? formatBytes(c.size) : c.entry.size != null ? formatBytes(c.entry.size) : "—"}
               </td>
               <td className="px-3 py-1.5 text-xs text-fg-muted">
-                {c.kind === "dir" ? `${c.fileCount} files` : c.entry.object_type ?? c.entry.mime ?? "—"}
+                {c.kind === "dir" ? `${c.fileCount} file${c.fileCount === 1 ? "" : "s"}` : c.entry.object_type ?? c.entry.mime ?? "—"}
               </td>
               <td className="mono max-w-[16rem] truncate px-3 py-1.5 text-xs text-fg-muted">
                 {c.kind === "dir" ? "" : c.entry.digest ? c.entry.digest.slice(0, 16) : c.entry.uri}
@@ -226,7 +226,7 @@ function FileDetail({ version, entry }: { version: ArtifactVersionInfo; entry: A
             <>
               <dt className="text-fg-muted">Digest</dt>
               <dd className="mono break-all">
-                sha256:{entry.digest} <CopyId id={entry.digest} className="text-[10px]" />
+                sha256:{entry.digest} <CopyButton text={entry.digest} />
               </dd>
             </>
           ) : (
@@ -240,7 +240,7 @@ function FileDetail({ version, entry }: { version: ArtifactVersionInfo; entry: A
                 ) : (
                   entry.uri
                 )}{" "}
-                <CopyId id={entry.uri ?? ""} className="text-[10px]" />
+                <CopyButton text={entry.uri ?? ""} />
               </dd>
               {entry.etag && (
                 <>

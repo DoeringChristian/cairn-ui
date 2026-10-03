@@ -9,7 +9,7 @@ import {
 } from "../../api/artifact-hooks";
 import { errorText } from "../../api/client";
 import type { ArtifactFamilyDetail, ArtifactVersionInfo, RunStatus } from "../../api/types";
-import CopyId from "../../components/CopyId";
+import CopyButton from "../../components/artifacts/CopyButton";
 import RunStatusBadge from "../../components/RunStatusBadge";
 import CodeBlock from "../../components/artifacts/CodeBlock";
 import {
@@ -116,7 +116,7 @@ function VersionView({
               {version.name}
               <span className="text-fg-muted">:v{version.version}</span>
             </h1>
-            <CopyId id={version.qualified_ref} className="text-[10px]" />
+            <CopyButton text={version.qualified_ref} />
             {version.aliases.map((a) => (
               <span key={a} className="mono rounded border border-accent/40 bg-accent/5 px-1.5 py-0.5 text-[11px] text-accent">
                 {a}
@@ -195,13 +195,17 @@ function VersionView({
         version={version}
         open={deleting === "version"}
         onClose={() => setDeleting(null)}
-        onDeleted={() => navigate(family.versions.length > 1 ? explorerPath(projectId, family.name) : explorerPath(projectId))}
+        onDeleted={() => {
+          // The newest version left (the cached family still lists the deleted one).
+          const next = family.versions.find((v) => v.id !== version.id);
+          navigate(next ? explorerPath(projectId, family.name, next.version) : explorerPath(projectId), { replace: true });
+        }}
       />
       <DeleteFamilyDialog
         family={family}
         open={deleting === "family"}
         onClose={() => setDeleting(null)}
-        onDeleted={() => navigate(explorerPath(projectId))}
+        onDeleted={() => navigate(explorerPath(projectId), { replace: true })}
       />
     </div>
   );
@@ -241,7 +245,7 @@ function OverviewTab({
       )}
       <dl className="card px-4 py-1">
         <Field label="Full name">
-          <span className="mono break-all">{version.qualified_ref}</span> <CopyId id={version.qualified_ref} className="text-[10px]" />
+          <span className="mono break-all">{version.qualified_ref}</span> <CopyButton text={version.qualified_ref} />
         </Field>
         <Field label="Type">
           <TypeBadge type={version.type} />
@@ -253,7 +257,7 @@ function OverviewTab({
           <TagsEditor version={version} />
         </Field>
         <Field label="Digest">
-          <span className="mono break-all text-xs">{version.digest}</span> <CopyId id={version.digest} className="text-[10px]" />
+          <span className="mono break-all text-xs">{version.digest}</span> <CopyButton text={version.digest} />
         </Field>
         <Field label="Created at">
           {new Date(version.created_at).toLocaleString()} <span className="text-fg-muted">({formatRelative(version.created_at)})</span>

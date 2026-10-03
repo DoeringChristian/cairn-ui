@@ -25,7 +25,7 @@ export interface Positioned {
 
 export function layoutGraph(view: ViewGraph): Map<string, Positioned> {
   const g = new dagre.graphlib.Graph({ multigraph: true });
-  g.setGraph({ rankdir: "LR", nodesep: 28, ranksep: 96, marginx: 16, marginy: 16 });
+  g.setGraph({ rankdir: "LR", nodesep: 28, ranksep: 130, marginx: 16, marginy: 16 });
   g.setDefaultEdgeLabel(() => ({}));
   for (const n of view.nodes) g.setNode(n.id, { width: NODE_WIDTH, height: nodeHeight(n) });
   for (const e of view.edges) {

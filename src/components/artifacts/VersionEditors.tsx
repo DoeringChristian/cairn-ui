@@ -6,7 +6,7 @@ import {
   useDeleteArtifactVersion,
   useVersionEdits,
 } from "../../api/artifact-hooks";
-import type { ArtifactFamily, ArtifactVersionInfo } from "../../api/types";
+import type { ArtifactFamilyDetail, ArtifactVersionInfo } from "../../api/types";
 import { aliasError, isRemovableAlias, tagError } from "../../lib/artifacts/refs";
 import Markdown from "../../lib/markdown";
 import ChipEditor from "./ChipEditor";
@@ -194,7 +194,7 @@ export function DeleteFamilyDialog({
   onClose,
   onDeleted,
 }: {
-  family: Pick<ArtifactFamily, "id" | "name" | "version_count">;
+  family: Pick<ArtifactFamilyDetail, "id" | "name" | "version_count" | "versions">;
   open: boolean;
   onClose: () => void;
   onDeleted: () => void;
@@ -208,7 +208,7 @@ export function DeleteFamilyDialog({
       confirmLabel="Delete artifact"
       requireText={family.name}
       onConfirm={() =>
-        del.mutate(family.id, {
+        del.mutate({ id: family.id, name: family.name, versionIds: family.versions.map((v) => v.id) }, {
           onSuccess: () => {
             onClose();
             onDeleted();

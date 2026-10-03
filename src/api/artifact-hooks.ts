@@ -13,10 +13,15 @@ import { CardMutationContext } from "../lib/card-settings";
 
 const ARTIFACT_KEY_PREFIXES = ["artifact-", "lineage", "run-input-artifacts", "run-output-artifacts"];
 
-export function invalidateArtifacts(qc: QueryClient): Promise<void> {
+/**
+ * Refetch every artifact / lineage query, except those naming one of `gone`
+ * (deleted versions' ids, a deleted artifact's name: they would only 404).
+ */
+export function invalidateArtifacts(qc: QueryClient, gone: readonly string[] = []): Promise<void> {
   return qc.invalidateQueries({
     predicate: (q) => {
       const head = q.queryKey[0];
+      if (gone.some((g) => q.queryKey.includes(g))) return false;
       return typeof head === "string" && ARTIFACT_KEY_PREFIXES.some((p) => head.startsWith(p));
     },
   });
@@ -106,15 +111,21 @@ export function useDeleteArtifactVersion() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, force }: { id: string; force: boolean }) => api.deleteArtifactVersion(id, force),
-    onSuccess: () => invalidateArtifacts(qc),
+    // Not awaited: the caller's onSuccess (navigating away) runs before the
+    // refetches land, so the dialog is not unmounted under it.
+    onSuccess: (_data, { id }) => {
+      void invalidateArtifacts(qc, [id]);
+    },
   });
 }
 
 export function useDeleteArtifactFamily() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (familyId: string) => api.deleteArtifactFamily(familyId),
-    onSuccess: () => invalidateArtifacts(qc),
+    mutationFn: ({ id }: { id: string; name: string; versionIds: string[] }) => api.deleteArtifactFamily(id),
+    onSuccess: (_data, { name, versionIds }) => {
+      void invalidateArtifacts(qc, [name, ...versionIds]);
+    },
   });
 }
 
