@@ -1,0 +1,1 @@
+function u(r,n){return(n==null?void 0:n.find(t=>t.name===r))??null}function i(r,n){var t;return((t=u(r,n))==null?void 0:t.x)??null}function a(r,n){var t;return((t=u(r,n))==null?void 0:t.summary)??null}function s(r){return r.startsWith("system.")}function e(r,n,t){return n.has(r)?"summary":a(r,t)??"last"}export{s as i,e as m,a as s,i as x};

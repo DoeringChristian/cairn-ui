@@ -1,1 +1,0 @@
-import{j as s,bO as i,dd as n,df as o}from"./index-DNPrgJkq.js";function r({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{data:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{r as default};
