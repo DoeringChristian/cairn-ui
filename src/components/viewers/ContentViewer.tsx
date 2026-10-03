@@ -98,7 +98,7 @@ export default function ContentViewer({ source, kind: given, fill = false, loadS
       case "arrays":
         return <NpzViewer source={source} />;
       case "tensor":
-        return <TensorViewer source={source} />;
+        return media(<TensorViewer source={source} />);
       case "text":
         return <TextViewer source={source} lang={langFromPath(source.name)} maxBytes={maxBytes} className="max-h-[70vh]" />;
       case "pickle":

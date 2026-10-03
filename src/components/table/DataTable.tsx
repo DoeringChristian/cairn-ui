@@ -112,7 +112,7 @@ export default function DataTable({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col" data-data-table="">
       {/* A stable scrollbar gutter keeps header and body aligned whether or not a scrollbar shows. */}
       <div className="flex-1 min-h-0 overflow-auto rounded border border-border" style={{ scrollbarGutter: "stable" }}>
         <table className="w-full table-fixed border-collapse text-xs">

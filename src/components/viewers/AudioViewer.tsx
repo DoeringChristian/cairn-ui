@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { audioPeaks, channelLabel } from "../../lib/viewers/audio-peaks";
+import { audioPeaks, channelLabel, wavFormat } from "../../lib/viewers/audio-peaks";
 import type { ViewerSource } from "../../lib/viewers/source";
 
-/** What the SDK records with a logged `cairn.Audio`. */
+/** What the SDK records with a logged `cairn.Audio` (a file decoded here may lack the rate). */
 interface AudioMeta {
-  sample_rate: number;
+  sample_rate?: number;
   duration: number;
   channels: number;
   peaks: number[];
@@ -26,11 +26,14 @@ function useDecodedAudio(source: ViewerSource, enabled: boolean) {
     queryFn: async (): Promise<AudioMeta> => {
       const res = await fetch(source.url);
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const bytes = await res.arrayBuffer();
+      // Decoding resamples to the context's rate: the file's own rate is in its header.
+      const wav = wavFormat(bytes);
       const ctx = new OfflineAudioContext(1, 1, 44_100);
-      const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+      const buf = await ctx.decodeAudioData(bytes);
       const channels = Array.from({ length: buf.numberOfChannels }, (_, i) => buf.getChannelData(i));
       return {
-        sample_rate: buf.sampleRate,
+        sample_rate: wav?.sampleRate,
         duration: Math.round(buf.duration * 100) / 100,
         channels: buf.numberOfChannels,
         peaks: audioPeaks(channels, 200),
@@ -82,7 +85,9 @@ export default function AudioViewer({
     return <audio className="h-8 w-full max-w-[16rem]" controls preload="none" src={source.url} data-viewer="audio" />;
   }
   const meta = hasPeaks ? (logged as AudioMeta) : decoded.data ?? null;
-  const format = meta?.sample_rate ? `${meta.sample_rate} Hz · ${meta.duration}s · ${channelLabel(meta.channels)}` : null;
+  const format = meta
+    ? [meta.sample_rate ? `${meta.sample_rate} Hz` : null, `${meta.duration}s`, channelLabel(meta.channels)].filter(Boolean).join(" · ")
+    : null;
   return (
     <div className="rounded bg-bg p-2" data-viewer="audio">
       {caption && <div className="mb-1 truncate text-xs text-fg" title={caption}>{caption}</div>}

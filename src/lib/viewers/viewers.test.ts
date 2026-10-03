@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { extensionOf, isTextKind, kindIcon, npzSceneKind, tableFormat, viewerKind } from "./kind.ts";
 import { csvToTable, csvValue, isPlotlyFigure, jsonlToTable, parseCsv, prettyJson, recordsToTable } from "./table-source.ts";
-import { audioPeaks, channelLabel } from "./audio-peaks.ts";
+import { audioPeaks, channelLabel, wavFormat } from "./audio-peaks.ts";
 
 const k = (path: string, mime: string | null = null, object_type: string | null = null, digest: string | null | undefined = "h") =>
   viewerKind({ path, mime, object_type, digest });
@@ -134,4 +134,14 @@ test("npzSceneKind by member names", () => {
   assert.equal(npzSceneKind(["points", "values_t"]), "pointcloud");
   assert.equal(npzSceneKind(["mins", "maxs", "depth"]), "boxes3d");
   assert.equal(npzSceneKind(["weights", "bias"]), null);
+});
+
+test("wavFormat reads the fmt chunk", () => {
+  const buf = new ArrayBuffer(44);
+  const v = new DataView(buf);
+  const put = (at: number, s: string) => [...s].forEach((c, i) => v.setUint8(at + i, c.charCodeAt(0)));
+  put(0, "RIFF"); v.setUint32(4, 36, true); put(8, "WAVE");
+  put(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 2, true); v.setUint32(24, 16000, true);
+  assert.deepEqual(wavFormat(buf), { channels: 2, sampleRate: 16000 });
+  assert.equal(wavFormat(new ArrayBuffer(8)), null);
 });

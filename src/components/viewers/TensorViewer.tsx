@@ -250,7 +250,7 @@ export default function TensorViewer({ source }: { source: Pick<ViewerSource, "h
   const [viewMode, setViewMode] = useState<ViewMode>(TENSOR_DEFAULTS.viewMode);
   const settings = useMemo(() => ({ ...TENSOR_DEFAULTS, viewMode }), [viewMode]);
   return (
-    <div className="flex h-full min-h-[16rem] flex-col gap-2">
+    <div className="flex h-full min-h-0 flex-col gap-2">
       <ViewModeSwitch modes={MODES} value={viewMode} onChange={setViewMode} />
       <TensorView hash={source.hash} meta={(source.meta as TensorMeta | null) ?? null} size={source.size} settings={settings} />
     </div>
