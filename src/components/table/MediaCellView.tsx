@@ -16,7 +16,13 @@ export default function MediaCellView({ media }: { media: MediaCell }) {
   const [open, setOpen] = useState(false);
   const src = api.artifactUrl(media.hash);
   const kind = mediaKind(media);
-  const source = hashSource(media.hash, { mime: media.mime_type || null, objectType: media.object_type ?? null });
+  const ext = media.mime_type.split("/")[1]?.split(/[;+]/)[0]?.replace("jpeg", "jpg");
+  const source = hashSource(media.hash, {
+    // A download keeps the media's extension.
+    name: `${media.hash.slice(0, 12)}${ext ? `.${ext}` : ""}`,
+    mime: media.mime_type || null,
+    objectType: media.object_type ?? null,
+  });
 
   if (kind === "audio") return <AudioViewer source={source} compact />;
   if (kind === "file") {

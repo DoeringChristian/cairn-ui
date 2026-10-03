@@ -46,10 +46,10 @@ export default function TextViewer({
 } & Omit<Parameters<typeof TextView>[0], "text">) {
   const t = useViewerText(source, maxBytes);
   const text = t.error ? `<fetch error: ${t.error.message}>` : t.text ?? "";
-  if (!t.cut || maxBytes == null) return <TextView text={text} {...view} />;
+  if (maxBytes == null) return <TextView text={text} {...view} />;
   return (
     <div className="flex min-h-0 flex-col gap-1">
-      <TruncatedNote shown={maxBytes} total={source.size} />
+      {t.cut && <TruncatedNote shown={maxBytes} total={source.size} />}
       <TextView text={text} {...view} />
     </div>
   );

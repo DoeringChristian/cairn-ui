@@ -181,6 +181,14 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
                   <span className="mono num text-fg">{formatBytes(meta.size_bytes)}</span>
                 </div>
               )}
+              {kind !== "pickle" && meta.python_type && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-fg-subtle">Type:</span>
+                  <span className="mono text-fg">
+                    {meta.python_module && meta.python_module !== "builtins" ? `${meta.python_module}.` : ""}{meta.python_type}
+                  </span>
+                </div>
+              )}
               {(mime || ext) && (
                 <div className="flex items-baseline gap-2">
                   <span className="text-fg-subtle">Format:</span>

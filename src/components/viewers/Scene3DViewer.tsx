@@ -77,8 +77,17 @@ export function SceneView<V extends object, M extends Scene3DMeta>({
   );
 }
 
+/** The count field each 3D handler records: its metadata is the handler's only when this is a number. */
+const COUNT_FIELD: Record<Scene3DKind<object, Scene3DMeta>["kind"], string> = {
+  pointcloud: "n_points",
+  mesh: "n_vertices",
+  boxes3d: "n_boxes",
+};
+
 /** One point cloud / mesh / boxes source on its own, drawn as its card draws it by default. */
 export default function Scene3DViewer({ source, kind }: { source: Pick<ViewerSource, "hash" | "meta">; kind: Scene3DKind<object, Scene3DMeta>["kind"] }) {
   const spec = SCENE_SPECS[kind] as Scene3DKind<object, Scene3DMeta>;
-  return <SceneView spec={spec} hash={source.hash} meta={source.meta as Scene3DMeta | null} view={spec.defaultView} link={null} resetKey={0} />;
+  // A plain `.npz` (or one carrying user metadata) has no handler facts to caption.
+  const meta = typeof source.meta?.[COUNT_FIELD[kind]] === "number" ? (source.meta as Scene3DMeta) : null;
+  return <SceneView spec={spec} hash={source.hash} meta={meta} view={spec.defaultView} link={null} resetKey={0} />;
 }

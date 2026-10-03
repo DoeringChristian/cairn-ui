@@ -168,7 +168,7 @@ export default function SweepDetailPage() {
                     <td className="mono num px-3 py-2 text-right">{t.value != null ? formatValue(t.value) : "—"}</td>
                   )}
                   {paramKeys.map((k) => (
-                    <td key={k} className="mono num px-3 py-2">{formatValue(t.params[k])}</td>
+                    <td key={k} className="mono num px-3 py-2">{t.params[k] === null ? "null" : formatValue(t.params[k])}</td>
                   ))}
                   <td className="px-3 py-2">
                     {t.run_id ? (

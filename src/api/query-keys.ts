@@ -27,7 +27,7 @@ export const qk = {
   /** An artifact's bytes as text (markdown, HTML); content addressed, so never stale. */
   artifactText: (hash: string | null | undefined) => ["artifact-text", hash] as const,
   /** The first `bytes` of an artifact as text (a file too big to show whole). */
-  artifactTextHead: (hash: string, bytes: number) => ["artifact-text", hash, "head", bytes] as const,
+  artifactTextHead: (hash: string, bytes: number) => ["artifact-text-head", hash, bytes] as const,
   // Artifact registry: every key starts with "artifact-" or "lineage" (see
   // invalidateArtifacts in api/artifact-hooks.ts).
   artifactFamilies: (projectId: string) => ["artifact-families", projectId] as const,

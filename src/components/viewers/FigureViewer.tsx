@@ -259,7 +259,8 @@ export default function FigureViewer({
   }
   return (
     <div className={`${className ?? "h-full"} overflow-hidden rounded`}>
-      <ImageViewer source={source} label={label} toolbar={!sync} />
+      {/* Keyed by figure: a new step's PNG starts fitted (the card's shared view is Plotly's). */}
+      <ImageViewer key={source.hash} source={source} label={label} toolbar={!sync} />
     </div>
   );
 }

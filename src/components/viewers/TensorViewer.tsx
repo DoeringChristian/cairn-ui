@@ -140,13 +140,20 @@ export function arrayMeta(arr: NpyArray, sizeBytes: number | null): TensorMeta {
  * Without the handler's metadata (`meta` null) the array is loaded and its
  * facts computed here.
  */
-export function TensorView({ hash, meta: logged, size = null, settings }: {
+/** The tensor handler's metadata, or null when `meta` is anything else (user metadata, a plain file). */
+export function tensorMetaOf(meta: unknown): TensorMeta | null {
+  const m = meta as Partial<TensorMeta> | null;
+  return m && Array.isArray(m.shape) && typeof m.dtype === "string" ? (m as TensorMeta) : null;
+}
+
+export function TensorView({ hash, meta: given, size = null, settings }: {
   hash: string;
   meta: TensorMeta | null;
   /** Byte size, for the facts of a file without metadata. */
   size?: number | null;
   settings: TensorSettings;
 }) {
+  const logged = tensorMetaOf(given);
   const facts = tensorFacts(logged, settings);
   // A file without the handler's facts is read for them, unless it is too big to read at all.
   const unreadable = !logged && (size ?? 0) > SIZE_CAP;
@@ -158,7 +165,9 @@ export function TensorView({ hash, meta: logged, size = null, settings }: {
     placeholderData: keepPreviousData,
   });
   const arr = npyQuery.data;
-  const meta = useMemo(() => logged ?? (arr ? arrayMeta(arr, size) : null), [logged, arr, size]);
+  // A file's facts come from its own array, never the previous file's placeholder.
+  const ownArr = npyQuery.isPlaceholderData ? undefined : arr;
+  const meta = useMemo(() => logged ?? (ownArr ? arrayMeta(ownArr, size) : null), [logged, ownArr, size]);
   const { ndim, tooBig, effectiveView, shapeLabel } = tensorFacts(meta, settings);
 
   const histogram = useMemo(() => {

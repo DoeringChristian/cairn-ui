@@ -110,10 +110,10 @@ export default function HtmlViewer({
       data-viewer="html"
     />
   );
-  if (!t.cut || maxBytes == null) return frame;
+  // One tree shape whether or not the text is cut: the frame never remounts.
   return (
     <div className="flex flex-col gap-1">
-      <TruncatedNote shown={maxBytes} total={source.size} />
+      {t.cut && maxBytes != null && <TruncatedNote shown={maxBytes} total={source.size} />}
       {frame}
     </div>
   );
