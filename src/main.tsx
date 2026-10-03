@@ -14,9 +14,6 @@ import RunMetricsTab from "./pages/RunMetricsTab";
 import RunLogsTab from "./pages/RunLogsTab";
 import RunSourceTab from "./pages/RunSourceTab";
 import RunEnvTab from "./pages/RunEnvTab";
-import ArtifactsPage from "./pages/ArtifactsPage";
-import ArtifactDetailPage from "./pages/ArtifactDetailPage";
-import LineagePage from "./pages/LineagePage";
 import ReportsListPage from "./pages/ReportsListPage";
 import ReportEditorPage from "./pages/ReportEditorPage";
 import SweepsListPage from "./pages/SweepsListPage";
@@ -56,9 +53,19 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <RunsTablePage /> },
           { path: "compare", element: <ComparePage /> },
-          { path: "artifacts", element: <ArtifactsPage /> },
-          { path: "artifacts/:familyId", element: <ArtifactDetailPage /> },
-          { path: "lineage", element: <LineagePage /> },
+          // The artifact explorer and the lineage viewer are code-split
+          // (React Flow loads only when a graph is shown).
+          {
+            path: "artifacts",
+            lazy: () => import("./pages/artifacts/ExplorerLayout").then((m) => ({ Component: m.default })),
+            children: [
+              { index: true, lazy: () => import("./pages/artifacts/ExplorerLayout").then((m) => ({ Component: m.ArtifactsHome })) },
+              { path: ":name", lazy: () => import("./pages/artifacts/ExplorerLayout").then((m) => ({ Component: m.FamilyRedirect })) },
+              { path: ":name/:versionSeg", lazy: () => import("./pages/artifacts/VersionPage").then((m) => ({ Component: m.default })) },
+              { path: ":name/:versionSeg/:tab", lazy: () => import("./pages/artifacts/VersionPage").then((m) => ({ Component: m.default })) },
+            ],
+          },
+          { path: "lineage", lazy: () => import("./pages/LineagePage").then((m) => ({ Component: m.default })) },
           { path: "reports", element: <ReportsListPage /> },
           { path: "reports/:reportId", element: <ReportEditorPage /> },
           { path: "sweeps", element: <SweepsListPage /> },
@@ -74,6 +81,7 @@ const router = createBrowserRouter([
               { path: "logs", element: <RunLogsTab /> },
               { path: "source", element: <RunSourceTab /> },
               { path: "env", element: <RunEnvTab /> },
+              { path: "artifacts", lazy: () => import("./pages/RunArtifactsTab").then((m) => ({ Component: m.default })) },
             ],
           },
         ],

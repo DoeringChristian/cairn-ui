@@ -27,11 +27,19 @@ export const qk = {
   gallery: (hash: string | null | undefined) => ["gallery", hash] as const,
   /** An artifact's bytes as text (markdown, HTML); content addressed, so never stale. */
   artifactText: (hash: string | null | undefined) => ["artifact-text", hash] as const,
+  // Artifact registry: every key starts with "artifact-" or "lineage" (see
+  // invalidateArtifacts in api/artifact-hooks.ts).
   artifactFamilies: (projectId: string) => ["artifact-families", projectId] as const,
-  artifactFamily: (projectId: string, familyId: string) => ["artifact-family", projectId, familyId] as const,
+  artifactFamilyByName: (projectId: string, name: string) => ["artifact-family", projectId, name] as const,
+  artifactVersion: (versionId: string) => ["artifact-version", versionId] as const,
+  artifactVersionFiles: (versionId: string) => ["artifact-version-files", versionId] as const,
+  artifactVersionConsumers: (versionId: string) => ["artifact-version-consumers", versionId] as const,
+  artifactFileText: (versionId: string, path: string) => ["artifact-file-text", versionId, path] as const,
   runInputArtifacts: (runId: string) => ["run-input-artifacts", runId] as const,
   runOutputArtifacts: (runId: string) => ["run-output-artifacts", runId] as const,
-  lineage: (projectId: string) => ["lineage", projectId] as const,
+  lineage: (projectId: string, familyId?: string | null) => ["lineage", projectId, familyId ?? null] as const,
+  lineageAround: (kind: string, id: string, depth: number | null, direction: string) =>
+    ["lineage-around", kind, id, depth, direction] as const,
   alerts: (projectId: string, runId?: string) => ["alerts", projectId, runId ?? null] as const,
   reports: (projectId: string, params?: unknown) =>
     params != null ? (["reports", projectId, params] as const) : (["reports", projectId] as const),

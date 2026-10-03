@@ -9,6 +9,7 @@ import { summaryRuleFor } from "../lib/metric-defs";
 import { formatNum } from "../lib/plot-utils/types";
 import { useProjectTags } from "../lib/use-project-tags";
 import TagInput from "../components/TagInput";
+import { explorerPath } from "../lib/artifacts/refs";
 import Markdown from "../lib/markdown";
 
 interface Ctx {
@@ -311,7 +312,7 @@ function RunArtifactsSection({ run }: { run: Run }) {
 
   const row = (v: ArtifactVersionInfo, role?: string) => (
     <li key={v.id} className="flex flex-wrap items-center gap-2 text-sm">
-      <Link to={`/p/${v.project_id}/artifacts/${v.family_id}`} className="mono text-accent hover:underline">
+      <Link to={explorerPath(v.project_id, v.name, v.version)} className="mono text-accent hover:underline">
         {v.project_id !== run.project_id ? v.qualified_ref : v.ref}
       </Link>
       <span className="text-fg-muted text-xs">{v.type}</span>

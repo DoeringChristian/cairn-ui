@@ -33,9 +33,34 @@ async function checkOk(res: Response, path: string): Promise<Response> {
     throw new Error(`401 Unauthorized: ${path}`);
   }
   if (!res.ok) {
-    throw new Error(`${res.status} ${res.statusText}: ${path}`);
+    let detail: string | null = null;
+    try {
+      const body = (await res.clone().json()) as { detail?: unknown };
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      // Not JSON: the status line is all there is.
+    }
+    throw new ApiError(res.status, `${res.status} ${res.statusText}: ${path}`, detail);
   }
   return res;
+}
+
+/** A non-2xx response: `status`, and the server's `detail` message when it sent one. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly detail: string | null = null,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+/** What to show the user for a failed request: the server's detail, else the message. */
+export function errorText(err: unknown): string {
+  if (err instanceof ApiError) return err.detail ?? err.message;
+  return err instanceof Error ? err.message : String(err);
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -355,55 +380,91 @@ export const api = {
   deleteServerReportTemplate: (projectId: string, id: string) =>
     del_<{ deleted: string }>(`/api/projects/${projectId}/report-templates/${id}`),
 
-  // Artifact registry
+  // Artifact registry (cairn/server/routes/artifact_registry.py)
   artifactFamilies: (projectId: string) =>
     get<{ families: import("./types").ArtifactFamily[] }>(
-      `/api/projects/${projectId}/artifact-families`,
+      `/api/projects/${encodeURIComponent(projectId)}/artifact-families`,
     ),
-  artifactFamily: (_projectId: string, familyId: string) =>
+  artifactFamily: (familyId: string) =>
+    get<import("./types").ArtifactFamilyDetail>(`/api/artifact-families/${familyId}`),
+  artifactFamilyByName: (projectId: string, name: string) =>
     get<import("./types").ArtifactFamilyDetail>(
-      `/api/artifact-families/${familyId}`,
+      `/api/projects/${encodeURIComponent(projectId)}/artifact-families/by-name/${encodeURIComponent(name)}`,
     ),
   updateArtifactFamily: (familyId: string, body: { description?: string | null }) =>
-    patch<import("./types").ArtifactFamilyDetail>(
-      `/api/artifact-families/${familyId}`,
-      body,
-    ),
+    patch<import("./types").ArtifactFamilyDetail>(`/api/artifact-families/${familyId}`, body),
+  deleteArtifactFamily: (familyId: string) =>
+    del_<{ deleted: string }>(`/api/artifact-families/${familyId}`),
   artifactVersion: (versionId: string) =>
     get<import("./types").ArtifactVersionInfo>(`/api/artifact-versions/${versionId}`),
+  /** Replace the description and/or merge keys into the metadata. */
+  updateArtifactVersion: (
+    versionId: string,
+    body: { description?: string; metadata?: Record<string, unknown> },
+  ) => patch<import("./types").ArtifactVersionInfo>(`/api/artifact-versions/${versionId}`, body),
+  /** 409 (ApiError) when an alias names the version, unless `force`. */
+  deleteArtifactVersion: (versionId: string, force = false) =>
+    del_<{ deleted: string }>(`/api/artifact-versions/${versionId}${force ? "?force=true" : ""}`),
+  resolveArtifactRef: (projectId: string, ref: string) =>
+    post<import("./types").ArtifactVersionInfo>(
+      `/api/projects/${encodeURIComponent(projectId)}/resolve-artifact-ref`,
+      { ref },
+    ),
   artifactVersionFiles: (versionId: string) =>
     get<{ files: import("./types").ArtifactEntryInfo[] }>(
       `/api/artifact-versions/${versionId}/files`,
     ),
-  /** One uploaded entry's bytes, served with the entry's mime type. */
+  /** One uploaded entry's bytes, served with the entry's mime type (Range aware). */
   artifactVersionFileUrl: (versionId: string, path: string) =>
     `/api/artifact-versions/${versionId}/file?path=${encodeURIComponent(path)}`,
+  /** The first `bytes` of an entry as text (a Range request). */
+  artifactVersionFileText: async (versionId: string, path: string, bytes: number) => {
+    const url = `/api/artifact-versions/${versionId}/file?path=${encodeURIComponent(path)}`;
+    const res = await checkOk(await fetch(url, { headers: { Range: `bytes=0-${bytes - 1}` } }), url);
+    const buf = new Uint8Array(await res.arrayBuffer());
+    return new TextDecoder("utf-8", { fatal: false }).decode(buf.subarray(0, bytes));
+  },
+  /** Every uploaded entry as `<name>-v<N>.zip` (references are left out). */
+  artifactVersionDownloadUrl: (versionId: string) => `/api/artifact-versions/${versionId}/download`,
   artifactVersionConsumers: (versionId: string) =>
     get<{ consumers: import("./types").ArtifactConsumer[]; count: number }>(
       `/api/artifact-versions/${versionId}/consumers`,
     ),
-  /** Point a user alias at a version (moving it within the family). */
+  /** Point a user alias at a version (moving it within the family); `latest` / `vN` are a 400. */
   addArtifactAlias: (versionId: string, alias: string) =>
-    post<import("./types").ArtifactVersionInfo>(
-      `/api/artifact-versions/${versionId}/aliases`,
-      { alias },
-    ),
+    post<import("./types").ArtifactVersionInfo>(`/api/artifact-versions/${versionId}/aliases`, { alias }),
   removeArtifactAlias: (versionId: string, alias: string) =>
     del_<import("./types").ArtifactVersionInfo>(
       `/api/artifact-versions/${versionId}/aliases/${encodeURIComponent(alias)}`,
     ),
-  runInputArtifacts: (runId: string) =>
-    get<{ inputs: import("./types").RunArtifactInput[] }>(
-      `/api/runs/${runId}/inputs`,
+  addArtifactTag: (versionId: string, tag: string) =>
+    post<import("./types").ArtifactVersionInfo>(`/api/artifact-versions/${versionId}/tags`, { tag }),
+  removeArtifactTag: (versionId: string, tag: string) =>
+    del_<import("./types").ArtifactVersionInfo>(
+      `/api/artifact-versions/${versionId}/tags/${encodeURIComponent(tag)}`,
     ),
+  runInputArtifacts: (runId: string) =>
+    get<{ inputs: import("./types").RunArtifactInput[] }>(`/api/runs/${runId}/inputs`),
   runOutputArtifacts: (runId: string) =>
     get<{ outputs: import("./types").ArtifactVersionInfo[] }>(
       `/api/runs/${runId}/outputs?include=files`,
     ),
-  lineage: (projectId: string) =>
+  /** The project's lineage (`familyId`: one artifact's versions). */
+  lineage: (projectId: string, familyId?: string | null) =>
     get<import("./types").LineageGraph>(
-      `/api/projects/${projectId}/lineage`,
+      `/api/projects/${encodeURIComponent(projectId)}/lineage${familyId ? `?family_id=${familyId}` : ""}`,
     ),
+  /** The lineage around one version or run. */
+  lineageAround: (
+    center: { kind: "artifact_version" | "run"; id: string },
+    opts: { depth?: number; direction?: "upstream" | "downstream" | "both" } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (opts.depth != null) q.set("depth", String(opts.depth));
+    if (opts.direction) q.set("direction", opts.direction);
+    const base = center.kind === "run" ? `/api/runs/${center.id}` : `/api/artifact-versions/${center.id}`;
+    return get<import("./types").LineageGraph>(`${base}/lineage?${q}`);
+  },
   sweeps: (projectId: string) =>
     get<{ sweeps: import("./types").Sweep[] }>(
       `/api/sweeps?project=${encodeURIComponent(projectId)}`,

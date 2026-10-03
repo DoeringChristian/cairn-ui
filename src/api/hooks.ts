@@ -298,22 +298,6 @@ export function useSetNotes(runId: string) {
   });
 }
 
-export function useArtifactFamilies(projectId: string) {
-  return useQuery({
-    queryKey: qk.artifactFamilies(projectId),
-    queryFn: () => api.artifactFamilies(projectId),
-    enabled: !!projectId,
-  });
-}
-
-export function useArtifactFamily(projectId: string, familyId: string) {
-  return useQuery({
-    queryKey: qk.artifactFamily(projectId, familyId),
-    queryFn: () => api.artifactFamily(projectId, familyId),
-    enabled: !!projectId && !!familyId,
-  });
-}
-
 export function useRunInputArtifacts(runId: string) {
   return useQuery({
     queryKey: qk.runInputArtifacts(runId),
@@ -327,14 +311,6 @@ export function useRunOutputArtifacts(runId: string) {
     queryKey: qk.runOutputArtifacts(runId),
     queryFn: () => api.runOutputArtifacts(runId),
     enabled: !!runId,
-  });
-}
-
-export function useLineage(projectId: string) {
-  return useQuery({
-    queryKey: qk.lineage(projectId),
-    queryFn: () => api.lineage(projectId),
-    enabled: !!projectId,
   });
 }
 

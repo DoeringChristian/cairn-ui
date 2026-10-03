@@ -13,6 +13,7 @@ const TABS = [
   { id: "logs", label: "Logs" },
   { id: "source", label: "Source" },
   { id: "env", label: "Environment" },
+  { id: "artifacts", label: "Artifacts" },
 ];
 
 export default function RunDetailPage() {
