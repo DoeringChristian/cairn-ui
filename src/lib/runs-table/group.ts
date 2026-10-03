@@ -10,7 +10,6 @@ import type { Run } from "../../api/types.ts";
 import { formatValue } from "../expr/index.ts";
 import { compileScalarExpr, evalScalar } from "./columns.ts";
 import { parseTags } from "./context.ts";
-import { compareValues } from "./sort.ts";
 
 export type GroupBy =
   | { source: "group" | "job_type" | "tag" }
@@ -87,14 +86,19 @@ function partition(runs: readonly Run[], by: GroupBy): Array<{ label: string | n
       groups.set(label, g);
     }
   }
-  return [...groups.values()].sort((a, b) => {
-    if (a.label === null) return b.label === null ? 0 : 1;
-    if (b.label === null) return -1;
-    return compareValues(a.raw, b.raw);
-  });
+  // Groups follow the table's sort: `runs` arrive sorted, so a group sits
+  // where its first run does (insertion order). Sorting by the grouped
+  // column orders the groups by their value; sorting by Created puts the
+  // group with the newest run first. Runs without a value group last.
+  const out = [...groups.values()];
+  return [...out.filter((g) => g.label !== null), ...out.filter((g) => g.label === null)];
 }
 
-/** Group `runs` level by level; [] levels → no groups (null). */
+/**
+ * Group `runs` level by level; [] levels → no groups (null). `runs` must be
+ * in the table's sort order: groups (at every level) and the runs inside
+ * them keep that order, so sorting and grouping compose.
+ */
 export function groupRunsNested(runs: readonly Run[], levels: readonly GroupBy[]): RunGroupNode[] | null {
   if (levels.length === 0) return null;
   const build = (rs: readonly Run[], depth: number, parentId: string): RunGroupNode[] => {
