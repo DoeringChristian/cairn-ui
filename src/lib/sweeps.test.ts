@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import type { SweepTrial } from "../api/types";
-import { formatParamValue, isLogParam, rankTrials, searchedParams, trialParamKeys } from "./sweeps.ts";
+import { isLogParam, rankTrials, searchedParams, trialParamKeys } from "./sweeps.ts";
 
 const trial = (id: string, value: number | null, params: Record<string, unknown> = {}, created_at = id): SweepTrial => ({
   id, sweep_id: "s", run_id: null, params, status: "completed", value, created_at,
@@ -19,13 +19,6 @@ test("trialParamKeys puts searched keys first", () => {
   assert.deepEqual(trialParamKeys([trial("a", 1, { bs: 1, lr: 2 })], ["lr"]), ["lr", "bs"]);
 });
 
-test("formatParamValue", () => {
-  assert.equal(formatParamValue(0.000123456), "0.0001235");
-  assert.equal(formatParamValue(3), "3");
-  assert.equal(formatParamValue("adam"), "adam");
-  assert.equal(formatParamValue([1, 2]), "[1,2]");
-  assert.equal(formatParamValue(undefined), "—");
-});
 
 test("rankTrials orders by goal with unscored trials last", () => {
   const ts = [trial("1", 3), trial("2", null), trial("3", 1), trial("4", null)];

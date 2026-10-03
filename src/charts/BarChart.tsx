@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import PlotlyChart, { type PlotlyData } from "./PlotlyChart.tsx";
-import { formatNum } from "../lib/plot-utils/types.ts";
+import { formatNum } from "../lib/plot-utils/format.ts";
 
 export interface BarDatum {
   id: string;

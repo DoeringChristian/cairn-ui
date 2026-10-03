@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useCompactLayout } from "../../lib/use-media-query";
-import { formatKeyValue } from "../../lib/media/slider-key";
+import { formatNum } from "../../lib/plot-utils/format";
 import { galleryColumns, setLinked, slotValue, type Columns, type CompareSlot } from "../../lib/media/panel-layout";
 
 export interface ComparePaneOption {
@@ -98,9 +98,9 @@ export default function ComparePanes({
                   disabled={disabled || linked || values.length < 2}
                   onChange={(e) => patch(i, { pane: slot.pane, value: Number(e.target.value) })}
                 >
-                  {!values.includes(value) && <option value={String(value)}>{`${keyName} ${formatKeyValue(value)}`}</option>}
+                  {!values.includes(value) && <option value={String(value)}>{`${keyName} ${formatNum(value)}`}</option>}
                   {values.map((v) => (
-                    <option key={v} value={String(v)}>{`${keyName} ${formatKeyValue(v)}`}</option>
+                    <option key={v} value={String(v)}>{`${keyName} ${formatNum(v)}`}</option>
                   ))}
                 </select>
               </div>

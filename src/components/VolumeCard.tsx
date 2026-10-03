@@ -5,7 +5,7 @@ import type { SequencePoint } from "../api/types";
 import { cardOverridesStorageKey } from "../lib/card-settings";
 import { safeJsonParse } from "../lib/format";
 import { artifactFilename } from "../lib/download";
-import { formatKeyValue } from "../lib/media/slider-key";
+import { formatNum } from "../lib/plot-utils/format";
 import { useCardDrop } from "../lib/use-series-drop";
 import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid } from "./card-kit";
 import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
@@ -139,7 +139,7 @@ export default function VolumeCard({
       settings={settings}
       updateSettings={ctl.set}
       title={metric.name}
-      subtitle={values.length > 0 ? `${keyName} ${formatKeyValue(currentValue)} (${safeIdx + 1}/${values.length})` : `${metric.count} pts`}
+      subtitle={values.length > 0 ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})` : `${metric.count} pts`}
       subtitleCollapsedOnly={values.length > 1}
       defaultHeight={plotCardPolicy("volume").defaultHeight}
       onRemove={onRemove}

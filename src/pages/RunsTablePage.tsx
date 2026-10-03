@@ -5,7 +5,7 @@ import { useBulkRunMutation, useInfiniteRuns, useSetTags } from "../api/hooks";
 import type { Run, RunStatus } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
 import { formatDuration, formatRelative, safeJsonParse } from "../lib/format";
-import { formatNum } from "../lib/plot-utils/types";
+import { formatValue } from "../lib/plot-utils/format";
 import { createComparison } from "../lib/workspace/comparisons";
 import { downloadBlob } from "../lib/download";
 import { api } from "../api/client";
@@ -92,13 +92,6 @@ function useRunsFilterState(projectId: string | undefined) {
     setEntry({ projectId, state: next });
   }, [projectId]);
   return [current.state, update] as const;
-}
-
-function formatCell(v: unknown): string {
-  if (v == null) return "";
-  if (typeof v === "number") return formatNum(v);
-  if (typeof v === "string") return v;
-  return JSON.stringify(v);
 }
 
 function formatCreated(iso: string): string {
@@ -634,7 +627,7 @@ export default function RunsTablePage() {
     }
     return (
       <span className="dim whitespace-nowrap">
-        <span className="text-fg-muted">{formatCell(v)}</span>
+        <span className="text-fg-muted">{formatValue(v, { empty: "" })}</span>
         {delta}
       </span>
     );

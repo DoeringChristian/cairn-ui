@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useCardSettings } from "../lib/card-settings";
 import type { TileSettings } from "./cards-settings/tile";
-import { formatNum } from "../lib/plot-utils/types";
+import { formatNum } from "../lib/plot-utils/format";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { useVisibleRuns } from "../lib/run-view";
 import { useScalarExprs } from "../lib/use-scalar-exprs";

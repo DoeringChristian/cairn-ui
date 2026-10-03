@@ -30,7 +30,8 @@ import {
 import { loadJson, saveJson, storageKeys } from "../../lib/storage";
 import { SectionSyncStore, parsePersisted, type SectionSyncState } from "../../lib/media/section-sync";
 import { SharedClock } from "../../lib/media/shared-clock";
-import { STEP_KEY, formatKeyValue, sliderIndex } from "../../lib/media/slider-key";
+import { formatNum } from "../../lib/plot-utils/format";
+import { STEP_KEY, sliderIndex } from "../../lib/media/slider-key";
 import StepSlider from "../StepSlider";
 import ClockTransport from "../media/ClockTransport";
 
@@ -181,7 +182,7 @@ export function SectionMediaBar({ className }: { className?: string }) {
         />
       ) : (
         <span className="mono text-[11px] text-fg-subtle">
-          {points.length === 1 ? `${state.key} ${formatKeyValue(points[0]!.step)}` : "no media yet"}
+          {points.length === 1 ? `${state.key} ${formatNum(points[0]!.step)}` : "no media yet"}
         </span>
       )}
       <ClockTransport clock={ctx.clock} hideWithoutMedia />

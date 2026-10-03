@@ -24,13 +24,6 @@ export function trialParamKeys(trials: SweepTrial[], searched: string[]): string
   return [...keys];
 }
 
-/** A param value as the trials table shows it. */
-export function formatParamValue(value: unknown): string {
-  if (value === undefined) return "—";
-  if (typeof value === "number") return Number.isInteger(value) ? String(value) : Number(value.toPrecision(4)).toString();
-  if (typeof value === "string") return value;
-  return JSON.stringify(value);
-}
 
 /** Trials best first by `goal` (unscored last, newest first among them). */
 export function rankTrials(trials: SweepTrial[], goal: "minimize" | "maximize"): SweepTrial[] {

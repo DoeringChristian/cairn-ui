@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import type { RunDetailResponse } from "../../api/types";
-import { formatNum } from "../../lib/plot-utils/types";
+import { formatValue } from "../../lib/plot-utils/format";
 import { shortRunId } from "../../lib/run-label";
-import type { CompareRow, CompareValue } from "../../lib/run-compare";
+import type { CompareRow } from "../../lib/run-compare";
 import { diffCellClassName } from "../../lib/table-diff";
 
 export interface CompareColumnsProps {
@@ -22,15 +22,13 @@ interface Props extends CompareColumnsProps {
   /** Shown instead of the table when `rows` is empty. */
   empty: string;
   mono?: boolean;
+  /** Numbers in full (config values), not rounded (measurements). */
+  exact?: boolean;
   /** Pinned keys get a filled pin; clicking toggles. Omit to hide the pins. */
   pinnedKeys?: readonly string[];
   onTogglePin?: (key: string) => void;
   /** Suffix after a key (e.g. the ↓ of a lower-is-better metric). */
   keySuffix?: (row: CompareRow) => ReactNode;
-}
-
-function show(v: CompareValue): string {
-  return v == null ? "—" : typeof v === "number" ? formatNum(v) : String(v);
 }
 
 /** Rows = keys, columns = runs; differing rows are marked, numeric cells tinted best/worst. */
@@ -41,6 +39,7 @@ export default function CompareRowsTable({
   rows,
   empty,
   mono = true,
+  exact = false,
   runIds,
   labels,
   colors,
@@ -116,7 +115,7 @@ export default function CompareRowsTable({
                           key={runIds[i]}
                           className={`mono py-1 pr-4 whitespace-nowrap tabular-nums text-fg-muted ${diffCls}`}
                         >
-                          {show(v)}
+                          {formatValue(v, { exact })}
                         </td>
                       );
                     })}

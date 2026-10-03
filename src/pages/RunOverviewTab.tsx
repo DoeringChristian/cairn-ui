@@ -6,7 +6,7 @@ import type { ArtifactVersionInfo, MetricDef, Param, Run } from "../api/types";
 import { formatBytes, safeJsonParse } from "../lib/format";
 import { remoteHref } from "../lib/git-remote";
 import { summaryRuleFor } from "../lib/metric-defs";
-import { formatNum } from "../lib/plot-utils/types";
+import { formatNum } from "../lib/plot-utils/format";
 import { useProjectTags } from "../lib/use-project-tags";
 import TagInput from "../components/TagInput";
 import { explorerPath } from "../lib/artifacts/refs";

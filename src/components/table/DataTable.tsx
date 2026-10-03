@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { diffCellClassName, type CellComparison } from "../../lib/table-diff";
-import { formatNum } from "../../lib/plot-utils/types";
+import { formatNum } from "../../lib/plot-utils/format";
 import { mediaOf } from "../../lib/table-media";
 import { cellText, type TableData } from "../../lib/table/types";
 import { isTextCell, type TextDiffMode } from "../../lib/table/text-diff";

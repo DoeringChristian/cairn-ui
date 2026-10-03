@@ -12,7 +12,7 @@ import {
   type RefLine,
   type RunningStat,
 } from "../lib/plot-utils/scatter-extras.ts";
-import { formatNum } from "../lib/plot-utils/types.ts";
+import { formatNum } from "../lib/plot-utils/format.ts";
 
 export interface ScatterPoint {
   /** The run id (a click opens it). */

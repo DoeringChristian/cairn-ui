@@ -9,6 +9,7 @@
 
 import type { RunDetailResponse } from "../api/types.ts";
 import { safeJsonParse } from "./format.ts";
+import { decodeConfigValue } from "./plot-utils/format.ts";
 import { summaryRuleFor } from "./metric-defs.ts";
 import { computeCellStatuses, isNumericSeries, toNumeric, type CellComparison } from "./table-diff.ts";
 
@@ -61,9 +62,9 @@ function toTable(runs: readonly RunDetailResponse[], map: Map<string, Map<string
   return { runIds, rows };
 }
 
-/** Each run's params (their raw logged value strings). */
+/** Each run's params, decoded (see `decodeConfigValue`). */
 export function buildParamDiff(runs: readonly RunDetailResponse[]): CompareTable {
-  return toTable(runs, byKey(runs, (rd) => rd.params.map((p) => [p.key, p.value] as [string, CompareValue])));
+  return toTable(runs, byKey(runs, (rd) => rd.params.map((p) => [p.key, decodeConfigValue(p.value)] as [string, CompareValue])));
 }
 
 /**

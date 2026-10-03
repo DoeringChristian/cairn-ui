@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
-import { formatNum, type AxisScale, type Series, type SeriesPoint } from "../lib/plot-utils/types.ts";
+import { type AxisScale, type Series, type SeriesPoint } from "../lib/plot-utils/types.ts";
+import { formatNum } from "../lib/plot-utils/format.ts";
 import { alignSeries, type DrawnSeries } from "./scalar-data.ts";
 import type { SmoothingKind } from "../lib/plot-utils/smooth.ts";
 import type { StackMode } from "../lib/plot-utils/stack.ts";

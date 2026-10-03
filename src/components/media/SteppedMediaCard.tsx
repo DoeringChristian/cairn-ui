@@ -24,7 +24,8 @@ import { cardOverridesStorageKey, type CardSettingsKey, type SettingsController 
 import { useCardDrop } from "../../lib/use-series-drop";
 import type { ComparisonSeriesRef } from "../../lib/comparisons";
 import { gridValues, normalizeSlots, slotValue } from "../../lib/media/panel-layout";
-import { STEP_KEY, formatKeyValue } from "../../lib/media/slider-key";
+import { formatNum } from "../../lib/plot-utils/format";
+import { STEP_KEY } from "../../lib/media/slider-key";
 import { useNeighbourPrefetch } from "../../lib/media/use-settled-frame";
 import { galleryCount, isGalleryPoint } from "../../lib/media/gallery";
 import { prefetchPointOrGallery } from "../../lib/media/gallery-query";
@@ -232,7 +233,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
 
   const subtitle =
     values.length > 0
-      ? `${keyName === STEP_KEY ? "step" : keyName} ${formatKeyValue(currentValue)} (${safeIdx + 1}/${values.length})`
+      ? `${keyName === STEP_KEY ? "step" : keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})`
       : `${metric.count} pts`;
 
   const cardRef = useRef<HTMLDivElement>(null);
@@ -314,7 +315,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       return (
         <GridPanes
           rows={paneOptions}
-          columns={gridCols.map((v) => ({ value: v, label: `${keyName} ${formatKeyValue(v)}` }))}
+          columns={gridCols.map((v) => ({ value: v, label: `${keyName} ${formatNum(v)}` }))}
           current={currentValue}
           onColumnClick={slider.setValue}
           rowHeight={inModal ? 220 : 140}

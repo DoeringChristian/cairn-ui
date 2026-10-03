@@ -8,7 +8,7 @@ import { downloadArtifact, artifactFilename } from "../../lib/download";
 import { cardOverridesStorageKey, type CardSettingsKey, type SettingsController } from "../../lib/card-settings";
 import type { ComparisonSeriesRef } from "../../lib/comparisons";
 import { useCardDrop } from "../../lib/use-series-drop";
-import { formatKeyValue } from "../../lib/media/slider-key";
+import { formatNum } from "../../lib/plot-utils/format";
 import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid } from "../card-kit";
 import { useMediaPanes, useScalarMetricNames } from "../card-kit/use-media-panes";
 import { scene3dInstanceDefaults, type Scene3DSettings } from "../cards-settings/scene3d";
@@ -268,7 +268,7 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   );
   const isMulti = effectiveMetrics.length > 1;
   const subtitle = values.length > 0
-    ? `${keyName} ${formatKeyValue(currentValue)} (${safeIdx + 1}/${values.length})`
+    ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})`
     : `${metric.count} pts`;
 
 

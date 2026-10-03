@@ -13,7 +13,8 @@ import {
   type OverlayView,
 } from "../lib/overlays";
 import { gridValues, normalizeSlots, slotValue } from "../lib/media/panel-layout";
-import { STEP_KEY, formatKeyValue } from "../lib/media/slider-key";
+import { formatNum } from "../lib/plot-utils/format";
+import { STEP_KEY } from "../lib/media/slider-key";
 import { useNeighbourPrefetch, useSettledFrame } from "../lib/media/use-settled-frame";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
@@ -235,7 +236,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       return (
         <GridPanes
           rows={paneOptions}
-          columns={gridCols.map((v) => ({ value: v, label: `${keyName} ${formatKeyValue(v)}` }))}
+          columns={gridCols.map((v) => ({ value: v, label: `${keyName} ${formatNum(v)}` }))}
           current={currentValue}
           onColumnClick={slider.setValue}
           renderCell={(row, col) => renderView(row, `grid:${row}:${col}`)}
@@ -310,7 +311,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
 
   const subtitle = values.length === 0
     ? undefined
-    : keyName === STEP_KEY ? `step ${currentStep}` : `${keyName} ${formatKeyValue(currentValue)}`;
+    : keyName === STEP_KEY ? `step ${currentStep}` : `${keyName} ${formatNum(currentValue)}`;
 
   return (
     <CardShell

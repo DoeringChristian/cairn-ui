@@ -38,8 +38,3 @@ export function seriesColor(index: number): string {
   const n = SERIES_COLORS.length;
   return SERIES_COLORS[((index % n) + n) % n]!;
 }
-
-export function formatNum(value: number): string {
-  if (!Number.isFinite(value)) return String(value);
-  return Number(value.toPrecision(4)).toString();
-}

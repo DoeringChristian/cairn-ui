@@ -130,8 +130,3 @@ export function sliderIndex(values: readonly number[], value: number | null | un
   return Math.max(0, indexAsOf(values, value));
 }
 
-/** A key value for labels: integers as is, other numbers to 4 significant digits. */
-export function formatKeyValue(value: number): string {
-  if (Number.isInteger(value)) return String(value);
-  return String(Number(value.toPrecision(4)));
-}

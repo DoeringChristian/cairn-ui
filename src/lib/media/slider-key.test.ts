@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   STEP_KEY,
-  formatKeyValue,
   indexAsOf,
   resolveAtValue,
   sliderIndex,
@@ -94,8 +93,3 @@ test("indexAsOf and sliderIndex land on the value or the one below", () => {
   assert.equal(sliderIndex([], 20), 0);
 });
 
-test("formatKeyValue keeps integers and trims floats", () => {
-  assert.equal(formatKeyValue(12), "12");
-  assert.equal(formatKeyValue(0.123456), "0.1235");
-  assert.equal(formatKeyValue(2.5), "2.5");
-});

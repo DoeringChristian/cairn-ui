@@ -4,7 +4,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { STEP_KEY, formatKeyValue } from "../lib/media/slider-key";
+import { formatNum } from "../lib/plot-utils/format";
+import { STEP_KEY } from "../lib/media/slider-key";
 
 export type XAxisMode = "step" | "relative_time" | "wall_time";
 
@@ -135,7 +136,7 @@ export default function StepSlider({
 
   let label: string;
   if (metricKey) {
-    label = `${keyName} ${formatKeyValue(current.step)}`;
+    label = `${keyName} ${formatNum(current.step)}`;
   } else if (xAxis === "relative_time" && current.wall_time && firstWallTime != null) {
     const elapsed = (new Date(current.wall_time).getTime() - firstWallTime) / 1000;
     label = `+${formatRelativeTime(elapsed)}`;

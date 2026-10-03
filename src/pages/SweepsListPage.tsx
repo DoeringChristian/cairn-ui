@@ -2,7 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useSweeps } from "../api/hooks";
 import type { Sweep } from "../api/types";
 import { formatRelative } from "../lib/format";
-import { formatParamValue } from "../lib/sweeps";
+import { formatValue } from "../lib/plot-utils/format";
 import SweepStatusBadge from "../components/SweepStatusBadge";
 
 function trialCounts(s: Sweep): string {
@@ -14,7 +14,7 @@ function trialCounts(s: Sweep): string {
 
 function bestLabel(s: Sweep): string {
   if (!s.best || s.best.value == null) return "—";
-  return formatParamValue(s.best.value);
+  return formatValue(s.best.value);
 }
 
 /** The project's sweeps, newest first. Created with `cairn sweep create` or `cairn.sweep(...)`. */

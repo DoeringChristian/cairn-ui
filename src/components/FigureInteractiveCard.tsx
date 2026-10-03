@@ -41,7 +41,7 @@ import SeriesChipStrip from "./SeriesChipStrip";
 import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
 import FigureSettingsPanel from "./settings-panels/FigureSettingsPanel";
 import StepSlider from "./StepSlider";
-import { formatKeyValue } from "../lib/media/slider-key";
+import { formatNum } from "../lib/plot-utils/format";
 import { plotCardPolicy } from "./card-kit/plot-card-policy";
 
 // The card's own minimum height — passed to every resolveCardHeight read so the
@@ -683,7 +683,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
 
   const subtitle =
     sliderValues.length > 0
-      ? `${slider.keyName === "step" ? "step" : slider.keyName} ${formatKeyValue(currentValue)} (${safeIdx + 1}/${sliderValues.length})`
+      ? `${slider.keyName === "step" ? "step" : slider.keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${sliderValues.length})`
       : `${metric.count} pts`;
 
   const isMulti = effectiveMetrics.length > 1;

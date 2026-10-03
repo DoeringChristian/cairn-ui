@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { colorscale } from "./colormaps.ts";
 
 import PlotlyChart, { type PlotlyData } from "./PlotlyChart.tsx";
-import { formatNum } from "../lib/plot-utils/types.ts";
+import { formatNum } from "../lib/plot-utils/format.ts";
 
 export interface ParallelColumn {
   /** A scalar expression per run (`config.lr`, `min(val.loss)`, …); also the axis label. */

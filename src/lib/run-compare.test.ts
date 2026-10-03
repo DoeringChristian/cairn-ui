@@ -34,7 +34,10 @@ test("param diff: rows per key, missing counts as differing, numeric rows get st
   assert.deepEqual(t.rows.map((r) => [r.key, r.differs]), [["lr", true], ["opt", false], ["seed", true]]);
   assert.deepEqual(t.rows[0]!.statuses, ["higher", "lower"]);
   assert.equal(t.rows[1]!.statuses, null);
-  assert.deepEqual(t.rows[2]!.values, ["1", null]);
+  assert.deepEqual(t.rows[2]!.values, [1, null]);
+  // Logged values are JSON: strings lose their quotes, lists stay compact JSON.
+  const d = buildParamDiff([run("a", { params: { opt: '"adam"', dims: "[1, 2]" } }), run("b", { params: { opt: '"adam"', dims: "[1,2]" } })]);
+  assert.deepEqual(d.rows.map((r) => [r.key, r.values, r.differs]), [["dims", ["[1,2]", "[1,2]"], false], ["opt", ["adam", "adam"], false]]);
   assert.equal(differingCount(t), 2);
 });
 

@@ -26,7 +26,7 @@ import {
   MultiPaneGrid,
 } from "./card-kit";
 import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
-import { formatKeyValue } from "../lib/media/slider-key";
+import { formatNum } from "../lib/plot-utils/format";
 import type { SeriesRef } from "./card-kit/use-card-series";
 import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
@@ -175,7 +175,7 @@ export default function PresetCard({
 
   const subtitle = [
     kind ? PRESET_KIND_LABELS[kind] : null,
-    values.length > 0 ? `${keyName} ${formatKeyValue(currentValue)} (${safeIdx + 1}/${values.length})` : null,
+    values.length > 0 ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})` : null,
   ].filter(Boolean).join(" · ");
 
   const compSeries = useMemo(

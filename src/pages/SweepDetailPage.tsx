@@ -3,7 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { useSweep, useSweepAction } from "../api/hooks";
 import type { SweepAction, SweepDetail } from "../api/types";
 import { formatRelative } from "../lib/format";
-import { formatParamValue, isLogParam, rankTrials, searchedParams, trialParamKeys } from "../lib/sweeps";
+import { formatValue } from "../lib/plot-utils/format";
+import { isLogParam, rankTrials, searchedParams, trialParamKeys } from "../lib/sweeps";
 import { metricExpr, paramExpr } from "../lib/scalar-exprs";
 import SweepStatusBadge from "../components/SweepStatusBadge";
 import CopyId from "../components/CopyId";
@@ -84,7 +85,7 @@ export default function SweepDetailPage() {
         <Fact label="Best">
           {sweep.best?.value != null ? (
             <>
-              {formatParamValue(sweep.best.value)}
+              {formatValue(sweep.best.value)}
               {sweep.best.run_id && (
                 <Link to={`/p/${projectId}/r/${sweep.best.run_id}`} className="ml-2 text-accent hover:underline">
                   run
@@ -164,10 +165,10 @@ export default function SweepDetailPage() {
                   <td className="mono px-3 py-2 text-fg-muted">{t.id.slice(0, 8)}</td>
                   <td className="px-3 py-2"><SweepStatusBadge status={t.status} /></td>
                   {sweep.metric && (
-                    <td className="mono num px-3 py-2 text-right">{t.value != null ? formatParamValue(t.value) : "—"}</td>
+                    <td className="mono num px-3 py-2 text-right">{t.value != null ? formatValue(t.value) : "—"}</td>
                   )}
                   {paramKeys.map((k) => (
-                    <td key={k} className="mono num px-3 py-2">{formatParamValue(t.params[k])}</td>
+                    <td key={k} className="mono num px-3 py-2">{formatValue(t.params[k])}</td>
                   ))}
                   <td className="px-3 py-2">
                     {t.run_id ? (

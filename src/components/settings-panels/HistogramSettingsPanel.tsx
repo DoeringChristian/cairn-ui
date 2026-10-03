@@ -1,6 +1,6 @@
 import { ColormapSelect, Segmented, SettingsSection, SettingsTabs, Switch } from "../settings/palette";
 import { bind, type SettingsController } from "../../lib/card-settings";
-import { formatNum } from "../../lib/plot-utils/types";
+import { formatNum } from "../../lib/plot-utils/format";
 import type { HistogramSettings } from "../cards-settings/histogram";
 
 export interface PanelCtx {

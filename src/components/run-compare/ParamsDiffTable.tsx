@@ -12,6 +12,7 @@ export default function ParamsDiffTable({ runs, labels, colors, onlyDiffs, filte
       title={`Parameters (${n} differ${n === 1 ? "s" : ""})`}
       actions={actions}
       keyHeader="Key"
+      exact
       rows={rows}
       empty={
         table.rows.length === 0

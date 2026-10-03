@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { safeJsonParse } from "../lib/format";
-import { formatNum } from "../lib/plot-utils/types";
+import { formatNum } from "../lib/plot-utils/format";
 import { downloadArtifact, artifactFilename } from "../lib/download";
 import { api } from "../api/client";
 import { cardOverridesStorageKey, useCardSettings, type CardSettingsKey } from "../lib/card-settings";
