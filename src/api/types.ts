@@ -325,40 +325,75 @@ export interface ArtifactFamilyDetail extends ArtifactFamily {
   versions: ArtifactVersionInfo[];
 }
 
-export interface LineageVersionNode {
-  type: "artifact_version";
+/** Shared by every lineage node: in/out degree within the returned graph and
+ * the sibling-set key (null when the node has no siblings). */
+interface LineageNodeBase {
   id: string;
+  label: string;
+  degree: { in: number; out: number };
+  group_key: string | null;
+}
+
+export interface LineageVersionNode extends LineageNodeBase {
+  kind: "artifact_version";
+  /** The artifact type (`model`, `dataset`, ...). */
+  type: string;
+  name: string;
   family_id: string;
   project_id: string;
-  name: string;
-  artifact_type: string;
   version: number;
   ref: string;
   qualified_ref: string;
   aliases: string[];
+  tags: string[];
   step: number | null;
   created_at: string;
   file_count: number;
   size: number;
 }
 
-export interface LineageRunNode extends ArtifactRunRef {
-  type: "run";
+export interface LineageRunNode extends LineageNodeBase {
+  kind: "run";
+  name: string | null;
+  status: RunStatus | null;
+  tags: string[];
+  group: string | null;
+  job_type: string | null;
+  project_id: string | null;
+  created_at: string | null;
+  archived: boolean;
+  /** The run no longer exists (its edges keep an endpoint). */
+  deleted: boolean;
 }
 
-export type LineageNode = LineageVersionNode | LineageRunNode;
+/** A collapsed sibling set (`?cluster=N`). */
+export interface LineageGroupNode {
+  kind: "group";
+  id: string;
+  label: string;
+  group_key: string;
+  member_kind: "run" | "artifact_version";
+  count: number;
+  members: string[];
+}
+
+export type LineageNode = LineageVersionNode | LineageRunNode | LineageGroupNode;
 
 export interface LineageEdge {
   source: string;
   target: string;
   /** produced: run -> version; consumed: version -> run (with `role`); forked: run -> run. */
-  relation: "produced" | "consumed" | "forked";
+  kind: "produced" | "consumed" | "forked";
   role?: string;
+  /** With clustering: how many member edges this edge stands for. */
+  count?: number;
 }
 
 export interface LineageGraph {
   nodes: LineageNode[];
   edges: LineageEdge[];
+  /** Every sibling set, collapsed or not. */
+  groups: Array<{ group_key: string; member_kind: "run" | "artifact_version"; members: string[] }>;
   /** The id the graph is centred on (version- and run-centred queries). */
   center?: string;
 }

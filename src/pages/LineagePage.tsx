@@ -96,7 +96,7 @@ function layoutGraph(graph: LineageGraph) {
 }
 
 function nodeColor(node: LineageNode): { fill: string; stroke: string } {
-  if (node.type === "run") {
+  if (node.kind === "run") {
     const status = node.status ?? undefined;
     switch (status) {
       case "completed":
@@ -109,8 +109,9 @@ function nodeColor(node: LineageNode): { fill: string; stroke: string } {
         return { fill: "rgba(156,163,175,0.12)", stroke: "rgba(156,163,175,0.5)" };
     }
   }
+  if (node.kind === "group") return { fill: "rgba(156,163,175,0.12)", stroke: "rgba(156,163,175,0.5)" };
   // artifact_version
-  const atype = node.artifact_type;
+  const atype = node.type;
   switch (atype) {
     case "dataset":
       return { fill: "rgba(59,130,246,0.12)", stroke: "rgba(59,130,246,0.5)" };
@@ -121,7 +122,7 @@ function nodeColor(node: LineageNode): { fill: string; stroke: string } {
   }
 }
 
-function edgeColor(relation: LineageEdge["relation"]): string {
+function edgeColor(relation: LineageEdge["kind"]): string {
   switch (relation) {
     case "produced":
       return "rgba(34,197,94,0.5)";
@@ -198,9 +199,9 @@ export default function LineagePage() {
               y1={le.y1}
               x2={le.x2}
               y2={le.y2}
-              stroke={edgeColor(le.edge.relation)}
+              stroke={edgeColor(le.edge.kind)}
               strokeWidth={1.5}
-              strokeDasharray={le.edge.relation === "forked" ? "5 3" : undefined}
+              strokeDasharray={le.edge.kind === "forked" ? "5 3" : undefined}
               markerEnd="url(#arrowhead)"
             />
           ))}
@@ -208,7 +209,7 @@ export default function LineagePage() {
           {/* Nodes */}
           {layout.positioned.map((p) => {
             const colors = nodeColor(p.node);
-            const isRun = p.node.type === "run";
+            const isRun = p.node.kind === "run";
             return (
               <g key={p.node.id}>
                 <rect
@@ -231,9 +232,7 @@ export default function LineagePage() {
                   fontFamily="monospace"
                 >
                   {(() => {
-                    const lbl = p.node.type === "artifact_version"
-                      ? p.node.ref
-                      : p.node.name ?? p.node.id.slice(0, 8);
+                    const lbl = p.node.label;
                     return lbl.length > 20 ? lbl.slice(0, 18) + "..." : lbl;
                   })()}
                 </text>
@@ -245,7 +244,7 @@ export default function LineagePage() {
                   className="fill-fg-muted text-[9px]"
                   fontFamily="monospace"
                 >
-                  {isRun ? "run" : "artifact"}
+                  {isRun ? "run" : p.node.kind === "group" ? "group" : "artifact"}
                 </text>
               </g>
             );
