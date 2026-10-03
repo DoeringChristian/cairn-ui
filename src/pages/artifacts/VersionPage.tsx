@@ -11,6 +11,7 @@ import { errorText } from "../../api/client";
 import type { ArtifactFamilyDetail, ArtifactVersionInfo, RunStatus } from "../../api/types";
 import CopyButton from "../../components/artifacts/CopyButton";
 import RunStatusBadge from "../../components/RunStatusBadge";
+import { RunConfigTree } from "../../components/viewers/ConfigTree";
 import CodeBlock from "../../components/viewers/CodeBlock";
 import {
   AliasesEditor,
@@ -222,6 +223,19 @@ function Field({ label, children, testId }: { label: string; children: ReactNode
 
 const DASH = <span className="text-fg-subtle">—</span>;
 
+/** The producing run's config, folded; loaded when opened. */
+function ProducerConfig({ runId }: { runId: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details className="basis-full" data-testid="producer-config" onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">Its config</summary>
+      {open && (
+        <RunConfigTree runId={runId} className="mt-1 max-h-72 overflow-auto rounded border border-border-subtle bg-bg-elevated px-2 py-1" />
+      )}
+    </details>
+  );
+}
+
 function OverviewTab({
   projectId,
   family,
@@ -273,6 +287,7 @@ function OverviewTab({
                 {version.producer.name ?? version.producer.id}
               </Link>
               {version.producer.status && <RunStatusBadge status={version.producer.status as RunStatus} archived={version.producer.archived} />}
+              <ProducerConfig runId={version.producer.id} />
             </span>
           ) : version.created_by_run ? (
             <span className="mono text-fg-muted">{version.created_by_run} (deleted)</span>

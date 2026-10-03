@@ -162,6 +162,10 @@ export interface RunDetailResponse {
   /** Keys set with `run.summary(...)` (same shape as params). */
   summary?: Param[];
   metric_defs?: MetricDef[];
+  /** The config as logged (nested); `params` is its flat index. */
+  config_doc?: Record<string, unknown>;
+  /** The summary as logged (nested); `summary` is its flat index. */
+  summary_doc?: Record<string, unknown>;
 }
 
 /** Per-run extras `GET /api/runs` adds on request (`?include=`). */

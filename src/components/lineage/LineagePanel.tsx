@@ -3,13 +3,14 @@ import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateArtifacts, useArtifactVersion, useCanEdit } from "../../api/artifact-hooks";
 import { useRun, useSetTags } from "../../api/hooks";
-import type { LineageRunNode, LineageVersionNode, Param, RunStatus } from "../../api/types";
+import type { LineageRunNode, LineageVersionNode, RunStatus } from "../../api/types";
 import type { ModelGraph, ViewGroupNode, ViewNode } from "../../lib/lineage/graph-model";
 import { explorerPath } from "../../lib/artifacts/refs";
 import { formatBytes, formatRelative, safeJsonParse } from "../../lib/format";
 import ChipEditor from "../artifacts/ChipEditor";
 import { AliasesEditor, DescriptionEditor, TagsEditor } from "../artifacts/VersionEditors";
 import RunStatusBadge from "../RunStatusBadge";
+import ConfigTree from "../viewers/ConfigTree";
 import { TypeBadgeInline } from "./TypeBadgeInline";
 
 export interface PanelActions {
@@ -91,14 +92,6 @@ function ExpandActions({ id, actions }: { id: string; actions: PanelActions }) {
   );
 }
 
-/** A few config values, flattened (`optimizer.lr: 0.001`). */
-function configSummary(params: Param[], max = 12): Array<[string, string]> {
-  return params.slice(0, max).map((p) => {
-    const v = safeJsonParse<unknown>(p.value);
-    return [p.key, typeof v === "string" ? v : JSON.stringify(v ?? p.value)];
-  });
-}
-
 function RunDetails({ node, projectId, actions }: { node: LineageRunNode; projectId: string; actions: PanelActions }) {
   const q = useRun(node.id);
   const canEdit = useCanEdit();
@@ -106,8 +99,6 @@ function RunDetails({ node, projectId, actions }: { node: LineageRunNode; projec
   const qc = useQueryClient();
   const run = q.data?.run;
   const tags = run ? (safeJsonParse<string[]>(run.tags) ?? []) : node.tags;
-  const params = q.data?.params ?? [];
-  const summary = configSummary(params);
   const project = node.project_id ?? projectId;
   const save = (next: string[]) => setTags.mutate(next, { onSuccess: () => invalidateArtifacts(qc) });
   return (
@@ -146,20 +137,10 @@ function RunDetails({ node, projectId, actions }: { node: LineageRunNode; projec
           <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-muted">Config</h4>
           {q.isLoading ? (
             <p className="text-xs text-fg-subtle">Loading…</p>
-          ) : summary.length === 0 ? (
-            <p className="text-xs text-fg-subtle">No config.</p>
           ) : (
-            <dl className="mono rounded border border-border-subtle bg-bg-elevated px-2 py-1 text-[11px]" data-testid="panel-run-config">
-              {summary.map(([k, v]) => (
-                <div key={k} className="flex gap-2 py-0.5">
-                  <dt className="shrink-0 text-fg-muted">{k}</dt>
-                  <dd className="min-w-0 truncate" title={v}>
-                    {v}
-                  </dd>
-                </div>
-              ))}
-              {params.length > summary.length && <div className="text-fg-subtle">+{params.length - summary.length} more</div>}
-            </dl>
+            <div className="max-h-64 overflow-auto rounded border border-border-subtle bg-bg-elevated px-2 py-1" data-testid="panel-run-config">
+              <ConfigTree config={q.data?.config_doc} openDepth={1} />
+            </div>
           )}
           <Link className="btn mt-3 px-2 py-1 text-xs" to={`/p/${project}/r/${node.id}`}>
             Open run <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden="true" />

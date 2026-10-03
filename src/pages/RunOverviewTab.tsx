@@ -5,22 +5,24 @@ import { useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArt
 import type { ArtifactVersionInfo, MetricDef, Param, Run } from "../api/types";
 import { formatBytes, safeJsonParse } from "../lib/format";
 import { remoteHref } from "../lib/git-remote";
-import { summaryRuleFor } from "../lib/metric-defs";
-import { formatNum } from "../lib/plot-utils/format";
+import { isSystemMetric, metricValueSource } from "../lib/metric-defs";
+import { formatValue } from "../lib/plot-utils/format";
 import { useProjectTags } from "../lib/use-project-tags";
 import TagInput from "../components/TagInput";
+import ConfigTree from "../components/viewers/ConfigTree";
 import { explorerPath } from "../lib/artifacts/refs";
 import Markdown from "../lib/markdown";
 
 interface Ctx {
   run: Run;
   params: Param[];
+  config: Record<string, unknown>;
   summary: Param[];
   metricDefs: MetricDef[];
 }
 
 export default function RunOverviewTab() {
-  const { run, params, summary, metricDefs } = useOutletContext<Ctx>();
+  const { run, params, config, summary, metricDefs } = useOutletContext<Ctx>();
   const env = safeJsonParse<Record<string, unknown>>(run.env_snapshot);
   const tags = safeJsonParse<string[]>(run.tags) ?? [];
   const cliArgs = safeJsonParse<string[]>(run.cli_args) ?? [];
@@ -64,29 +66,8 @@ export default function RunOverviewTab() {
         <TagsEditor run={run} tags={tags} />
         <NotesEditor runId={run.id} notes={run.notes ?? ""} />
       </Section>
-      <Section title={`Params (${params.length})`} className="lg:col-span-2">
-        {params.length === 0 ? (
-          <p className="text-sm text-fg-subtle">No params logged.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-fg-muted">
-              <tr>
-                <th className="pb-1 pr-4">Key</th>
-                <th className="pb-1 pr-4">Type</th>
-                <th className="pb-1">Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {params.map((p) => (
-                <tr key={p.key} className="border-t border-border-subtle">
-                  <td className="mono break-all py-1 pr-4">{p.key}</td>
-                  <td className="mono py-1 pr-4 text-fg-subtle">{p.value_type}</td>
-                  <td className="mono break-all py-1 text-fg-muted">{p.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <Section title={`Config (${params.length})`} className="lg:col-span-2">
+        <ConfigTree config={config} />
       </Section>
       {cliArgs.length > 0 && (
         <Section title="CLI args">
@@ -154,10 +135,8 @@ function MetricsSection({ run, summary, metricDefs }: { run: Run; summary: Param
   const [showSystem, setShowSystem] = useState(false);
   const explicit = new Set(summary.map((p) => p.key));
   const all = Object.entries(run.values ?? {}).sort(([a], [b]) => a.localeCompare(b));
-  const system = all.filter(([k]) => k.startsWith("system."));
-  const rows = showSystem ? all : all.filter(([k]) => !k.startsWith("system."));
-  const source = (key: string) =>
-    explicit.has(key) ? "summary" : (summaryRuleFor(key, metricDefs) ?? "last");
+  const system = all.filter(([k]) => isSystemMetric(k));
+  const rows = showSystem ? all : all.filter(([k]) => !isSystemMetric(k));
   return (
     <Section title={`Metrics (${all.length - system.length})`} className="lg:col-span-2">
       {all.length === 0 ? (
@@ -178,9 +157,9 @@ function MetricsSection({ run, summary, metricDefs }: { run: Run; summary: Param
                   <tr key={key} className="border-t border-border-subtle">
                     <td className="mono break-all py-1 pr-4">{key}</td>
                     <td className="mono num py-1 pr-4 text-fg">
-                      {v == null ? "—" : typeof v === "number" ? formatNum(v) : String(v)}
+                      {formatValue(v)}
                     </td>
-                    <td className="mono py-1 text-fg-subtle">{source(key)}</td>
+                    <td className="mono py-1 text-fg-subtle">{metricValueSource(key, explicit, metricDefs)}</td>
                   </tr>
                 ))}
               </tbody>

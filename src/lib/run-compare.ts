@@ -10,7 +10,7 @@
 import type { RunDetailResponse } from "../api/types.ts";
 import { safeJsonParse } from "./format.ts";
 import { decodeConfigValue } from "./plot-utils/format.ts";
-import { summaryRuleFor } from "./metric-defs.ts";
+import { isSystemMetric, summaryRuleFor } from "./metric-defs.ts";
 import { computeCellStatuses, isNumericSeries, toNumeric, type CellComparison } from "./table-diff.ts";
 
 export type CompareValue = string | number | boolean | null;
@@ -78,7 +78,7 @@ export function buildMetricsSummary(runs: readonly RunDetailResponse[]): Compare
   const map = byKey(runs, (rd) => {
     const out: [string, CompareValue][] = [];
     for (const [name, v] of Object.entries(rd.run.values ?? {})) {
-      if (name.startsWith("system.")) continue;
+      if (isSystemMetric(name)) continue;
       out.push([name, v]);
       const rule = summaryRuleFor(name, rd.metric_defs) ?? rd.run.stats?.[name]?.rule ?? null;
       if (rule === "min") lower.add(name);

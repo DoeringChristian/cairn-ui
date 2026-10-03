@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { summaryRuleFor, xMetricFor } from "./metric-defs.ts";
+import { summaryRuleFor, xMetricFor, isSystemMetric, metricValueSource } from "./metric-defs.ts";
 
 const defs = [
   { name: "val.loss", x: "epoch", summary: "min" },
@@ -24,4 +24,13 @@ test("summaryRuleFor: the metric's own rule, exact names only", () => {
   assert.equal(summaryRuleFor("val.f1", defs), null);
   assert.equal(summaryRuleFor("val.*", defs), "max");
   assert.equal(summaryRuleFor("loss", undefined), null);
+});
+
+test("system metrics and where a final value comes from", () => {
+  assert.equal(isSystemMetric("system.cpu"), true);
+  assert.equal(isSystemMetric("loss"), false);
+  const defs = [{ name: "loss", x: null, summary: "min" }];
+  assert.equal(metricValueSource("acc", new Set(["acc"]), defs), "summary");
+  assert.equal(metricValueSource("loss", new Set(), defs), "min");
+  assert.equal(metricValueSource("lr", new Set(), defs), "last");
 });

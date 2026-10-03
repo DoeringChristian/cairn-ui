@@ -5,6 +5,7 @@
 // this decides what a comparison or report template resolves to.
 // ---------------------------------------------------------------------------
 
+import { isSystemMetric } from "../metric-defs.ts";
 import { isMultiRunCardType, MULTI_RUN_CARD_LABELS } from "./types.ts";
 import type { ComparisonTemplateCard } from "./template-cards.ts";
 
@@ -61,7 +62,7 @@ export function matchTemplateCards(
     const series: SeriesEntry[] = [];
     const seen = new Set<string>();
     for (const name of tc.keys) {
-      if (name.startsWith("system.")) continue;
+      if (isSystemMetric(name)) continue;
       const candidates = seqMap.get(name);
       if (!candidates?.length) continue;
       for (const s of candidates) {

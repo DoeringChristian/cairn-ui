@@ -11,7 +11,6 @@
 
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   Background,
   Controls,
@@ -25,19 +24,15 @@ import {
   type Edge,
   type NodeChange,
 } from "@xyflow/react";
-import { api, errorText } from "../../api/client";
-import { qk } from "../../api/query-keys";
-import type { LineageGraph } from "../../api/types";
+import { useLineageGraph, type LineageCenter } from "./use-lineage-graph";
+import { errorText } from "../../api/client";
 import {
   artifactTypes,
   clusterGraph,
-  emptyModel,
   filterGraph,
   groupNodeId,
   hiddenNeighbours,
   lineagePath,
-  mergeGraphs,
-  type ModelGraph,
   type ViewEdge,
   type ViewNode,
 } from "../../lib/lineage/graph-model";
@@ -45,11 +40,6 @@ import { layoutGraph, nodeHeight } from "../../lib/lineage/layout";
 import { typeColor } from "../../lib/artifacts/type-style";
 import LineagePanel, { type PanelActions } from "./LineagePanel";
 import { NODE_TYPES, RUN_COLOR, type LineageFlowNode } from "./nodes";
-
-export interface LineageCenter {
-  kind: "artifact_version" | "run";
-  id: string;
-}
 
 /** Sibling sets larger than this fold into one group node. */
 export const CLUSTER_THRESHOLD = 5;
@@ -59,12 +49,6 @@ export const INITIAL_DEPTH = 2;
 const FIT_MIN_ZOOM = 0.6;
 /** The details panel's width (LineagePanel: w-[340px] + margins). */
 const PANEL_WIDTH = 340;
-
-interface Expansion {
-  kind: "artifact_version" | "run";
-  id: string;
-  direction: "upstream" | "downstream";
-}
 
 export default function LineageView(props: {
   projectId: string;
@@ -89,33 +73,7 @@ function LineageCanvas({
   center?: LineageCenter | null;
   familyId?: string | null;
 }) {
-  const base = useQuery({
-    queryKey: center
-      ? qk.lineageAround(center.kind, center.id, INITIAL_DEPTH, "both")
-      : qk.lineage(projectId, familyId),
-    queryFn: () =>
-      center ? api.lineageAround(center, { depth: INITIAL_DEPTH, direction: "both" }) : api.lineage(projectId, familyId),
-  });
-  const [expansions, setExpansions] = useState<Expansion[]>([]);
-  const expansionQs = useQueries({
-    queries: expansions.map((x) => ({
-      queryKey: qk.lineageAround(x.kind, x.id, 1, x.direction),
-      queryFn: () => api.lineageAround({ kind: x.kind, id: x.id }, { depth: 1, direction: x.direction }),
-    })),
-  });
-  const expanding = expansionQs.some((q) => q.isFetching && !q.data);
-  // A fixed-size dependency standing for every expansion's current data.
-  const expansionStamp = expansionQs.map((q) => q.dataUpdatedAt).join(",");
-  const expansionQsRef = useRef(expansionQs);
-  expansionQsRef.current = expansionQs;
-
-  // Every graph fetched so far, merged (refetches after edits keep it fresh).
-  const model: ModelGraph = useMemo(() => {
-    let m = emptyModel();
-    const all = [base.data, ...expansionQsRef.current.map((q) => q.data)].filter((g): g is LineageGraph => !!g);
-    for (const g of all) m = mergeGraphs(m, g);
-    return m;
-  }, [base.data, expansionStamp]);
+  const { model, isLoading, error, expanding, expand } = useLineageGraph(projectId, { center, familyId, depth: INITIAL_DEPTH });
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [hiddenKinds, setHiddenKinds] = useState<Set<"run" | "artifact_version">>(new Set());
@@ -162,16 +120,6 @@ function LineageCanvas({
     [getViewport, setViewport],
   );
 
-  const expand = useCallback(
-    (id: string, direction: "upstream" | "downstream") => {
-      const n = model.nodes.get(id);
-      if (!n) return;
-      setExpansions((xs) =>
-        xs.some((x) => x.id === id && x.direction === direction) ? xs : [...xs, { kind: n.kind, id, direction }],
-      );
-    },
-    [model],
-  );
   const expandGroup = useCallback((key: string) => {
     setExpandedGroups((s) => new Set(s).add(key));
     setSelectedId((sel) => (sel === groupNodeId(key) ? null : sel));
@@ -277,8 +225,8 @@ function LineageCanvas({
     groupOf,
   };
 
-  if (base.isLoading) return <p className="p-4 text-sm text-fg-muted">Loading lineage…</p>;
-  if (base.isError) return <p className="p-4 text-sm text-status-failed">{errorText(base.error)}</p>;
+  if (isLoading) return <p className="p-4 text-sm text-fg-muted">Loading lineage…</p>;
+  if (error) return <p className="p-4 text-sm text-status-failed">{errorText(error)}</p>;
   if (model.nodes.size === 0)
     return (
       <div className="p-6 text-sm text-fg-muted" data-testid="lineage-empty">

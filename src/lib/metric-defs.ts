@@ -25,3 +25,17 @@ export function summaryRuleFor(
 ): string | null {
   return defFor(name, defs)?.summary ?? null;
 }
+
+/**
+ * A `system.*` metric (the SDK's CPU / GPU / memory sampler): listed apart
+ * from the run's own metrics (folded on the run page, left out of run
+ * comparisons and comparison templates).
+ */
+export function isSystemMetric(name: string): boolean {
+  return name.startsWith("system.");
+}
+
+/** Where a run's final value of `key` comes from: an explicit summary key, the metric's summary rule, or its last point. */
+export function metricValueSource(key: string, explicitSummaryKeys: ReadonlySet<string>, defs: readonly MetricDef[] | undefined): string {
+  return explicitSummaryKeys.has(key) ? "summary" : (summaryRuleFor(key, defs) ?? "last");
+}
