@@ -3,7 +3,8 @@
 export interface SeriesPoint {
   x: number;
   y: number;
-  wallTime?: string;
+  /** Wall time of the point, epoch ms. */
+  wallTime?: number;
 }
 
 export interface Series {

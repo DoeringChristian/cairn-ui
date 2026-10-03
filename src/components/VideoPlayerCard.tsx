@@ -10,6 +10,7 @@ import SteppedMediaCard, { type MediaView, type SteppedMediaCardProps } from "./
 import type { VideoSettings } from "./cards-settings/video";
 import { SharedClock } from "../lib/media/shared-clock";
 import { FIT_VIEW, isFitView, type ZoomView } from "../lib/media/view-geometry";
+import { ZoomViewSync } from "../lib/media/zoom-view-sync";
 import { SwapBarrier, pairKey, requestPair, slotElements, type SwapState, type VideoPair } from "../lib/media/video-swap";
 import { useMediaSyncContext } from "./card-kit/media-sync";
 import ClockTransport from "./media/ClockTransport";
@@ -46,6 +47,8 @@ interface VideoClipProps extends MediaView<VideoSettings> {
   onSplitChange: (split: number, final: boolean) => void;
   zoomView: ZoomView;
   onZoomViewChange: (view: ZoomView) => void;
+  /** Moves every pane in the same frame during a gesture (see ZoomSplitPane). */
+  zoomSync: ZoomViewSync;
 }
 
 const playable = (p: SequencePoint | null) => !!p && isPlayable(p.artifact_mime);
@@ -185,6 +188,7 @@ function VideoClip(props: VideoClipProps) {
         onSplitChange={props.onSplitChange}
         view={props.zoomView}
         onViewChange={props.onZoomViewChange}
+        viewSync={props.zoomSync}
         rendering={settings.rendering}
         reference={(r) => videos("ref", r)}
       >
@@ -228,6 +232,7 @@ export default function VideoPlayerCard(props: SteppedMediaCardProps) {
   const barrier = useMemo(() => new SwapBarrier(), []);
   const frameLock = useMemo(() => new CardFrameLock(), []);
   const [zoomView, setZoomView] = useState<ZoomView>(FIT_VIEW);
+  const zoomSync = useMemo(() => new ZoomViewSync(), []);
   const viewModified = !isFitView(zoomView);
   // Divider drags stay local until release; arrow keys persist immediately.
   const [dragSplit, setDragSplit] = useState<number | null>(null);
@@ -265,6 +270,7 @@ export default function VideoPlayerCard(props: SteppedMediaCardProps) {
           }}
           zoomView={zoomView}
           onZoomViewChange={setZoomView}
+          zoomSync={zoomSync}
         />
       )}
       footer={({ settings, paneCount, following, update }) => {

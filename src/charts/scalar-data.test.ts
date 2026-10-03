@@ -39,7 +39,7 @@ test("x = step: each point at its own step", () => {
   const { points, warnings } = metricLine("loss", node("step"), ctx);
   assert.deepEqual(points.map((p) => [p.x, p.y]), [[0, 5], [10, 4]]);
   assert.deepEqual(warnings, []);
-  assert.equal(points[0]!.wallTime, "2024-01-01T00:00:00.000Z");
+  assert.equal(points[0]!.wallTime, Date.parse("2024-01-01T00:00:00.000Z"));
 });
 
 test("x = step * 32 scales the steps", () => {
@@ -64,7 +64,7 @@ test("a derived series joins two metrics as of the first's steps, with a warning
   assert.deepEqual(points.map((p) => [p.x, p.y]), [[0, 5], [2, 10], [4, 6]]);
   assert.equal(warnings[0]?.kind, "asof-join");
   // Wall times follow the first metric's points.
-  assert.equal(points[1]!.wallTime, new Date(T0 + 2000).toISOString());
+  assert.equal(points[1]!.wallTime, T0 + 2000);
 });
 
 test("a derived series on one metric has no warning", () => {

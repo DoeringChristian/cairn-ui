@@ -497,7 +497,7 @@ export default function ScalarPlotCard({
         const rows: (string | number)[][] = [];
         for (const s of series) {
           for (const p of s.points) {
-            rows.push([s.label, s.role ?? "line", p.x, p.y, p.wallTime ?? ""]);
+            rows.push([s.label, s.role ?? "line", p.x, p.y, p.wallTime != null ? new Date(p.wallTime).toISOString() : ""]);
           }
         }
         downloadCsv(headers, rows, safeName(settings.title ?? metric.name) + ".csv");

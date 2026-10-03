@@ -21,6 +21,7 @@ import {
   type PixelRendering,
 } from "../../lib/media/split-geometry";
 import { transformToView, viewToTransform, type ZoomView, type Size } from "../../lib/media/view-geometry";
+import { GestureCommitter, type ZoomViewFollower, type ZoomViewSync } from "../../lib/media/zoom-view-sync";
 
 export interface ZoomSplitPaneProps {
   /**
@@ -46,6 +47,12 @@ export interface ZoomSplitPaneProps {
    */
   view: ZoomView;
   onViewChange: (view: ZoomView) => void;
+  /**
+   * The card's live sync between its panes (lib/media/zoom-view-sync.ts).
+   * With it, a gesture moves every pane of the sync in the same frame and
+   * `onViewChange` fires once the gesture settles; without it, on every move.
+   */
+  viewSync?: ZoomViewSync;
   rendering?: PixelRendering;
   /**
    * The reference, rendered inside the zoomed layer (left of the divider).
@@ -89,7 +96,7 @@ export const PANE_MEDIA_CLASS = "absolute inset-0 h-full w-full object-contain s
  * pixel), for overlays that keep their strokes a constant screen width.
  */
 export default function ZoomSplitPane({
-  contentSize, compare, referenceLabel, label, noun = "image", split, onSplitChange, view, onViewChange,
+  contentSize, compare, referenceLabel, label, noun = "image", split, onSplitChange, view, onViewChange, viewSync,
   rendering = "auto", reference, children,
 }: ZoomSplitPaneProps) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -165,10 +172,39 @@ export default function ZoomSplitPane({
   }, [measure, updateScreenPerPx]);
 
   // Before paint: a pane mounting into a bigger box (the settings view) shows the view at once.
+  // The prop is adopted when it changes; between changes the pane may show a
+  // newer view from its sync (a gesture whose state is not written yet).
+  const adoptedProp = useRef<ZoomView | null>(null);
   useLayoutEffect(() => {
-    viewRef.current = view;
+    if (view !== adoptedProp.current) {
+      adoptedProp.current = view;
+      viewRef.current = view;
+    }
     sync();
   }, [view, contentSize?.w, contentSize?.h, sync]);
+
+  // The sync: other panes' gestures show here at once; ours are committed once settled.
+  const committer = useRef<GestureCommitter | null>(null);
+  const follower = useRef<ZoomViewFollower | null>(null);
+  useEffect(() => {
+    if (!viewSync) return;
+    const me: ZoomViewFollower = {
+      show: (v) => {
+        viewRef.current = v;
+        sync();
+      },
+    };
+    const c = new GestureCommitter((v) => onViewChangeRef.current(v));
+    follower.current = me;
+    committer.current = c;
+    const leave = viewSync.join(me);
+    return () => {
+      leave();
+      c.flush();
+      if (committer.current === c) committer.current = null;
+      if (follower.current === me) follower.current = null;
+    };
+  }, [viewSync, sync]);
 
   useEffect(() => {
     const box = boxRef.current;
@@ -190,8 +226,14 @@ export default function ZoomSplitPane({
     }
     const next = transformToView(own.current, pane, sizeRef.current);
     viewRef.current = next;
-    onViewChangeRef.current(next);
-  }, [measure, sync, updateScreenPerPx]);
+    const c = committer.current;
+    if (viewSync && c && follower.current) {
+      viewSync.publish(next, follower.current);
+      c.changed(next);
+    } else {
+      onViewChangeRef.current(next);
+    }
+  }, [measure, sync, updateScreenPerPx, viewSync]);
 
   // Non-passive, so the page doesn't scroll while zooming.
   useEffect(() => {
@@ -271,6 +313,10 @@ export default function ZoomSplitPane({
         doubleClick={{ disabled: true }}
         customTransform={applyTransform}
         onTransform={onLibraryTransform}
+        onPanningStart={() => committer.current?.start()}
+        onPanningStop={() => committer.current?.stop()}
+        onPinchStart={() => committer.current?.start()}
+        onPinchStop={() => committer.current?.stop()}
       >
         <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%" }}>
           <div className="relative h-full w-full">

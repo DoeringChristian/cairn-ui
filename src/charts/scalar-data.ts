@@ -310,7 +310,7 @@ export function toPoints(y: SeriesData, x: XValues): SeriesPoint[] {
     if (xv == null) continue;
     const pt: SeriesPoint = { x: xv, y: v };
     const w = y.wall?.[i];
-    if (w != null) pt.wallTime = new Date(w).toISOString();
+    if (w != null) pt.wallTime = w;
     out.push(pt);
   }
   out.sort((a, b) => a.x - b.x);

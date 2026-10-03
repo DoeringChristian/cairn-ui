@@ -652,7 +652,7 @@ function ChartTooltip({
         </div>
       ))}
       {rows.length > shown.length && <div className="text-fg-subtle">+{rows.length - shown.length} more</div>}
-      {tooltip.showWallTime && shown[0]?.point.wallTime && (
+      {tooltip.showWallTime && shown[0]?.point.wallTime != null && (
         <div className="mono mt-0.5 text-fg-subtle">{new Date(shown[0].point.wallTime).toLocaleString()}</div>
       )}
     </div>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ImageOverlays, OverlayView } from "../../lib/overlays";
 import type { PixelRendering } from "../../lib/media/split-geometry";
 import type { ZoomView } from "../../lib/media/view-geometry";
+import type { ZoomViewSync } from "../../lib/media/zoom-view-sync";
 import ZoomSplitPane, { PANE_MEDIA_CLASS } from "../media/ZoomSplitPane";
 import ImageOverlay from "./ImageOverlay";
 
@@ -29,6 +30,8 @@ interface Props {
   /** Shared zoom/pan, independent of the pane's size (see lib/media/view-geometry.ts). */
   view: ZoomView;
   onViewChange: (view: ZoomView) => void;
+  /** The card's live sync between its panes (see ZoomSplitPane). */
+  viewSync?: ZoomViewSync;
   /** Annotations drawn over the pane's own image (never over the reference). */
   overlays?: ImageOverlays | null;
   overlayView?: OverlayView;
@@ -47,7 +50,7 @@ export type ImageRendering = PixelRendering;
  * sits in the foreground with the image, so it is clipped and zoomed with it.
  */
 export default function ImagePane({
-  image, imageSize, reference, split, onSplitChange, view, onViewChange, overlays, overlayView, rendering = "auto",
+  image, imageSize, reference, split, onSplitChange, view, onViewChange, viewSync, overlays, overlayView, rendering = "auto",
 }: Props) {
   // Keyed by src: a new image's overlay waits for that image's size.
   const [loaded, setLoaded] = useState<{ src: string; w: number; h: number } | null>(null);
@@ -65,6 +68,7 @@ export default function ImagePane({
       onSplitChange={onSplitChange}
       view={view}
       onViewChange={onViewChange}
+      viewSync={viewSync}
       rendering={rendering}
       reference={(imageRendering) => reference && (
         <img src={reference.src} alt={reference.label ?? "reference"} draggable={false} decoding="sync" className={PANE_MEDIA_CLASS} style={{ imageRendering }} />

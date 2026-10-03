@@ -59,7 +59,7 @@ export function bucketPoints(points: readonly SeriesPoint[], opts: BucketOptions
   const count = new Array<number>(n).fill(0);
   const min = new Array<number>(n).fill(Infinity);
   const max = new Array<number>(n).fill(-Infinity);
-  const wall = new Array<string | undefined>(n);
+  const wall = new Array<number | undefined>(n);
   for (const p of inRange) {
     const b = Math.min(n - 1, Math.max(0, Math.floor((t(p.x) - t0) / width)));
     sum[b]! += p.y;
