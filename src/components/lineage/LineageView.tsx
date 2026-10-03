@@ -55,8 +55,10 @@ export interface LineageCenter {
 export const CLUSTER_THRESHOLD = 5;
 /** Hops loaded around the centre on open. */
 export const INITIAL_DEPTH = 2;
-/** Automatic fits never zoom out past this (labels stay readable; pan for the rest). */
+/** Automatic fits of a centred graph never zoom out past this (labels stay readable; pan for the rest). */
 const FIT_MIN_ZOOM = 0.6;
+/** The details panel's width (LineagePanel: w-[340px] + margins). */
+const PANEL_WIDTH = 340;
 
 interface Expansion {
   kind: "artifact_version" | "run";
@@ -141,7 +143,24 @@ function LineageCanvas({
 
   // Dragged positions: this visit only.
   const dragged = useRef(new Map<string, { x: number; y: number }>());
-  const { fitView, getZoom, setCenter } = useReactFlow();
+  const { fitView, getZoom, setCenter, getViewport, setViewport } = useReactFlow();
+  const wrapper = useRef<HTMLDivElement>(null);
+
+  /** Select a node; when the details panel would cover it, pan it into view. */
+  const selectNode = useCallback(
+    (id: string, el: Element | null) => {
+      setSelectedId(id);
+      const box = wrapper.current?.getBoundingClientRect();
+      const r = el?.closest(".react-flow__node")?.getBoundingClientRect();
+      if (!box || !r) return;
+      const panelLeft = box.right - PANEL_WIDTH - 24;
+      if (r.right > panelLeft) {
+        const v = getViewport();
+        void setViewport({ ...v, x: v.x - (r.right - panelLeft) - 24 }, { duration: 200 });
+      }
+    },
+    [getViewport, setViewport],
+  );
 
   const expand = useCallback(
     (id: string, direction: "upstream" | "downstream") => {
@@ -208,7 +227,9 @@ function LineageCanvas({
 
   // Fit the graph; when it is too wide to fit readably, keep the centre node in view.
   const autoFit = useCallback(() => {
-    void fitView({ padding: 0.12, duration: 250, maxZoom: 1.1, minZoom: FIT_MIN_ZOOM }).then(() => {
+    // A centred graph never zooms out past FIT_MIN_ZOOM (the centre stays
+    // readable); the project graph fits whole.
+    void fitView({ padding: 0.12, duration: 250, maxZoom: 1.1, minZoom: center ? FIT_MIN_ZOOM : 0.1 }).then(() => {
       if (!center || getZoom() > FIT_MIN_ZOOM + 1e-3) return;
       const p = dragged.current.get(center.id) ?? layout.get(center.id);
       const n = view.nodes.find((x) => x.id === center.id);
@@ -275,13 +296,13 @@ function LineageCanvas({
   const foldable = model.groups.filter((g) => g.members.length > CLUSTER_THRESHOLD);
 
   return (
-    <div className="relative h-full w-full" data-testid="lineage-view">
+    <div ref={wrapper} className="relative h-full w-full" data-testid="lineage-view">
       <ReactFlow<LineageFlowNode, Edge>
         nodes={nodes}
         edges={edges}
         nodeTypes={NODE_TYPES}
         onNodesChange={onNodesChange}
-        onNodeClick={(_, n) => setSelectedId(n.id)}
+        onNodeClick={(e, n) => selectNode(n.id, e.target as Element)}
         onPaneClick={() => setSelectedId(null)}
         nodesDraggable
         nodesConnectable={false}
@@ -304,7 +325,7 @@ function LineageCanvas({
             if (d.node.kind === "artifact_version") return typeColor(d.node.type);
             return "#8b949e";
           }}
-          style={{ marginRight: selected ? 356 : undefined }}
+          style={{ marginRight: selected ? PANEL_WIDTH + 16 : undefined }}
         />
         <Panel position="top-left">
           <div className="flex max-w-[calc(100vw-2rem)] flex-wrap items-center gap-1.5 rounded-lg border border-border bg-bg/95 px-2 py-1.5 text-xs shadow-sm" data-testid="lineage-toolbar">
