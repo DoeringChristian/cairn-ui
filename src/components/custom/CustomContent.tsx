@@ -1,16 +1,16 @@
 /**
  * Stored content in a custom viewer, outside a card: an artifact version's
- * file or a table cell (ContentViewer). Custom data opens in the project's
- * most specific accepting viewer (or `viewer`); without one it falls back to
+ * file or a table cell (ContentViewer). Custom data opens in the default
+ * viewer of its kind (or `viewer`); without one it falls back to
  * its arrays (npz), JSON tree, or a download.
  */
 
 import { lazy, Suspense } from "react";
 import type { SequencePoint } from "../../api/types";
 import { parseCustomMeta } from "../../lib/custom/data";
-import { useViewer, useViewerList } from "../../lib/custom/hooks";
+import { useViewer, useViewerDefaults, useViewerList } from "../../lib/custom/hooks";
 import { settingValues } from "../../lib/custom/manifest";
-import { viewersFor } from "../../lib/custom/viewers";
+import { defaultViewerName, viewersFor } from "../../lib/custom/viewers";
 import { useProjectId } from "../../lib/project-context";
 import type { ViewerSource } from "../../lib/viewers/source";
 import UnsupportedArtifact from "../UnsupportedArtifact";
@@ -20,17 +20,23 @@ import ViewerFrame from "./ViewerFrame";
 const NpzViewer = lazy(() => import("../viewers/NpzViewer"));
 const JsonViewer = lazy(() => import("../viewers/JsonViewer"));
 
-/** The viewers of this project that accept `source` (most specific first). */
+/** The viewers of this project that accept `source` (most specific first) and its kind's default viewer. */
 export function useAcceptingViewers(source: Pick<ViewerSource, "objectType" | "meta">) {
   const project = useProjectId();
   const list = useViewerList(source.objectType ? project : null).data ?? [];
+  const defaults = useViewerDefaults(source.objectType ? project : null).data;
   const kind = parseCustomMeta(source.meta)?.kind ?? null;
-  return { project, viewers: source.objectType ? viewersFor(list, [{ object_type: source.objectType, kind }]) : [] };
+  const series = source.objectType ? { object_type: source.objectType, kind } : null;
+  return {
+    project,
+    viewers: series ? viewersFor(list, [series]) : [],
+    defaultName: series ? defaultViewerName(defaults, list, series) : null,
+  };
 }
 
 export default function CustomContent({ source, viewer: forced, fill }: { source: ViewerSource; viewer?: string; fill?: boolean }) {
-  const { project, viewers } = useAcceptingViewers(source);
-  const name = forced ?? viewers[0]?.name ?? null;
+  const { project, defaultName } = useAcceptingViewers(source);
+  const name = forced ?? defaultName;
   const { viewer, loading } = useViewer(project, name);
   const meta = parseCustomMeta(source.meta);
   const box = fill ? "h-full min-h-0 w-full" : "h-[60vh] min-h-[16rem] w-full";

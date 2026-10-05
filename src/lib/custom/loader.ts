@@ -52,6 +52,10 @@ async function pool<T, R>(items: readonly T[], limit: number, fn: (t: T) => Prom
 
 async function fetchFiles(project: string, viewer: Viewer): Promise<SourceFile[]> {
   const { info } = viewer;
+  if (info.builtin) {
+    const list = await api.builtinViewerFiles(info.name);
+    return pool(list.files, 8, async (f) => ({ path: f.path, data: await api.builtinViewerFile(info.name, f.path) }));
+  }
   if (info.dev) {
     const list = await api.viewerDevFiles(project, info.name);
     return pool(list.files, 8, async (f) => ({ path: f.path, data: await api.viewerDevFile(project, info.name, f.path) }));

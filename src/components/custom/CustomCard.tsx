@@ -12,16 +12,16 @@
  * a gesture ends.
  *
  * The viewer: `settings.viewer` (pinned to `viewer_version`), else the
- * project's viewer that accepts the data most specifically.
+ * default viewer of the data's kind (lib/custom/viewers.ts defaultViewerName).
  */
 
 import { useMemo } from "react";
 import { useSequences } from "../../api/hooks";
 import type { SequencePoint } from "../../api/types";
 import { parseCustomMeta } from "../../lib/custom/data";
-import { artifactBytesQuery, useViewer, useViewerList, useViewerProject } from "../../lib/custom/hooks";
+import { artifactBytesQuery, useViewer, useViewerDefaults, useViewerList, useViewerProject } from "../../lib/custom/hooks";
 import { settingValues, storedViewerSettings, validateSettingsPatch, viewerSettingKey, type SeriesKind } from "../../lib/custom/manifest";
-import { viewersFor } from "../../lib/custom/viewers";
+import { defaultViewerName } from "../../lib/custom/viewers";
 import { ZoomViewSync } from "../../lib/media/zoom-view-sync";
 import type { CustomSettings } from "../cards-settings/custom";
 import SteppedMediaCard, { type MediaView, type SteppedMediaCardProps } from "../media/SteppedMediaCard";
@@ -49,6 +49,7 @@ export default function CustomCard(props: SteppedMediaCardProps) {
   const objectType = listed?.object_type ?? (metric.object_type || "custom");
   const series = useMemo<SeriesKind[]>(() => [{ object_type: objectType, kind: listedKind }], [objectType, listedKind]);
   const list = useViewerList(project).data;
+  const defaults = useViewerDefaults(project).data;
   const bus = useMemo(() => new ZoomViewSync<unknown>(), []);
 
   return (
@@ -66,7 +67,7 @@ export default function CustomCard(props: SteppedMediaCardProps) {
       // A stored view (a viewer's camera): the header's reset button clears it, and the viewer gets onView(null).
       viewReset={(s, update) => (s.view != null ? { modified: true, reset: () => update({ view: undefined }) } : undefined)}
       renderArtifact={(view) => (
-        <CustomPane view={view} project={project} auto={list ? viewersFor(list, [seriesKindOf(view.point, series[0]!)])[0]?.name ?? null : null} bus={bus} />
+        <CustomPane view={view} project={project} auto={list ? defaultViewerName(defaults, list, seriesKindOf(view.point, series[0]!)) : null} bus={bus} />
       )}
     />
   );

@@ -10,7 +10,7 @@ import { api } from "../../api/client";
 import { qk } from "../../api/query-keys";
 import type { ViewerInfo } from "../../api/types";
 import { useProjectId } from "../project-context";
-import { resolveViewer, viewerFromInfo, type Viewer } from "./viewers.ts";
+import { defaultViewerName, resolveViewer, viewerFromInfo, type SeriesKind, type Viewer } from "./viewers.ts";
 
 const DEV_POLL_MS = 2000;
 const POLL_MS = 15_000;
@@ -37,6 +37,28 @@ export function useViewerList(project: string | null, allVersions = false) {
     staleTime: 1000,
     refetchInterval: (q) => (q.state.data?.viewers.some((v: ViewerInfo) => v.dev) ? DEV_POLL_MS : POLL_MS),
   });
+}
+
+/** The project's default viewer per kind (lib/custom/viewers.ts defaultViewerName). */
+export function useViewerDefaults(project: string | null) {
+  return useQuery({
+    queryKey: qk.viewerDefaults(project ?? ""),
+    queryFn: () => api.viewerDefaults(project!),
+    enabled: !!project,
+    staleTime: 5000,
+  });
+}
+
+/**
+ * The default viewer of one kind of data in a project; `ready` once the
+ * viewer list and the defaults are in (null: a built-in type's own renderer).
+ */
+export function useDefaultViewer(project: string | null, series: SeriesKind | null) {
+  const list = useViewerList(project);
+  const defaults = useViewerDefaults(project);
+  const ready = project != null && (list.data !== undefined || list.isError) && (defaults.data !== undefined || defaults.isError);
+  const name = ready && series ? defaultViewerName(defaults.data, list.data ?? [], series) : null;
+  return { ready, name, list: list.data ?? [] };
 }
 
 /** The viewer a card names (null while loading or when there is none) and why it is missing. */

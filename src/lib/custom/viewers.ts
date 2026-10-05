@@ -8,8 +8,10 @@
  * the pinned version needs the all-versions list.
  */
 
-import type { ViewerInfo } from "../../api/types";
+import type { ViewerDefaults, ViewerInfo } from "../../api/types";
 import { acceptScore, parseManifest, type SeriesKind, type ViewerManifest } from "./manifest.ts";
+
+export type { SeriesKind };
 
 /** The entry a card with `name` (pinned to `version`, if any) uses; null when there is none. */
 export function resolveViewer(list: readonly ViewerInfo[], name: string, version?: number | null): ViewerInfo | null {
@@ -42,6 +44,45 @@ export function viewersFor(list: readonly ViewerInfo[], series: readonly SeriesK
   return scored.sort((a, b) => b.score - a.score || (a.v.title || a.v.name).localeCompare(b.v.title || b.v.name)).map((x) => x.v);
 }
 
+/**
+ * The built-in types a custom viewer can be the default of (every series
+ * kind with a built-in card but scalars; the server's
+ * `viewer_defaults.BUILTIN_TYPES`).
+ */
+export const VIEWER_DEFAULT_TYPES: ReadonlySet<string> = new Set([
+  "image", "figure", "audio", "video", "histogram", "tensor", "text", "table", "html",
+  "markdown", "pointcloud", "mesh", "boxes3d", "volume", "preset", "artifact",
+]);
+
+/** The viewer a defaults map (`{key: viewer}`) names for a series: the most specific matching key's. */
+function defaultIn(map: Record<string, string>, series: SeriesKind): string | null {
+  let best: { score: number; viewer: string } | null = null;
+  for (const [key, viewer] of Object.entries(map)) {
+    const score = acceptScore({ accepts: [key] }, series);
+    if (score >= 0 && (!best || score > best.score)) best = { score, viewer };
+  }
+  return best?.viewer ?? null;
+}
+
+/**
+ * The default viewer of a series (one kind of data) — every kind has
+ * exactly one: the project's default for it (the Defaults page,
+ * `default_for` on publish), else a built-in viewer's (`cairn.volume` for
+ * volumes), else, for custom data, the viewer accepting it most
+ * specifically. Null: a built-in type's own renderer (or, for custom data,
+ * no viewer at all). A named viewer that is not in `list` is skipped.
+ */
+export function defaultViewerName(
+  defaults: ViewerDefaults | null | undefined,
+  list: readonly ViewerInfo[],
+  series: SeriesKind,
+): string | null {
+  const known = (n: string | null) => (n != null && list.some((v) => v.name === n) ? n : null);
+  const named = known(defaultIn(defaults?.defaults ?? {}, series)) ?? known(defaultIn(defaults?.builtin ?? {}, series));
+  if (named) return named;
+  return series.object_type === "custom" ? (viewersFor(list, [series])[0]?.name ?? null) : null;
+}
+
 /** A listed viewer with its manifest parsed (`error` set when it is unusable). */
 export interface Viewer {
   info: ViewerInfo;
@@ -52,7 +93,11 @@ export interface Viewer {
 }
 
 export function viewerFromInfo(info: ViewerInfo): Viewer {
-  const key = info.dev ? `dev:${info.name}:${info.revision ?? 0}` : `v:${info.version_id}`;
+  const key = info.builtin
+    ? `builtin:${info.name}:${info.content_digest}`
+    : info.dev
+      ? `dev:${info.name}:${info.revision ?? 0}`
+      : `v:${info.version_id}`;
   if (info.error) return { info, manifest: null, error: info.error, key };
   const r = parseManifest(info);
   return r.ok ? { info, manifest: r.manifest, error: null, key } : { info, manifest: null, error: r.errors.join("; "), key };

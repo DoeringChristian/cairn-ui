@@ -2,7 +2,7 @@
  * One custom viewer pane: the viewer's code in a sandboxed frame, fed the
  * pane's logged values over postMessage (lib/custom/protocol.ts).
  *
- * Security contract (do not weaken; same as components/viewers/HtmlViewer.tsx):
+ * Security contract (do not weaken; stricter than logged HTML, HtmlViewer.tsx):
  * viewer code only ever runs inside `<iframe sandbox="allow-scripts" srcdoc>`
  * — no `allow-same-origin` (opaque origin: no cookies, storage, API or DOM of
  * the app), no `allow-popups`, `allow-forms`, `allow-top-navigation`. The

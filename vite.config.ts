@@ -3,6 +3,10 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  // The built-in custom viewers: builtin-viewers/viewers/ (a folder per
+  // viewer + registry.json) is copied to _dist/viewers/, where the server
+  // lists and serves them (cairn.viewer.builtin_viewers_dir).
+  publicDir: "builtin-viewers",
   build: {
     outDir: "./cairn_ui/_dist",
     emptyOutDir: true,

@@ -1,0 +1,1 @@
+import{j as s,d4 as i,f0 as n,f2 as o}from"./index-YFxL_haQ.js";function u({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{data:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{u as default};

@@ -71,6 +71,22 @@ export const artifactTextQuery = (hash: string) => ({
   staleTime: Infinity,
 });
 
+/**
+ * An HTML artifact's document (components/viewers/HtmlViewer.tsx loads it in
+ * its frame): fetched once to warm the browser cache, so a step the HTML
+ * card prefetched loads its frame from there.
+ */
+export const htmlDocumentQuery = (hash: string) => ({
+  queryKey: ["html-document", hash] as const,
+  queryFn: async (): Promise<true> => {
+    const res = await fetch(api.artifactHtmlUrl(hash));
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    await res.arrayBuffer();
+    return true;
+  },
+  staleTime: Infinity,
+});
+
 /** The first `bytes` of an artifact as text (a Range request): the head of a file too big to show whole. */
 export const artifactTextHeadQuery = (hash: string, bytes: number) => ({
   queryKey: qk.artifactTextHead(hash, bytes),
