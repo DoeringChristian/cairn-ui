@@ -24,7 +24,12 @@ import SweepsListPage from "./pages/SweepsListPage";
 import SweepDetailPage from "./pages/SweepDetailPage";
 import LoginPage from "./pages/LoginPage";
 import ReportViewPage, { ShareRedeemPage } from "./pages/ReportViewPage";
+import RouteError from "./components/RouteError";
+import { installStaleBuildReload } from "./lib/stale-build";
 import "./index.css";
+
+// A page of an older build asks for chunks the server no longer has: reload once into the new build.
+installStaleBuildReload();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -50,6 +55,7 @@ const router = createBrowserRouter([
   {
     path: "/",
     element: <App />,
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <ProjectsPage /> },
       // The settings-palette gallery (dev reference), code-split.

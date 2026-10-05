@@ -1,1 +1,0 @@
-import{j as s,cg as i,dU as n,dW as o}from"./index-C-3kZhp-.js";function u({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{values:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{u as default};
