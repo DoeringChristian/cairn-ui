@@ -1,4 +1,5 @@
 import type { CardSettingsMeta } from "./meta";
+
 import {
   STEPPED_MEDIA_CASCADE,
   steppedMediaBuiltin,
@@ -12,8 +13,8 @@ export interface CustomSettings extends SteppedMediaSettings {
   viewer?: string;
   /** Pin a published version (`vN`); absent/null follows `latest` (or a live dev source). */
   viewer_version?: number | null;
-  /** Values of the viewer's manifest settings, by key (kept per card; foreign keys are ignored). */
-  viewerSettings: Record<string, string | number | boolean>;
+  /** A viewer setting's value: `vs:<viewer>:<key>` (lib/custom/manifest.ts viewerSettingKey). */
+  [viewerSetting: `vs:${string}`]: string | number | boolean | undefined;
   /** The view (camera) the card's panes share, as the viewer reported it. */
   view?: unknown;
   /** Reference tag: compare viewers get it as input B, others show it as a pane beside A. */
@@ -26,15 +27,14 @@ export const builtin: CustomSettings = {
   ...steppedMediaBuiltin,
   version: 1,
   metrics: [],
-  viewerSettings: {},
 };
 
 export const instanceDefaults = steppedMediaInstanceDefaults as (seed: { name: string }) => Partial<CustomSettings>;
 
 export const meta: CardSettingsMeta<CustomSettings> = {
   builtin,
-  // Viewer settings take section/workspace defaults (keys a viewer does not know are ignored);
+  // Viewer settings take section/workspace defaults per viewer and setting (`vs:<viewer>:<key>`);
   // the viewer itself is per card (different kinds want different viewers).
-  cascadeKeys: ["viewerSettings", ...STEPPED_MEDIA_CASCADE],
+  cascadeKeys: ["vs:*" as keyof CustomSettings & string, ...STEPPED_MEDIA_CASCADE],
   tabs: [],
 };

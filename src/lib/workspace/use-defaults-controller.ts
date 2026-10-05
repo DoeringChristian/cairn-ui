@@ -14,6 +14,7 @@ import type { CardType } from "../cards/card-spec";
 import { metaFor } from "../cards/settings-registry";
 import type { SetOptions, SettingsController } from "../card-settings";
 import {
+  isCascadeKey,
   isOverridden as layerIsOverridden,
   parentValue,
   removeOverride,
@@ -67,7 +68,7 @@ export function useDefaultsController<T extends object = Record<string, unknown>
   const set = useCallback(
     (patch: Partial<T>, opts?: SetOptions) => {
       const cascading = Object.fromEntries(
-        Object.entries(patch).filter(([k]) => cascadeKeys.includes(k)),
+        Object.entries(patch).filter(([k]) => isCascadeKey(k, cascadeKeys)),
       ) as Partial<T>;
       if (Object.keys(cascading).length === 0) return;
       const next = setOverride(ref.current.own, cascading as Record<string, unknown>, parentOf);

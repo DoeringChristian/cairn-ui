@@ -5,11 +5,13 @@
  * host side of the protocol is protocol.ts.
  *
  * ```js
- * import { onRender, onResize, onView, setView, onTheme, snapshot, asset, setHeight, reportError } from "cairn:sdk";
+ * import { onRender, onResize, onView, setView, onTheme, onSettings, setSettings, snapshot, asset, setHeight, reportError } from "cairn:sdk";
  * onRender(async ({ inputs, step, settings, size, theme, view }) => { … }); // inputs: [{data, meta, kind, …}] (A, B for "compare")
  * onView((v) => camera.fromJSON(v));    setView(camera.toJSON());          // shared across the card's panes
  * snapshot(() => canvas.toDataURL());   // the picture shown while the frame is paused, and in exports
  * const url = asset("textures/env.png"); // a blob URL of a file of the viewer
+ * setSettings({ exposure: 2 });          // change the card's settings from inside (validated, stored like a user edit)
+ * onSettings((s) => { … });              // settings changed; without it the render callback re-runs
  * ```
  *
  * Without `onResize`, a resize re-runs the render callback with the new
@@ -70,7 +72,7 @@ export function viewerDocument(): string {
 
 /** The `cairn:sdk` module. */
 export const SDK_SOURCE = `const VERSION = "${SDK_VERSION}";
-let renderFn = null, resizeFn = null, viewFn = null, themeFn = null, snapshotFn = null;
+let renderFn = null, resizeFn = null, viewFn = null, themeFn = null, snapshotFn = null, settingsFn = null;
 let last = null, rendering = false, pending = null, quiet = null, lastView;
 
 function post(m) { m.v = 1; try { parent.postMessage(m, "*"); } catch (e) { /* the host is gone */ } }
@@ -124,6 +126,12 @@ addEventListener("message", (e) => {
       if (themeFn) { try { themeFn(d.theme); } catch (err) { post(errorOf(err)); } }
       else if (last) run(last);
       break;
+    case "cairn:settings":
+      if (!last) break;
+      last = Object.assign({}, last, { settings: d.settings || {} });
+      if (settingsFn) { try { settingsFn(last.settings); } catch (err) { post(errorOf(err)); } }
+      else run(last);
+      break;
     case "cairn:snapshot":
       takeSnapshot().then((url) => post({ type: "cairn:snapshot", id: d.id, url }));
       break;
@@ -149,6 +157,12 @@ export function onRender(fn) { renderFn = fn; if (pending) { const p = pending; 
 export function onResize(fn) { resizeFn = fn; }
 /** A sibling pane (or the stored card state) moved the shared view. */
 export function onView(fn) { viewFn = fn; if (lastView !== undefined && lastView !== null) { try { fn(lastView); } catch (e) { post(errorOf(e)); } } }
+/** The card's settings changed (and nothing else); without it, a settings change re-renders. */
+export function onSettings(fn) { settingsFn = fn; }
+/** Change the card's settings (manifest keys); the host checks them and they come back through onSettings / a render. */
+export function setSettings(patch) { post({ type: "cairn:settings", patch: Object.assign({}, patch) }); }
+/** The settings of the last render or settings change. */
+export function settings() { return last ? last.settings : null; }
 /** The theme changed; without it, a theme change re-renders. */
 export function onTheme(fn) { themeFn = fn; }
 /** Share this pane's view (any JSON, e.g. a camera) with the card's other panes. */

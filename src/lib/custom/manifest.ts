@@ -17,6 +17,19 @@
  * wrong shape is an error naming it.
  */
 
+/** Icons a viewer may name (Font Awesome solid; the server's list, cairn/server/viewer_manifest.py). */
+export const VIEWER_ICONS = [
+  "cube", "cubes", "globe", "sun", "fire", "eye", "compass", "brain", "image", "images",
+  "chart-line", "chart-area", "chart-column", "wave-square", "table", "table-cells", "shapes",
+  "layer-group", "circle-nodes", "diagram-project", "route", "microscope", "atom", "wand-magic-sparkles",
+] as const;
+
+/** The settings tabs and sections a setting can sit in (the settings palette's). */
+export const SETTING_TABS = ["data", "grouping", "display", "expressions"] as const;
+export const SETTING_SECTIONS = ["Axes", "Smoothing", "Outliers", "Series", "Appearance", "Overlays", "Layout", "Playback", "Compare"] as const;
+export type ViewerSettingTab = (typeof SETTING_TABS)[number];
+export type ViewerSettingSection = (typeof SETTING_SECTIONS)[number];
+
 /** The palette controls a manifest setting can use. */
 export const SETTING_TYPES = ["slider", "number", "select", "switch", "colormap", "text"] as const;
 export type ViewerSettingType = (typeof SETTING_TYPES)[number];
@@ -25,7 +38,11 @@ export interface ViewerSetting {
   key: string;
   type: ViewerSettingType;
   label: string;
-  description?: string;
+  /** Help text under the control. */
+  help?: string;
+  /** Where the control sits in the card's settings. */
+  tab: ViewerSettingTab;
+  section: ViewerSettingSection;
   default: string | number | boolean;
   min?: number;
   max?: number;
@@ -40,6 +57,8 @@ export interface ViewerManifest {
   name: string;
   title: string;
   description?: string;
+  /** Font Awesome solid icon name (one of VIEWER_ICONS). */
+  icon?: string;
   /** Patterns of the series it shows: `custom:<kind glob>` or a built-in object type (`volume`). */
   accepts: string[];
   /** `compare`: the viewer gets the pane's input and its reference together, as [A, B]. */
@@ -116,6 +135,8 @@ export function parseManifest(input: unknown): ManifestResult {
   if (name && (!NAME_RE.test(name) || name.length > 64)) errors.push(`"name" must match ${NAME_RE.source} (at most 64 characters)`);
   const title = str("title", false) ?? name ?? "";
   const description = str("description", false);
+  const icon = str("icon", false);
+  if (icon && !(VIEWER_ICONS as readonly string[]).includes(icon)) errors.push(`"icon" must be one of ${VIEWER_ICONS.join(", ")}`);
 
   let accepts: string[] = [];
   if (!Array.isArray(raw.accepts) || raw.accepts.length === 0 || !raw.accepts.every((a) => typeof a === "string" && a.trim())) {
@@ -190,7 +211,7 @@ export function parseManifest(input: unknown): ManifestResult {
   return {
     ok: true,
     manifest: {
-      name: name!, title, ...(description ? { description } : {}), accepts, inputs, webgl, view,
+      name: name!, title, ...(description ? { description } : {}), ...(icon ? { icon } : {}), accepts, inputs, webgl, view,
       entry: entry!, imports, settings,
     },
   };
@@ -217,9 +238,15 @@ function parseSetting(setting: unknown, i: number): ViewerSetting | string {
   const step = num("step");
   for (const v of [min, max, step]) if (typeof v === "string") return v;
   const label = typeof s.label === "string" && s.label ? s.label : key;
-  const description = typeof s.description === "string" ? s.description : undefined;
-  const out: ViewerSetting = { key, type: type as ViewerSettingType, label, default: 0 };
-  if (description) out.description = description;
+  if (s.help !== undefined && typeof s.help !== "string") return `${at} (${key}): "help" must be a string`;
+  const tab = s.tab ?? "display";
+  if (!(SETTING_TABS as readonly unknown[]).includes(tab)) return `${at} (${key}): "tab" must be one of ${SETTING_TABS.join(", ")}`;
+  const section = s.section ?? "Appearance";
+  if (!(SETTING_SECTIONS as readonly unknown[]).includes(section)) return `${at} (${key}): "section" must be one of ${SETTING_SECTIONS.join(", ")}`;
+  const out: ViewerSetting = {
+    key, type: type as ViewerSettingType, label, tab: tab as ViewerSettingTab, section: section as ViewerSettingSection, default: 0,
+  };
+  if (typeof s.help === "string" && s.help) out.help = s.help;
   if (min !== undefined) out.min = min as number;
   if (max !== undefined) out.max = max as number;
   if (step !== undefined) out.step = step as number;
@@ -268,6 +295,59 @@ function parseSetting(setting: unknown, i: number): ViewerSetting | string {
       break;
   }
   return out;
+}
+
+/**
+ * Where a card stores a viewer setting: the flat key `vs:<viewer>:<key>`,
+ * so section/workspace defaults cascade per viewer and per setting.
+ */
+export function viewerSettingKey(viewer: string, key: string): string {
+  return `vs:${viewer}:${key}`;
+}
+
+/** The cascade pattern of every viewer setting (see lib/settings-cascade.ts). */
+export const VIEWER_SETTINGS_CASCADE = "vs:*";
+
+/** A viewer's stored setting values out of a card's settings (keys without the prefix). */
+export function storedViewerSettings(cardSettings: Record<string, unknown>, viewer: string): Record<string, unknown> {
+  const prefix = `vs:${viewer}:`;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(cardSettings)) if (k.startsWith(prefix) && v !== undefined) out[k.slice(prefix.length)] = v;
+  return out;
+}
+
+/**
+ * A viewer's own settings change (`setSettings(patch)` from its frame),
+ * checked against the manifest: unknown keys and values of the wrong type
+ * (or not among a select's options) are rejected; numbers are clamped to
+ * [min, max]; text is cut at 1000 characters.
+ */
+export function validateSettingsPatch(
+  settings: readonly ViewerSetting[],
+  patch: Record<string, unknown>,
+): { accepted: Record<string, string | number | boolean>; rejected: string[] } {
+  const accepted: Record<string, string | number | boolean> = {};
+  const rejected: string[] = [];
+  const byKey = new Map(settings.map((s) => [s.key, s]));
+  for (const [k, v] of Object.entries(patch)) {
+    const s = byKey.get(k);
+    if (!s) {
+      rejected.push(`${k}: not a setting of this viewer`);
+      continue;
+    }
+    if (typeof v !== typeof s.default || (typeof v === "number" && !Number.isFinite(v))) {
+      rejected.push(`${k}: expected a ${typeof s.default}`);
+      continue;
+    }
+    if ((s.type === "select" || (s.type === "colormap" && s.options)) && !s.options!.some((o) => o.value === v)) {
+      rejected.push(`${k}: ${JSON.stringify(v)} is not an option`);
+      continue;
+    }
+    if (typeof v === "number") accepted[k] = Math.min(s.max ?? Infinity, Math.max(s.min ?? -Infinity, v));
+    else if (typeof v === "string") accepted[k] = v.slice(0, 1000);
+    else accepted[k] = v as boolean;
+  }
+  return { accepted, rejected };
 }
 
 /** The manifest settings' defaults, by key. */

@@ -20,7 +20,7 @@ import { useSequences } from "../../api/hooks";
 import type { SequencePoint } from "../../api/types";
 import { parseCustomMeta } from "../../lib/custom/data";
 import { artifactBytesQuery, useViewer, useViewerList, useViewerProject } from "../../lib/custom/hooks";
-import { settingValues, type SeriesKind } from "../../lib/custom/manifest";
+import { settingValues, storedViewerSettings, validateSettingsPatch, viewerSettingKey, type SeriesKind } from "../../lib/custom/manifest";
 import { viewersFor } from "../../lib/custom/viewers";
 import { ZoomViewSync } from "../../lib/media/zoom-view-sync";
 import type { CustomSettings } from "../cards-settings/custom";
@@ -86,7 +86,10 @@ function CustomPane({
   const viewerName = settings.viewer ?? auto;
   const { viewer, loading, error } = useViewer(project, viewerName, settings.viewer_version ?? null);
   const manifest = viewer?.manifest ?? null;
-  const values = useMemo(() => (manifest ? settingValues(manifest.settings, settings.viewerSettings) : {}), [manifest, settings.viewerSettings]);
+  const stored = viewer ? storedViewerSettings(settings as unknown as Record<string, unknown>, viewer.info.name) : {};
+  const storedJson = JSON.stringify(stored);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const values = useMemo(() => (manifest ? settingValues(manifest.settings, stored) : {}), [manifest, storedJson]);
   const height = single ? undefined : inModal ? 360 : view.paneId.includes("#") ? 180 : 240;
   const wrap = (node: React.ReactNode) =>
     single ? <div className="flex min-h-0 flex-1 flex-col">{node}</div> : <div style={{ height }}>{node}</div>;
@@ -111,6 +114,16 @@ function CustomPane({
     view: manifest?.view ? settings.view : undefined,
     bus: manifest?.view ? bus : undefined,
     onViewCommit: manifest?.view ? (v: unknown) => view.update({ view: v } as Partial<CustomSettings>, { mergeKey: "view" }) : undefined,
+    // The viewer's own controls change the card's settings like the settings panel does.
+    onSettingsPatch: (patch: Record<string, string | number | boolean>) => {
+      if (!manifest) return;
+      const { accepted, rejected } = validateSettingsPatch(manifest.settings, patch);
+      for (const r of rejected) console.warn(`viewer ${viewer.info.name}: setSettings: ${r}`);
+      const keys = Object.keys(accepted);
+      if (keys.length === 0) return;
+      const update = Object.fromEntries(keys.map((k) => [viewerSettingKey(viewer.info.name, k), accepted[k]]));
+      view.update(update as Partial<CustomSettings>, keys.length === 1 ? { mergeKey: viewerSettingKey(viewer.info.name, keys[0]!) } : undefined);
+    },
     height: single ? undefined : height,
   };
   if (!b || manifest?.inputs === "compare") {

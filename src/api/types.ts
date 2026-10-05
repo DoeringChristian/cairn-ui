@@ -592,6 +592,8 @@ export interface ViewerInfo {
   settings: unknown[];
   imports: Record<string, string>;
   description?: string | null;
+  /** Font Awesome solid icon name for the card builder (manifest `icon`). */
+  icon?: string | null;
   /** A live `cairn viewer dev` source (preferred over the published one while it exists). */
   dev: boolean;
   /** The published version (null for a dev source). */

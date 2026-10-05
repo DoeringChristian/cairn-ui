@@ -14,6 +14,7 @@
  * - `cairn:view`     {view}                         a sibling pane moved the shared view
  * - `cairn:resize`   {size}
  * - `cairn:theme`    {theme}
+ * - `cairn:settings` {settings}                     only the settings changed (inputs as before)
  * - `cairn:snapshot` {id}                           please send a snapshot
  *
  * frame → host
@@ -22,6 +23,7 @@
  * - `cairn:rendered` {seq}                           a render call returned
  * - `cairn:view`     {view, final}                   the user moved the view (`final`: gesture end)
  * - `cairn:size`     {height}                        the content's preferred height
+ * - `cairn:settings` {patch}                         the viewer changes its own settings (validated by the host)
  * - `cairn:snapshot` {id, url}                       a data/blob URL of the current picture, or null
  * - `cairn:error`    {message, stack?}
  */
@@ -81,6 +83,7 @@ export type HostMessage =
   | { type: "cairn:view"; v: number; view: unknown }
   | { type: "cairn:resize"; v: number; size: ViewerSize }
   | { type: "cairn:theme"; v: number; theme: ViewerTheme }
+  | { type: "cairn:settings"; v: number; settings: Record<string, unknown> }
   | { type: "cairn:snapshot"; v: number; id: number };
 
 export type FrameMessage =
@@ -89,6 +92,7 @@ export type FrameMessage =
   | { type: "cairn:rendered"; seq: number }
   | { type: "cairn:view"; view: unknown; final: boolean }
   | { type: "cairn:size"; height: number }
+  | { type: "cairn:settings"; patch: Record<string, string | number | boolean> }
   | { type: "cairn:snapshot"; id: number; url: string | null }
   | { type: "cairn:error"; message: string; stack?: string };
 
@@ -135,6 +139,15 @@ export function decodeFrameMessage(raw: unknown): FrameMessage | null {
     case "cairn:size": {
       const h = finite(raw.height);
       return h == null || h < 0 ? null : { type: "cairn:size", height: h };
+    }
+    case "cairn:settings": {
+      // Primitive values only; the host checks them against the manifest (validateSettingsPatch).
+      if (!isObj(raw.patch)) return null;
+      const patch: Record<string, string | number | boolean> = {};
+      for (const [k, v] of Object.entries(raw.patch).slice(0, 100)) {
+        if (typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v))) patch[k.slice(0, 100)] = v;
+      }
+      return { type: "cairn:settings", patch };
     }
     case "cairn:snapshot": {
       const id = finite(raw.id);

@@ -2,7 +2,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { acceptMatches, acceptScore, accepts, normalizePath, parseManifest, settingDefaults, settingValues } from "./manifest.ts";
+import {
+  acceptMatches, acceptScore, accepts, normalizePath, parseManifest, settingDefaults, settingValues, storedViewerSettings,
+  validateSettingsPatch, viewerSettingKey,
+} from "./manifest.ts";
 
 const ok = (raw: unknown) => {
   const r = parseManifest(raw);
@@ -131,4 +134,40 @@ test("a normalized listing (nulls for none, extra fields) parses", () => {
   });
   assert.equal(m.description, undefined);
   assert.equal(m.settings[0]!.options, undefined);
+});
+
+test("settings placement, help and icon", () => {
+  const m = ok({ name: "a", accepts: ["x"], icon: "globe", settings: [
+    { key: "lobes", type: "number", tab: "data", section: "Series", help: "How many lobes." },
+    { key: "e", type: "slider", min: 0, max: 1 },
+  ] });
+  assert.equal(m.icon, "globe");
+  assert.deepEqual([m.settings[0]!.tab, m.settings[0]!.section, m.settings[0]!.help], ["data", "Series", "How many lobes."]);
+  assert.deepEqual([m.settings[1]!.tab, m.settings[1]!.section, m.settings[1]!.help], ["display", "Appearance", undefined]);
+  assert.match(errs({ name: "a", accepts: ["x"], icon: "skull" }), /"icon" must be one of/);
+  assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "a", type: "text", tab: "advanced" }] }), /"tab" must be one of/);
+  assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "a", type: "text", section: "Misc" }] }), /"section" must be one of/);
+  assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "a", type: "text", help: 1 }] }), /"help" must be a string/);
+});
+
+test("viewer settings are stored flat per viewer", () => {
+  assert.equal(viewerSettingKey("vmf-sphere", "exposure"), "vs:vmf-sphere:exposure");
+  const card = { title: "x", "vs:vmf-sphere:exposure": 2, "vs:vmf-sphere:wire": false, "vs:other:exposure": 9, "vs:vmf-sphere:gone": undefined };
+  assert.deepEqual(storedViewerSettings(card, "vmf-sphere"), { exposure: 2, wire: false });
+  assert.deepEqual(storedViewerSettings(card, "vmf"), {}, "a name prefix is not the viewer");
+});
+
+test("validateSettingsPatch: unknown keys and wrong types rejected, numbers clamped", () => {
+  const m = ok({ name: "a", accepts: ["x"], settings: [
+    { key: "e", type: "slider", min: 0, max: 4, default: 1 },
+    { key: "m", type: "select", options: ["a", "b"] },
+    { key: "g", type: "switch" },
+    { key: "c", type: "colormap", options: ["turbo", "magma"] },
+    { key: "t", type: "text" },
+  ] });
+  const r = validateSettingsPatch(m.settings, { e: 9, m: "b", g: true, c: "viridis", t: "x".repeat(2000), nope: 1, wire: "yes" });
+  assert.deepEqual(r.accepted, { e: 4, m: "b", g: true, t: "x".repeat(1000) });
+  assert.deepEqual(r.rejected, [`c: "viridis" is not an option`, "nope: not a setting of this viewer", "wire: not a setting of this viewer"]);
+  assert.deepEqual(validateSettingsPatch(m.settings, { e: "2", m: "z", g: 1 }).rejected, ["e: expected a number", `m: "z" is not an option`, "g: expected a boolean"]);
+  assert.deepEqual(validateSettingsPatch(m.settings, { e: NaN }).rejected, ["e: expected a number"]);
 });

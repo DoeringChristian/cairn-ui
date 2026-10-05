@@ -110,3 +110,15 @@ test("jsonEqual", () => {
   assert.ok(!jsonEqual({ a: 1 }, [1]));
   assert.ok(!jsonEqual(null, {}));
 });
+
+test("prefix cascade keys: `vs:*` cascades every vs: key", async () => {
+  const { isCascadeKey } = await import("./settings-cascade.ts");
+  assert.ok(isCascadeKey("vs:vmf:exposure", ["vs:*"]));
+  assert.ok(!isCascadeKey("vsx", ["vs:*"]));
+  assert.ok(isCascadeKey("columns", new Set(["columns"])));
+  const r = resolveSettings(
+    { builtin: { a: 1 } as Record<string, unknown>, workspace: { "vs:v:e": 2, "vs:v:g": true }, section: { "vs:v:e": 3 }, card: { "vs:v:g": false } },
+    ["vs:*"],
+  );
+  assert.deepEqual(r, { a: 1, "vs:v:e": 3, "vs:v:g": false });
+});

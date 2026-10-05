@@ -47,3 +47,11 @@ test("transferables: every buffer once", () => {
   const list = transferables([{ data: { x: { data: a }, y: { data: new Uint8Array(a.buffer) } } }, { data: b }, "s", 1, null]);
   assert.deepEqual(list, [a.buffer, b]);
 });
+
+test("settings patches: primitives only", () => {
+  assert.deepEqual(decodeFrameMessage({ type: "cairn:settings", patch: { a: 1, b: "x", c: true, d: { x: 1 }, e: NaN, f: null }, extra: 1 }), {
+    type: "cairn:settings", patch: { a: 1, b: "x", c: true },
+  });
+  assert.equal(decodeFrameMessage({ type: "cairn:settings", patch: [1] }), null);
+  assert.equal(decodeFrameMessage({ type: "cairn:settings" }), null);
+});

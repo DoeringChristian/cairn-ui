@@ -141,7 +141,7 @@ const CUSTOM: MetricInfo[] = [
   { name: "vol", object_type: "volume", count: 5, runIds: ["r1"] },
 ];
 const VIEWERS = [
-  viewer({ name: "vmf", title: "Guiding", accepts: ["custom:guiding/*"] }),
+  viewer({ name: "vmf", title: "Guiding", accepts: ["custom:guiding/*"], icon: "globe" }),
   viewer({ name: "any", title: "Any custom", accepts: ["custom:*"] }),
   viewer({ name: "ray", title: "Raymarcher", accepts: ["volume"], dev: true, version: null, version_id: null }),
   viewer({ name: "broken", title: "Broken", accepts: ["custom:guiding/vmf"], dev: true, error: "bad manifest" }),
@@ -153,6 +153,8 @@ test("custom data: every accepting viewer is an option, the most specific first"
   assert.equal(r.options[0]!.unavailable, "the viewer is broken: bad manifest");
   assert.deepEqual(r.options[1]!.seed, { viewer: "vmf" });
   assert.equal(r.options[1]!.label, "Guiding");
+  assert.equal(r.options[1]!.icon, "globe");
+  assert.equal(r.options[2]!.icon, undefined);
   assert.equal(r.reason, null);
 });
 

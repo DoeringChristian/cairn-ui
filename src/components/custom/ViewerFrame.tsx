@@ -94,6 +94,7 @@ export default function ViewerFrame({
   view,
   bus,
   onViewCommit,
+  onSettingsPatch,
   height,
   title,
 }: {
@@ -109,6 +110,8 @@ export default function ViewerFrame({
   bus?: ZoomViewSync<unknown>;
   /** The user's view gesture ended: store it on the card. */
   onViewCommit?: (view: unknown) => void;
+  /** The viewer changed its own settings (`setSettings`; checked by the caller against the manifest). */
+  onSettingsPatch?: (patch: Record<string, string | number | boolean>) => void;
   /** Fixed height in px; omitted, the pane fills its parent. */
   height?: number;
   /** The frame's accessible title. */
@@ -130,6 +133,12 @@ export default function ViewerFrame({
   // Latest props for the message handlers (which outlive renders).
   const viewCommitRef = useRef(onViewCommit);
   viewCommitRef.current = onViewCommit;
+  const settingsPatchRef = useRef(onSettingsPatch);
+  settingsPatchRef.current = onSettingsPatch;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  /** The settings the frame has (from the last render or settings message). */
+  const sentSettingsJson = useRef<string | null>(null);
   const lastViewJson = useRef<string | undefined>(undefined);
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -209,6 +218,9 @@ export default function ViewerFrame({
         case "cairn:error":
           setError({ message: msg.message, stack: msg.stack });
           break;
+        case "cairn:settings":
+          settingsPatchRef.current?.(msg.patch);
+          break;
         case "cairn:size":
           break;
       }
@@ -225,7 +237,7 @@ export default function ViewerFrame({
     return () => clearTimeout(t);
   }, [showFrame, loaded, frameKey, viewer.info.name]);
 
-  // Render whenever the data, step or settings change.
+  // Render whenever the data or step change (settings alone: see below).
   useEffect(() => {
     if (!showFrame || !loaded || !ready) return;
     let cancelled = false;
@@ -238,10 +250,11 @@ export default function ViewerFrame({
         if (cancelled) return;
         const payload = inputs.map((f, i) => inputOf(f, decoded[i]));
         const msg = hostMessage({
-          type: "cairn:render", seq, inputs: payload, step, settings, size: sizeRef.current,
+          type: "cairn:render", seq, inputs: payload, step, settings: settingsRef.current, size: sizeRef.current,
           theme: readViewerTheme(boxRef.current), view: viewRef.current ?? null,
         });
         lastViewJson.current = JSON.stringify(viewRef.current ?? null);
+        sentSettingsJson.current = JSON.stringify(settingsRef.current);
         post(msg, transferables(payload));
         if (renderTimer.current) clearTimeout(renderTimer.current);
         renderTimer.current = setTimeout(() => {
@@ -256,7 +269,15 @@ export default function ViewerFrame({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showFrame, loaded, ready, buffersKey, step, settingsJson, frameKey]);
+  }, [showFrame, loaded, ready, buffersKey, step, frameKey]);
+
+  // Only the settings changed: the frame keeps its inputs (onSettings, or a re-render there).
+  useEffect(() => {
+    if (!showFrame || !loaded || sentSettingsJson.current == null || sentSettingsJson.current === settingsJson) return;
+    sentSettingsJson.current = settingsJson;
+    post(hostMessage({ type: "cairn:settings", settings }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsJson, showFrame, loaded]);
 
   useEffect(() => () => {
     if (renderTimer.current) clearTimeout(renderTimer.current);
@@ -353,6 +374,10 @@ export default function ViewerFrame({
   }, [webgl]);
 
   const message = error ?? (bytesError ? { message: `could not fetch the data: ${String(bytesError)}` } : null);
+  useEffect(() => {
+    if (!loaded) sentSettingsJson.current = null;
+  }, [loaded]);
+
   const reload = () => {
     setError(null);
     setStopped(false);

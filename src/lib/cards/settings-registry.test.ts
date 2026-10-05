@@ -18,6 +18,8 @@ test("cascadeKeys ⊆ keys(builtin), without duplicates or per-card keys", () =>
     const { builtin, cascadeKeys } = metaFor(type);
     const keys = new Set(Object.keys(builtin));
     for (const k of cascadeKeys) {
+      // A prefix pattern ("vs:*": a custom viewer's settings) names keys builtin cannot list.
+      if (k.endsWith("*")) continue;
       assert.ok(keys.has(k), `${type}: cascade key "${k}" is not in builtin`);
       assert.ok(!PER_CARD.includes(k), `${type}: "${k}" is per card and must not cascade`);
     }

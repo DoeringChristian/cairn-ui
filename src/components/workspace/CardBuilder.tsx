@@ -618,7 +618,10 @@ function TypeStep({
                   data-type={o.key}
                 />
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onFocus(o.key)}>
-                  <span className={`block font-medium ${o.unavailable ? "text-fg-subtle" : "text-fg"}`}>{o.label}</span>
+                  <span className={`block font-medium ${o.unavailable ? "text-fg-subtle" : "text-fg"}`}>
+                    {o.icon && <i className={`fa-solid fa-${o.icon} mr-1.5 text-fg-muted`} aria-hidden="true" />}
+                    {o.label}
+                  </span>
                   <span className="block text-[11px] text-fg-muted">{o.hint}</span>
                   {o.unavailable && <span className="block text-[11px] text-status-failed">{o.unavailable}</span>}
                 </button>

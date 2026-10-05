@@ -21,6 +21,7 @@
 
 import type { ViewerInfo } from "../../api/types.ts";
 import type { CardType } from "../cards/card-spec.ts";
+import { VIEWER_ICONS } from "../custom/manifest.ts";
 import { viewersFor } from "../custom/viewers.ts";
 import { isMultiRunCardType, minRunsFor } from "../comparisons/types.ts";
 import { deps, parse } from "../expr/index.ts";
@@ -228,6 +229,8 @@ export interface TypeOption {
   type: CardType;
   /** Settings the option seeds a new card with (a custom viewer's `viewer`). */
   seed?: Record<string, unknown>;
+  /** A custom viewer's icon (Font Awesome solid name). */
+  icon?: string;
   label: string;
   hint: string;
   /** Why it cannot be added now (too few runs, too many series), else null. */
@@ -304,6 +307,7 @@ export function compatibleTypes(
     key: `custom:${v.name}`,
     type: "custom",
     seed: { viewer: v.name },
+    ...(v.icon && (VIEWER_ICONS as readonly string[]).includes(v.icon) ? { icon: v.icon } : {}),
     label: v.title || v.name,
     hint: `${v.description ? `${v.description} ` : ""}Custom viewer ${v.name}${v.dev ? " (live dev source)" : v.version != null ? ` v${v.version}` : ""}.`,
     unavailable: v.error ? `the viewer is broken: ${v.error}` : null,

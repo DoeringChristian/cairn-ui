@@ -32,15 +32,23 @@ export interface SettingsLayers<T extends object = SettingsRecord> {
 const has = (o: object | undefined, key: string): boolean =>
   o != null && Object.prototype.hasOwnProperty.call(o, key) && (o as SettingsRecord)[key] !== undefined;
 
+/**
+ * Whether `key` takes section/workspace defaults: it is one of
+ * `cascadeKeys`, or matches a prefix pattern among them (`"vs:*"`: every key
+ * starting with `vs:`, a custom viewer's settings).
+ */
+export function isCascadeKey(key: string, cascadeKeys: ReadonlySet<string> | readonly string[]): boolean {
+  const list = Array.isArray(cascadeKeys) ? (cascadeKeys as readonly string[]) : [...(cascadeKeys as ReadonlySet<string>)];
+  return list.some((k) => (k.endsWith("*") ? key.startsWith(k.slice(0, -1)) : k === key));
+}
+
 /** The layers a key reads, highest first, excluding the card layer. */
 function parentLayers<T extends object>(
   layers: SettingsLayers<T>,
   key: string,
   cascadeKeys: ReadonlySet<string> | readonly string[],
 ): Array<Partial<T> | undefined> {
-  const cascades = Array.isArray(cascadeKeys)
-    ? (cascadeKeys as readonly string[]).includes(key)
-    : (cascadeKeys as ReadonlySet<string>).has(key);
+  const cascades = isCascadeKey(key, cascadeKeys);
   return cascades
     ? [layers.instance, layers.section, layers.workspace, layers.builtin]
     : [layers.instance, layers.builtin];
