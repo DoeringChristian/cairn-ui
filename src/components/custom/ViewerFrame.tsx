@@ -26,6 +26,7 @@ import { pointCaption } from "../../lib/caption";
 import type { ViewerBundle } from "../../lib/custom/bundle";
 import { decodeForViewer, parseCustomMeta } from "../../lib/custom/data";
 import { frameWeight } from "../../lib/custom/budget";
+import { CaptureQueue } from "../../lib/custom/capture-queue";
 import { artifactBytesQuery } from "../../lib/custom/hooks";
 import { loadViewerBundle, type Viewer } from "../../lib/custom/loader";
 import { decodeFrameMessage, hostMessage, transferables, type HostMessage, type ViewerInput, type ViewerSize, type ViewerTheme } from "../../lib/custom/protocol";
@@ -47,6 +48,12 @@ const LOAD_TIMEOUT_MS = 15_000;
 /** Until `cairn:rendered`: the render callback hangs. */
 const RENDER_TIMEOUT_MS = 20_000;
 const SNAPSHOT_TIMEOUT_MS = 1000;
+/** A capture turn gives up after this long (the viewer never rendered). */
+const CAPTURE_TIMEOUT_MS = 10_000;
+
+/** Paused frames take turns here to render briefly for a snapshot (see capture-queue.ts). */
+const captures = new CaptureQueue(1);
+let nextFrameId = 1;
 
 /** The app's theme tokens, for viewers to match. */
 export function readViewerTheme(el: Element | null): ViewerTheme {
@@ -125,7 +132,16 @@ export default function ViewerFrame({
   const [error, setError] = useState<FrameError | null>(viewer.error ? { message: viewer.error } : null);
   // A budgeted frame waits for the budget to let it in.
   const [live, setLive] = useState(!webgl);
-  const [snap, setSnap] = useState<string | null>(null);
+  /** The last picture of the frame, and what it showed (data, step, settings). */
+  const [snap, setSnap] = useState<{ url: string; key: string } | null>(null);
+  /** Running briefly (paused by the budget) to take a snapshot. */
+  const [capturing, setCapturing] = useState(false);
+  const capturingRef = useRef(false);
+  capturingRef.current = capturing;
+  const captureDone = useRef<(() => void) | null>(null);
+  /** 2 on screen, 1 near it, 0 away: what a paused frame's capture turn is worth. */
+  const [onScreen, setOnScreen] = useState(0);
+  const frameId = useMemo(() => `f${nextFrameId++}`, []);
   const [mountId, setMountId] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [stopped, setStopped] = useState(false);
@@ -181,7 +197,10 @@ export default function ViewerFrame({
   const buffersKey = byteQueries.map((q) => q.dataUpdatedAt).join("|") + inputs.map((f) => f.point.artifact_hash).join("|");
   const settingsJson = JSON.stringify(settings);
 
-  const showFrame = live && !stopped && bundle != null && manifest != null;
+  const dataKey = `${viewer.key}|${buffersKey}|${step}|${settingsJson}`;
+  const dataKeyRef = useRef(dataKey);
+  dataKeyRef.current = dataKey;
+  const showFrame = (live || capturing) && !stopped && bundle != null && manifest != null;
   const frameKey = `${viewer.key}:${mountId}`;
 
   // Messages from this frame only.
@@ -202,6 +221,14 @@ export default function ViewerFrame({
           if (msg.seq === seqRef.current && renderTimer.current) {
             clearTimeout(renderTimer.current);
             renderTimer.current = null;
+          }
+          // A capture turn: the picture is there, keep it and give the turn back.
+          if (msg.seq === seqRef.current && capturingRef.current) {
+            const key = dataKeyRef.current;
+            void requestSnapshot().then((url) => {
+              if (url) setSnap({ url, key });
+              finishCapture();
+            });
           }
           break;
         case "cairn:view":
@@ -331,37 +358,59 @@ export default function ViewerFrame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // The WebGL budget: paused frames become their snapshot.
-  const reg = useRef<GlRegistration | null>(null);
+  // Snapshots: asked of the frame, answered by its snapshot() callback (or its first canvas).
   const loadedRef = useRef(loaded);
   loadedRef.current = loaded;
+  const snapshotId = useRef(1);
+  const requestSnapshot = () =>
+    new Promise<string | null>((resolve) => {
+      if (!frameRef.current || !loadedRef.current) return resolve(null);
+      const id = snapshotId.current++;
+      const timer = setTimeout(() => {
+        snapshotWaiters.current.delete(id);
+        resolve(null);
+      }, SNAPSHOT_TIMEOUT_MS);
+      snapshotWaiters.current.set(id, (url) => {
+        clearTimeout(timer);
+        resolve(url);
+      });
+      frameRef.current.contentWindow?.postMessage(hostMessage({ type: "cairn:snapshot", id }), "*");
+    });
+  const finishCapture = () => {
+    const done = captureDone.current;
+    captureDone.current = null;
+    if (!capturingRef.current && !done) return;
+    capturingRef.current = false;
+    setCapturing(false);
+    setLoaded(false);
+    done?.();
+  };
+
+  // The WebGL budget: paused frames become their snapshot.
+  const reg = useRef<GlRegistration | null>(null);
   useEffect(() => {
     const el = boxRef.current;
     if (!webgl || !el) return;
-    let nextId = 1;
-    const requestSnapshot = () =>
-      new Promise<string | null>((resolve) => {
-        if (!frameRef.current || !loadedRef.current) return resolve(null);
-        const id = nextId++;
-        const timer = setTimeout(() => {
-          snapshotWaiters.current.delete(id);
-          resolve(null);
-        }, SNAPSHOT_TIMEOUT_MS);
-        snapshotWaiters.current.set(id, (url) => {
-          clearTimeout(timer);
-          resolve(url);
-        });
-        frameRef.current.contentWindow?.postMessage(hostMessage({ type: "cairn:snapshot", id }), "*");
-      });
     const r = glBudget.register(el, {
       activate: () => {
+        // Live now: a capture turn in progress is over (its frame stays as the live one).
+        const done = captureDone.current;
+        captureDone.current = null;
+        if (capturingRef.current) {
+          capturingRef.current = false;
+          setCapturing(false);
+          done?.();
+          setLive(true);
+          return;
+        }
         setLoaded(false);
         setMountId((n) => n + 1);
         setLive(true);
       },
       deactivate: async () => {
+        const key = dataKeyRef.current;
         const url = await requestSnapshot();
-        if (url) setSnap(url);
+        if (url) setSnap({ url, key });
         setLive(false);
         setLoaded(false);
       },
@@ -371,7 +420,53 @@ export default function ViewerFrame({
       r.unregister();
       reg.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [webgl]);
+
+  // Where the frame is (a paused frame's capture turn goes to on-screen frames first).
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!webgl || !el) return;
+    const visible = new IntersectionObserver(([e]) => setOnScreen((v) => (e!.isIntersecting ? 2 : v === 2 ? 0 : v)), { threshold: 0 });
+    const near = new IntersectionObserver(([e]) => setOnScreen((v) => (e!.isIntersecting ? Math.max(v, 1) : 0)), { rootMargin: "100% 0px", threshold: 0 });
+    visible.observe(el);
+    near.observe(el);
+    return () => {
+      visible.disconnect();
+      near.disconnect();
+    };
+  }, [webgl]);
+
+  // A paused frame on or near the screen without a current picture takes a capture turn.
+  const needsCapture = webgl && !live && !capturing && !stopped && !error && bundle != null && ready && onScreen > 0 && snap?.key !== dataKey;
+  useEffect(() => {
+    if (!needsCapture) return;
+    const cancel = captures.request(frameId, (done) => {
+      captureDone.current = done;
+      capturingRef.current = true;
+      setLoaded(false);
+      setMountId((n) => n + 1);
+      setCapturing(true);
+    }, onScreen);
+    return () => {
+      // Only a turn that has not started yet is dropped here; a started one ends in finishCapture.
+      if (!capturingRef.current) cancel();
+    };
+  }, [needsCapture, frameId, onScreen, dataKey]);
+
+  // A capture turn that never renders gives the turn back.
+  useEffect(() => {
+    if (!capturing) return;
+    const t = setTimeout(finishCapture, CAPTURE_TIMEOUT_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capturing]);
+
+  // Unmounting mid-turn gives the turn back.
+  useEffect(() => () => {
+    captureDone.current?.();
+    captures.cancel(frameId);
+  }, [frameId]);
 
   const message = error ?? (bytesError ? { message: `could not fetch the data: ${String(bytesError)}` } : null);
   useEffect(() => {
@@ -392,7 +487,7 @@ export default function ViewerFrame({
       style={{ height: height ?? "100%" }}
       data-viewer="custom"
       data-viewer-name={viewer.info.name}
-      data-viewer-state={showFrame ? (loaded ? "live" : "loading") : live ? "waiting" : "paused"}
+      data-viewer-state={capturing ? "capturing" : showFrame ? (loaded ? "live" : "loading") : live ? "waiting" : snap ? "snapshot" : "paused"}
       onPointerEnter={() => reg.current?.pin(true)}
       onPointerLeave={() => reg.current?.pin(false)}
       onPointerDown={() => reg.current?.touch()}
@@ -416,13 +511,14 @@ export default function ViewerFrame({
             }
           }}
         />
-      ) : snap ? (
-        <img src={snap} alt={title} className="absolute inset-0 h-full w-full object-contain" draggable={false} />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center text-xs text-fg-subtle">
-          {!live ? "paused — scroll here or hover to resume" : !bundle && !message ? "loading viewer…" : null}
-        </div>
-      )}
+      ) : null}
+      {/* While paused (or while a capture turn loads behind it): the last picture, else a skeleton. */}
+      {(!showFrame || capturing) &&
+        (snap ? (
+          <img src={snap.url} alt={title} className="pointer-events-none absolute inset-0 h-full w-full object-contain" draggable={false} />
+        ) : (
+          <div className="absolute inset-0 motion-safe:animate-pulse bg-bg-hover" aria-label={`${title}: loading`} />
+        ))}
       {!ready && !message && showFrame && (
         <div className="pointer-events-none absolute right-1 top-1 rounded bg-bg/80 px-1 text-[10px] text-fg-subtle">loading data…</div>
       )}
