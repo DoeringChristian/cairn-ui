@@ -37,6 +37,7 @@ import ShareDialog from "../components/reports/ShareDialog";
 import { usePushUndo } from "../lib/undo-context";
 import { downloadBlob, safeName } from "../lib/download";
 import { ReportExportContext } from "../lib/reports/export-context";
+import { framesBusy, freezeFramesForPrint } from "../lib/custom/frame-snapshots";
 
 const AUTOSAVE_DELAY_MS = 1500;
 const PRINT_WAIT_LIMIT_MS = 20000;
@@ -50,7 +51,7 @@ const PRINT_WAIT_LIMIT_MS = 20000;
 async function waitForSettledPage(qc: QueryClient): Promise<void> {
   const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
   const settled = () =>
-    qc.isFetching() === 0 && Array.from(document.images).every((img) => img.complete);
+    qc.isFetching() === 0 && Array.from(document.images).every((img) => img.complete) && !framesBusy(document);
   const deadline = performance.now() + PRINT_WAIT_LIMIT_MS;
   let calm = 0;
   while (calm < 2 && performance.now() < deadline) {
@@ -78,7 +79,14 @@ export default function ReportEditorPage() {
     setPrinting(true);
     try {
       await waitForSettledPage(queryClient);
-      window.print();
+      // Custom viewers print as their snapshot() (a frame's WebGL canvas may print blank).
+      const thaw = await freezeFramesForPrint(document);
+      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+      try {
+        window.print();
+      } finally {
+        thaw();
+      }
     } finally {
       setPrinting(false);
     }

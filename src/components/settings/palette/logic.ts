@@ -127,6 +127,8 @@ export function activeTab(
 
 /** The shared section names; every card's panel picks its sections from here. */
 export const SECTION_NAMES = [
+  // The gear editor's own section (the card's type and data), first in the Data tab.
+  "Card",
   "Axes",
   "Smoothing",
   "Outliers",

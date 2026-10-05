@@ -11,7 +11,7 @@
  * viewer is picked first, and its settings' defaults are edited.
  */
 
-import { useState } from "react";
+import { useContext, useState } from "react";
 import type { ViewerInfo } from "../../api/types";
 import type { SettingsController } from "../../lib/card-settings";
 import { COLORMAP_OPTIONS, type Colormap } from "../../charts/colormaps";
@@ -45,6 +45,7 @@ import {
   type SettingsTabId,
 } from "../settings/palette";
 import { LayoutSection, SliderSection, type PanelSurface } from "./media-panel-kit";
+import { SettingsDataExtraContext, takePendingSettingsTab } from "../settings/palette/SettingsTabs";
 import { CARD_SECTIONS, initialTab, placeSettings } from "../../lib/custom/placement";
 
 /** What a custom card's panel knows beyond the stepped media context. */
@@ -211,7 +212,8 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
   ];
   if (s.viewer && !offered.some((v) => v.name === s.viewer)) viewerOptions.push({ value: s.viewer, label: `${s.viewer} (does not accept this data)` });
   const vs = viewerPlacement(ctl, chosen, manifest);
-  const [tab, setTab] = useState<SettingsTabId | null>(null);
+  const editorExtra = useContext(SettingsDataExtraContext);
+  const [tab, setTab] = useState<SettingsTabId | null>(() => (editorExtra ? takePendingSettingsTab() : null));
 
   const data = (
     <>

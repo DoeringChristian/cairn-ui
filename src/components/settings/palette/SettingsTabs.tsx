@@ -8,6 +8,25 @@ import { SETTINGS_TABS, activeTab, showTabBar, visibleTabs, type SettingsTabId }
  */
 export const SettingsDataExtraContext = createContext<{ node: ReactNode; claim: () => void } | null>(null);
 
+/**
+ * The tab the next settings panel to mount opens on, once: a card type change
+ * in the gear's Data tab remounts the card, and its editor reopens where the
+ * user was instead of on the new type's usual first tab.
+ */
+let pendingTab: SettingsTabId | null = null;
+export function openNextSettingsOn(tab: SettingsTabId): void {
+  pendingTab = tab;
+  // Only the remount right after the change takes it.
+  setTimeout(() => {
+    if (pendingTab === tab) pendingTab = null;
+  }, 2000);
+}
+export function takePendingSettingsTab(): SettingsTabId | null {
+  const t = pendingTab;
+  pendingTab = null;
+  return t;
+}
+
 interface Props {
   /** Each tab's content; a missing / null / false tab is hidden. */
   tabs: Partial<Record<SettingsTabId, ReactNode>>;
@@ -29,7 +48,7 @@ export default function SettingsTabs({ tabs: given, active, onActiveChange }: Pr
   const extra = useContext(SettingsDataExtraContext);
   useEffect(() => extra?.claim(), [extra]);
   const tabs = extra ? { ...given, data: <>{extra.node}{given.data}</> } : given;
-  const [own, setOwn] = useState<SettingsTabId | null>(null);
+  const [own, setOwn] = useState<SettingsTabId | null>(() => (extra ? takePendingSettingsTab() : null));
   const visible = visibleTabs({
     data: hasContent(tabs.data),
     grouping: hasContent(tabs.grouping),

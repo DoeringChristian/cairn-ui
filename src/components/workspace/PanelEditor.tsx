@@ -28,7 +28,7 @@ import {
 } from "../../lib/workspace/card-builder";
 import type { PanelEditor } from "../../lib/workspace/panel-actions";
 import { Segmented, Select, SettingRow, SettingsSection, TextInput } from "../settings/palette";
-import { SettingsDataExtraContext } from "../settings/palette/SettingsTabs";
+import { SettingsDataExtraContext, openNextSettingsOn } from "../settings/palette/SettingsTabs";
 
 export function PanelEditorHeader({ editor, title }: { editor: PanelEditor; title: string }) {
   const custom = typeof editor.panel.settings.title === "string" ? editor.panel.settings.title : "";
@@ -64,12 +64,16 @@ export function PanelEditorData({ editor }: { editor: PanelEditor }) {
     .sort((a, b) => Number(picked.includes(b.name)) - Number(picked.includes(a.name)) || a.name.localeCompare(b.name));
 
   return (
-    <SettingsSection name="Series">
+    <SettingsSection name="Card">
       <Select
         label="Card type"
         description={compat.options.find((o) => o.key === key)?.hint}
         value={key}
-        onChange={(v) => editor.change({ option: v })}
+        onChange={(v) => {
+          // The card remounts as the new type; its editor reopens here, on Data.
+          openNextSettingsOn("data");
+          editor.change({ option: v });
+        }}
         options={compat.options.map((o) => ({ value: o.key, label: o.unavailable ? `${o.label} (${o.unavailable})` : o.label, disabled: o.unavailable != null && o.key !== key }))}
       />
       {compat.reason && <p className="text-xs text-fg-muted">{compat.reason}</p>}

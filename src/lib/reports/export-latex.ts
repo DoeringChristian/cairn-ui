@@ -11,6 +11,7 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 import { renderChartPng } from "../download";
+import { framesBusy } from "../custom/frame-snapshots";
 import { zipStore, type ZipEntry } from "../zip";
 import { assetStem, buildLatexDocument, emptyFigures, type LatexFigures } from "./latex";
 import { isCardsBlock, type ReportBlock } from "./types";
@@ -58,6 +59,7 @@ async function waitForCards(root: HTMLElement, qc: QueryClient): Promise<void> {
       !root.querySelector('[data-cairn-card] [class*="animate-pulse"]') &&
       Array.from(root.querySelectorAll("img")).every((img) => img.complete) &&
       Array.from(root.querySelectorAll<HTMLElement>(".js-plotly-plot")).every(plotlyDrawn) &&
+      !framesBusy(root) &&
       sig === last;
     last = sig;
     calm = ready ? calm + 1 : 0;

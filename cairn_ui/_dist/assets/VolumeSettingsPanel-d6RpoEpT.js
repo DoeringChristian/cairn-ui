@@ -1,0 +1,1 @@
+import{j as s,d4 as i,eX as n,eZ as o}from"./index-CKgUI5FT.js";function u({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{data:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{u as default};

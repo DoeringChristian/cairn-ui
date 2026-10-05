@@ -1,5 +1,7 @@
 /** Artifact download and chart export helpers. */
 
+import { snapshotFrame } from "./custom/frame-snapshots";
+
 export type ExportFormat = "svg" | "png" | "jpg" | "pdf";
 
 const MIME_EXT: Record<string, string> = {
@@ -78,10 +80,12 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+const CUSTOM_VIEWER = '[data-viewer="custom"]';
+
 /**
  * Render the charts under `container` as one PNG. Plotly figures render
  * through `Plotly.toImage`; other canvases (uPlot) and images (a static
- * figure) are copied as drawn. Each layer lands at its on-screen position, so
+ * figure) are copied as drawn; a custom viewer gives its `snapshot()`. Each layer lands at its on-screen position, so
  * a grid of panes stays a grid. Rejects when there is nothing to render.
  */
 export async function renderChartPng(container: HTMLElement, scale = 2): Promise<Blob> {
@@ -99,12 +103,18 @@ export async function renderChartPng(container: HTMLElement, scale = 2): Promise
       layers.push({ rect: plot.getBoundingClientRect(), source: await loadImage(url) });
     }
   }
+  // Custom viewers draw in their own sandboxed frames: each gives its snapshot() (or the picture it shows while paused).
+  const viewerBoxes = Array.from(container.querySelectorAll<HTMLElement>(CUSTOM_VIEWER));
+  for (const box of viewerBoxes) {
+    const url = await snapshotFrame(box);
+    if (url) layers.push({ rect: box.getBoundingClientRect(), source: await loadImage(url) });
+  }
   for (const canvas of container.querySelectorAll<HTMLCanvasElement>("canvas")) {
-    if (canvas.closest(".js-plotly-plot") || canvas.width === 0 || canvas.height === 0) continue;
+    if (canvas.closest(".js-plotly-plot") || canvas.closest(CUSTOM_VIEWER) || canvas.width === 0 || canvas.height === 0) continue;
     layers.push({ rect: canvas.getBoundingClientRect(), source: canvas });
   }
   for (const img of container.querySelectorAll<HTMLImageElement>("img")) {
-    if (img.closest(".js-plotly-plot") || !img.complete || img.naturalWidth === 0) continue;
+    if (img.closest(".js-plotly-plot") || img.closest(CUSTOM_VIEWER) || !img.complete || img.naturalWidth === 0) continue;
     layers.push({ rect: img.getBoundingClientRect(), source: img });
   }
   if (layers.length === 0) throw new Error("no chart found to render");
