@@ -6,27 +6,7 @@ import { onPrintLayout } from "../lib/print-layout.ts";
 import { glContextEstimate } from "../lib/plot-utils/gl-budget.ts";
 import { applyViewOverrides, extractViewState, mergeRelayout, reconcileOwnView, type SharedView } from "../lib/plot-utils/view-overrides.ts";
 import { glBudget, glContextsIn, loseContexts, type GlRegistration } from "./gl-budget-manager.ts";
-
-// plotly.js-dist-min ships no types; the runtime API is plotly.js.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type PlotlyApi = any;
-
-/**
- * Plotly, once loaded. It is ~4.6 MB of script, so it loads on first use
- * (the first plot drawn, or an export) rather than with the app: pages
- * without a Plotly plot never parse it.
- */
-let Plotly: PlotlyApi | null = null;
-let plotlyLoading: Promise<PlotlyApi> | null = null;
-
-/** Load Plotly (once); resolves to its API. */
-export function loadPlotly(): Promise<PlotlyApi> {
-  plotlyLoading ??= import(
-    // @ts-expect-error - no types (see PlotlyApi)
-    "plotly.js-dist-min"
-  ).then((m: { default: PlotlyApi }) => (Plotly = m.default));
-  return plotlyLoading;
-}
+import { loadPlotly, plotly as Plotly } from "./plotly-loader.ts";
 
 export type PlotlyData = Array<Record<string, unknown>>;
 export type PlotlyLayout = Record<string, unknown>;

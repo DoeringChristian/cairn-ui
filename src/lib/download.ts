@@ -3,6 +3,7 @@
 import { api } from "../api/client";
 import { captureCardPng, cardArtifacts, collectLayers } from "./card-capture";
 import { zipStore } from "./zip";
+import { loadPlotly } from "../charts/plotly-loader";
 
 export type ExportFormat = "svg" | "png" | "jpg" | "pdf";
 
@@ -129,7 +130,7 @@ export async function exportPlotlyChart(
     return;
   }
   const plot = plots[0]!;
-  const Plotly = await (await import("../charts/PlotlyChart")).loadPlotly();
+  const Plotly = await loadPlotly();
   await Plotly.downloadImage(plot, {
     format: format === "jpg" ? "jpeg" : format === "pdf" ? "svg" : format,
     filename,
@@ -194,7 +195,7 @@ export async function resetPlotlyViews(container: HTMLElement): Promise<void> {
   type Plot = HTMLElement & { _fullLayout?: Record<string, unknown> };
   const plots = Array.from(container.querySelectorAll<Plot>(".js-plotly-plot")).filter((p) => p._fullLayout);
   if (plots.length === 0) return;
-  const Plotly = await (await import("../charts/PlotlyChart")).loadPlotly();
+  const Plotly = await loadPlotly();
   for (const plot of plots) {
     const update: Record<string, unknown> = {};
     for (const k of Object.keys(plot._fullLayout!)) if (/^[xy]axis\d*$/.test(k)) update[`${k}.autorange`] = true;

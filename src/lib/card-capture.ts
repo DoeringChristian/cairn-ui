@@ -16,6 +16,7 @@
  * `downloadCardArtifacts`.
  */
 
+import { loadPlotly } from "../charts/plotly-loader";
 import { snapshotFrame } from "./custom/frame-snapshots";
 
 export interface Layer {
@@ -64,7 +65,7 @@ export async function collectLayers(container: HTMLElement, scale = 2): Promise<
     (p) => (p as HTMLElement & { _fullLayout?: unknown })._fullLayout != null,
   );
   if (plots.length > 0) {
-    const Plotly = await (await import("../charts/PlotlyChart")).loadPlotly();
+    const Plotly = await loadPlotly();
     for (const plot of plots) {
       const url: string = await Plotly.toImage(plot, { format: "png", width: plot.clientWidth, height: plot.clientHeight, scale });
       layers.push({ rect: plot.getBoundingClientRect(), source: await loadImage(url) });
