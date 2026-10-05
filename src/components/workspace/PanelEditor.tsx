@@ -94,7 +94,7 @@ export function PanelEditorData({ editor }: { editor: PanelEditor }) {
     .sort((a, b) => Number(picked.includes(b.name)) - Number(picked.includes(a.name)) || a.name.localeCompare(b.name));
 
   return (
-    <SettingsSection name="Series">
+    <SettingsSection name="Card">
       <Select
         label="Card type"
         description={compat.options.find((o) => o.key === key)?.hint}

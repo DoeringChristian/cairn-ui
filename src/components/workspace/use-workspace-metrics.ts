@@ -34,7 +34,8 @@ export function useWorkspaceMetrics(runIds: readonly string[]): { metrics: Metri
         runIds.map((runId, i) => ({
           runId,
           sequences: seqQs[i]?.data?.sequences ?? [],
-          artifactNames: (artQs[i]?.data?.outputs ?? []).map((a) => a.name),
+          // A custom viewer the run published (`run.use_viewer`) is code for cards, not an output to show.
+          artifactNames: (artQs[i]?.data?.outputs ?? []).filter((a) => a.type !== "cairn-viewer").map((a) => a.name),
         })),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
