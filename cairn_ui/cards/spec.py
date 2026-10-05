@@ -60,6 +60,8 @@ CARD_TYPES: tuple[str, ...] = (
     "boxes3d",
     "volume",
     "preset",
+    # A custom viewer (`settings.viewer`) over custom data or a built-in kind.
+    "custom",
     # Workspace-level "multi-run" cards.
     "parallel",
     "scatter",
@@ -89,6 +91,7 @@ CardType = Literal[
     "boxes3d",
     "volume",
     "preset",
+    "custom",
     "parallel",
     "scatter",
     "bar",

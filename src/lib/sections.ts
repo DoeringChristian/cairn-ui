@@ -20,6 +20,7 @@ const MEDIA_TYPES = new Set([
   "html",
   "markdown",
   "preset",
+  "custom",
 ]);
 
 /** The automatic section of a metric. */

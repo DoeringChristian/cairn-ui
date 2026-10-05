@@ -61,6 +61,8 @@ export interface MediaView<S> {
   hash: string;
   /** Series name of the pane. */
   name: string;
+  /** The run the pane's series belongs to. */
+  runId: string;
   settings: S;
   /**
    * True when this is the card's only pane (it fills the card); false for one
@@ -89,7 +91,7 @@ export interface SteppedMediaPanelCtx extends MediaPanelCtx, ReferencePanelCtx {
 
 interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
   /** Card kind, used for CardShell sizing and as the comparison card type. */
-  kind: "markdown" | "html" | "audio" | "video";
+  kind: "markdown" | "html" | "audio" | "video" | "custom";
   /** Word in the empty state: "no {noun} logged yet". */
   noun: string;
   /** Gallery item captions as chips over the items (pictures: video, audio) rather than a line above. */
@@ -279,7 +281,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
     const refGallery = ref && isGalleryPoint(ref) ? galleryFrames?.get(`${paneId}~ref`)?.itemPoints ?? [] : null;
     const refFor = (j: number): SequencePoint | null =>
       refGallery ? (refGallery.length > 1 ? refGallery[j] ?? null : refGallery[0] ?? null) : ref;
-    const common = { name, settings, inModal, paneCount, following, referenceName: refName ?? undefined, update: ctl.set };
+    const common = { name, runId: panes.runIds[i] ?? runId, settings, inModal, paneCount, following, referenceName: refName ?? undefined, update: ctl.set };
     if (isGalleryPoint(point)) {
       const gallery = (
         <GalleryView

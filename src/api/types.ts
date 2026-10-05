@@ -98,6 +98,8 @@ export interface SequenceMeta {
   min_step: number;
   max_step: number;
   count: number;
+  /** Custom data (`object_type: "custom"`): the kind of the latest point (`guiding/vmf`). */
+  kind?: string | null;
 }
 
 export interface SequencePoint {

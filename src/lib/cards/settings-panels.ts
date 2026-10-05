@@ -37,4 +37,5 @@ export const SETTINGS_PANELS: Partial<Record<CardType, () => Promise<{ default: 
   mesh: () => import("../../components/settings-panels/Scene3DSettingsPanel"),
   boxes3d: () => import("../../components/settings-panels/Scene3DSettingsPanel"),
   volume: () => import("../../components/settings-panels/VolumeSettingsPanel"),
+  custom: () => import("../../components/settings-panels/CustomSettingsPanel"),
 };

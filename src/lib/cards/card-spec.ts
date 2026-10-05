@@ -41,6 +41,8 @@ export const CARD_TYPES = [
   "boxes3d",
   "volume",
   "preset",
+  // A custom viewer (`settings.viewer`) over custom data or a built-in kind.
+  "custom",
   // Workspace-level "multi-run" cards.
   "parallel",
   "scatter",

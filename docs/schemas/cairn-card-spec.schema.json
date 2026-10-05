@@ -51,6 +51,7 @@
         "boxes3d",
         "volume",
         "preset",
+        "custom",
         "parallel",
         "scatter",
         "bar",

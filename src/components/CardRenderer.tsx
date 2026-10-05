@@ -48,6 +48,7 @@ const MeshCard = lazy(() => import("./MeshCard"));
 const Boxes3DCard = lazy(() => import("./Boxes3DCard"));
 const VolumeCard = lazy(() => import("./VolumeCard"));
 const PresetCard = lazy(() => import("./PresetCard"));
+const CustomCard = lazy(() => import("./custom/CustomCard"));
 
 
 /**
@@ -323,6 +324,12 @@ function CardRendererInner(props: CardDescriptor) {
       return (
         <Suspense fallback={<LazyCardFallback label="loading chart…" />}>
           <PresetCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />
+        </Suspense>
+      );
+    case "custom":
+      return (
+        <Suspense fallback={<LazyCardFallback label="loading viewer…" />}>
+          <CustomCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} settingsKeyOverride={settingsKeyOverride} onRemove={onRemove} />
         </Suspense>
       );
     default: {

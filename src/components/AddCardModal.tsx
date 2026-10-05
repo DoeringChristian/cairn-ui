@@ -41,6 +41,7 @@ const TYPE_LABELS: Record<string, string> = {
   volume: "Volumes",
   preset: "Confusion / PR / ROC",
   artifact: "Artifacts",
+  custom: "Custom data",
   parallel: "Parallel Coords",
   scatter: "Scatter Plot",
   bar: "Bar Chart",
@@ -50,7 +51,7 @@ const TYPE_LABELS: Record<string, string> = {
   "code-diff": "Code Diff",
 };
 
-const TYPE_ORDER = ["scalar", "image", "figure", "audio", "video", "histogram", "tensor", "text", "table", "html", "markdown", "pointcloud", "mesh", "boxes3d", "volume", "preset", "artifact", "parallel", "scatter", "bar", "tile", "importance", "run-compare", "code-diff"];
+const TYPE_ORDER = ["scalar", "image", "figure", "audio", "video", "histogram", "tensor", "text", "table", "html", "markdown", "pointcloud", "mesh", "boxes3d", "volume", "preset", "custom", "artifact", "parallel", "scatter", "bar", "tile", "importance", "run-compare", "code-diff"];
 
 /** Map a picked grouping entry (a lib/reports/metric-index.ts entry) to a typed selection. */
 function toSelection(m: MetricIndexEntry): AddCardSelection {
