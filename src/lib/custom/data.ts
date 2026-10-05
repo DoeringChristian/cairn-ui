@@ -17,6 +17,8 @@ export interface CustomMeta {
   meta: Record<string, unknown>;
   /** Shapes and dtypes of an npz's arrays, known before the blob loads. */
   arrays: Record<string, { shape: number[]; dtype: string }>;
+  /** npz: the dict's non-array (JSON) entries, merged into the decoded value. */
+  values: Record<string, unknown>;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => v != null && typeof v === "object" && !Array.isArray(v);
@@ -39,7 +41,7 @@ export function parseCustomMeta(raw: unknown): CustomMeta | null {
       if (isObj(a) && Array.isArray(a.shape)) arrays[k] = { shape: a.shape.map(Number), dtype: String(a.dtype ?? "") };
     }
   }
-  return { kind: v.kind, format, meta: isObj(v.meta) ? v.meta : {}, arrays };
+  return { kind: v.kind, format, meta: isObj(v.meta) ? v.meta : {}, arrays, values: isObj(v.values) ? v.values : {} };
 }
 
 const isZip = (b: ArrayBuffer) => {
@@ -62,12 +64,18 @@ export async function decodeNpz(buffer: ArrayBuffer): Promise<Record<string, Typ
 /**
  * The value a viewer gets for a blob of `format`. Fresh on every call (the
  * caller transfers its buffers to the frame). Without a format the bytes
- * decide: zip → npz, `.npy` → `{array: …}`, else raw bytes.
+ * decide: zip → npz, `.npy` → `{array: …}`, else raw bytes. An npz's
+ * `values` (from the metadata) join its arrays: `{...values, ...arrays}`.
  */
-export async function decodeForViewer(buffer: ArrayBuffer, format: string | null | undefined): Promise<unknown> {
+export async function decodeForViewer(
+  buffer: ArrayBuffer,
+  format: string | null | undefined,
+  values: Record<string, unknown> = {},
+): Promise<unknown> {
   switch (format) {
     case "npz":
-      return decodeNpz(buffer);
+      // The dict's scalars/JSON entries live in the metadata, its arrays in the npz.
+      return { ...structuredClone(values), ...(await decodeNpz(buffer)) };
     case "json":
       return JSON.parse(new TextDecoder().decode(buffer));
     case "bytes":

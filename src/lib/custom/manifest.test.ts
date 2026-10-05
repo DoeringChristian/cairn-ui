@@ -42,10 +42,13 @@ test("bad shapes name the field", () => {
 });
 
 test("imports: vendored files and folder prefixes, inside the folder only", () => {
-  const m = ok({ name: "a", accepts: ["x"], imports: { d3: "./vendor/d3.js", "three/addons/": "./vendor/three-addons/", lib: "/vendor/lib.js" } });
-  assert.deepEqual(m.imports, { d3: "vendor/d3.js", "three/addons/": "vendor/three-addons/", lib: "vendor/lib.js" });
+  const m = ok({ name: "a", accepts: ["x"], imports: { d3: "./vendor/d3.js", "three/addons/": "./vendor/three-addons/" } });
+  assert.deepEqual(m.imports, { d3: "vendor/d3.js", "three/addons/": "vendor/three-addons/" });
+  assert.match(errs({ name: "a", accepts: ["x"], imports: { lib: "/vendor/lib.js" } }), /"\.\/" path/);
+  assert.match(errs({ name: "a", accepts: ["x"], imports: { "./x": "./x.js" } }), /bare specifiers/);
+  assert.match(errs({ name: "a", accepts: ["x"], imports: { "https://x": "./x.js" } }), /bare specifiers/);
   assert.match(errs({ name: "a", accepts: ["x"], imports: { d3: "https://cdn.example/d3.js" } }), /no network/);
-  assert.match(errs({ name: "a", accepts: ["x"], imports: { d3: "../d3.js" } }), /leaves the viewer folder/);
+  assert.match(errs({ name: "a", accepts: ["x"], imports: { d3: "./x/../../d3.js" } }), /leaves the viewer folder/);
   assert.match(errs({ name: "a", accepts: ["x"], imports: { "x/": "./vendor/x.js" } }), /ends both sides/);
   assert.match(errs({ name: "a", accepts: ["x"], imports: { "cairn:three": "./three.js" } }), /provided by cairn/);
 });
@@ -61,7 +64,7 @@ test("settings: the palette vocabulary with defaults", () => {
       { key: "label", type: "text", label: "Label" },
     ],
   });
-  assert.deepEqual(settingDefaults(m.settings), { exposure: 1, n: 0, mode: "a", grid: true, cmap: "viridis", label: "" });
+  assert.deepEqual(settingDefaults(m.settings), { exposure: 1, n: 0, mode: "a", grid: true, cmap: "turbo", label: "" });
   assert.deepEqual(m.settings[2]!.options, [{ value: "a", label: "a" }, { value: "b", label: "B" }]);
   assert.equal(m.settings[5]!.label, "Label");
   assert.equal(m.settings[0]!.label, "exposure");
@@ -70,7 +73,8 @@ test("settings: the palette vocabulary with defaults", () => {
 test("settings errors", () => {
   assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "e", type: "slider", max: 1 }] }), /needs "min" and "max"/);
   assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "e", type: "knob" }] }), /"type" must be one of/);
-  assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "panelMode", type: "text" }] }), /is a card setting/);
+  assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "viewer_version", type: "text" }] }), /is a card setting/);
+  assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "c", type: "colormap", options: [1] }] }), /colormap names/);
   assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "a", type: "text" }, { key: "a", type: "text" }] }), /duplicate key/);
   assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "m", type: "select", options: ["a"], default: "z" }] }), /not one of the options/);
   assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "m", type: "switch", default: 1 }] }), /true or false/);
@@ -92,18 +96,20 @@ test("normalizePath", () => {
   assert.equal(normalizePath("../x.js"), null);
 });
 
-test("accepts: kinds with globs, built-in types", () => {
+test("accepts: custom data as custom:<kind>, globs, built-in types", () => {
   const vmf = { object_type: "custom", kind: "guiding/vmf" };
   assert.ok(acceptMatches("custom:guiding/vmf", vmf));
   assert.ok(acceptMatches("custom:guiding/*", vmf));
-  assert.ok(!acceptMatches("custom:*", vmf), "* stays within a segment");
-  assert.ok(acceptMatches("custom:**", vmf));
-  assert.ok(acceptMatches("custom", vmf), "a bare type takes every kind");
+  assert.ok(acceptMatches("custom:guiding/*", { object_type: "custom", kind: "guiding/a/b" }), "* crosses /");
+  assert.ok(acceptMatches("custom:*", vmf));
+  assert.ok(acceptMatches("custom:guiding/vm?", vmf));
+  assert.ok(!acceptMatches("custom:guiding/v?", vmf));
+  assert.ok(!acceptMatches("custom", vmf), "custom data is matched as custom:<kind>");
   assert.ok(!acceptMatches("custom:guiding/vmfx", vmf));
   assert.ok(!acceptMatches("custom:guiding.vmf", { object_type: "custom", kind: "guidingxvmf" }), "dots are literal");
   assert.ok(acceptMatches("volume", { object_type: "volume" }));
   assert.ok(!acceptMatches("volume", vmf));
-  assert.ok(!acceptMatches("custom:x", { object_type: "custom" }), "no kind, no kind match");
+  assert.ok(!acceptMatches("custom:*", { object_type: "volume" }));
   assert.ok(accepts({ accepts: ["volume", "custom:field/*"] }, { object_type: "custom", kind: "field/2d" }));
 });
 
@@ -111,8 +117,8 @@ test("acceptScore prefers the most specific pattern", () => {
   const s = { object_type: "custom", kind: "guiding/vmf" };
   const exact = acceptScore({ accepts: ["custom:guiding/vmf"] }, s);
   const glob = acceptScore({ accepts: ["custom:guiding/*"] }, s);
-  const any = acceptScore({ accepts: ["custom:**"] }, s);
-  const bare = acceptScore({ accepts: ["custom"] }, s);
-  assert.ok(exact > glob && glob > any && any > bare && bare >= 0);
+  const any = acceptScore({ accepts: ["custom:*"] }, s);
+  assert.ok(exact > glob && glob > any && any >= 0);
   assert.equal(acceptScore({ accepts: ["volume"] }, s), -1);
+  assert.equal(acceptScore({ accepts: ["volume", "custom:*", "custom:guiding/vmf"] }, s), exact);
 });

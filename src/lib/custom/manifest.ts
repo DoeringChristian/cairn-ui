@@ -30,8 +30,10 @@ export interface ViewerSetting {
   min?: number;
   max?: number;
   step?: number;
-  /** `select`: the choices (a value, or `{value, label}`). */
+  /** `select`: the choices; `colormap`: the colormaps offered (all when absent). */
   options?: Array<{ value: string; label: string }>;
+  /** `text`: shown while empty. */
+  placeholder?: string;
 }
 
 export interface ViewerManifest {
@@ -57,12 +59,8 @@ export type ManifestResult = { ok: true; manifest: ViewerManifest } | { ok: fals
 
 const NAME_RE = /^[a-z0-9][a-z0-9_.-]*$/;
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-/** Settings keys the card itself owns; a viewer setting may not shadow them. */
-const RESERVED_KEYS = new Set([
-  "version", "metrics", "title", "height", "colSpan", "collapsed", "viewer", "viewerVersion", "viewerSettings", "view",
-  "sliderStep", "sliderKey", "followSection", "columns", "maxRuns", "panelMode", "compareSlots", "compareLinked",
-  "paneWidths", "xAxis", "reference", "referenceStep",
-]);
+/** Keys a viewer setting may not use (the card's own; see the contract). */
+const RESERVED_KEYS = new Set(["viewer", "viewer_version"]);
 
 const isObj = (v: unknown): v is Record<string, unknown> => v != null && typeof v === "object" && !Array.isArray(v);
 
@@ -111,7 +109,7 @@ export function parseManifest(input: unknown): ManifestResult {
   };
 
   const name = str("name", true);
-  if (name && !NAME_RE.test(name)) errors.push(`"name" must match ${NAME_RE.source}`);
+  if (name && (!NAME_RE.test(name) || name.length > 64)) errors.push(`"name" must match ${NAME_RE.source} (at most 64 characters)`);
   const title = str("title", false) ?? name ?? "";
   const description = str("description", false);
 
@@ -143,12 +141,16 @@ export function parseManifest(input: unknown): ManifestResult {
           errors.push(`imports["${spec}"]: "cairn:" specifiers are provided by cairn`);
           continue;
         }
-        if (!/^\.{0,2}\//.test(target)) {
-          errors.push(`imports["${spec}"] must be a relative path into the folder ("./vendor/…"); the viewer has no network`);
+        if (!spec || /^[./]/.test(spec) || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(spec)) {
+          errors.push(`imports["${spec}"]: keys are bare specifiers ("d3", "three/addons/")`);
+          continue;
+        }
+        if (!target.startsWith("./")) {
+          errors.push(`imports["${spec}"] must be a "./" path into the folder ("./vendor/…"); the viewer has no network`);
           continue;
         }
         const norm = normalizePath(target);
-        if (norm == null) {
+        if (norm == null || target.split("/").includes("..")) {
           errors.push(`imports["${spec}"] leaves the viewer folder`);
           continue;
         }
@@ -243,10 +245,21 @@ function parseSetting(s: unknown, i: number): ViewerSetting | string {
       out.default = typeof d === "string" ? d : options[0]!.value;
       break;
     }
-    case "colormap":
+    case "colormap": {
+      if (d !== undefined && typeof d !== "string") return `${at} (${key}): "default" must be a string`;
+      if (s.options !== undefined) {
+        if (!Array.isArray(s.options) || !s.options.length || !s.options.every((o) => typeof o === "string")) {
+          return `${at} (${key}): colormap "options" are colormap names`;
+        }
+        out.options = (s.options as string[]).map((o) => ({ value: o, label: o }));
+      }
+      out.default = typeof d === "string" ? d : (out.options?.[0]?.value ?? "turbo");
+      break;
+    }
     case "text":
       if (d !== undefined && typeof d !== "string") return `${at} (${key}): "default" must be a string`;
-      out.default = typeof d === "string" ? d : type === "colormap" ? "viridis" : "";
+      if (typeof s.placeholder === "string") out.placeholder = s.placeholder;
+      out.default = typeof d === "string" ? d : "";
       break;
   }
   return out;
@@ -287,35 +300,26 @@ export interface SeriesKind {
   kind?: string | null;
 }
 
-/** A glob over a kind: `*` matches any run of characters within a segment, `**` across segments. */
+/** A glob: `*` matches any run of characters (`/` included), `?` one character; the rest is literal. */
 function globRegex(glob: string): RegExp {
   let re = "";
-  for (let i = 0; i < glob.length; i++) {
-    const c = glob[i]!;
-    if (c === "*") {
-      if (glob[i + 1] === "*") {
-        re += ".*";
-        i++;
-      } else re += "[^/]*";
-    } else re += c.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
-  }
-  return new RegExp(`^${re}$`);
+  for (const c of glob) re += c === "*" ? ".*" : c === "?" ? "." : c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${re}$`, "s");
+}
+
+/** The string `accepts` patterns match: `custom:<kind>` for custom data, else the object type. */
+export function acceptSubject(series: SeriesKind): string {
+  return series.object_type === "custom" ? `custom:${series.kind ?? ""}` : series.object_type;
 }
 
 /**
- * Whether one `accepts` pattern matches a series:
- * - `custom:<glob>` matches custom data whose kind matches the glob
- *   (`custom:guiding/*` → `guiding/vmf`; `custom:**` → every kind);
- * - anything else is an object type glob (`volume`, `custom` = all custom data).
+ * Whether one `accepts` pattern matches a series (whole string): custom
+ * data is matched as `custom:<kind>` (`custom:guiding/*` takes
+ * `guiding/vmf` and `guiding/a/b`), a built-in series by its object type
+ * (`volume`).
  */
 export function acceptMatches(pattern: string, series: SeriesKind): boolean {
-  const colon = pattern.indexOf(":");
-  if (colon >= 0) {
-    const type = pattern.slice(0, colon);
-    if (!globRegex(type).test(series.object_type)) return false;
-    return series.kind != null && globRegex(pattern.slice(colon + 1)).test(series.kind);
-  }
-  return globRegex(pattern).test(series.object_type);
+  return globRegex(pattern).test(acceptSubject(series));
 }
 
 /** Whether a viewer accepts a series. */
@@ -332,7 +336,9 @@ export function acceptScore(manifest: Pick<ViewerManifest, "accepts">, series: S
   let best = -1;
   for (const p of manifest.accepts) {
     if (!acceptMatches(p, series)) continue;
-    const score = p.includes(":") ? (p.includes("*") ? 2 + p.replace(/\*/g, "").length / 1000 : 3) : p.includes("*") ? 0 : 1;
+    // No wildcard beats a wildcard; among globs, more literal characters win.
+    const literal = p.replace(/[*?]/g, "").length;
+    const score = /[*?]/.test(p) ? literal / 1000 : 1 + literal / 1000;
     best = Math.max(best, score);
   }
   return best;

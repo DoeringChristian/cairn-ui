@@ -73,6 +73,9 @@ test("decodeForViewer: by format, else sniffed", async () => {
   const bytes = (await decodeForViewer(raw, "bytes")) as ArrayBuffer;
   assert.deepEqual([...new Uint8Array(bytes)], [1, 2, 3]);
   assert.notEqual(bytes, raw, "a copy: the cached blob stays usable");
+  const merged = (await decodeForViewer(npz(), "npz", { n: 3, mu: "shadowed" })) as Record<string, unknown>;
+  assert.equal(merged.n, 3);
+  assert.ok((merged.mu as { data: unknown }).data instanceof Float32Array, "arrays win over values");
   const sniffed = (await decodeForViewer(npz(), null)) as Record<string, unknown>;
   assert.ok("mu" in sniffed);
   const one = npy("<f4", u8(new Float32Array([1, 2])), [2]);
@@ -82,9 +85,9 @@ test("decodeForViewer: by format, else sniffed", async () => {
 
 test("parseCustomMeta", () => {
   assert.deepEqual(parseCustomMeta(JSON.stringify({ kind: "guiding/vmf", format: "npz", meta: { lobes: 3 }, arrays: { mu: { shape: [3, 3], dtype: "float32" } } })), {
-    kind: "guiding/vmf", format: "npz", meta: { lobes: 3 }, arrays: { mu: { shape: [3, 3], dtype: "float32" } },
+    kind: "guiding/vmf", format: "npz", meta: { lobes: 3 }, arrays: { mu: { shape: [3, 3], dtype: "float32" } }, values: {},
   });
-  assert.deepEqual(parseCustomMeta({ kind: "x", format: "json" }), { kind: "x", format: "json", meta: {}, arrays: {} });
+  assert.deepEqual(parseCustomMeta({ kind: "x", format: "json" }), { kind: "x", format: "json", meta: {}, arrays: {}, values: {} });
   assert.equal(parseCustomMeta("not json"), null);
   assert.equal(parseCustomMeta({ format: "npz" }), null);
   assert.equal(parseCustomMeta(null), null);
