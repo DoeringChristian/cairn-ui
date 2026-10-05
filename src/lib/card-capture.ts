@@ -2,14 +2,13 @@
  * The card header's screenshot and download, for every card type (the
  * shared actions of components/card-header/CardHeaderActions.tsx).
  *
- * Screenshot (`captureCardPng`): the card's body as one PNG. Its DOM (text,
- * tables, tiles, diffs, legends) is rasterized through an SVG
- * `<foreignObject>` with every element's computed style inlined; over it go
- * the layers the DOM picture cannot hold, each at its on-screen place:
- * Plotly figures (`Plotly.toImage`), canvases (uPlot, three.js with
- * `preserveDrawingBuffer`), images, videos, custom viewers (their
- * `snapshot()`) and logged HTML documents (asked through the server's shim,
- * `cairn:snapshot`, to rasterize themselves the same way).
+ * Screenshot (`captureCardPng`): the card's body as displayed, as one PNG —
+ * a faithful clone (computed styles, pseudo-elements, scroll offsets, form
+ * state, fonts embedded; canvases, images, video frames, custom viewers'
+ * `snapshot()` and logged HTML's own picture in place of what an SVG cannot
+ * draw) rendered by the browser through an SVG `<foreignObject>`, at the
+ * device's pixel ratio. `collectLayers` serves the reports' LaTeX export
+ * (charts only).
  *
  * The artifacts a card shows at its step (`cardArtifacts`): every viewer
  * marks its root with `data-cairn-artifact` (the content hash). The
@@ -37,7 +36,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /** Ask a logged HTML document (its server shim) for a picture of what it shows. */
-function snapshotHtmlFrame(frame: HTMLIFrameElement, timeoutMs = 3000): Promise<string | null> {
+function snapshotHtmlFrame(frame: HTMLIFrameElement, timeoutMs = 8000): Promise<string | null> {
   const win = frame.contentWindow;
   if (!win) return Promise.resolve(null);
   const id = Math.random().toString(36).slice(2);
@@ -95,68 +94,213 @@ export async function collectLayers(container: HTMLElement, scale = 2): Promise<
   return layers.filter((l) => l.rect.width > 0 && l.rect.height > 0);
 }
 
-/** Every element's computed style, inline on its clone (the SVG picture has no stylesheets). */
-function inlineStyles(src: Element, dst: Element): void {
-  const cs = getComputedStyle(src);
+// ---------------------------------------------------------------------------
+// The card as displayed: one faithful clone, rendered by the browser itself
+// ---------------------------------------------------------------------------
+
+/** A computed style as a declaration list. */
+function cssText(cs: CSSStyleDeclaration): string {
   let css = "";
   for (let i = 0; i < cs.length; i++) {
     const p = cs[i]!;
     css += `${p}:${cs.getPropertyValue(p)};`;
   }
-  dst.setAttribute("style", css);
-  for (let i = 0; i < src.children.length; i++) {
-    const s = src.children[i]!;
-    const d = dst.children[i];
-    if (d) inlineStyles(s, d);
+  return css;
+}
+
+/** Canvas pixels as a data URL ("" when unreadable). */
+function canvasUrl(c: HTMLCanvasElement): string {
+  try {
+    return c.toDataURL("image/png");
+  } catch {
+    return "";
   }
 }
 
-/** `el` as drawn, through an SVG `<foreignObject>`; media, canvases and frames are left blank (they are layers). */
-async function rasterizeDom(el: HTMLElement): Promise<HTMLImageElement> {
-  const rect = el.getBoundingClientRect();
-  const clone = el.cloneNode(true) as HTMLElement;
-  inlineStyles(el, clone);
-  for (const n of clone.querySelectorAll("img, canvas, video, iframe, audio")) {
-    (n as HTMLElement).style.visibility = "hidden";
-    n.removeAttribute("src");
-    n.removeAttribute("srcset");
+/** An image or a video's current frame as a data URL, at its natural size ("" when unreadable). */
+function mediaUrl(el: HTMLImageElement | HTMLVideoElement): string {
+  const w = el instanceof HTMLImageElement ? el.naturalWidth : el.videoWidth;
+  const h = el instanceof HTMLImageElement ? el.naturalHeight : el.videoHeight;
+  if (!w || !h) return "";
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  try {
+    c.getContext("2d")!.drawImage(el, 0, 0, w, h);
+    return c.toDataURL("image/png");
+  } catch {
+    return el instanceof HTMLImageElement ? el.currentSrc || el.src : "";
   }
-  for (const n of clone.querySelectorAll("script, [data-cairn-capture-skip]")) n.remove();
+}
+
+const fontCache = new Map<string, Promise<string>>();
+
+/** The page's `@font-face` rules for `families`, their files inlined (an SVG picture loads nothing). */
+async function embeddedFonts(families: ReadonlySet<string>): Promise<string> {
+  const rules: Array<{ rule: CSSFontFaceRule; base: string }> = [];
+  const walk = (list: CSSRuleList, base: string) => {
+    for (const r of Array.from(list)) {
+      if (r instanceof CSSFontFaceRule) rules.push({ rule: r, base });
+      else if ("cssRules" in r && (r as CSSGroupingRule).cssRules) walk((r as CSSGroupingRule).cssRules, base);
+    }
+  };
+  for (const sheet of Array.from(document.styleSheets)) {
+    try {
+      walk(sheet.cssRules, sheet.href ?? location.href);
+    } catch {
+      /* a stylesheet we may not read */
+    }
+  }
+  const out: string[] = [];
+  for (const { rule, base } of rules) {
+    const family = rule.style.getPropertyValue("font-family").replace(/["']/g, "").trim();
+    if (!families.has(family)) continue;
+    const key = `${base}|${rule.cssText}`;
+    let text = fontCache.get(key);
+    if (!text) {
+      text = (async () => {
+        let css = rule.cssText;
+        for (const m of [...css.matchAll(/url\((["']?)([^"')]+)\1\)/g)]) {
+          if (m[2]!.startsWith("data:")) continue;
+          try {
+            const blob = await (await fetch(new URL(m[2]!, base).href)).blob();
+            const data = await new Promise<string>((res) => {
+              const fr = new FileReader();
+              fr.onload = () => res(String(fr.result));
+              fr.readAsDataURL(blob);
+            });
+            css = css.replace(m[0], `url("${data}")`);
+          } catch {
+            /* that format stays a reference: the next src still works */
+          }
+        }
+        return css;
+      })();
+      fontCache.set(key, text);
+    }
+    out.push(await text);
+  }
+  return out.join("\n");
+}
+
+/**
+ * A clone of `root` that draws exactly like it: every element's computed
+ * style inline, its `::before` / `::after` as rules, form values, scroll
+ * offsets, and in place of what an SVG picture cannot draw itself the pixels
+ * the page shows now — canvases (uPlot, three.js), images and video frames,
+ * custom viewers (their `snapshot()`) and logged HTML (its shim's picture).
+ * Laid out by the browser with the same CSS (object-fit, transforms,
+ * clipping, stacking), so the picture is the card as displayed.
+ */
+async function faithfulClone(root: HTMLElement): Promise<{ clone: HTMLElement; css: string; families: Set<string> }> {
+  // What the frames show, asked for first (they answer asynchronously).
+  const frameShots = new Map<Element, Promise<string | null>>();
+  for (const box of root.querySelectorAll<HTMLElement>(CUSTOM_VIEWER)) frameShots.set(box, snapshotFrame(box));
+  for (const f of root.querySelectorAll<HTMLIFrameElement>(HTML_FRAME)) frameShots.set(f, snapshotHtmlFrame(f));
+  const shots = new Map<Element, string | null>();
+  for (const [el, p] of frameShots) shots.set(el, await p);
+
+  const clone = root.cloneNode(true) as HTMLElement;
+  const pseudo: string[] = [];
+  const families = new Set<string>();
+  const scrolled: Array<{ el: HTMLElement; x: number; y: number }> = [];
+  let n = 0;
+  const visit = (o: Element, c: Element) => {
+    const cs = getComputedStyle(o);
+    c.setAttribute("style", cssText(cs));
+    for (const f of cs.fontFamily.split(",")) families.add(f.replace(/["']/g, "").trim());
+    for (const which of ["::before", "::after"] as const) {
+      const ps = getComputedStyle(o, which);
+      if (ps.content && ps.content !== "none" && ps.content !== "normal") {
+        const cls = `cairn-cap-${n++}`;
+        c.setAttribute("class", `${c.getAttribute("class") ?? ""} ${cls}`);
+        pseudo.push(`.${cls}${which}{${cssText(ps)}}`);
+        for (const f of ps.fontFamily.split(",")) families.add(f.replace(/["']/g, "").trim());
+      }
+    }
+    if (o instanceof HTMLElement && (o.scrollTop || o.scrollLeft)) scrolled.push({ el: c as HTMLElement, x: o.scrollLeft, y: o.scrollTop });
+    // A scrollbar the page does not show (overlay scrollbars, nothing to scroll yet) is not drawn either.
+    if (o instanceof HTMLElement && /auto|scroll/.test(cs.overflow)) {
+      const bx = parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
+      const by = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+      if (o.offsetWidth - o.clientWidth - bx < 1 && o.offsetHeight - o.clientHeight - by < 1) (c as HTMLElement).style.setProperty("scrollbar-width", "none");
+    }
+    const replaceWith = (url: string) => {
+      const img = document.createElement("img");
+      img.setAttribute("style", c.getAttribute("style") ?? "");
+      if (url) img.setAttribute("src", url);
+      c.replaceWith(img);
+    };
+    if (o instanceof HTMLCanvasElement) return replaceWith(canvasUrl(o));
+    if (o instanceof HTMLVideoElement) return replaceWith(mediaUrl(o));
+    if (o instanceof HTMLImageElement) {
+      c.removeAttribute("srcset");
+      c.setAttribute("src", o.complete ? mediaUrl(o) : "");
+      return;
+    }
+    if (o instanceof HTMLIFrameElement) {
+      const box = o.closest(CUSTOM_VIEWER);
+      return replaceWith((shots.get(o) ?? (box ? shots.get(box) : null)) ?? "");
+    }
+    if (o instanceof HTMLInputElement || o instanceof HTMLTextAreaElement) {
+      if (o.type === "checkbox" || o.type === "radio") {
+        if ((o as HTMLInputElement).checked) c.setAttribute("checked", "");
+        else c.removeAttribute("checked");
+      } else c.setAttribute("value", o.value);
+      if (o instanceof HTMLTextAreaElement) c.textContent = o.value;
+    }
+    if (o instanceof HTMLSelectElement) {
+      Array.from((c as HTMLSelectElement).options).forEach((opt, i) => {
+        if (i === o.selectedIndex) opt.setAttribute("selected", "");
+        else opt.removeAttribute("selected");
+      });
+    }
+    const oc = o.children;
+    const cc = Array.from(c.children);
+    for (let i = 0; i < oc.length; i++) if (cc[i]) visit(oc[i]!, cc[i]!);
+  };
+  visit(root, clone);
+  // Scroll offsets: an SVG picture does not scroll, so the scrolled content moves instead.
+  for (const { el, x, y } of scrolled) {
+    for (const child of Array.from(el.children) as HTMLElement[]) {
+      const t = child.style.getPropertyValue("transform");
+      child.style.setProperty("transform", `translate(${-x}px, ${-y}px)${t && t !== "none" ? ` ${t}` : ""}`);
+    }
+  }
+  for (const s of clone.querySelectorAll("script")) s.remove();
   clone.style.margin = "0";
-  const xml = new XMLSerializer().serializeToString(clone);
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">` +
-    `<foreignObject x="0" y="0" width="100%" height="100%">${xml}</foreignObject></svg>`;
-  return loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+  return { clone, css: pseudo.join("\n"), families };
 }
 
 function toPng(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("PNG encoding failed"))), "image/png"));
 }
 
-/** The body of card `card` (below its header) as one PNG. */
-export async function captureCardPng(card: HTMLElement, scale = 2): Promise<Blob> {
+/**
+ * The body of card `card` (below its header) as one PNG, as displayed now:
+ * its size, the device's pixel ratio, zoom and camera, step, scroll.
+ */
+export async function captureCardPng(card: HTMLElement, scale = window.devicePixelRatio || 1): Promise<Blob> {
   const cardRect = card.getBoundingClientRect();
   const header = card.querySelector<HTMLElement>("[data-cairn-card-header]");
   const top = header ? header.getBoundingClientRect().bottom : cardRect.top;
-  const region = { left: cardRect.left, top, width: cardRect.width, height: Math.max(1, cardRect.bottom - top) };
+  const { clone, css, families } = await faithfulClone(card);
+  const fonts = await embeddedFonts(families);
+  const xml = new XMLSerializer().serializeToString(clone);
+  const style = `<style xmlns="http://www.w3.org/1999/xhtml">${(fonts + "\n" + css).replace(/]]>/g, "")}</style>`;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${cardRect.width}" height="${cardRect.height}">` +
+    `<foreignObject x="0" y="0" width="100%" height="100%">${style}${xml}</foreignObject></svg>`;
+  const picture = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+  const w = cardRect.width;
+  const h = Math.max(1, cardRect.bottom - top);
   const out = document.createElement("canvas");
-  out.width = Math.round(region.width * scale);
-  out.height = Math.round(region.height * scale);
+  out.width = Math.round(w * scale);
+  out.height = Math.round(h * scale);
   const ctx = out.getContext("2d");
   if (!ctx) throw new Error("2D canvas unavailable");
   ctx.scale(scale, scale);
-  ctx.fillStyle = getComputedStyle(card).backgroundColor || "#ffffff";
-  ctx.fillRect(0, 0, region.width, region.height);
-  try {
-    ctx.drawImage(await rasterizeDom(card), cardRect.left - region.left, cardRect.top - region.top, cardRect.width, cardRect.height);
-  } catch (err) {
-    console.warn("card screenshot: the DOM picture failed", err);
-  }
-  for (const { rect, source } of await collectLayers(card, scale)) {
-    if (header?.contains(source as Node)) continue;
-    ctx.drawImage(source, rect.left - region.left, rect.top - region.top, rect.width, rect.height);
-  }
+  ctx.drawImage(picture, 0, cardRect.top - top, cardRect.width, cardRect.height);
   return toPng(out);
 }
 

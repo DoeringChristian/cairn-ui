@@ -80,3 +80,15 @@ test("no card renders its own copies of the shared actions", () => {
     );
   assert.deepEqual(hits, []);
 });
+
+test("the screenshot is the card as displayed: one faithful clone at the device pixel ratio, no composited layers", () => {
+  const cap = read("lib/card-capture.ts");
+  assert.match(cap, /export async function captureCardPng\(card: HTMLElement, scale = window\.devicePixelRatio \|\| 1\)/);
+  const body = cap.slice(cap.indexOf("export async function captureCardPng"));
+  assert.match(body, /await faithfulClone\(card\)/);
+  assert.doesNotMatch(body.slice(0, body.indexOf("\n}\n")), /collectLayers/);
+  // What an SVG picture cannot draw is replaced in place by what the page shows now.
+  for (const re of [/o instanceof HTMLCanvasElement\) return replaceWith\(canvasUrl\(o\)\)/, /o instanceof HTMLVideoElement\) return replaceWith\(mediaUrl\(o\)\)/, /getComputedStyle\(o, which\)/, /scrolled\.push/, /embeddedFonts\(families\)/]) {
+    assert.match(cap, re);
+  }
+});
