@@ -15,11 +15,11 @@
  * the enclosing workspace's settings store maps it to the panel's settings.
  */
 
-import { useContext, useMemo } from "react";
+import { useMemo } from "react";
 import CardRenderer from "../CardRenderer";
-import CardHeader from "../CardHeader";
 import LazyPanel from "./LazyPanel";
-import { CardMutationContext, useCardOverridesReader, type CardSettingsKey } from "../../lib/card-settings";
+import EmptyCard from "../card-kit/EmptyCard";
+import type { CardSettingsKey } from "../../lib/card-settings";
 import { isMultiRunCardType, minRunsFor, type ComparisonSeriesRef } from "../../lib/comparisons/types";
 import type { RenderedPanel } from "../../lib/workspace/layout";
 import { PanelTitleContext } from "../../lib/workspace/panel-actions";
@@ -50,7 +50,8 @@ export default function PanelCard({ rendered, runIds, settingsKey, onRemove, aut
     const need = minRunsFor(panel.type);
     if (visible.length < need) {
       return (
-        <PanelPlaceholder
+        <EmptyCard
+          type={panel.type}
           title={label}
           settingsKey={settingsKey}
           onRemove={onRemove}
@@ -87,7 +88,8 @@ export default function PanelCard({ rendered, runIds, settingsKey, onRemove, aut
   }
   if (!primary) {
     return (
-      <PanelPlaceholder
+      <EmptyCard
+          type={panel.type}
         title={label}
         settingsKey={settingsKey}
         onRemove={onRemove}
@@ -129,35 +131,5 @@ export default function PanelCard({ rendered, runIds, settingsKey, onRemove, aut
     />
     </PanelTitleContext.Provider>
     </LazyPanel>
-  );
-}
-
-/** A panel with nothing to draw: its header (title, edit, remove) and why. */
-function PanelPlaceholder({
-  title,
-  message,
-  settingsKey,
-  onRemove,
-}: {
-  title: string;
-  message: string;
-  settingsKey: CardSettingsKey;
-  onRemove?: () => void;
-}) {
-  const mutable = useContext(CardMutationContext);
-  // Keep the panel's size, so the grid does not reflow while flipping runs.
-  const settings = useCardOverridesReader()(settingsKey) ?? {};
-  const span = typeof settings.colSpan === "number" ? settings.colSpan : 3;
-  const height = typeof settings.height === "number" && !settings.collapsed ? settings.height : undefined;
-  return (
-    <div
-      data-cairn-card
-      data-cairn-empty-panel
-      className="card flex min-w-0 flex-col p-4"
-      style={{ gridColumn: `span ${span}`, height }}
-    >
-      <CardHeader title={title} onRemove={mutable ? onRemove : undefined} />
-      <p className="py-6 text-center text-sm text-fg-muted">{message}</p>
-    </div>
   );
 }

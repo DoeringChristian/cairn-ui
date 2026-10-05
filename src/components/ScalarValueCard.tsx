@@ -16,10 +16,11 @@
  * sequence. This card makes the accident legible rather than hiding it.
  */
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSequence } from "../api/hooks";
 import { formatNum } from "../lib/plot-utils/format";
-import { type CardSettingsKey, useCardSettings } from "../lib/card-settings";
+import { type CardSettingsKey, type SettingsController, useCardSettings } from "../lib/card-settings";
+import TypeSettingsPanel from "./card-kit/TypeSettingsPanel";
 import type { SequenceMeta } from "../api/types";
 import { type BaseCardSettings } from "./card-kit";
 import CardShell from "./CardShell";
@@ -54,6 +55,7 @@ export default function ScalarValueCard({
   const ctl = useCardSettings<BaseCardSettings>(settingsKey, "scalar", VALUE_INSTANCE_DEFAULTS);
   const settings = ctl.value;
 
+  const [open, setOpen] = useState(false);
   const q = useSequence(runId, metric.name);
   const point = q.data?.points?.[0];
   const value = point?.scalar_value;
@@ -72,6 +74,12 @@ export default function ScalarValueCard({
       }
       defaultHeight={120}
       onRemove={onRemove}
+      // The value is a scalar series of one point: the line chart's settings apply once it grows.
+      onSettings={() => setOpen(true)}
+      settingsPanel={<TypeSettingsPanel type="scalar" ctl={ctl as unknown as SettingsController<Record<string, unknown>>} />}
+      modalOpen={open}
+      onModalClose={() => setOpen(false)}
+      modalContent={<div className="flex h-full items-center justify-center text-3xl font-semibold mono">{value == null ? "no value" : formatNum(value)}</div>}
       scrollIntoViewOnMount={autoOpenSettings}
     >
       <div className="flex h-full min-h-0 items-center justify-center px-3 pb-3">
