@@ -163,3 +163,8 @@ test("picking a type (adding a card, or changing its type) lands on Values, else
   // Nothing else sends a type pick back to Data.
   assert.doesNotMatch(editor, /pick = \(key: string\) => \{[^}]*onTab\("data"\)/);
 });
+
+test("another custom viewer remounts the card, so its editor lands on the new viewer's tabs", () => {
+  const view = sources().find((s) => s.rel === "components/workspace/WorkspaceView.tsx")!.text;
+  assert.match(view, /<PanelCard\s+(?:\/\/[^\n]*\s+)?key=\{`\$\{rp\.panel\.id\}:\$\{editorTokens\.get\(rp\.panel\.id\) \?\? 0\}:\$\{optionKey\(rp\.panel\.type, rp\.panel\.settings\)\}`\}/);
+});

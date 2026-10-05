@@ -49,7 +49,7 @@ import {
   type RenderedPanel,
   type RenderedSection,
 } from "../../lib/workspace/layout";
-import { autoSectionOfPanel, cardCatalogue, changedPanel, type CatalogueEntry, type NewCard, type PanelChange } from "../../lib/workspace/card-builder";
+import { autoSectionOfPanel, cardCatalogue, changedPanel, optionKey, type CatalogueEntry, type NewCard, type PanelChange } from "../../lib/workspace/card-builder";
 import { compilePanelFilter } from "../../lib/workspace/panel-filter";
 import { moveCardOp, moveSectionOp, reorderBeforeId, type CardSpot } from "../../lib/workspace/reorder";
 import { PanelActionsContext } from "../../lib/workspace/panel-actions";
@@ -429,7 +429,8 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
                       >
                         <CardErrorBoundary variant="card">
                           <PanelCard
-                            key={`${rp.panel.id}:${editorTokens.get(rp.panel.id) ?? 0}`}
+                            // Another viewer (or type) remounts the card, so the open editor lands on the new one's tabs.
+                            key={`${rp.panel.id}:${editorTokens.get(rp.panel.id) ?? 0}:${optionKey(rp.panel.type, rp.panel.settings)}`}
                             autoOpenSettings={openNow === rp.panel.id}
                             rendered={rp}
                             runIds={runIds}
