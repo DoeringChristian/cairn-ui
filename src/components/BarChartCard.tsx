@@ -3,7 +3,7 @@ import { useCardSettings } from "../lib/card-settings";
 import type { BarSettings } from "./cards-settings/bar";
 import BarChart, { type BarDatum } from "../charts/BarChart";
 import DistributionChart, { type DistributionGroup } from "../charts/DistributionChart";
-import { downloadCsv, exportChartPng, safeName } from "../lib/download";
+import { downloadCsv, safeName } from "../lib/download";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { assignRunColors } from "../lib/run-color";
 import { useRunColors, useVisibleRuns } from "../lib/run-view";
@@ -192,7 +192,6 @@ export default function BarChartCard({
         });
         downloadCsv(headers, rows, safeName(settings.title ?? "bar_chart") + ".csv");
       }}
-      onScreenshot={() => { if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? "bar_chart")); }}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

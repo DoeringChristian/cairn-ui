@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import ArtifactMark from "../media/ArtifactMark";
 import { api } from "../../api/client";
 import { describeEncoding, isBrowserDisplayable } from "../../lib/artifact-format";
 import { artifactFilename } from "../../lib/download";
@@ -105,7 +106,12 @@ export default function ImagePointView({
   const gallery = items.length > 1;
   // A gallery's own caption heads the grid; each image shows its entry's.
   const galleryCaption = gallery ? pointCaption(shown.metadata) : null;
-  const cell = (item: ImageItem, i: number) => {
+  const cell = (item: ImageItem, i: number) => (
+    <ArtifactMark key={i} hash={item.hash} name={gallery ? `${metricName}_${i}` : metricName} step={shown.step} mime={item.mime}>
+      {cellBody(item, i)}
+    </ArtifactMark>
+  );
+  const cellBody = (item: ImageItem, i: number) => {
     const url = api.artifactUrl(item.hash);
     const base = gallery ? `${metricName} · ${shown.step} · #${i}` : `${metricName} · ${shown.step}`;
     const label = item.caption ? `${base} · ${item.caption}` : base;

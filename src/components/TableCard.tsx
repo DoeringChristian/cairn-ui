@@ -10,7 +10,6 @@ import { useRunColors, useVisibleRuns } from "../lib/run-view";
 import type { SequenceMeta, SequencePoint } from "../api/types";
 import { useCardSeries, useStepSlider, resolveAtStep, useRunInfo, MultiPaneGrid } from "./card-kit";
 import { instanceDefaults, type TableCombineSource, type TableSettings } from "./cards-settings/table";
-import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import StepSlider from "./StepSlider";
@@ -270,7 +269,6 @@ export default function TableCard({
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const compSeries = useMemo(() => [{ runId, name: metric.name }], [runId, metric.name]);
 
   const subtitle = useMemo(() => {
     const dims = first ? `${first.table.data.length}×${first.table.columns.length}` : `${metric.count} pts`;
@@ -441,7 +439,6 @@ export default function TableCard({
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
       onDownload={first ? downloadCurrentCsv : undefined}
-      addToReportSlot={<AddToReportButton cardType="table" series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
       settingsPanel={<TableSettingsPanel ctl={ctl} ctx={panelCtx} mode="card" />}

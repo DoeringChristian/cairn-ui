@@ -11,7 +11,6 @@ import GalleryView from "./media/GalleryView";
 import { isGalleryPoint } from "../lib/media/gallery";
 import { galleryQuery } from "../lib/media/gallery-query";
 import { StatsGrid, TensorView, npyQueryOf, tensorFacts, type TensorMeta } from "./viewers/TensorViewer";
-import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import { useStepSlider, resolveAtStep } from "./card-kit";
@@ -81,10 +80,6 @@ export default function TensorCard({
 
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
-  const compSeries = useMemo(
-    () => [{ runId, name: metric.name }],
-    [runId, metric.name],
-  );
 
   const subtitle =
     points.length > 0
@@ -159,7 +154,8 @@ export default function TensorCard({
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
       onDownload={
-        current?.artifact_hash
+        // A gallery: its items (marked by GalleryView), zipped.
+        current?.artifact_hash && !gallery
           ? () =>
               downloadArtifact(
                 api.artifactUrl(current.artifact_hash!),
@@ -167,7 +163,6 @@ export default function TensorCard({
               )
           : undefined
       }
-      addToReportSlot={<AddToReportButton cardType="tensor" series={compSeries} settingsKey={settingsKey} />}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

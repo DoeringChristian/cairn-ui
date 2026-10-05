@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { artifactFilename, downloadArtifacts } from "../lib/download";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { api } from "../api/client";
@@ -28,7 +29,6 @@ import {
 import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
 import { formatNum } from "../lib/plot-utils/format";
 import type { SeriesRef } from "./card-kit/use-card-series";
-import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import PresetSettingsPanel from "./settings-panels/PresetSettingsPanel";
@@ -178,10 +178,6 @@ export default function PresetCard({
     values.length > 0 ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})` : null,
   ].filter(Boolean).join(" · ");
 
-  const compSeries = useMemo(
-    () => [{ runId, name: metric.name }],
-    [runId, metric.name],
-  );
   const paneKeys = panes.keys;
   const paneLabels = panes.labels;
 
@@ -262,7 +258,12 @@ export default function PresetCard({
       defaultHeight={340}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
-      addToReportSlot={<AddToReportButton cardType="preset" series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
+      onDownload={() =>
+        void downloadArtifacts(
+          currents.flatMap((p, i) => (p?.artifact_hash ? [{ hash: p.artifact_hash, name: artifactFilename(effectiveMetrics[i]!.name, p.step, p.artifact_mime ?? "application/json") }] : [])),
+          settings.title ?? metric.name,
+        )
+      }
       dropHighlight={dropHighlight}
       dropProps={dropProps}
       settingsPanel={settingsPanel}

@@ -25,7 +25,7 @@ import { plotCardPolicy } from "./card-kit/plot-card-policy";
 import { resolveAtStep, resolveReference } from "./card-kit/resolve-at-step";
 import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
 import { useStepSlider } from "./card-kit/use-step-slider";
-import { FIT_VIEW, isFitView, type ZoomView } from "../lib/media/view-geometry";
+import { FIT_VIEW, type ZoomView } from "../lib/media/view-geometry";
 import { ZoomViewSync } from "../lib/media/zoom-view-sync";
 import ImagePointView from "./image/ImagePointView";
 import { imageFrameKey, peekImageFrame, resolveImageFrame, type ImageFrame } from "./image/image-frame";
@@ -106,7 +106,6 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
   const [view, setView] = useState<ZoomView>(FIT_VIEW);
   // Gestures move every pane in the same frame through this; `view` follows once they settle.
   const viewSync = useMemo(() => new ZoomViewSync(), []);
-  const viewModified = !isFitView(view);
 
   // Divider drags stay local until release; arrow keys persist immediately.
   const [dragSplit, setDragSplit] = useState<number | null>(null);
@@ -330,7 +329,6 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       onRemove={onRemove}
       onSettings={() => setSettingsOpen(true)}
       onResetView={() => setView(FIT_VIEW)}
-      viewModified={viewModified}
       settingsPanel={settingsPanel}
       modalContent={body}
       modalOpen={settingsOpen}

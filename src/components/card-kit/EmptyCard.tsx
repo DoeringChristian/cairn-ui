@@ -6,6 +6,7 @@
  * runs.
  */
 
+import { downloadCsv, safeName } from "../../lib/download";
 import { useRef, useState } from "react";
 import { useCardSettings, type CardSettingsKey } from "../../lib/card-settings";
 import type { CardType } from "../../lib/cards/card-spec";
@@ -41,6 +42,8 @@ export default function EmptyCard({
       updateSettings={ctl.set}
       title={title}
       onRemove={onRemove}
+      // Nothing is logged: the data is an empty table.
+      onDownload={() => downloadCsv(["run", "metric", "step", "value"], [], `${safeName(title)}.csv`)}
       onSettings={() => setOpen(true)}
       settingsPanel={<TypeSettingsPanel type={type} ctl={ctl} />}
       modalOpen={open}

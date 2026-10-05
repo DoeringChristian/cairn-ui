@@ -7,9 +7,14 @@
  * changed one; both persist once picked.
  */
 
+import { useQueryClient } from "@tanstack/react-query";
+import { createTwoFilesPatch } from "diff";
+import { api } from "../api/client";
+import { qk } from "../api/query-keys";
+import { fileText } from "../lib/source-diff";
+import { downloadBlob, safeName } from "../lib/download";
 import { useMemo, useRef, useState } from "react";
 import { useCardSettings } from "../lib/card-settings";
-import { exportChartPng, safeName } from "../lib/download";
 import { disambiguateRunLabels, shortRunId, useRunMetadataVersion } from "../lib/run-label";
 import { useRunColors, useVisibleRuns } from "../lib/run-view";
 import { HeaderToggle } from "./card-header";
@@ -60,6 +65,29 @@ export default function CodeDiffCard({ runIds: allRunIds, settingsKey, onRemove,
   const runOptions = useMemo(() => runIds.map((id) => ({ value: id, label: labels[id] ?? shortRunId(id) })), [runIds, labels]);
   const settingsPanel = <CodeDiffSettingsPanel ctl={ctl} mode="card" ctx={{ runs: runOptions, leftId, rightId }} />;
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // Every changed file as one unified diff (`git apply`-able), before → after.
+  const qc = useQueryClient();
+  const downloadPatch = async () => {
+    const side = async (id: string, path: string, absent: boolean): Promise<string> => {
+      if (absent) return "";
+      const t = fileText(await qc.fetchQuery({ queryKey: qk.sourceFile(id, path), queryFn: () => api.sourceFile(id, path), staleTime: Infinity }));
+      return typeof t === "string" ? t : "";
+    };
+    const parts = await Promise.all(
+      trees.changed.map(async (f) =>
+        createTwoFilesPatch(
+          f.status === "added" ? "/dev/null" : `a/${f.path}`,
+          f.status === "removed" ? "/dev/null" : `b/${f.path}`,
+          await side(leftId, f.path, f.status === "added"),
+          await side(rightId, f.path, f.status === "removed"),
+          label(leftId),
+          label(rightId),
+        ),
+      ),
+    );
+    downloadBlob(new Blob([parts.join("")], { type: "text/x-patch" }), `${safeName(s.title ?? `${label(leftId)}..${label(rightId)}`)}.patch`);
+  };
 
   const runLabel = (id: string) => (
     <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -157,7 +185,7 @@ export default function CodeDiffCard({ runIds: allRunIds, settingsKey, onRemove,
       }
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
-      onScreenshot={() => { if (cardRef.current) exportChartPng(cardRef.current, safeName(s.title ?? "code_diff")); }}
+      onDownload={() => void downloadPatch()}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

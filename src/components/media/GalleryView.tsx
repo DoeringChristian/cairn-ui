@@ -15,6 +15,7 @@
  * change reuses each item's renderer.
  */
 
+import ArtifactMark from "./ArtifactMark";
 import type { ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { SequencePoint } from "../../api/types";
@@ -155,7 +156,9 @@ export default function GalleryView({ point, frame: given, renderItem, columns =
                 </div>
               )}
               <div className={fill ? "flex min-h-0 flex-1 flex-col" : "flex min-w-0 flex-col"}>
-                {renderItem(item, i, count)}
+                <ArtifactMark hash={item.artifact_hash} mime={item.artifact_mime}>
+                  {renderItem(item, i, count)}
+                </ArtifactMark>
               </div>
               {itemCaption && captionOverlay && <ItemCaption text={itemCaption} />}
             </div>

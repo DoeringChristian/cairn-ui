@@ -15,11 +15,10 @@
  * item by item (a single reference serves every item).
  */
 
+import ArtifactMark from "./ArtifactMark";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useSequencesForRuns } from "../../api/hooks";
-import { api } from "../../api/client";
-import { downloadArtifact, artifactFilename } from "../../lib/download";
 import { cardOverridesStorageKey, type CardSettingsKey, type SettingsController } from "../../lib/card-settings";
 import { useCardDrop } from "../../lib/use-series-drop";
 import type { ComparisonSeriesRef } from "../../lib/comparisons";
@@ -38,7 +37,6 @@ import GridPanes from "../card-kit/GridPanes";
 import { useMediaPanes, useScalarMetricNames } from "../card-kit/use-media-panes";
 import { steppedMediaInstanceDefaults, type SteppedMediaSettings } from "../cards-settings/stepped-media";
 import type { MediaPanelCtx, ReferencePanelCtx } from "../settings-panels/media-panel-kit";
-import AddToReportButton from "../AddToReportButton";
 import CardShell from "../CardShell";
 import SeriesChipStrip from "../SeriesChipStrip";
 import StepSlider from "../StepSlider";
@@ -229,15 +227,8 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
     }),
   );
 
-  // The first pane's artifact drives the header download.
-  const current = pointAt(0, currentValue, false);
-
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
-  const compSeries = useMemo(
-    () => [{ runId, name: metric.name }],
-    [runId, metric.name],
-  );
 
   const subtitle =
     values.length > 0
@@ -308,14 +299,18 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       );
       return single ? <div className="min-h-0 flex-1 overflow-auto">{gallery}</div> : gallery;
     }
-    return renderArtifact({
-      ...common,
-      point,
-      hash: point.artifact_hash,
-      single,
-      paneId,
-      reference: refFor(0),
-    });
+    return (
+      <ArtifactMark hash={point.artifact_hash} name={name} step={point.step} mime={point.artifact_mime ?? defaultMime}>
+        {renderArtifact({
+          ...common,
+          point,
+          hash: point.artifact_hash,
+          single,
+          paneId,
+          reference: refFor(0),
+        })}
+      </ArtifactMark>
+    );
   };
 
   const renderPanes = (inModal: boolean) => {
@@ -409,12 +404,9 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       defaultHeight={defaultHeight}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
-      onDownload={current?.artifact_hash ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), artifactFilename(metric.name, current.step, current.artifact_mime ?? defaultMime)) : undefined}
-      addToReportSlot={<AddToReportButton cardType={kind} series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
       onResetView={reset?.reset}
-      viewModified={reset?.modified}
       settingsPanel={settingsPanel(ctl, {
         runId,
         metricName: metric.name,

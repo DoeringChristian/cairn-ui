@@ -1,6 +1,8 @@
 /** Artifact download and chart export helpers. */
 
-import { snapshotFrame } from "./custom/frame-snapshots";
+import { api } from "../api/client";
+import { captureCardPng, cardArtifacts, collectLayers } from "./card-capture";
+import { zipStore } from "./zip";
 
 export type ExportFormat = "svg" | "png" | "jpg" | "pdf";
 
@@ -70,18 +72,6 @@ export function downloadCsv(headers: string[], rows: (string | number)[][], file
   downloadBlob(new Blob([csv], { type: "text/csv" }), filename);
 }
 
-/** Decode a data URL into an image element. */
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("image decode failed"));
-    img.src = src;
-  });
-}
-
-const CUSTOM_VIEWER = '[data-viewer="custom"]';
-
 /**
  * Render the charts under `container` as one PNG. Plotly figures render
  * through `Plotly.toImage`; other canvases (uPlot) and images (a static
@@ -89,34 +79,7 @@ const CUSTOM_VIEWER = '[data-viewer="custom"]';
  * a grid of panes stays a grid. Rejects when there is nothing to render.
  */
 export async function renderChartPng(container: HTMLElement, scale = 2): Promise<Blob> {
-  const layers: { rect: DOMRect; source: CanvasImageSource }[] = [];
-  const plots = Array.from(container.querySelectorAll<HTMLElement>(".js-plotly-plot"));
-  if (plots.length > 0) {
-    const Plotly = await (await import("../charts/PlotlyChart")).loadPlotly();
-    for (const plot of plots) {
-      const url: string = await Plotly.toImage(plot, {
-        format: "png",
-        width: plot.clientWidth,
-        height: plot.clientHeight,
-        scale,
-      });
-      layers.push({ rect: plot.getBoundingClientRect(), source: await loadImage(url) });
-    }
-  }
-  // Custom viewers draw in their own sandboxed frames: each gives its snapshot() (or the picture it shows while paused).
-  const viewerBoxes = Array.from(container.querySelectorAll<HTMLElement>(CUSTOM_VIEWER));
-  for (const box of viewerBoxes) {
-    const url = await snapshotFrame(box);
-    if (url) layers.push({ rect: box.getBoundingClientRect(), source: await loadImage(url) });
-  }
-  for (const canvas of container.querySelectorAll<HTMLCanvasElement>("canvas")) {
-    if (canvas.closest(".js-plotly-plot") || canvas.closest(CUSTOM_VIEWER) || canvas.width === 0 || canvas.height === 0) continue;
-    layers.push({ rect: canvas.getBoundingClientRect(), source: canvas });
-  }
-  for (const img of container.querySelectorAll<HTMLImageElement>("img")) {
-    if (img.closest(".js-plotly-plot") || img.closest(CUSTOM_VIEWER) || !img.complete || img.naturalWidth === 0) continue;
-    layers.push({ rect: img.getBoundingClientRect(), source: img });
-  }
+  const layers = await collectLayers(container, scale);
   if (layers.length === 0) throw new Error("no chart found to render");
 
   const left = Math.min(...layers.map(l => l.rect.left));
@@ -173,4 +136,67 @@ export async function exportPlotlyChart(
     height: plot.clientHeight,
     scale: 2,
   });
+}
+
+/** Download the screenshot of card `card` as `<name>.png`. */
+export async function downloadCardPng(card: HTMLElement, name: string): Promise<void> {
+  try {
+    downloadBlob(await captureCardPng(card), `${safeName(name)}.png`);
+  } catch (err) {
+    console.error("card screenshot failed", err);
+  }
+}
+
+const EXT: Record<string, string> = {
+  "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/x-exr": "exr",
+  "audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3", "video/mp4": "mp4", "video/webm": "webm",
+  "text/plain": "txt", "text/html": "html", "text/markdown": "md", "application/json": "json",
+  "application/x-npy": "npy", "application/python-pickle": "pkl",
+};
+
+/** Download what card `card` shows (its `data-cairn-artifact` marks): one artifact as itself, several as `<name>.zip`. Returns how many. */
+export async function downloadCardArtifacts(card: HTMLElement, name: string): Promise<number> {
+  return downloadArtifacts(cardArtifacts(card), name);
+}
+
+/** Download stored artifacts: one as itself, several as `<zipName>.zip` (names made unique). Returns how many. */
+export async function downloadArtifacts(items: ReadonlyArray<{ hash: string; name: string | null }>, zipName: string): Promise<number> {
+  if (items.length === 0) return 0;
+  const files = await Promise.all(
+    items.map(async (it, i) => {
+      const res = await fetch(api.artifactUrl(it.hash));
+      const blob = await res.blob();
+      const ext = EXT[(blob.type || "").split(";")[0]!] ?? "bin";
+      const base = it.name ? safeName(it.name) : `${safeName(zipName)}_${i + 1}`;
+      return { name: /\.[a-z0-9]+$/i.test(base) ? base : `${base}.${ext}`, blob };
+    }),
+  );
+  if (files.length === 1) {
+    downloadBlob(files[0]!.blob, files[0]!.name);
+    return 1;
+  }
+  const used = new Map<string, number>();
+  const entries = await Promise.all(
+    files.map(async (f) => {
+      const n = used.get(f.name) ?? 0;
+      used.set(f.name, n + 1);
+      const fname = n === 0 ? f.name : f.name.replace(/(\.[^.]*)?$/, `_${n + 1}$1`);
+      return { name: fname, data: new Uint8Array(await f.blob.arrayBuffer()) };
+    }),
+  );
+  downloadBlob(new Blob([zipStore(entries) as Uint8Array<ArrayBuffer>], { type: "application/zip" }), `${safeName(zipName)}.zip`);
+  return files.length;
+}
+
+/** Every Plotly figure under `container` back to its autorange (the card header's reset view). */
+export async function resetPlotlyViews(container: HTMLElement): Promise<void> {
+  type Plot = HTMLElement & { _fullLayout?: Record<string, unknown> };
+  const plots = Array.from(container.querySelectorAll<Plot>(".js-plotly-plot")).filter((p) => p._fullLayout);
+  if (plots.length === 0) return;
+  const Plotly = await (await import("../charts/PlotlyChart")).loadPlotly();
+  for (const plot of plots) {
+    const update: Record<string, unknown> = {};
+    for (const k of Object.keys(plot._fullLayout!)) if (/^[xy]axis\d*$/.test(k)) update[`${k}.autorange`] = true;
+    if (Object.keys(update).length > 0) await Plotly.relayout(plot, update);
+  }
 }

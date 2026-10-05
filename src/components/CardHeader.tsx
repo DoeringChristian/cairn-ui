@@ -1,22 +1,17 @@
 import { useState, useCallback, useContext, useRef, useEffect, type ReactNode } from "react";
 import { useDraggableCard } from "./DraggableCard";
 import { CardMutationContext } from "../lib/card-settings";
-import { useClickOutside } from "../lib/use-click-outside";
 import { useCoarsePointer, useCompactLayout } from "../lib/use-media-query";
 import { ICON_BTN } from "./card-header/icon-btn";
+import CardHeaderActions, { OverflowMenu, type CardActionHandlers, type MenuItem } from "./card-header/CardHeaderActions";
 import { CardCommentsContext } from "./reports/comments-context";
-import { PanelActionsContext } from "../lib/workspace/panel-actions";
 
 interface Props {
   /** Metric name, e.g. "train.loss". */
   title: string;
   /** Subtle text shown after the title in the left section. */
   subtitle?: ReactNode;
-  /**
-   * Card-specific action buttons rendered to the LEFT of the standard
-   * buttons (settings, download, remove). When present a 1px divider
-   * separates them from the standard group.
-   */
+  /** Card-specific controls, left of the bar (log scale, badges, …). */
   cardActions?: ReactNode;
   /** If provided, the title becomes editable. */
   onTitleChange?: (newTitle: string) => void;
@@ -24,24 +19,11 @@ interface Props {
   collapsed?: boolean;
   /** Toggle collapse state. When provided, a chevron is rendered. */
   onToggleCollapse?: () => void;
-  /** Opens the card settings modal / popover. Renders gear button. */
-  onSettings?: () => void;
   /**
-   * Reset the card's interactive view (camera/zoom/pan/etc.) to its default.
-   * Renders a home-icon button to the LEFT of download, shown only when
-   * `viewModified` is true.
+   * The shared actions right of the bar (components/card-header/CardHeaderActions):
+   * the same seven, in the same order, on every card; read-only cards get four.
    */
-  onResetView?: () => void;
-  /** Whether the view has been changed from its default; gates the reset button. */
-  viewModified?: boolean;
-  /** Download/export. Renders download button. */
-  onDownload?: () => void;
-  /** Screenshot/export-as-image. Renders camera button. */
-  onScreenshot?: () => void;
-  /** Slot for AddToReportButton. */
-  addToReportSlot?: ReactNode;
-  /** Remove the card. Renders close button in upper-right. */
-  onRemove?: () => void;
+  actions: CardActionHandlers;
   /**
    * Touch devices: the tap-to-interact toggle (see lib/use-interact). Renders
    * a hand button; while `on`, the card's content captures gestures.
@@ -50,11 +32,6 @@ interface Props {
 }
 
 
-interface MenuItem {
-  icon: string;
-  label: string;
-  onClick: () => void;
-}
 
 export default function CardHeader({
   title,
@@ -63,26 +40,20 @@ export default function CardHeader({
   onTitleChange: onTitleChangeProp,
   collapsed,
   onToggleCollapse,
-  onSettings,
-  onResetView,
-  viewModified,
-  onDownload,
-  onScreenshot,
-  addToReportSlot: addToReportSlotProp,
-  onRemove: onRemoveProp,
+  actions: actionsProp,
   interact,
 }: Props) {
   // Read-only cards (report viewers, embeds) can't be renamed, removed,
   // added elsewhere or dragged.
   const mutable = useContext(CardMutationContext);
   const onTitleChange = mutable ? onTitleChangeProp : undefined;
-  const addToReportSlot = mutable ? addToReportSlotProp : undefined;
+
   // A report card's comment threads (provided in editable reports only).
   const comments = useContext(CardCommentsContext);
-  const onRemove = mutable ? onRemoveProp : undefined;
-  // A workspace card: "duplicate" (its data, type, title and section are edited in the gear's modal).
-  const panelActions = useContext(PanelActionsContext);
-  const onDuplicate = mutable ? panelActions?.onDuplicate : undefined;
+  // Adding to a report, duplicating and removing edit: not on read-only cards.
+  const actions: CardActionHandlers = mutable
+    ? actionsProp
+    : { onScreenshot: actionsProp.onScreenshot, onDownload: actionsProp.onDownload, onResetView: actionsProp.onResetView, onSettings: actionsProp.onSettings };
   const dragCtx = useDraggableCard();
   const drag = mutable ? dragCtx : null;
   // Below `md` the standard actions fold into a "⋯" menu so the title keeps
@@ -127,24 +98,11 @@ export default function CardHeader({
     [commitEdit, cancelEdit],
   );
 
-  const showResetView = !!(onResetView && viewModified);
-  const hasStandardActions = !!(
-    showResetView || onDownload || onScreenshot || addToReportSlot || comments || onSettings || onDuplicate || onRemove
-  );
-
-  const menuItems: MenuItem[] = [];
-  if (compact) {
-    if (showResetView) menuItems.push({ icon: "fa-house", label: "Reset view", onClick: onResetView! });
-    if (onDownload) menuItems.push({ icon: "fa-arrow-down", label: "Save", onClick: onDownload });
-    if (onScreenshot) menuItems.push({ icon: "fa-camera", label: "Screenshot", onClick: onScreenshot });
-    if (onSettings) menuItems.push({ icon: "fa-gear", label: "Settings", onClick: onSettings });
-    if (onDuplicate) menuItems.push({ icon: "fa-clone", label: "Duplicate card", onClick: onDuplicate });
-  }
+  const moveMenu: MenuItem[] = [];
   if (compact || coarse) {
-    if (drag?.onMoveUp) menuItems.push({ icon: "fa-arrow-up-long", label: "Move up", onClick: drag.onMoveUp });
-    if (drag?.onMoveDown) menuItems.push({ icon: "fa-arrow-down-long", label: "Move down", onClick: drag.onMoveDown });
+    if (drag?.onMoveUp) moveMenu.push({ icon: "fa-arrow-up-long", label: "Move up", onClick: drag.onMoveUp });
+    if (drag?.onMoveDown) moveMenu.push({ icon: "fa-arrow-down-long", label: "Move down", onClick: drag.onMoveDown });
   }
-  if (compact && onRemove) menuItems.push({ icon: "fa-xmark", label: "Remove card", onClick: onRemove });
 
   const interactButton = interact && (
     <button
@@ -160,7 +118,7 @@ export default function CardHeader({
   );
 
   return (
-    <div className="group mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+    <div data-cairn-card-header className="group mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
       {/* Left section: collapse chevron, drag grip, title, edit, subtitle */}
       <div className="flex flex-1 basis-32 items-baseline gap-1.5 min-w-0">
         {onToggleCollapse && (
@@ -227,113 +185,29 @@ export default function CardHeader({
         )}
       </div>
 
-      {/* Right section: card-specific actions | divider | standard actions.
+      {/* Right section: card-specific controls | bar | the shared actions.
           Wraps under the title when both don't fit on one line. */}
       <div className="ml-auto flex items-center gap-1 text-xs text-fg-subtle shrink-0">
-        {/* Card-specific actions */}
         {cardActions}
-
-        {/* Standard buttons: download, settings, remove */}
-        {(hasStandardActions || interactButton || menuItems.length > 0) && (
-          <div className={cardActions ? "border-l border-border pl-1.5 flex items-center gap-1" : "flex items-center gap-1"}>
-            {interactButton}
-            {!compact && showResetView && (
-              <button type="button" onClick={onResetView} className={ICON_BTN} aria-label="Reset view" title="Reset view">
-                <i className="fa-solid fa-house" aria-hidden="true" />
-              </button>
-            )}
-            {!compact && onDownload && (
-              <button type="button" onClick={onDownload} className={ICON_BTN} aria-label="Save" title="Save">
-                <i className="fa-solid fa-arrow-down" aria-hidden="true" />
-              </button>
-            )}
-            {!compact && onScreenshot && (
-              <button type="button" onClick={onScreenshot} className={ICON_BTN} aria-label="Screenshot" title="Screenshot">
-                <i className="fa-solid fa-camera" aria-hidden="true" />
-              </button>
-            )}
-            {addToReportSlot}
-            {comments && (
-              <button
-                type="button"
-                data-comment-card={comments.cardId}
-                onClick={(e) => comments.open(e.currentTarget)}
-                className={comments.count > 0 ? `${ICON_BTN.replace("text-fg-muted", "text-accent")} gap-0.5 px-1` : ICON_BTN}
-                aria-label={comments.count > 0 ? `${comments.count} open comment threads` : "Comment on this card"}
-                title={comments.count > 0 ? `${comments.count} open comment thread${comments.count === 1 ? "" : "s"}` : "Comment"}
-              >
-                <i className={`${comments.count > 0 ? "fa-solid" : "fa-regular"} fa-comment`} aria-hidden="true" />
-                {comments.count > 0 && <span className="text-[10px] leading-none">{comments.count}</span>}
-              </button>
-            )}
-            {!compact && onSettings && (
-              <button type="button" onClick={onSettings} className={ICON_BTN} aria-label="Settings" title="Settings">
-                <i className="fa-solid fa-gear" aria-hidden="true" />
-              </button>
-            )}
-            {!compact && onDuplicate && (
-              <button type="button" onClick={onDuplicate} className={ICON_BTN} aria-label="Duplicate card" title="Duplicate card (then change its type or settings)">
-                <i className="fa-solid fa-clone" aria-hidden="true" />
-              </button>
-            )}
-            {menuItems.length > 0 && <OverflowMenu items={menuItems} />}
-            {!compact && onRemove && (
-              <button type="button" onClick={onRemove} className={ICON_BTN} aria-label="Remove card" title="Remove card">
-                <i className="fa-solid fa-xmark" aria-hidden="true" />
-              </button>
-            )}
-          </div>
+        {interactButton}
+        {comments && (
+          <button
+            type="button"
+            data-comment-card={comments.cardId}
+            onClick={(e) => comments.open(e.currentTarget)}
+            className={comments.count > 0 ? `${ICON_BTN.replace("text-fg-muted", "text-accent")} gap-0.5 px-1` : ICON_BTN}
+            aria-label={comments.count > 0 ? `${comments.count} open comment threads` : "Comment on this card"}
+            title={comments.count > 0 ? `${comments.count} open comment thread${comments.count === 1 ? "" : "s"}` : "Comment"}
+          >
+            <i className={`${comments.count > 0 ? "fa-solid" : "fa-regular"} fa-comment`} aria-hidden="true" />
+            {comments.count > 0 && <span className="text-[10px] leading-none">{comments.count}</span>}
+          </button>
         )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * "⋯" button with a small action list, right-aligned under it so it opens
- * towards the card's interior (the button sits at the card's right edge).
- */
-function OverflowMenu({ items }: { items: MenuItem[] }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => setOpen(false), []);
-  useClickOutside(wrapRef, close, open);
-
-  return (
-    <div ref={wrapRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={ICON_BTN}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label="More actions"
-        title="More actions"
-      >
-        <i className="fa-solid fa-ellipsis" aria-hidden="true" />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-30 mt-1 min-w-[11rem] max-w-[calc(100vw-2rem)] rounded-md border border-border bg-bg py-1 text-sm text-fg shadow-lg"
-        >
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                item.onClick();
-              }}
-              className="flex w-full items-center gap-2.5 px-3 py-1.5 touch:py-3 text-left hover:bg-bg-hover"
-            >
-              <i className={`fa-solid ${item.icon} w-4 text-center text-fg-muted`} aria-hidden="true" />
-              {item.label}
-            </button>
-          ))}
+        {!compact && moveMenu.length > 0 && <OverflowMenu items={moveMenu} />}
+        <div className="border-l border-border pl-1.5">
+          <CardHeaderActions actions={actions} compact={compact} extraMenu={compact ? moveMenu : []} />
         </div>
-      )}
+      </div>
     </div>
   );
 }

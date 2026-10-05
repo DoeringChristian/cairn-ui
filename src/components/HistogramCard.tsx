@@ -5,8 +5,6 @@ import { safeJsonParse } from "../lib/format";
 import {
   downloadArtifact,
   artifactFilename,
-  exportChartPng,
-  safeName,
 } from "../lib/download";
 import { api } from "../api/client";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
@@ -18,7 +16,6 @@ import {
   StepHistogramHeatmap,
 } from "../charts/HistogramChart";
 import { parseNpz } from "../lib/parse-npz";
-import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import HistogramSettingsPanel from "./settings-panels/HistogramSettingsPanel";
@@ -152,10 +149,6 @@ export default function HistogramCard({
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
   const qc = useQueryClient();
 
-  const compSeries = useMemo(
-    () => [{ runId, name: metric.name }],
-    [runId, metric.name],
-  );
 
   const subtitle = heatmapActive
     ? `${points.length} steps`
@@ -243,7 +236,8 @@ export default function HistogramCard({
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
       onDownload={
-        current?.artifact_hash
+        // A gallery: its items (marked by GalleryView), zipped.
+        current?.artifact_hash && !gallery
           ? () =>
               downloadArtifact(
                 api.artifactUrl(current.artifact_hash!),
@@ -251,11 +245,6 @@ export default function HistogramCard({
               )
           : undefined
       }
-      onScreenshot={() => {
-        if (cardRef.current)
-          exportChartPng(cardRef.current, safeName(settings.title ?? metric.name));
-      }}
-      addToReportSlot={<AddToReportButton cardType="histogram" series={compSeries} settingsKey={settingsKey} />}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

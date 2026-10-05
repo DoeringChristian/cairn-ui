@@ -22,14 +22,15 @@ import { CardCommentsContext, ReportCommentsContext } from "./comments-context";
 import { shouldAutoRebind } from "../../lib/reports/selector-rebind";
 import RunSelectorBadge from "../RunSelectorBadge";
 import RunSetEditor, { DEFAULT_QUERY_SELECTOR } from "../comparison/RunSetEditor";
-import { CardMutationContext, CardSettingsChangeContext } from "../../lib/card-settings";
+import { CardMutationContext, CardSettingsChangeContext, loadCardOverrides, saveCardOverrides } from "../../lib/card-settings";
+import { PanelActionsContext } from "../../lib/workspace/panel-actions";
 import { CascadeScopeContext } from "../../lib/settings-scope";
 import {
   rebindCardsToMetricIndex,
   rebindCardsToRuns,
   rebuildCardsFromRuns,
 } from "../../lib/comparisons";
-import { cardFromSpec, cardSettingsKeyForReport, restoreReportCardSettings, useMetricIndex, type CardsBlock } from "../../lib/reports";
+import { cardFromSpec, cardSettingsKeyForReport, newId, restoreReportCardSettings, useMetricIndex, type CardsBlock } from "../../lib/reports";
 import { recompileDecision, recompileFailedBlock } from "../../lib/reports/recompile";
 import { describeRunSelector, type QueryRunSelector } from "../../lib/run-selector";
 import { useRunSelectorResolution } from "../../api/hooks";
@@ -204,6 +205,16 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
     onChange({ ...block, cards: block.cards.filter((c) => c.id !== cardId) });
   };
 
+  /** A copy of a card (its settings too) right after it. */
+  const duplicateCard = (cardId: string) => {
+    const at = block.cards.findIndex((c) => c.id === cardId);
+    if (at < 0) return;
+    const card = block.cards[at]!;
+    const copy = { ...card, id: newId() };
+    saveCardOverrides(cardSettingsKeyForReport(reportId, copy), loadCardOverrides(cardSettingsKeyForReport(reportId, card)));
+    onChange({ ...block, cards: [...block.cards.slice(0, at + 1), copy, ...block.cards.slice(at + 1)] });
+  };
+
   const reorderCards = (fromId: string, toId: string) => {
     const cards = [...block.cards];
     const fromIdx = cards.findIndex((c) => c.id === fromId);
@@ -352,11 +363,13 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
                     : null
                 }
               >
-                <ComparisonCardView
-                  card={card}
-                  settingsKey={cardSettingsKeyForReport(reportId, card)}
-                  onRemove={readOnly ? undefined : () => removeCard(card.id)}
-                />
+                <PanelActionsContext.Provider value={readOnly ? null : { onDuplicate: () => duplicateCard(card.id) }}>
+                  <ComparisonCardView
+                    card={card}
+                    settingsKey={cardSettingsKeyForReport(reportId, card)}
+                    onRemove={readOnly ? undefined : () => removeCard(card.id)}
+                  />
+                </PanelActionsContext.Provider>
               </CardCommentsContext.Provider>
             ),
           }))}

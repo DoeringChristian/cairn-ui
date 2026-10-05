@@ -9,7 +9,7 @@ import { useMemo, useRef, useState } from "react";
 import { useRunsDetails } from "../api/hooks";
 import type { RunDetailResponse } from "../api/types";
 import { useCardSettings } from "../lib/card-settings";
-import { downloadCsv, exportChartPng, safeName } from "../lib/download";
+import { downloadCsv, safeName } from "../lib/download";
 import { buildEnvDiff, buildMetricsSummary, buildParamDiff, selectRows, type CompareTable } from "../lib/run-compare";
 import { disambiguateRunLabels, shortRunId, useRunMetadataVersion } from "../lib/run-label";
 import { useRunColors, useVisibleRuns } from "../lib/run-view";
@@ -133,7 +133,6 @@ export default function RunCompareCard({ runIds: allRunIds, settingsKey, onRemov
         }
         downloadCsv(headers, rows, safeName(s.title ?? "run_comparer") + ".csv");
       }}
-      onScreenshot={() => { if (cardRef.current) exportChartPng(cardRef.current, safeName(s.title ?? "run_comparer")); }}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

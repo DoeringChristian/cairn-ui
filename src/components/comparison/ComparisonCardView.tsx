@@ -4,6 +4,7 @@ import { isMultiRunCardType, type ComparisonCard } from "../../lib/comparisons";
 import type { CardSettingsKey } from "../../lib/card-settings";
 import type { SequenceMeta } from "../../api/types";
 import { useVisibleRuns } from "../../lib/run-view";
+import { CardReportContext, type CardReportCopy } from "../../lib/card-report-context";
 
 interface Props {
   card: ComparisonCard;
@@ -21,7 +22,17 @@ interface Props {
  * SequenceMeta for its first series (CardRenderer fetches the real one) and
  * overlays the rest.
  */
-export default function ComparisonCardView({ card: rawCard, settingsKey, onRemove, autoOpenSettings }: Props) {
+export default function ComparisonCardView(props: Props) {
+  const { card, settingsKey } = props;
+  const copy = useMemo<CardReportCopy>(() => ({ cardType: card.type, series: card.series, settingsKey }), [card, settingsKey]);
+  return (
+    <CardReportContext.Provider value={copy}>
+      <ComparisonCardBody {...props} />
+    </CardReportContext.Provider>
+  );
+}
+
+function ComparisonCardBody({ card: rawCard, settingsKey, onRemove, autoOpenSettings }: Props) {
   // The scope's run view: hidden runs drop out, pinned runs come first.
   const allRunIds = useMemo(() => Array.from(new Set(rawCard.series.map((s) => s.runId))), [rawCard.series]);
   const runIds = useVisibleRuns(allRunIds);

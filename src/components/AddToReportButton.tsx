@@ -118,8 +118,9 @@ export default function AddToReportButton({ cardType, series, settingsKey }: Pro
         aria-haspopup="dialog"
         aria-expanded={open}
         title="Add to report"
+        data-card-action="addToReport"
       >
-        <i className="fa-regular fa-file-lines" aria-hidden="true" />
+        <i className="fa-solid fa-file-circle-plus" aria-hidden="true" />
       </button>
       <SettingsPopover open={open} onClose={close} anchorRef={btnRef} title="Add to report">
         {done ? (

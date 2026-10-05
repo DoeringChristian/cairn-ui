@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
+import ArtifactMark from "./media/ArtifactMark";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { hashSource } from "../lib/viewers/source";
 import { safeJsonParse } from "../lib/format";
-import { downloadArtifact, artifactFilename, exportPlotlyChart, safeName } from "../lib/download";
 import { cardOverridesStorageKey, resolveCardHeight, type CardSettingsKey } from "../lib/card-settings";
 import { cardMinSize } from "./card-kit/card-min-sizes";
 import { useCardDrop } from "../lib/use-series-drop";
@@ -33,7 +33,6 @@ import FigureViewer, {
   type FigureSync,
   type PlotlyFigure,
 } from "./viewers/FigureViewer";
-import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import { useMediaPanes, useScalarMetricNames } from "./card-kit/use-media-panes";
@@ -150,7 +149,11 @@ function FigurePane({
       </div>
     );
   }
-  return <FigureViewer source={figureSource(current)} label={`${m.name} @ step ${current.step}`} sync={sync} />;
+  return (
+    <ArtifactMark hash={current.artifact_hash} name={m.name} step={current.step} mime={current.artifact_mime ?? "image/png"}>
+      <FigureViewer source={figureSource(current)} label={`${m.name} @ step ${current.step}`} sync={sync} />
+    </ArtifactMark>
+  );
 }
 
 export default function FigureInteractiveCard({ runId, metric, extraSeries, controlledSeries, settingsKeyOverride, onRemove, autoOpenSettings }: Props) {
@@ -347,10 +350,6 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
 
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
-  const compSeries = useMemo(
-    () => [{ runId, name: metric.name }],
-    [runId, metric.name],
-  );
 
 
   // Single-metric path: the current figure's Plotly source (its identity below).
@@ -380,7 +379,6 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     });
   }, [figureIdentity]);
 
-  const viewModified = Object.keys(sharedView).length > 0;
   // Live 3D camera sync while a plot is dragged (the shared view above gets
   // the camera when the drag ends).
   const cameraLink = useMemo(createCameraLink, []);
@@ -455,12 +453,14 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
             />
           </div>
         ) : (
-          <FigureViewer
-            source={figureSource(current)}
-            label={`${metric.name} @ step ${current.step}`}
-            sync={{ settings, viewOverrides: sharedView, onRelayout: handlePaneRelayout, revision: plotRevision, cameraLink }}
-            className={`rounded bg-bg ${heightClass}`}
-          />
+          <ArtifactMark hash={current.artifact_hash} name={metric.name} step={current.step} mime={current.artifact_mime ?? "image/png"}>
+            <FigureViewer
+              source={figureSource(current)}
+              label={`${metric.name} @ step ${current.step}`}
+              sync={{ settings, viewOverrides: sharedView, onRelayout: handlePaneRelayout, revision: plotRevision, cameraLink }}
+              className={`rounded bg-bg ${heightClass}`}
+            />
+          </ArtifactMark>
         )}
         <StepSlider
           points={slider.sliderPoints}
@@ -531,13 +531,19 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   // in one figure, layout from the first run with fixed ranges dropped (see
   // mergeFigures/checkFigureMergeable in lib/plot-utils/figure-merge).
   const renderOverlayPlot = () => (
-    <InteractiveFigure
-      figure={mergedFigure ?? EMPTY_FIGURE}
-      settings={settings}
-      viewOverrides={sharedView}
-      onRelayout={handlePaneRelayout}
-      revision={plotRevision}
-    />
+    <>
+      {/* The overlaid figures, for the header's download. */}
+      {paneCurrents.map((p, i) => (
+        <ArtifactMark key={i} hash={p.hash} name={p.m.name} step={p.point?.step} mime={p.point?.artifact_mime ?? "image/png"}>{null}</ArtifactMark>
+      ))}
+      <InteractiveFigure
+        figure={mergedFigure ?? EMPTY_FIGURE}
+        settings={settings}
+        viewOverrides={sharedView}
+        onRelayout={handlePaneRelayout}
+        revision={plotRevision}
+      />
+    </>
   );
 
   const renderMultiFigure = (inModal: boolean) => (
@@ -598,11 +604,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       defaultHeight={FIGURE_POLICY.defaultHeight}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
-      onDownload={current?.artifact_hash ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), artifactFilename(metric.name, current.step, current.artifact_mime ?? "image/png")) : undefined}
-      onScreenshot={() => { if (cardRef.current) exportPlotlyChart(cardRef.current, safeName(settings.title ?? metric.name), "png"); }}
-      addToReportSlot={<AddToReportButton cardType="figure" series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       onResetView={resetView}
-      viewModified={viewModified}
       headerActions={<>
         <button
           type="button"

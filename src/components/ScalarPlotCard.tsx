@@ -14,14 +14,13 @@ import {
 } from "./cards-settings/scalar";
 import type { RunDetailResponse, SequenceMeta, SequenceResponse } from "../api/types";
 import SeriesChipStrip from "./SeriesChipStrip";
-import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import { HeaderBadge, HeaderToggle } from "./card-header";
 import ScalarSettingsPanel, { type ScalarPanelCtx } from "./settings-panels/ScalarSettingsPanel";
 import { plotCardPolicy } from "./card-kit/plot-card-policy";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { seriesKey, seriesLabel } from "../lib/series-utils";
-import { downloadCsv, exportChartPng, safeName } from "../lib/download";
+import { downloadCsv, safeName } from "../lib/download";
 import ScalarChart, { type LineStyle, type ScalarView } from "../charts/ScalarChart";
 import {
   compileSeriesExpr,
@@ -73,9 +72,6 @@ function groupValue(
   return `${by.key}=${typeof v === "string" ? v : JSON.stringify(v)}`;
 }
 
-function viewportIsAuto(v: ScalarSettings["viewport"]): boolean {
-  return v.xMin === null && v.xMax === null && v.yMin === null && v.yMax === null;
-}
 
 /** A derived series' line key: `expr:<i>`, per run when the card shows several. */
 const derivedKey = (i: number, runId: string, multipleRuns: boolean) =>
@@ -364,21 +360,11 @@ export default function ScalarPlotCard({
     synced.publish(v);
   };
 
-  const viewportModified =
-    !viewportIsAuto(view) ||
-    settings.xRange[0] != null ||
-    settings.xRange[1] != null ||
-    settings.yRange[0] != null ||
-    settings.yRange[1] != null;
 
   const { highlight: dropHighlight, dropProps } = useCardDrop(effectiveMetrics, updateSettings);
 
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
-  const compSeries = useMemo(
-    (): ComparisonSeriesRef[] => effectiveMetrics.map((m) => ({ runId: m.runId ?? runId, name: m.name })),
-    [runId, effectiveMetrics],
-  );
 
   const flipYScale = () => updateSettings({ yScale: settings.yScale === "log" ? "linear" : "log" });
 
@@ -503,13 +489,8 @@ export default function ScalarPlotCard({
         }
         downloadCsv(headers, rows, safeName(settings.title ?? metric.name) + ".csv");
       }}
-      onScreenshot={() => {
-        if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? metric.name));
-      }}
-      addToReportSlot={<AddToReportButton cardType="scalar" series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       onRemove={onRemove}
       onResetView={resetViewport}
-      viewModified={viewportModified}
       headerActions={
         <>
           {built.asOf && (

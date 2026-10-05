@@ -23,6 +23,7 @@ import type { CardSettingsKey } from "../../lib/card-settings";
 import { isMultiRunCardType, minRunsFor, type ComparisonSeriesRef } from "../../lib/comparisons/types";
 import type { RenderedPanel } from "../../lib/workspace/layout";
 import { PanelTitleContext } from "../../lib/workspace/panel-actions";
+import { CardReportContext, type CardReportCopy } from "../../lib/card-report-context";
 import { claimedMetric } from "../../lib/workspace/doc";
 import { useVisibleRuns } from "../../lib/run-view";
 import type { SequenceMeta } from "../../api/types";
@@ -36,7 +37,26 @@ interface Props {
   autoOpenSettings?: boolean;
 }
 
-export default function PanelCard({ rendered, runIds, settingsKey, onRemove, autoOpenSettings }: Props) {
+export default function PanelCard(props: Props) {
+  const { rendered, runIds, settingsKey } = props;
+  const { panel, label } = rendered;
+  const visible = useVisibleRuns(useMemo(() => [...runIds], [runIds]));
+  // What "add to report" copies: the panel's series (by name for one not logged yet), or its runs for a run-level card.
+  const copy = useMemo<CardReportCopy>(() => {
+    const names = rendered.metrics.length > 0 ? rendered.metrics.map((m) => m.name) : "names" in panel.selector ? panel.selector.names : [];
+    const series = isMultiRunCardType(panel.type)
+      ? visible.map((runId) => ({ runId, name: label }))
+      : names.flatMap((name) => visible.filter((r) => rendered.metrics.find((m) => m.name === name)?.runIds.includes(r) ?? true).map((runId) => ({ runId, name })));
+    return { cardType: panel.type, series, settingsKey };
+  }, [rendered.metrics, panel, label, visible, settingsKey]);
+  return (
+    <CardReportContext.Provider value={copy}>
+      <PanelCardBody {...props} />
+    </CardReportContext.Provider>
+  );
+}
+
+function PanelCardBody({ rendered, runIds, settingsKey, onRemove, autoOpenSettings }: Props) {
   const { panel, metrics, label } = rendered;
   const visible = useVisibleRuns(useMemo(() => [...runIds], [runIds]));
 

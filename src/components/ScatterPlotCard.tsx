@@ -5,7 +5,7 @@ import { instanceDefaults, type ScatterSettings } from "./cards-settings/scatter
 import ScatterChart, { type ScatterPoint } from "../charts/ScatterChart";
 import type { Better, ParetoDirection } from "../lib/plot-utils/pareto";
 import { summaryRuleFor } from "../lib/metric-defs";
-import { downloadCsv, exportChartPng, safeName } from "../lib/download";
+import { downloadCsv, safeName } from "../lib/download";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { useRunColors, useVisibleRuns } from "../lib/run-view";
 import { useScalarExprs } from "../lib/use-scalar-exprs";
@@ -177,7 +177,6 @@ export default function ScatterPlotCard({
         });
         downloadCsv(headers, rows, safeName(settings.title ?? "scatter_plot") + ".csv");
       }}
-      onScreenshot={() => { if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? "scatter_plot")); }}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

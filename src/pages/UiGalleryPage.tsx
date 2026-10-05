@@ -174,9 +174,7 @@ function HeaderDemo() {
       <CardHeader
         title="train/loss"
         subtitle="4 runs"
-        onSettings={() => {}}
-        onDownload={() => {}}
-        onRemove={() => {}}
+        actions={{ onScreenshot: () => {}, onDownload: () => {}, onResetView: () => {}, onSettings: () => {}, onDuplicate: () => {}, onRemove: () => {} }}
         cardActions={
           <>
             <HeaderLabel title="Current step">step 1,200</HeaderLabel>

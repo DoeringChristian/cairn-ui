@@ -11,7 +11,7 @@ import { useMemo, useRef, useState } from "react";
 import ParallelChart, { type ParallelRow } from "../charts/ParallelChart";
 import { useCardSettings } from "../lib/card-settings";
 import { instanceDefaults, type ParallelSettings } from "./cards-settings/parallel";
-import { downloadCsv, exportChartPng, safeName } from "../lib/download";
+import { downloadCsv, safeName } from "../lib/download";
 import { useVisibleRuns } from "../lib/run-view";
 import { useScalarExprs } from "../lib/use-scalar-exprs";
 import { toNumber, toText } from "../lib/scalar-exprs";
@@ -81,7 +81,6 @@ export default function ParallelCoordsCard({
         const rows: (string | number)[][] = rowData.map((row) => [row.id, ...row.raw.map((v) => v ?? "")]);
         downloadCsv(headers, rows, safeName(settings.title ?? "parallel_coords") + ".csv");
       }}
-      onScreenshot={() => { if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? "parallel_coords")); }}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

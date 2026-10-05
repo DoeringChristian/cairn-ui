@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import ArtifactMark from "./media/ArtifactMark";
 import { useSequencesForRuns } from "../api/hooks";
 import { api } from "../api/client";
 import type { SequencePoint } from "../api/types";
@@ -38,7 +39,11 @@ function VolumePane({ name, points, targetStep }: { name: string; points: Sequen
       </div>
     );
   }
-  return <VolumePlaceholder name={name} point={current} />;
+  return (
+    <ArtifactMark hash={current.artifact_hash} name={name} step={current.step} ext=".npz">
+      <VolumePlaceholder name={name} point={current} />
+    </ArtifactMark>
+  );
 }
 
 function VolumePlaceholder({ name, point }: { name: string; point: SequencePoint }) {

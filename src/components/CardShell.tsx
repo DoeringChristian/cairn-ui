@@ -11,6 +11,9 @@ import { useCardNavEntry, useOpenOnMount } from "../lib/card-nav";
 import { useReportExporting } from "../lib/reports/export-context";
 import { PanelActionsContext, PanelTitleContext } from "../lib/workspace/panel-actions";
 import { CardEditorSlots, useCardEditorHost } from "./workspace/card-editor-host";
+import AddToReportButton from "./AddToReportButton";
+import { CardReportContext } from "../lib/card-report-context";
+import { downloadCardArtifacts, downloadCardPng, resetPlotlyViews } from "../lib/download";
 
 interface Props {
   cardRef: RefObject<HTMLDivElement>;
@@ -28,13 +31,11 @@ interface Props {
   cardKind?: string;
   onRemove?: () => void;
   onSettings?: () => void;
-  /** Reset the card's interactive view to default. Renders a home button left of download, only when `viewModified`. */
+  /** Reset the card's own view state (zoom, camera, slider…); Plotly figures are reset too. */
   onResetView?: () => void;
-  viewModified?: boolean;
+  /** The card's data (a CSV, a patch); default: the artifacts it shows at its step (one file, or a zip). */
   onDownload?: () => void;
-  onScreenshot?: () => void;
-  /** AddToReportButton. */
-  addToReportSlot?: ReactNode;
+  /** Card-specific controls, left of the header's bar. */
   headerActions?: ReactNode;
   dropHighlight?: boolean;
   dropProps?: Record<string, unknown>;
@@ -63,10 +64,7 @@ export default function CardShell({
   onRemove,
   onSettings,
   onResetView,
-  viewModified,
   onDownload,
-  onScreenshot,
-  addToReportSlot,
   headerActions,
   dropHighlight,
   dropProps,
@@ -106,6 +104,7 @@ export default function CardShell({
   const mutable = useContext(CardMutationContext);
   // A workspace card opens in the workspace's card editor (data, type, title, then its settings).
   const panelActions = useContext(PanelActionsContext);
+  const reportCopy = useContext(CardReportContext);
   const hosted = useCardEditorHost();
   const panelId = mutable && hosted ? panelActions?.panelId : undefined;
   // ←/→ in the detail modal: close this card's modal, open the neighbour's.
@@ -143,13 +142,24 @@ export default function CardShell({
           subtitle={subtitleCollapsedOnly && !collapsed ? undefined : subtitle}
           collapsed={collapsed}
           onToggleCollapse={() => updateSettings({ collapsed: !settings.collapsed })}
-          onSettings={onSettings}
-          onResetView={onResetView}
-          viewModified={viewModified}
-          onRemove={onRemove}
-          onDownload={onDownload}
-          onScreenshot={onScreenshot}
-          addToReportSlot={addToReportSlot}
+          actions={{
+            onScreenshot: () => {
+              if (cardRef.current) void downloadCardPng(cardRef.current, shownTitle);
+            },
+            onDownload:
+              onDownload ??
+              (() => {
+                if (cardRef.current) void downloadCardArtifacts(cardRef.current, shownTitle);
+              }),
+            addToReport: reportCopy && <AddToReportButton {...reportCopy} />,
+            onResetView: () => {
+              onResetView?.();
+              if (cardRef.current) void resetPlotlyViews(cardRef.current);
+            },
+            onSettings,
+            onDuplicate: panelActions?.onDuplicate,
+            onRemove,
+          }}
           cardActions={headerActions}
           interact={interact.available && !collapsed
             ? { on: interact.on, onToggle: interact.toggle }

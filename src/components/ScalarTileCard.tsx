@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { downloadCsv, safeName } from "../lib/download";
 import { useCardSettings } from "../lib/card-settings";
 import type { TileSettings } from "./cards-settings/tile";
 import { formatNum } from "../lib/plot-utils/format";
@@ -111,6 +112,12 @@ export default function ScalarTileCard({
       defaultHeight={170}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
+      onDownload={() => {
+        // Every run's value, then the shown one (the reduce across runs).
+        const rows: (string | number)[][] = perRun.map((r) => [r.runId, metric?.src ?? "", r.value]);
+        if (tile) rows.push([settings.reduce === "mean" ? "mean" : `${settings.reduce} (${tile.runId ?? ""})`, metric?.src ?? "", tile.value]);
+        downloadCsv(["run", "expression", "value"], rows, `${safeName(settings.title ?? metric?.src ?? "value")}.csv`);
+      }}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

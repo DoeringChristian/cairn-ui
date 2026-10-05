@@ -16,6 +16,7 @@
  * sequence. This card makes the accident legible rather than hiding it.
  */
 
+import { downloadCsv, safeName } from "../lib/download";
 import { useMemo, useRef, useState } from "react";
 import { useSequence } from "../api/hooks";
 import { formatNum } from "../lib/plot-utils/format";
@@ -74,6 +75,7 @@ export default function ScalarValueCard({
       }
       defaultHeight={120}
       onRemove={onRemove}
+      onDownload={() => downloadCsv(["run", "metric", "step", "value"], [[runId, metric.name, point?.step ?? "", value ?? ""]], `${safeName(settings.title ?? metric.name)}.csv`)}
       // The value is a scalar series of one point: the line chart's settings apply once it grows.
       onSettings={() => setOpen(true)}
       settingsPanel={<TypeSettingsPanel type="scalar" ctl={ctl as unknown as SettingsController<Record<string, unknown>>} />}

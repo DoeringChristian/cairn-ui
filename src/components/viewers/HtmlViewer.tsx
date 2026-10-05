@@ -20,6 +20,9 @@
  * Auto-height: the server injects a shim that posts `cairn:resize` to the
  * host (received by card-kit's useIframeAutoHeight). If no resize message
  * ever arrives, the frame keeps `fixedHeight`.
+ *
+ * Screenshots: the same shim answers `cairn:snapshot` with a PNG of what the
+ * document shows (lib/card-capture.ts); the frame is marked `data-cairn-html`.
  */
 
 import { useRef } from "react";
@@ -81,6 +84,7 @@ export default function HtmlViewer({
         style={{ height: autoHeight ? (measuredHeight ?? fixedHeight) : fixedHeight }}
         title={`HTML: ${name}`}
         data-viewer="html"
+        data-cairn-html
       />
     </div>
   );

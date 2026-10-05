@@ -15,7 +15,7 @@ import { useMemo, useRef, useState } from "react";
 import BarChart, { type BarDatum } from "../charts/BarChart";
 import { useCardSettings } from "../lib/card-settings";
 import type { ImportanceSettings } from "./cards-settings/importance";
-import { downloadCsv, exportChartPng, safeName } from "../lib/download";
+import { downloadCsv, safeName } from "../lib/download";
 import { parameterImportance, MIN_RUNS, type ImportanceRow } from "../lib/plot-utils/importance.ts";
 import { SERIES_COLORS } from "../lib/plot-utils/types";
 import { formatNum } from "../lib/plot-utils/format";
@@ -134,7 +134,6 @@ export default function ImportanceCard({ runIds: allRunIds, settingsKey, onRemov
         ]);
         downloadCsv(headers, csv, safeName(settings.title ?? "parameter_importance") + ".csv");
       }}
-      onScreenshot={() => { if (cardRef.current) exportChartPng(cardRef.current, safeName(settings.title ?? "parameter_importance")); }}
       settingsPanel={settingsPanel}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

@@ -1,9 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import { useSequencesForRuns } from "../../api/hooks";
-import { api } from "../../api/client";
 import type { SequenceMeta, SequencePoint } from "../../api/types";
 import { safeJsonParse } from "../../lib/format";
-import { downloadArtifact, artifactFilename } from "../../lib/download";
+import { artifactFilename, downloadArtifacts } from "../../lib/download";
 import { cardOverridesStorageKey, type CardSettingsKey, type SettingsController } from "../../lib/card-settings";
 import type { ComparisonSeriesRef } from "../../lib/comparisons";
 import { useCardDrop } from "../../lib/use-series-drop";
@@ -13,7 +12,6 @@ import { useMediaPanes, useScalarMetricNames } from "../card-kit/use-media-panes
 import { scene3dInstanceDefaults, type Scene3DSettings } from "../cards-settings/scene3d";
 import { useOverlaySlot } from "../card-kit/use-overlay-slot";
 import { plotCardPolicy } from "../card-kit/plot-card-policy";
-import AddToReportButton from "../AddToReportButton";
 import CardShell from "../CardShell";
 import SeriesChipStrip from "../SeriesChipStrip";
 import StepSlider from "../StepSlider";
@@ -200,10 +198,6 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   const paneKeys = panes.keys;
   const paneLabels = panes.labels;
 
-  const compSeries = useMemo(
-    () => [{ runId, name: metric.name }],
-    [runId, metric.name],
-  );
   const isMulti = effectiveMetrics.length > 1;
   const subtitle = values.length > 0
     ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})`
@@ -223,13 +217,15 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
       onSettings={() => setSettingsOpen(true)}
       onResetView={() => setResetKey((k) => k + 1)}
       onRemove={onRemove}
-      onDownload={seedCurrent?.artifact_hash
-        ? () => downloadArtifact(
-            api.artifactUrl(seedCurrent.artifact_hash!),
-            artifactFilename(metric.name, seedCurrent.step, seedCurrent.artifact_mime, ".npz"),
-          )
-        : undefined}
-      addToReportSlot={<AddToReportButton cardType={spec.kind} series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
+      onDownload={() => {
+        // Every pane's point at its step: one file, or a zip.
+        const items = effectiveMetrics.flatMap((m, i) => {
+          const at = stepFor(i);
+          const p = at == null ? null : resolveAtStep(seriesPoints[i] ?? [], at);
+          return p?.artifact_hash ? [{ hash: p.artifact_hash, name: artifactFilename(m.name, p.step, p.artifact_mime, ".npz") }] : [];
+        });
+        void downloadArtifacts(items, settings.title ?? metric.name);
+      }}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
       settingsPanel={

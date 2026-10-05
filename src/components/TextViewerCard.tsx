@@ -1,12 +1,10 @@
 import { useState, useMemo, useRef } from "react";
+import ArtifactMark from "./media/ArtifactMark";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSequence } from "../api/hooks";
 import { useCardSettings, type CardSettingsKey } from "../lib/card-settings";
 import type { TextSettings } from "./cards-settings/text";
-import { downloadArtifact, artifactFilename } from "../lib/download";
-import { api } from "../api/client";
 import type { SequenceMeta } from "../api/types";
-import AddToReportButton from "./AddToReportButton";
 import CardShell from "./CardShell";
 import TextSettingsPanel from "./settings-panels/TextSettingsPanel";
 import StepSlider from "./StepSlider";
@@ -43,10 +41,6 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
 
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
-  const compSeries = useMemo(
-    () => [{ runId, name: metric.name }],
-    [runId, metric.name],
-  );
 
 
   const subtitle =
@@ -72,7 +66,9 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
           />
         </div>
       ) : current?.artifact_hash ? (
-        <TextViewer source={{ hash: current.artifact_hash, size: current.artifact_size ?? null }} {...textView} className="flex-1 min-h-0" />
+        <ArtifactMark hash={current.artifact_hash} name={metric.name} step={current.step} mime="text/plain">
+          <TextViewer source={{ hash: current.artifact_hash, size: current.artifact_size ?? null }} {...textView} className="flex-1 min-h-0" />
+        </ArtifactMark>
       ) : (
         <TextView text="" {...textView} className="flex-1 min-h-0" />
       )}
@@ -98,8 +94,6 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
       defaultHeight={250}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
-      onDownload={current?.artifact_hash ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), artifactFilename(metric.name, current?.step ?? 0, "text/plain")) : undefined}
-      addToReportSlot={<AddToReportButton cardType="text" series={compSeries} settingsKey={settingsKey} />}
       settingsPanel={<TextSettingsPanel ctl={ctl} mode="card" />}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}
