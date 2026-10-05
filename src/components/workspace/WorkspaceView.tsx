@@ -18,7 +18,7 @@
  * duplicate: those only edit the layout.
  */
 
-import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import CardErrorBoundary from "../card-kit/CardErrorBoundary";
 import ReorderableCardGrid from "../ReorderableCardGrid";
@@ -44,7 +44,7 @@ import {
   type RenderedPanel,
   type RenderedSection,
 } from "../../lib/workspace/layout";
-import { autoSectionOfPanel, cardCatalogue, seriesShownBy, type CatalogueEntry } from "../../lib/workspace/card-builder";
+import { autoSectionOfPanel, cardCatalogue, changedPanel, seriesShownBy, type CatalogueEntry, type PanelChange } from "../../lib/workspace/card-builder";
 import { compilePanelFilter } from "../../lib/workspace/panel-filter";
 import type { BuiltPanel } from "../../lib/workspace/panel-builder";
 import { PanelActionsContext } from "../../lib/workspace/panel-actions";
@@ -165,24 +165,55 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
   metricsRef.current = metrics;
   const [builder, setBuilder] = useState<BuilderMode | null>(null);
 
+  // --- the card editor (the gear) -------------------------------------------
+  // A card opens its editor on mount when asked (just added, picked in Manage
+  // cards, or remounted by a type / section change): its key gets a new token
+  // and it mounts with autoOpenSettings.
+  const [editorTokens, setEditorTokens] = useState<ReadonlyMap<string, number>>(new Map());
+  const [openNow, setOpenNow] = useState<string | null>(null);
+  const openEditor = useCallback((id: string) => {
+    setEditorTokens((m) => new Map(m).set(id, (m.get(id) ?? 0) + 1));
+    setOpenNow(id);
+  }, []);
+  useEffect(() => {
+    if (openNow == null) return;
+    const t = setTimeout(() => setOpenNow(null), 1500);
+    return () => clearTimeout(t);
+  }, [openNow, editorTokens]);
+
   const addCards = useCallback(
     (section: string, cards: BuilderCard[]) => {
       const panels: Panel[] = cards.map((c) => ({ id: newLayoutId("p_"), ...c }));
       update(sectionOp(ops.addPanels(section, panels)), { label: `Add ${panels.length} card${panels.length === 1 ? "" : "s"}` });
+      if (panels[0]) openEditor(panels[0].id);
     },
-    [update, sectionOp],
+    [update, sectionOp, openEditor],
   );
-  const saveCard = useCallback(
-    (id: string, card: BuilderCard, section: string) => {
-      const from = findPanel(getWorkspace(key), id)?.section ?? allRef.current.find((s) => s.panels.some((p) => p.panel.id === id))?.name;
-      update(
-        sectionOp(
-          ops.seq(materializeOp(id), ops.replacePanel(id, card), section !== from ? ops.movePanel(id, section, null) : identity),
-        ),
-        { label: "Edit card" },
-      );
+  const panelOf = useCallback(
+    (id: string): Panel | undefined =>
+      findPanel(getWorkspace(key), id)?.panel ?? allRef.current.flatMap((s) => s.panels).find((p) => p.panel.id === id)?.panel,
+    [key],
+  );
+  const changePanel = useCallback(
+    (id: string, change: PanelChange) => {
+      const cur = panelOf(id);
+      if (!cur) return;
+      const next = changedPanel(cur, change);
+      update(sectionOp(ops.seq(materializeOp(id), ops.replacePanel(id, next))), {
+        label: change.option ? "Change card type" : change.data ? "Change card data" : "Rename card",
+        mergeKey: change.title !== undefined ? `title:${id}` : undefined,
+      });
+      // Another card component: it remounts, and its editor reopens.
+      if (next.type !== cur.type) openEditor(id);
     },
-    [key, update, sectionOp, materializeOp],
+    [panelOf, update, sectionOp, materializeOp, openEditor],
+  );
+  const movePanelTo = useCallback(
+    (id: string, section: string) => {
+      update(sectionOp(ops.seq(materializeOp(id), ops.ensureSections([section]), ops.movePanel(id, section, null))), { label: `Move card to ${section}` });
+      openEditor(id);
+    },
+    [update, sectionOp, materializeOp, openEditor],
   );
   /** Copy a card (an automatic one is written first) right after itself. */
   const duplicate = useCallback(
@@ -372,14 +403,24 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
                         value={
                           mutable
                             ? {
-                                onEdit: () => setBuilder({ kind: "edit", panel: rp.panel, section: section.name, returnTo: null }),
                                 onDuplicate: () => duplicate(rp.panel.id),
+                                editor: {
+                                  panel: rp.panel,
+                                  section: section.name,
+                                  sections: sectionNames,
+                                  metrics,
+                                  runCount: runIds.length,
+                                  change: (c) => changePanel(rp.panel.id, c),
+                                  moveTo: (s) => movePanelTo(rp.panel.id, s),
+                                },
                               }
                             : null
                         }
                       >
                         <CardErrorBoundary variant="card">
                           <PanelCard
+                            key={`${rp.panel.id}:${editorTokens.get(rp.panel.id) ?? 0}`}
+                            autoOpenSettings={openNow === rp.panel.id}
                             rendered={rp}
                             runIds={runIds}
                             settingsKey={settingsKeyOf(rp.panel.id)}
@@ -408,7 +449,11 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
           autoPanels={doc.autoPanels}
           onToggleAutoPanels={toggleAutoPanels}
           onAdd={addCards}
-          onSave={saveCard}
+          onEditCard={(e) => {
+            setBuilder(null);
+            if (e.status === "hidden") update(ops.setPanelHidden(e.panel.id, false), { label: `Show ${e.label}` });
+            openEditor(e.panel.id);
+          }}
           manage={manage}
         />
       )}

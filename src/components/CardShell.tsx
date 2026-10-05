@@ -10,7 +10,8 @@ import CardDetailModal from "./CardDetailModal";
 import CardErrorBoundary from "./card-kit/CardErrorBoundary";
 import { useCardNavEntry, useOpenOnMount } from "../lib/card-nav";
 import { useReportExporting } from "../lib/reports/export-context";
-import { CardSettingsSlotContext, PanelTitleContext } from "../lib/workspace/panel-actions";
+import { CardSettingsSlotContext, PanelActionsContext, PanelTitleContext } from "../lib/workspace/panel-actions";
+import { PanelEditorSettings } from "./workspace/PanelEditor";
 
 interface Props {
   cardRef: RefObject<HTMLDivElement>;
@@ -106,6 +107,9 @@ export default function CardShell({
   const settingsSlot = useContext(CardSettingsSlotContext);
   // Read-only cards (report viewers, embeds) keep their size.
   const mutable = useContext(CardMutationContext);
+  // A workspace card: its gear also edits the panel (data, type, title, section).
+  const panelActions = useContext(PanelActionsContext);
+  const editor = mutable ? panelActions?.editor : undefined;
   // ←/→ in the detail modal: close this card's modal, open the neighbour's.
   const nav = useCardNavEntry(onSettings, modalContent !== undefined && !collapsed, !!modalOpen);
   // Mounted by ←/→ from a neighbour's modal (workspace/LazyPanel): open ours.
@@ -161,7 +165,7 @@ export default function CardShell({
                 open={!!modalOpen}
                 onClose={onModalClose ?? (() => {})}
                 title={shownTitle}
-                settingsContent={settingsPanel}
+                settingsContent={editor ? <PanelEditorSettings editor={editor} title={shownTitle}>{settingsPanel}</PanelEditorSettings> : settingsPanel}
                 onPrev={step(nav.prev)}
                 onNext={step(nav.next)}
               >

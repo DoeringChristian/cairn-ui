@@ -469,3 +469,72 @@ export function autoSectionOfPanel(panel: Panel, metrics: readonly MetricInfo[])
   const m = metrics.find((x) => x.name === name);
   return autoSectionOf(name ?? "", m?.object_type ?? panel.type);
 }
+
+// ---------------------------------------------------------------------------
+// Editing a card in place (the gear's editor)
+// ---------------------------------------------------------------------------
+
+/** Settings a type change keeps (the card's frame, not its content). */
+export const FRAME_KEYS = ["title", "height", "colSpan", "collapsed"] as const;
+
+const pickKeys = (o: Record<string, unknown>, keys: readonly string[]) =>
+  Object.fromEntries(Object.entries(o).filter(([k]) => keys.includes(k)));
+
+/** A title that is still its card's default (`loss · Value`) follows the data; one the user wrote stays. */
+export function followTitle(type: CardType, settings: Record<string, unknown>, data: BuilderData): Record<string, unknown> {
+  const was = defaultTitle(type, panelData({ type, selector: { names: [] }, settings }));
+  if (!was || settings.title !== was) return settings;
+  const next = { ...settings };
+  const now = defaultTitle(type, data);
+  if (now) next.title = now;
+  else delete next.title;
+  return next;
+}
+
+/** What the gear's editor changes on a card: its data, its type (an option key), its title. */
+export interface PanelChange {
+  data?: BuilderData;
+  /** A card type, or `custom:<viewer>` (see optionKey). */
+  option?: string;
+  /** "" clears the title (the card is named by its data again). */
+  title?: string;
+}
+
+/**
+ * The card after an edit. A new type keeps the card's frame (title, size)
+ * and starts its own settings; another custom viewer keeps the card's
+ * settings (each viewer's are stored apart) but not a pinned version. New
+ * data keeps the settings (a default title follows the data).
+ */
+export function changedPanel(
+  panel: Pick<Panel, "type" | "selector" | "settings">,
+  change: PanelChange,
+): Pick<Panel, "type" | "selector" | "settings"> {
+  const data = change.data ?? panelData(panel);
+  let type = panel.type;
+  let settings: Record<string, unknown> = panel.settings;
+  if (change.option && change.option !== optionKey(panel.type, panel.settings)) {
+    const next = parseOptionKey(change.option);
+    if (next.type === panel.type) {
+      settings = { ...panel.settings, ...next.seed };
+      delete settings.viewer_version;
+    } else {
+      const frame = pickKeys(panel.settings, FRAME_KEYS);
+      const prevDefault = defaultTitle(panel.type, panelData({ type: panel.type, selector: { names: [] }, settings: panel.settings }));
+      if (prevDefault && frame.title === prevDefault) delete frame.title;
+      const title = defaultTitle(next.type, data);
+      if (frame.title == null && title) frame.title = title;
+      settings = { ...frame, ...next.seed };
+    }
+    type = next.type;
+  } else if (change.data) {
+    settings = followTitle(type, settings, data);
+  }
+  const seeded = seedPanel(type, data, settings);
+  if (change.title !== undefined) {
+    seeded.settings = { ...seeded.settings };
+    if (change.title.trim()) seeded.settings.title = change.title.trim();
+    else delete seeded.settings.title;
+  }
+  return { type, selector: seeded.selector, settings: seeded.settings };
+}

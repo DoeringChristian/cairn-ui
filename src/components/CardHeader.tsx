@@ -80,9 +80,8 @@ export default function CardHeader({
   // A report card's comment threads (provided in editable reports only).
   const comments = useContext(CardCommentsContext);
   const onRemove = mutable ? onRemoveProp : undefined;
-  // A workspace card: "edit card" (data, type, settings, section) and "duplicate".
+  // A workspace card: "duplicate" (its data, type, title and section are edited in the gear's modal).
   const panelActions = useContext(PanelActionsContext);
-  const onEditPanel = mutable ? panelActions?.onEdit : undefined;
   const onDuplicate = mutable ? panelActions?.onDuplicate : undefined;
   const dragCtx = useDraggableCard();
   const drag = mutable ? dragCtx : null;
@@ -130,7 +129,7 @@ export default function CardHeader({
 
   const showResetView = !!(onResetView && viewModified);
   const hasStandardActions = !!(
-    showResetView || onDownload || onScreenshot || addToReportSlot || comments || onSettings || onEditPanel || onDuplicate || onRemove
+    showResetView || onDownload || onScreenshot || addToReportSlot || comments || onSettings || onDuplicate || onRemove
   );
 
   const menuItems: MenuItem[] = [];
@@ -139,7 +138,6 @@ export default function CardHeader({
     if (onDownload) menuItems.push({ icon: "fa-arrow-down", label: "Save", onClick: onDownload });
     if (onScreenshot) menuItems.push({ icon: "fa-camera", label: "Screenshot", onClick: onScreenshot });
     if (onSettings) menuItems.push({ icon: "fa-gear", label: "Settings", onClick: onSettings });
-    if (onEditPanel) menuItems.push({ icon: "fa-pen-to-square", label: "Edit card", onClick: onEditPanel });
     if (onDuplicate) menuItems.push({ icon: "fa-clone", label: "Duplicate card", onClick: onDuplicate });
   }
   if (compact || coarse) {
@@ -271,11 +269,6 @@ export default function CardHeader({
             {!compact && onSettings && (
               <button type="button" onClick={onSettings} className={ICON_BTN} aria-label="Settings" title="Settings">
                 <i className="fa-solid fa-gear" aria-hidden="true" />
-              </button>
-            )}
-            {!compact && onEditPanel && (
-              <button type="button" onClick={onEditPanel} className={ICON_BTN} aria-label="Edit card" title="Edit card: data, type, settings, section">
-                <i className="fa-solid fa-pen-to-square" aria-hidden="true" />
               </button>
             )}
             {!compact && onDuplicate && (

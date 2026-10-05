@@ -19,16 +19,19 @@ export default function EmptyCard({
   title,
   message,
   onRemove,
+  autoOpen,
 }: {
   type: CardType;
   settingsKey: CardSettingsKey;
   title: string;
   message: string;
   onRemove?: () => void;
+  /** Open the settings at once (a card just added or picked to edit). */
+  autoOpen?: boolean;
 }) {
   const cardRef = useRef<HTMLDivElement>(null!);
   const ctl = useCardSettings<BaseCardSettings & Record<string, unknown>>(settingsKey, type);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen ?? false);
   const body = <p className="py-6 text-center text-sm text-fg-muted">{message}</p>;
   return (
     <CardShell

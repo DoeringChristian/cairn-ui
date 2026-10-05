@@ -1,15 +1,31 @@
 /**
- * Panel-level actions a workspace offers in each card's header (the card
- * components themselves know nothing about panels): "edit card" opens the
- * card builder on the card (data, type, settings, section); "duplicate"
- * copies it right after itself.
+ * Panel-level things a workspace offers each card (the card components
+ * themselves know nothing about panels): "duplicate" copies the card right
+ * after itself, and `editor` lets the card's settings modal (the gear) edit
+ * the panel itself — its data, card type, title and section — beside the
+ * card's own settings. The gear is the one editor of a card.
  */
 
 import { createContext } from "react";
+import type { Panel } from "./doc";
+import type { MetricInfo } from "./layout";
+import type { PanelChange } from "./card-builder";
+
+export interface PanelEditor {
+  panel: Panel;
+  section: string;
+  sections: readonly string[];
+  /** The series of the bound runs (what the card can show). */
+  metrics: readonly MetricInfo[];
+  runCount: number;
+  change: (change: PanelChange) => void;
+  /** Move the card to a section (created when new). */
+  moveTo: (section: string) => void;
+}
 
 export interface PanelActions {
-  onEdit: () => void;
   onDuplicate?: () => void;
+  editor?: PanelEditor;
 }
 
 export const PanelActionsContext = createContext<PanelActions | null>(null);

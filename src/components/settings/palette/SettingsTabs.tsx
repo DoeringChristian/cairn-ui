@@ -1,5 +1,12 @@
-import { useId, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useState, type ReactNode } from "react";
 import { SETTINGS_TABS, activeTab, showTabBar, visibleTabs, type SettingsTabId } from "./logic";
+
+/**
+ * Content the surrounding editor puts first in the Data tab (the card's data
+ * and type, in the gear's editor). `claim` tells the editor a tabbed panel
+ * showed it, so it does not show it a second time above an untabbed one.
+ */
+export const SettingsDataExtraContext = createContext<{ node: ReactNode; claim: () => void } | null>(null);
 
 interface Props {
   /** Each tab's content; a missing / null / false tab is hidden. */
@@ -17,8 +24,11 @@ function hasContent(node: ReactNode): boolean {
  * The fixed Data · Grouping · Display · Expressions tabs of a settings panel.
  * Tabs without content are hidden; with a single tab left there is no bar.
  */
-export default function SettingsTabs({ tabs, active, onActiveChange }: Props) {
+export default function SettingsTabs({ tabs: given, active, onActiveChange }: Props) {
   const id = useId();
+  const extra = useContext(SettingsDataExtraContext);
+  useEffect(() => extra?.claim(), [extra]);
+  const tabs = extra ? { ...given, data: <>{extra.node}{given.data}</> } : given;
   const [own, setOwn] = useState<SettingsTabId | null>(null);
   const visible = visibleTabs({
     data: hasContent(tabs.data),

@@ -56,8 +56,8 @@ import {
   dataMetrics,
   dataReady,
   defaultTitle,
+  followTitle,
   kindLabel,
-  panelData,
   regexMatches,
   seedPanel,
   seriesCatalogue,
@@ -69,7 +69,6 @@ import { CardSettingsSlotContext, PanelActionsContext } from "../../lib/workspac
 
 export type BuilderMode =
   | { kind: "add"; section: string | null }
-  | { kind: "edit"; panel: Panel; section: string; returnTo: "manage" | null }
   | { kind: "manage" };
 
 /** A card the builder writes. */
@@ -100,7 +99,8 @@ interface Props {
   autoPanels: boolean;
   onToggleAutoPanels: () => void;
   onAdd: (section: string, cards: BuilderCard[]) => void;
-  onSave: (panelId: string, card: BuilderCard, section: string) => void;
+  /** Open a card's editor (its gear): Manage cards' edit. */
+  onEditCard: (e: CatalogueEntry) => void;
   manage: ManageActions;
 }
 
@@ -110,9 +110,9 @@ export const DEFAULT_NEW_SECTION = "Custom panels";
 export default function CardBuilder(props: Props) {
   const { mode, onModeChange } = props;
   const title =
-    mode.kind === "manage" ? "Manage cards" : mode.kind === "edit" ? "Edit card" : "Add cards";
+    mode.kind === "manage" ? "Manage cards" : "Add cards";
   const tabs =
-    mode.kind === "edit" ? null : (
+    (
       <div className="flex shrink-0 gap-1 border-b border-border px-4 py-1.5" role="tablist" aria-label="Card builder">
         {(
           [
@@ -142,7 +142,7 @@ export default function CardBuilder(props: Props) {
         {mode.kind === "manage" ? (
           <ManageCards {...props} />
         ) : (
-          <BuildFlow key={mode.kind === "edit" ? `edit:${mode.panel.id}` : `add:${mode.section ?? ""}`} {...props} mode={mode} />
+          <BuildFlow key={`add:${mode.section ?? ""}`} {...props} mode={mode} />
         )}
       </div>
     </Dialog>
@@ -153,11 +153,10 @@ export default function CardBuilder(props: Props) {
 // Add / edit
 // ---------------------------------------------------------------------------
 
-type Step = "data" | "type" | "configure" | "place";
+type Step = "data" | "type" | "place";
 const STEPS: Array<[Step, string]> = [
   ["data", "Data"],
   ["type", "Card type"],
-  ["configure", "Configure"],
   ["place", "Place"],
 ];
 
@@ -172,46 +171,23 @@ interface Draft {
 const draftLabel = (d: Draft) => d.label ?? builderTypeLabel(d.type);
 
 const NEW_SECTION = "\u0000new";
-/** Settings a type change keeps (the card's frame, not its content). */
-const FRAME_KEYS = ["title", "height", "colSpan", "collapsed"];
 
-/** A title that is still its card's default (`loss · Value`) follows the data; one the user wrote stays. */
-function followTitle(type: CardType, settings: Record<string, unknown>, data: BuilderData): Record<string, unknown> {
-  const was = defaultTitle(type, panelData({ type, selector: { names: [] }, settings }));
-  if (!was || settings.title !== was) return settings;
-  const next = { ...settings };
-  const now = defaultTitle(type, data);
-  if (now) next.title = now;
-  else delete next.title;
-  return next;
-}
 
-const pick = (o: Record<string, unknown>, keys: readonly string[]) =>
-  Object.fromEntries(Object.entries(o).filter(([k]) => keys.includes(k)));
+function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" }> }) {
+  const { mode, metrics, runIds, shownBy, sections, onAdd, onModeChange } = props;
 
-function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "edit" }> }) {
-  const { mode, metrics, runIds, shownBy, sections, onAdd, onSave, onModeChange } = props;
-  const editing = mode.kind === "edit" ? mode.panel : null;
-
-  const [step, setStep] = useState<Step>(editing ? "configure" : "data");
-  const [data, setData] = useState<BuilderData>(() => (editing ? panelData(editing) : { mode: "series", names: [] }));
+  const [step, setStep] = useState<Step>("data");
+  const [data, setData] = useState<BuilderData>({ mode: "series", names: [] });
   // Chosen options: card types, or `custom:<viewer>` (see optionKey).
-  const editingKey = editing ? optionKey(editing.type, editing.settings) : null;
-  const [types, setTypes] = useState<string[]>(() => (editingKey ? [editingKey] : []));
-  const [focus, setFocus] = useState<string | null>(editingKey);
+  const [types, setTypes] = useState<string[]>([]);
+  const [focus, setFocus] = useState<string | null>(null);
   const viewers = useViewerList(useProjectId()).data ?? [];
-  const [drafts, setDrafts] = useState<Draft[]>(() =>
-    editing ? [{ key: editing.id, type: editing.type, settings: editing.settings }] : [],
-  );
-  const [active, setActive] = useState<string | null>(editing?.id ?? null);
-  const initialSection = mode.kind === "edit" ? mode.section : mode.section;
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const initialSection = mode.section;
   const [target, setTarget] = useState<string>(initialSection ?? NEW_SECTION);
   const [newSection, setNewSection] = useState(initialSection ? "" : DEFAULT_NEW_SECTION);
 
-  const compat = useMemo(
-    () => compatibleTypes(data, metrics, runIds.length, editingKey, viewers),
-    [data, metrics, runIds.length, editingKey, viewers],
-  );
+  const compat = useMemo(() => compatibleTypes(data, metrics, runIds.length, null, viewers), [data, metrics, runIds.length, viewers]);
   const available = compat.options.filter((o) => o.unavailable == null).map((o) => o.key);
 
   // The draft list for the chosen types: kept drafts follow the data; new types start seeded.
@@ -225,18 +201,6 @@ function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "
         for (const d of kept) out.push({ ...d, label, settings: seedPanel(t, data, followTitle(t, d.settings, data)).settings });
         continue;
       }
-      if (editing && drafts[0]) {
-        // Editing: the card changes type; it keeps its frame.
-        const prev = drafts[0];
-        const frame = pick(prev.settings, FRAME_KEYS);
-        // A default title (`loss · Value`) is the old type's: the new type brings its own.
-        const prevDefault = defaultTitle(prev.type, panelData({ type: prev.type, selector: { names: [] }, settings: prev.settings }));
-        if (prevDefault && frame.title === prevDefault) delete frame.title;
-        const title = defaultTitle(t, data);
-        if (frame.title == null && title) frame.title = title;
-        out.push({ key: drafts[0].key, type: t, label, settings: seedPanel(t, data, { ...frame, ...seed }).settings });
-        continue;
-      }
       const title = defaultTitle(t, data);
       out.push({ key: newLayoutId("d_"), type: t, label, settings: seedPanel(t, data, { ...(title ? { title } : {}), ...seed }).settings });
     }
@@ -244,17 +208,12 @@ function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "
   };
 
   const goto = (next: Step) => {
-    if (next === "type" && !editing && types.length === 0 && available.length > 0) {
+    if (next === "type" && types.length === 0 && available.length > 0) {
       setTypes([available[0]!]);
       setFocus(available[0]!);
     }
     if (next === "type" && !focus) setFocus(types[0] ?? available[0] ?? null);
-    if (next === "configure" || next === "place") {
-      const chosen = types.filter((t) => available.includes(t));
-      const nextDrafts = buildDrafts(chosen);
-      setDrafts(nextDrafts);
-      if (!nextDrafts.some((d) => d.key === active)) setActive(nextDrafts[0]?.key ?? null);
-    }
+    if (next === "place") setDrafts(buildDrafts(types.filter((t) => available.includes(t))));
     setStep(next);
   };
 
@@ -272,16 +231,12 @@ function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "
       const seeded = seedPanel(d.type, data, d.settings);
       return { type: d.type, selector: seeded.selector, settings: seeded.settings };
     });
-  const canSubmit = drafts.length > 0 && sectionName !== "" && (step === "configure" || step === "place");
+  const canSubmit = drafts.length > 0 && sectionName !== "" && step === "place";
+  // The new cards are added, and the first opens in its editor (the gear) for its settings.
   const submit = () => {
     if (!canSubmit) return;
-    if (editing) {
-      onSave(editing.id, cards()[0]!, sectionName);
-      onModeChange(mode.kind === "edit" && mode.returnTo === "manage" ? { kind: "manage" } : null);
-    } else {
-      onAdd(sectionName, cards());
-      onModeChange(null);
-    }
+    onAdd(sectionName, cards());
+    onModeChange(null);
   };
 
   const stepIndex = STEPS.findIndex(([s]) => s === step);
@@ -318,7 +273,7 @@ function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "
           <TypeStep
             options={compat.options}
             reason={compat.reason}
-            single={!!editing}
+            single={false}
             types={types}
             onTypes={setTypes}
             focus={focus}
@@ -326,18 +281,6 @@ function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "
             data={data}
             metrics={metrics}
             runIds={runIds}
-          />
-        )}
-        {step === "configure" && (
-          <ConfigureStep
-            drafts={drafts}
-            onDrafts={setDrafts}
-            active={active}
-            onActive={setActive}
-            data={data}
-            metrics={metrics}
-            runIds={runIds}
-            single={!!editing}
           />
         )}
         {step === "place" && (
@@ -371,7 +314,7 @@ function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "
             Next →
           </button>
         )}
-        {(step === "configure" || step === "place") && (
+        {step === "place" && (
           <button
             type="button"
             className="btn text-xs touch:min-h-10 disabled:cursor-not-allowed disabled:opacity-50"
@@ -379,7 +322,7 @@ function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "
             onClick={submit}
             data-testid="card-builder-submit"
           >
-            {editing ? "Save card" : `Add ${drafts.length} card${drafts.length === 1 ? "" : "s"} to “${sectionName || "…"}”`}
+            {`Add ${drafts.length} card${drafts.length === 1 ? "" : "s"} to “${sectionName || "…"}” and edit`}
           </button>
         )}
       </div>
@@ -658,131 +601,6 @@ function TypeStep({
   );
 }
 
-// --- step 3: configure --------------------------------------------------------
-
-function ConfigureStep({
-  drafts,
-  onDrafts,
-  active,
-  onActive,
-  data,
-  metrics,
-  runIds,
-  single,
-}: {
-  drafts: Draft[];
-  onDrafts: (d: Draft[]) => void;
-  active: string | null;
-  onActive: (k: string) => void;
-  data: BuilderData;
-  metrics: readonly MetricInfo[];
-  runIds: readonly string[];
-  single: boolean;
-}) {
-  const draft = drafts.find((d) => d.key === active) ?? drafts[0] ?? null;
-  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
-  const draftsRef = useRef(drafts);
-  draftsRef.current = drafts;
-  const setSettings = (key: string, settings: Record<string, unknown>) =>
-    onDrafts(draftsRef.current.map((d) => (d.key === key ? { ...d, settings } : d)));
-  const another = (d: Draft) => {
-    const copy: Draft = { key: newLayoutId("d_"), type: d.type, label: d.label, settings: structuredClone(d.settings) };
-    const at = drafts.indexOf(d);
-    onDrafts([...drafts.slice(0, at + 1), copy, ...drafts.slice(at + 1)]);
-    onActive(copy.key);
-  };
-  if (!draft) return <p className="p-4 text-sm text-fg-muted">Pick a card type first.</p>;
-  const seeded = seedPanel(draft.type, data, draft.settings);
-  const titleOf = (d: Draft) => (typeof d.settings.title === "string" && d.settings.title) || draftLabel(d);
-  const setTitle = (t: string) => {
-    const next = { ...draft.settings };
-    if (t) next.title = t;
-    else delete next.title;
-    setSettings(draft.key, next);
-  };
-
-  return (
-    <>
-      {!single && (
-        <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-4 py-1.5" role="tablist" aria-label="New cards">
-          {drafts.map((d, i) => (
-            <span key={d.key} className="inline-flex items-center">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={d.key === draft.key}
-                onClick={() => onActive(d.key)}
-                className={`rounded-l px-2.5 py-1 text-xs touch:min-h-10 ${
-                  d.key === draft.key ? "bg-accent text-white" : "bg-bg-hover text-fg-muted hover:text-fg"
-                }`}
-                title={titleOf(d)}
-              >
-                {i + 1}. {draftLabel(d)}
-              </button>
-              <button
-                type="button"
-                onClick={() => another(d)}
-                className="bg-bg-hover px-1.5 py-1 text-xs text-fg-muted hover:text-fg touch:min-h-10"
-                aria-label={`Another ${draftLabel(d)} card`}
-                title={`Another ${draftLabel(d)} card of the same data (its own settings)`}
-              >
-                <i className="fa-solid fa-clone" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                disabled={drafts.length === 1}
-                onClick={() => {
-                  const rest = drafts.filter((x) => x.key !== d.key);
-                  onDrafts(rest);
-                  if (d.key === draft.key && rest[0]) onActive(rest[0].key);
-                }}
-                className="rounded-r bg-bg-hover px-1.5 py-1 text-xs text-fg-muted hover:text-status-failed disabled:opacity-40 touch:min-h-10"
-                aria-label={`Drop card ${i + 1}`}
-                title="Don't add this one"
-              >
-                <i className="fa-solid fa-xmark" aria-hidden="true" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <div className="min-h-0 flex-1 overflow-y-auto p-4" data-testid="builder-config-preview">
-          <CardPreview
-            key={draft.key}
-            draftKey={draft.key}
-            type={draft.type}
-            selector={seeded.selector}
-            settings={draft.settings}
-            onSettings={(s) => setSettings(draft.key, s)}
-            metrics={metrics}
-            runIds={runIds}
-            slot={slot}
-          />
-        </div>
-        <div className="flex min-h-0 shrink-0 flex-col border-t border-border md:w-[22rem] md:border-l md:border-t-0">
-          <label className="flex shrink-0 flex-col gap-1 border-b border-border p-3 text-xs text-fg-muted">
-            Title
-            <input
-              className="input py-1 text-sm"
-              value={typeof draft.settings.title === "string" ? draft.settings.title : ""}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="(the series name)"
-              aria-label="Card title"
-            />
-          </label>
-          <div className="min-h-0 flex-1 overflow-y-auto p-3" data-testid="builder-settings">
-            <div
-              ref={setSlot}
-              className="empty:after:text-xs empty:after:text-fg-muted empty:after:content-['Settings_appear_once_the_card_renders.']"
-            />
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
 // --- step 4: place -----------------------------------------------------------
 
 function PlaceStep({
@@ -968,7 +786,7 @@ const STATUS_TITLE: Record<CardStatus, string> = {
 const ICON = "inline-flex h-6 w-6 items-center justify-center rounded text-fg-muted hover:bg-bg-hover hover:text-fg touch:h-10 touch:w-10";
 
 function ManageCards(props: Props) {
-  const { catalogue, sections, manage, onModeChange, autoPanels, onToggleAutoPanels } = props;
+  const { catalogue, sections, manage, autoPanels, onToggleAutoPanels } = props;
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<CardStatus | "all">("all");
   const q = query.trim().toLowerCase();
@@ -1025,7 +843,7 @@ function ManageCards(props: Props) {
                   entry={e}
                   sections={sections}
                   manage={manage}
-                  onEdit={() => onModeChange({ kind: "edit", panel: e.panel, section: e.section, returnTo: "manage" })}
+                  onEdit={() => props.onEditCard(e)}
                 />
               ))}
             </ul>

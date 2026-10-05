@@ -52,6 +52,7 @@ export default function PanelCard({ rendered, runIds, settingsKey, onRemove, aut
       return (
         <EmptyCard
           type={panel.type}
+          autoOpen={autoOpenSettings}
           title={label}
           settingsKey={settingsKey}
           onRemove={onRemove}
@@ -89,7 +90,8 @@ export default function PanelCard({ rendered, runIds, settingsKey, onRemove, aut
   if (!primary) {
     return (
       <EmptyCard
-          type={panel.type}
+        type={panel.type}
+        autoOpen={autoOpenSettings}
         title={label}
         settingsKey={settingsKey}
         onRemove={onRemove}

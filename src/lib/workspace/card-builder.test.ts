@@ -190,3 +190,34 @@ test("option keys", () => {
   assert.equal(optionLabel("custom:gone", VIEWERS), "gone");
   assert.equal(optionLabel("scalar"), "Line chart");
 });
+
+// --- the gear's editor ---------------------------------------------------------
+
+import { changedPanel } from "./card-builder.ts";
+
+test("changedPanel: new data keeps the settings; a default title follows", () => {
+  const p = { type: "image" as const, selector: { names: ["samples"] }, settings: { height: 300, rendering: "smooth" } };
+  assert.deepEqual(changedPanel(p, { data: { mode: "series", names: ["samples", "other"] } }), {
+    type: "image", selector: { names: ["samples", "other"] }, settings: { height: 300, rendering: "smooth" },
+  });
+  assert.deepEqual(changedPanel(p, { data: { mode: "regex", regex: "sam.*" } }).selector, { regex: "sam.*" });
+  const tile = { type: "tile" as const, selector: { names: [] }, settings: { title: "loss · Value", metric: { src: "last(loss)" } } };
+  const moved = changedPanel(tile, { data: { mode: "series", names: ["acc"] } });
+  assert.equal(moved.settings.title, "acc · Value");
+  assert.deepEqual(moved.settings.metric, { src: "last(acc)" });
+});
+
+test("changedPanel: a new type keeps the frame, not the content", () => {
+  const p = { type: "image" as const, selector: { names: ["guide"] }, settings: { title: "Mine", height: 400, rendering: "smooth" } };
+  const c = changedPanel(p, { option: "custom:vmf" });
+  assert.deepEqual(c, { type: "custom", selector: { names: ["guide"] }, settings: { title: "Mine", height: 400, viewer: "vmf" } });
+  const other = changedPanel({ ...c, settings: { ...c.settings, viewer_version: 2, "vs:vmf:e": 1 } }, { option: "custom:ray" });
+  assert.deepEqual(other.settings, { title: "Mine", height: 400, viewer: "ray", "vs:vmf:e": 1 }, "another viewer: settings kept, pin dropped");
+  assert.deepEqual(changedPanel(p, { option: "image" }), { type: "image", selector: p.selector, settings: p.settings }, "the same option changes nothing");
+});
+
+test("changedPanel: title set and cleared", () => {
+  const p = { type: "scalar" as const, selector: { names: ["loss"] }, settings: { title: "old" } };
+  assert.equal(changedPanel(p, { title: " New " }).settings.title, "New");
+  assert.equal("title" in changedPanel(p, { title: "" }).settings, false);
+});

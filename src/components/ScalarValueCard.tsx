@@ -55,7 +55,7 @@ export default function ScalarValueCard({
   const ctl = useCardSettings<BaseCardSettings>(settingsKey, "scalar", VALUE_INSTANCE_DEFAULTS);
   const settings = ctl.value;
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpenSettings ?? false);
   const q = useSequence(runId, metric.name);
   const point = q.data?.points?.[0];
   const value = point?.scalar_value;
