@@ -1,31 +1,5 @@
-import { createContext, useContext, useEffect, useId, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { SETTINGS_TABS, activeTab, showTabBar, visibleTabs, type SettingsTabId } from "./logic";
-
-/**
- * Content the surrounding editor puts first in the Data tab (the card's data
- * and type, in the gear's editor). `claim` tells the editor a tabbed panel
- * showed it, so it does not show it a second time above an untabbed one.
- */
-export const SettingsDataExtraContext = createContext<{ node: ReactNode; claim: () => void } | null>(null);
-
-/**
- * The tab the next settings panel to mount opens on, once: a card type change
- * in the gear's Data tab remounts the card, and its editor reopens where the
- * user was instead of on the new type's usual first tab.
- */
-let pendingTab: SettingsTabId | null = null;
-export function openNextSettingsOn(tab: SettingsTabId): void {
-  pendingTab = tab;
-  // Only the remount right after the change takes it.
-  setTimeout(() => {
-    if (pendingTab === tab) pendingTab = null;
-  }, 2000);
-}
-export function takePendingSettingsTab(): SettingsTabId | null {
-  const t = pendingTab;
-  pendingTab = null;
-  return t;
-}
 
 interface Props {
   /** Each tab's content; a missing / null / false tab is hidden. */
@@ -43,12 +17,9 @@ function hasContent(node: ReactNode): boolean {
  * The fixed Data · Grouping · Display · Expressions tabs of a settings panel.
  * Tabs without content are hidden; with a single tab left there is no bar.
  */
-export default function SettingsTabs({ tabs: given, active, onActiveChange }: Props) {
+export default function SettingsTabs({ tabs, active, onActiveChange }: Props) {
   const id = useId();
-  const extra = useContext(SettingsDataExtraContext);
-  useEffect(() => extra?.claim(), [extra]);
-  const tabs = extra ? { ...given, data: <>{extra.node}{given.data}</> } : given;
-  const [own, setOwn] = useState<SettingsTabId | null>(() => (extra ? takePendingSettingsTab() : null));
+  const [own, setOwn] = useState<SettingsTabId | null>(null);
   const visible = visibleTabs({
     data: hasContent(tabs.data),
     grouping: hasContent(tabs.grouping),

@@ -1,27 +1,18 @@
 /**
  * Panel-level things a workspace offers each card (the card components
  * themselves know nothing about panels): "duplicate" copies the card right
- * after itself, and `editor` lets the card's settings modal (the gear) edit
- * the panel itself — its data, card type and title — beside the
- * card's own settings. The gear is the one editor of a card.
+ * after itself, and `panelId` makes the card's gear open the workspace's
+ * card editor (components/workspace/CardEditor.tsx) on that panel — its
+ * data, card type and title above the card's own settings. The gear is the
+ * one editor of a card.
  */
 
 import { createContext } from "react";
-import type { Panel } from "./doc";
-import type { MetricInfo } from "./layout";
-import type { PanelChange } from "./card-builder";
-
-export interface PanelEditor {
-  panel: Panel;
-  /** The series of the bound runs (what the card can show). */
-  metrics: readonly MetricInfo[];
-  runCount: number;
-  change: (change: PanelChange) => void;
-}
 
 export interface PanelActions {
   onDuplicate?: () => void;
-  editor?: PanelEditor;
+  /** The card's panel (editable: the workspace is not read-only). */
+  panelId?: string;
 }
 
 export const PanelActionsContext = createContext<PanelActions | null>(null);

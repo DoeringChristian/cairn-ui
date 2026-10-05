@@ -106,7 +106,7 @@ export default function ScalarPlotCard({
 }: Props) {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { ctl, effectiveMetrics, allRunIds, multipleRuns } = useCardSeries<ScalarSettings>({
+  const { ctl, effectiveMetrics, allRunIds, multipleRuns, panelSeries } = useCardSeries<ScalarSettings>({
     runId,
     metric,
     extraSeries,
@@ -426,7 +426,8 @@ export default function ScalarPlotCard({
   const panelCtx: ScalarPanelCtx = {
     metricNames,
     chosen,
-    onChosenChange,
+    // A workspace card's series are its panel's data, picked in the card editor's Data.
+    onChosenChange: panelSeries ? undefined : onChosenChange,
     paramKeys,
     multipleRuns,
     lines: series

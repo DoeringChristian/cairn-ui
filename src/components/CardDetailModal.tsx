@@ -14,6 +14,8 @@ interface Props {
   /** The settings column's heading and phone tab (default "Settings"); the card side's phone tab (default "Card"). */
   settingsLabel?: string;
   cardLabel?: string;
+  /** The phone tab it opens on (default the card). */
+  initialTab?: "card" | "settings";
 }
 
 /** Arrow keys belong to a focused control (a slider, a select), not to card navigation. */
@@ -25,9 +27,10 @@ function isControl(t: EventTarget | null): boolean {
 }
 
 /**
- * The card at full size beside its settings panel. Adding cards to a
- * workspace uses the same shell (workspace/AddCardsModal.tsx): the preview
- * where the card is, the add steps where its settings are. Below `md` it fills the
+ * The card at full size beside its settings panel. A workspace's card
+ * editor (workspace/CardEditor.tsx) is this shell too, while adding a card
+ * (previews where the card is, the data and type pickers where its settings
+ * are) and while editing one. Below `md` it fills the
  * screen instead: a sticky header (title, close, Card / Settings tabs) over
  * one of the two panels. The inactive panel is hidden, not unmounted, so the
  * card's content keeps its state across tab switches.
@@ -46,6 +49,7 @@ export default function CardDetailModal({
   onNext,
   settingsLabel = "Settings",
   cardLabel = "Card",
+  initialTab = "card",
 }: Props) {
   useModalBehavior(open, onClose);
   const hasNav = !!onPrev || !!onNext;
@@ -65,9 +69,11 @@ export default function CardDetailModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, hasNav]);
-  const [tab, setTab] = useState<"card" | "settings">("card");
+  const [tab, setTab] = useState<"card" | "settings">(initialTab);
   useEffect(() => {
-    if (open) setTab("card");
+    if (open) setTab(initialTab);
+    // Only on opening: the workspace's card editor stays open from adding a card to editing it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   if (!open) return null;

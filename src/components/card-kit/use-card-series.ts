@@ -4,6 +4,7 @@ import type { ComparisonSeriesRef } from "../../lib/comparisons";
 import type { CardType } from "../../lib/cards/card-spec";
 import { useCardSettings, type CardSettingsKey, type SettingsController } from "../../lib/card-settings";
 import { seriesKey } from "../../lib/series-utils";
+import { useWorkspaceRef } from "../../lib/workspace/ref";
 
 export interface SeriesRef {
   runId?: string;
@@ -18,6 +19,11 @@ export interface CardSeriesResult<TSettings> {
   /** Distinct run ids across effectiveMetrics (always includes runId). */
   allRunIds: string[];
   multipleRuns: boolean;
+  /**
+   * The series are the workspace panel's (its data, edited in the card
+   * editor): nothing in the card adds or removes series.
+   */
+  panelSeries: boolean;
 }
 
 /**
@@ -34,6 +40,9 @@ export interface CardSeriesResult<TSettings> {
  *                                     metrics whose *name* is not among the
  *                                     prop series names, deduped by `seriesKey`.
  *                    (uncontrolled) = settings.metrics as-is.
+ *                    (in a workspace) = props series only: the panel's
+ *                                     data is the one source of the card's
+ *                                     series; settings.metrics is not read.
  *  - identity        = the sorted-join string of extraSeries keys (the
  *                      `JSON.stringify` dep trick is centralised here, once).
  */
@@ -122,8 +131,9 @@ export function useCardSeries<
   const ctl = useCardSettings<TSettings>(settingsKey, type, defaults);
   const settings = ctl.value;
 
+  const panelSeries = useWorkspaceRef() != null;
   const effectiveMetrics = useMemo<SeriesRef[]>(() => {
-    if (!controlledSeries) return settings.metrics;
+    if (!controlledSeries && !panelSeries) return settings.metrics;
     const all: SeriesRef[] = [
       { name: metric.name },
       ...(extraSeries ?? []).map((s) => ({
@@ -131,10 +141,12 @@ export function useCardSeries<
         name: s.name,
       })),
     ];
-    const propsTagNames = new Set(all.map((m) => m.name));
-    for (const sm of settings.metrics) {
-      if (!propsTagNames.has(sm.name)) {
-        all.push(sm);
+    if (!panelSeries) {
+      const propsTagNames = new Set(all.map((m) => m.name));
+      for (const sm of settings.metrics) {
+        if (!propsTagNames.has(sm.name)) {
+          all.push(sm);
+        }
       }
     }
     const seen = new Set<string>();
@@ -145,7 +157,7 @@ export function useCardSeries<
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [controlledSeries, settings.metrics, metric.name, extraSeriesKey]);
+  }, [controlledSeries, panelSeries, settings.metrics, metric.name, extraSeriesKey]);
 
   const allRunIds = useMemo(() => {
     const set = new Set<string>([runId]);
@@ -159,5 +171,6 @@ export function useCardSeries<
     effectiveMetrics,
     allRunIds,
     multipleRuns,
+    panelSeries,
   };
 }

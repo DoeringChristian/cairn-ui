@@ -168,6 +168,27 @@ export function sectionAutoPanels(sections: readonly RenderedSection[], name: st
 }
 
 /**
+ * Add `panels` at the end of section `name` as rendered (`sections`, a
+ * `deriveLayout` result): every rendered section gets its place in the
+ * document, and the section's automatic panels are written first, so the
+ * new cards come after them, where the ghost card was.
+ */
+export function addToSectionOp(sections: readonly RenderedSection[], name: string, panels: readonly Panel[]): WorkspaceOp {
+  return ops.seq(
+    ops.ensureSections(sections.map((s) => s.name)),
+    ops.addPanels(name, sectionAutoPanels(sections, name)),
+    ops.addPanels(name, panels),
+  );
+}
+
+/** `base`, else `base 2`, `base 3`, … — the first not in `taken`. */
+export function uniqueSectionName(base: string, taken: readonly string[]): string {
+  const set = new Set(taken);
+  if (!set.has(base)) return base;
+  for (let i = 2; ; i++) if (!set.has(`${base} ${i}`)) return `${base} ${i}`;
+}
+
+/**
  * Write every automatic panel of `sections` (a `deriveLayout` result) into
  * the document, in rendered order, giving every rendered section its place.
  */

@@ -1,6 +1,7 @@
 import { SERIES_COLORS } from "../lib/plot-utils/types";
 import { seriesKey, seriesLabel } from "../lib/series-utils";
 import SeriesChip, { type SeriesRef } from "./SeriesChip";
+import { useWorkspaceRef } from "../lib/workspace/ref";
 
 type MetricEntry = { runId?: string; name: string };
 
@@ -41,6 +42,8 @@ export default function SeriesChipStrip({
   className,
 }: Props) {
   const multipleRuns = allRunIds.length > 1;
+  // A workspace card's series are its panel's data (the card editor): no removing here.
+  const removable = useWorkspaceRef() == null;
   // A controlled card (its runs set by the comparison) with one series shows
   // a single fixed tag: the card's own metric, already its title. No strip.
   if (controlledSeries && new Set(metrics.map((m) => m.name)).size <= 1) return null;
@@ -75,7 +78,7 @@ export default function SeriesChipStrip({
                   label={tag.name}
                   runId={runId}
                   onRemove={
-                    tags.length > 1
+                    removable && tags.length > 1
                       ? () => onMetricsChange(metrics.filter((x) => x.name !== tag.name))
                       : undefined
                   }
@@ -96,7 +99,7 @@ export default function SeriesChipStrip({
                 label={labelFn(m, runId, multipleRuns, allRunIds)}
                 runId={runId}
                 onRemove={
-                  metrics.length > 1
+                  removable && metrics.length > 1
                     ? () => onMetricsChange(metrics.filter((_, j) => j !== i))
                     : undefined
                 }

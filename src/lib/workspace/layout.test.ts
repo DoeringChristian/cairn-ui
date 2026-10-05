@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EMPTY_WORKSPACE, ops, type Panel } from "./doc.ts";
-import { autoPanelsOp, deriveLayout, panelsToMaterialize, type MetricInfo } from "./layout.ts";
+import { addToSectionOp, autoPanelsOp, deriveLayout, panelsToMaterialize, uniqueSectionName, type MetricInfo } from "./layout.ts";
 
 const M = (name: string, object_type = "scalar", runIds = ["r1"]): MetricInfo => ({ name, object_type, count: 5, runIds });
 const P = (id: string, sel: Panel["selector"], type: Panel["type"] = "scalar", settings = {}): Panel => ({ id, type, selector: sel, settings });
@@ -113,4 +113,30 @@ test("autoPanelsOp off materializes what is shown, so nothing disappears; later 
   const on = autoPanelsOp(true, [])(off);
   assert.ok(shape(deriveLayout(on, later)).some((s) => s.includes("auto:val.new")));
   assert.ok(shape(deriveLayout(on, later)).some((s) => s.includes("auto:brand.new")));
+});
+
+// --- adding cards to a section ---------------------------------------------------
+
+const SM = [M("train.loss"), M("train.acc"), M("val.loss"), M("val.acc"), M("lr"), M("samples", "image")];
+
+test("unique section names", () => {
+  assert.equal(uniqueSectionName("New section", ["a"]), "New section");
+  assert.equal(uniqueSectionName("New section", ["New section", "New section 2"]), "New section 3");
+});
+
+test("adding to a section puts the cards after its automatic ones; other sections keep their place", () => {
+  const doc = ops.addPanels("mine", [P("m", { names: ["lr"] })])(EMPTY_WORKSPACE);
+  const secs = deriveLayout(doc, SM);
+  assert.deepEqual(shape(secs), ["mine:m", "train*:auto:train.acc,auto:train.loss", "val*:auto:val.acc,auto:val.loss", "Media*:auto:samples"]);
+  const next = addToSectionOp(secs, "val", [P("new", { names: ["train.loss", "val.loss"] })])(doc);
+  assert.deepEqual(shape(deriveLayout(next, SM)), [
+    "mine:m",
+    "train:auto:train.acc,auto:train.loss",
+    "val:auto:val.acc,auto:val.loss,new",
+    "Media:auto:samples",
+  ]);
+  // A brand-new (empty) section of the document.
+  const withNew = ops.addSection("New section")(doc);
+  const added = addToSectionOp(deriveLayout(withNew, SM), "New section", [P("n", { names: ["lr"] })])(withNew);
+  assert.deepEqual(shape(deriveLayout(added, SM)).slice(0, 2), ["mine:m", "New section:n"]);
 });

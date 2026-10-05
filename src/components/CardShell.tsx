@@ -10,7 +10,7 @@ import CardErrorBoundary from "./card-kit/CardErrorBoundary";
 import { useCardNavEntry, useOpenOnMount } from "../lib/card-nav";
 import { useReportExporting } from "../lib/reports/export-context";
 import { PanelActionsContext, PanelTitleContext } from "../lib/workspace/panel-actions";
-import { PanelEditorSettings } from "./workspace/PanelEditor";
+import { CardEditorSlots, useCardEditorHost } from "./workspace/CardEditor";
 
 interface Props {
   cardRef: RefObject<HTMLDivElement>;
@@ -104,9 +104,10 @@ export default function CardShell({
   const interact = useInteractState(!!modalOpen);
   // Read-only cards (report viewers, embeds) keep their size.
   const mutable = useContext(CardMutationContext);
-  // A workspace card: its gear also edits the panel (data, type, title, section).
+  // A workspace card opens in the workspace's card editor (data, type, title, then its settings).
   const panelActions = useContext(PanelActionsContext);
-  const editor = mutable ? panelActions?.editor : undefined;
+  const hosted = useCardEditorHost();
+  const panelId = mutable && hosted ? panelActions?.panelId : undefined;
   // ←/→ in the detail modal: close this card's modal, open the neighbour's.
   const nav = useCardNavEntry(onSettings, modalContent !== undefined && !collapsed, !!modalOpen);
   // Mounted by ←/→ from a neighbour's modal (workspace/LazyPanel): open ours.
@@ -157,18 +158,30 @@ export default function CardShell({
         {!collapsed && (
           <>
             <CardErrorBoundary label={shownTitle}>{children}</CardErrorBoundary>
-            {modalContent !== undefined && (
-              <CardDetailModal
-                open={!!modalOpen}
-                onClose={onModalClose ?? (() => {})}
-                title={shownTitle}
-                settingsContent={editor ? <PanelEditorSettings editor={editor} title={shownTitle}>{settingsPanel}</PanelEditorSettings> : settingsPanel}
-                onPrev={step(nav.prev)}
-                onNext={step(nav.next)}
-              >
-                <CardErrorBoundary label={shownTitle}>{modalContent}</CardErrorBoundary>
-              </CardDetailModal>
-            )}
+            {modalContent !== undefined &&
+              (panelId != null ? (
+                <CardEditorSlots
+                  id={panelId}
+                  open={!!modalOpen}
+                  onClose={onModalClose ?? (() => {})}
+                  title={shownTitle}
+                  onPrev={step(nav.prev)}
+                  onNext={step(nav.next)}
+                  content={<CardErrorBoundary label={shownTitle}>{modalContent}</CardErrorBoundary>}
+                  settings={settingsPanel}
+                />
+              ) : (
+                <CardDetailModal
+                  open={!!modalOpen}
+                  onClose={onModalClose ?? (() => {})}
+                  title={shownTitle}
+                  settingsContent={settingsPanel}
+                  onPrev={step(nav.prev)}
+                  onNext={step(nav.next)}
+                >
+                  <CardErrorBoundary label={shownTitle}>{modalContent}</CardErrorBoundary>
+                </CardDetailModal>
+              ))}
           </>
         )}
       </InteractContext.Provider>

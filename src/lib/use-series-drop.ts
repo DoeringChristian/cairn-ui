@@ -9,6 +9,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { CAIRN_SERIES_MIME, type SeriesRef } from "../components/SeriesChip";
+import { useWorkspaceRef } from "./workspace/ref";
 
 type MetricEntry = { runId?: string; name: string };
 
@@ -39,6 +40,8 @@ interface UseSeriesDropOpts {
 }
 
 function useSeriesDrop({ metricsRef, onMetricsChange }: UseSeriesDropOpts) {
+  // A workspace card's series are its panel's data (the card editor): no drops.
+  const accepts = useWorkspaceRef() == null;
   const [highlight, setHighlight] = useState(false);
   // Counter-based enter/leave tracking avoids the flicker caused by
   // entering/leaving child elements within the card.
@@ -88,6 +91,6 @@ function useSeriesDrop({ metricsRef, onMetricsChange }: UseSeriesDropOpts) {
 
   return {
     highlight,
-    dropProps: { onDragOver, onDragEnter, onDragLeave, onDrop },
+    dropProps: accepts ? { onDragOver, onDragEnter, onDragLeave, onDrop } : {},
   };
 }

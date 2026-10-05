@@ -3,12 +3,15 @@ import assert from "node:assert/strict";
 import { EMPTY_WORKSPACE, ops, type Panel } from "./doc.ts";
 import { deriveLayout, type MetricInfo } from "./layout.ts";
 import {
+  captureGroups,
   cardCatalogue,
   compatibleTypes,
   dataLabel,
   dataMetrics,
+  dataReady,
   defaultTitle,
   multiRunSeries,
+  newCards,
   panelData,
   regexMatches,
   seedPanel,
@@ -86,8 +89,8 @@ test("panelData reads a panel back into builder data", () => {
 });
 
 test("labels and default titles", () => {
-  assert.equal(dataLabel({ mode: "series", names: ["a", "b", "c"] }), "a + 2 more");
-  assert.equal(dataLabel({ mode: "regex", regex: "x" }), "/x/");
+  assert.equal(dataLabel({ mode: "series", names: ["a", "b", "c"] }, METRICS), "a + 2 more");
+  assert.equal(dataLabel({ mode: "regex", regex: "x" }, METRICS), "/x/");
   assert.equal(defaultTitle("tile", { mode: "series", names: ["loss"] }), "loss · Value");
   assert.equal(defaultTitle("scalar", { mode: "series", names: ["loss"] }), "");
 });
@@ -220,4 +223,76 @@ test("changedPanel: title set and cleared", () => {
   const p = { type: "scalar" as const, selector: { names: ["loss"] }, settings: { title: "old" } };
   assert.equal(changedPanel(p, { title: " New " }).settings.title, "New");
   assert.equal("title" in changedPanel(p, { title: "" }).settings, false);
+});
+
+// --- groups (adding only) and new cards ---------------------------------------
+
+const GM = [M("train.loss"), M("train.acc"), M("val.loss"), M("val.acc"), M("lr"), M("samples", "image")];
+
+test("capture groups split matches into one card per distinct capture", () => {
+  const r = captureGroups("val\\.(.*)", GM);
+  assert.ok(r.ok);
+  assert.deepEqual(r.groups, [
+    { title: "acc", names: ["val.acc"] },
+    { title: "loss", names: ["val.loss"] },
+  ]);
+});
+
+test("metrics sharing a capture share a card; several groups join the title", () => {
+  const r = captureGroups(".*\\.(loss|acc)", GM);
+  assert.ok(r.ok);
+  assert.deepEqual(r.groups, [
+    { title: "acc", names: ["train.acc", "val.acc"] },
+    { title: "loss", names: ["train.loss", "val.loss"] },
+  ]);
+  const two = captureGroups("(train|val)\\.(loss)", GM);
+  assert.ok(two.ok);
+  assert.deepEqual(two.groups.map((g) => g.title), ["train · loss", "val · loss"]);
+});
+
+test("no groups: every match on one card; the pattern is anchored; bad patterns say so", () => {
+  const r = captureGroups("val\\..*", GM);
+  assert.ok(r.ok);
+  assert.deepEqual(r.groups, [{ title: "val\\..*", names: ["val.acc", "val.loss"] }]);
+  const partial = captureGroups("loss", GM);
+  assert.ok(partial.ok);
+  assert.deepEqual(partial.groups, []);
+  assert.equal(captureGroups("val\\.(", GM).ok, false);
+  assert.equal(captureGroups("  ", GM).ok, false);
+});
+
+test("groups make one card per group and chosen type, titled by the captures", () => {
+  const data = { mode: "groups", regex: "(train|val)\\.loss" } as const;
+  assert.ok(dataReady(data, GM));
+  assert.equal(dataLabel(data, GM), "/(train|val)\\.loss/ → 2 cards");
+  const cards = newCards(data, ["scalar"], GM);
+  assert.deepEqual(cards, [
+    { type: "scalar", selector: { names: ["train.loss"] }, settings: { title: "train" } },
+    { type: "scalar", selector: { names: ["val.loss"] }, settings: { title: "val" } },
+  ]);
+  // Two types: one card of each per group.
+  assert.equal(newCards(data, ["scalar", "tile"], GM).length, 4);
+  assert.equal(dataReady({ mode: "groups", regex: "nope\\.(.*)" }, GM), false);
+});
+
+test("groups offer the types every group's card can take", () => {
+  // One series per group: the one-series cards are fine.
+  const one = compatibleTypes({ mode: "groups", regex: "(train|val)\\.loss" }, GM, 3);
+  assert.deepEqual(types(one), ["scalar", "tile", "bar", "scatter", "parallel", "importance"]);
+  // Two series in a group: the one-series cards are not.
+  const two = compatibleTypes({ mode: "groups", regex: ".*\\.(loss)" }, GM, 3);
+  assert.deepEqual(types(two), ["scalar", "tile(shows one series)", "bar(shows one series)", "scatter", "parallel", "importance(shows one series)"]);
+  // A group mixing kinds has no type.
+  const mixed = compatibleTypes({ mode: "groups", regex: "(lr|samples)" }, GM, 1);
+  assert.deepEqual(types(mixed), []);
+  assert.equal(compatibleTypes({ mode: "groups", regex: "zz(.*)" }, GM, 1).reason, "No series of these runs matches (yet).");
+});
+
+test("plain data: one card per chosen type; multi-run cards are titled by their data", () => {
+  const cards = newCards({ mode: "series", names: ["val.loss"] }, ["scalar", "tile"], GM);
+  assert.deepEqual(cards[0], { type: "scalar", selector: { names: ["val.loss"] }, settings: {} });
+  assert.equal(cards[1]!.type, "tile");
+  assert.equal(cards[1]!.settings.title, "val.loss · Value");
+  const custom = newCards({ mode: "series", names: ["samples"] }, ["custom:viewers/x"], GM);
+  assert.deepEqual(custom, [{ type: "custom", selector: { names: ["samples"] }, settings: { viewer: "viewers/x" } }]);
 });

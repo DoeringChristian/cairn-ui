@@ -35,7 +35,11 @@ export interface ScalarPanelCtx {
   metricNames: string[];
   /** The metrics the card draws (names; every run draws each). */
   chosen: string[];
-  onChosenChange: (names: string[]) => void;
+  /**
+   * Pick the metrics here (reports, embeds). Absent in a workspace: the
+   * panel's data is the card's series, picked in the card editor's Data.
+   */
+  onChosenChange?: (names: string[]) => void;
   paramKeys: string[];
   multipleRuns: boolean;
   /** The drawn lines, for per-series styles. */
@@ -261,7 +265,7 @@ export default function ScalarSettingsPanel({ ctl, ctx, mode }: Props) {
 
   const data = (
     <>
-      {card && ctx && (
+      {card && ctx?.onChosenChange && (
         <SettingsSection name="Series">
           <FieldMultiPicker
             label="Metrics"

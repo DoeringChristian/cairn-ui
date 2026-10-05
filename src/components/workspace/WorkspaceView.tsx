@@ -2,8 +2,9 @@
  * The workspace renderer: one layout document + a bound run set. The run
  * page (`runIds = [the run]`) and every comparison (`runIds = its runs`)
  * render exactly this component — toolbar, sections, panels, adding cards
- * (the one way: the dashed "Add card" ghost card ending each section's grid,
- * components/workspace/AddCardsModal.tsx), "+ New section" below the last
+ * (the one way: the dashed "Add card" ghost card ending each section's grid),
+ * the card editor adding and editing cards (components/workspace/CardEditor.tsx),
+ * "+ New section" below the last
  * section, and Manage cards (components/workspace/ManageCards.tsx) — and
  * differ only in the ref and the runs.
  *
@@ -28,7 +29,7 @@ import SectionBlock from "../SectionBlock";
 import WorkspaceToolbar from "../WorkspaceToolbar";
 import RunColorByProvider from "../RunColorByProvider";
 import PanelCard from "./PanelCard";
-import AddCardsModal from "./AddCardsModal";
+import { CardEditorHost } from "./CardEditor";
 import ManageCards, { type ManageActions } from "./ManageCards";
 import { useWorkspaceMetrics } from "./use-workspace-metrics";
 import { useSession } from "../../api/hooks";
@@ -40,14 +41,15 @@ import { ChartSyncProvider } from "../../lib/chart-sync";
 import { WorkspaceDefaultsProvider } from "../../lib/settings-scope";
 import { claimedMetric, findPanel, newLayoutId, ops, type Panel, type WorkspaceOp } from "../../lib/workspace/doc";
 import {
+  addToSectionOp,
   autoPanelsOp,
   deriveLayout,
+  uniqueSectionName,
   panelsToMaterialize,
   type RenderedPanel,
   type RenderedSection,
 } from "../../lib/workspace/layout";
-import { autoSectionOfPanel, cardCatalogue, changedPanel, seriesShownBy, type CatalogueEntry, type PanelChange } from "../../lib/workspace/card-builder";
-import { addToSectionOp, uniqueSectionName, type NewCard } from "../../lib/workspace/add-cards";
+import { autoSectionOfPanel, cardCatalogue, changedPanel, type CatalogueEntry, type NewCard, type PanelChange } from "../../lib/workspace/card-builder";
 import { compilePanelFilter } from "../../lib/workspace/panel-filter";
 import { moveCardOp, moveSectionOp, reorderBeforeId, type CardSpot } from "../../lib/workspace/reorder";
 import { PanelActionsContext } from "../../lib/workspace/panel-actions";
@@ -170,17 +172,17 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
     [moveCard],
   );
 
-  // --- adding cards (a + of the layout) and Manage cards ----------------------
+  // --- adding cards (the ghost card ending a section) and Manage cards --------
   const [adding, setAdding] = useState<string | null>(null);
   const closeAdd = useCallback(() => setAdding(null), []);
   const [manageOpen, setManageOpen] = useState(false);
   /** A section just made by "+ New section": its name is in edit. */
   const [renaming, setRenaming] = useState<string | null>(null);
 
-  // --- the card editor (the gear) -------------------------------------------
+  // --- the card editor (the gear; components/workspace/CardEditor.tsx) -------
   // A card opens its editor on mount when asked (just added, picked in Manage
-  // cards, or remounted by a type / section change): its key gets a new token
-  // and it mounts with autoOpenSettings.
+  // cards, or remounted by a type change under the open editor): its key gets
+  // a new token and it mounts with autoOpenSettings.
   const [editorTokens, setEditorTokens] = useState<ReadonlyMap<string, number>>(new Map());
   const [openNow, setOpenNow] = useState<string | null>(null);
   const openEditor = useCallback((id: string) => {
@@ -195,8 +197,8 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
 
   /**
    * The new cards go at the end of the section whose ghost card was
-   * pressed, and the first opens in its editor (the gear): the add modal
-   * hands over to it in place. Returns that card's id.
+   * pressed, and the first opens in the card editor that added it (it turns
+   * into that card's editor). Returns that card's id.
    */
   const addCards = useCallback(
     (section: string, cards: NewCard[]): string | undefined => {
@@ -237,10 +239,9 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
         label: change.option ? "Change card type" : change.data ? "Change card data" : "Rename card",
         mergeKey: change.title !== undefined ? `title:${id}` : undefined,
       });
-      // Another card component: it remounts, and its editor reopens.
-      if (next.type !== cur.type) openEditor(id);
+      // Another card component remounts under the open editor, which reopens it (CardEditorHost `reopen`).
     },
-    [panelOf, update, sectionOp, materializeOp, openEditor],
+    [panelOf, update, sectionOp, materializeOp],
   );
   /** Copy a card (an automatic one is written first) right after itself. */
   const duplicate = useCallback(
@@ -278,7 +279,6 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
     }),
     [update, sectionOp, duplicate, openEditor, moveCard, moveSection],
   );
-  const shownBy = useMemo(() => (adding != null ? seriesShownBy(all) : new Map<string, string[]>()), [adding, all]);
   const catalogue = useMemo(() => (manageOpen ? cardCatalogue(doc, metrics) : []), [manageOpen, doc, metrics]);
 
   // --- toolbar ---------------------------------------------------------------
@@ -339,6 +339,17 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
     <ChartSyncProvider enabled={doc.prefs.syncZoom}>
     <RunColorByProvider colorBy={doc.prefs.colorBy} runIds={runIds as string[]}>
     <CardNavProvider>
+    <CardEditorHost
+      enabled={mutable}
+      adding={adding}
+      onAddingDone={closeAdd}
+      sections={all}
+      metrics={metrics}
+      runIds={runIds}
+      onAdd={addCards}
+      onChange={changePanel}
+      reopen={openEditor}
+    >
       <div className="space-y-8" data-cairn-workspace={key}>
         <WorkspaceToolbar
           query={query}
@@ -413,17 +424,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
                     content: (
                       <PanelActionsContext.Provider
                         value={
-                          mutable
-                            ? {
-                                onDuplicate: () => duplicate(rp.panel.id),
-                                editor: {
-                                  panel: rp.panel,
-                                  metrics,
-                                  runCount: runIds.length,
-                                  change: (c) => changePanel(rp.panel.id, c),
-                                },
-                              }
-                            : null
+                          mutable ? { onDuplicate: () => duplicate(rp.panel.id), panelId: rp.panel.id } : null
                         }
                       >
                         <CardErrorBoundary variant="card">
@@ -458,17 +459,6 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
           </button>
         )}
       </div>
-      {adding != null && mutable && (
-        <AddCardsModal
-          key={adding}
-          section={adding}
-          onClose={closeAdd}
-          metrics={metrics}
-          runIds={runIds}
-          shownBy={shownBy}
-          onAdd={(cards) => addCards(adding, cards)}
-        />
-      )}
       {manageOpen && mutable && (
         <ManageCards
           onClose={() => setManageOpen(false)}
@@ -479,6 +469,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
           manage={manage}
         />
       )}
+    </CardEditorHost>
     </CardNavProvider>
     </RunColorByProvider>
     </ChartSyncProvider>
@@ -490,7 +481,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
 
 /**
  * The dashed "Add card" ghost card ending a section's grid — the one way to
- * add a card: it opens the add modal for that section. The size of a small
+ * add a card: it opens the card editor, adding to that section. The size of a small
  * card; a card dragged onto it goes last in the section.
  */
 function AddCardTile({ section, onAdd }: { section: string; onAdd: (section: string) => void }) {

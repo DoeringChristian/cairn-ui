@@ -1,11 +1,13 @@
 /**
- * The card builder (pure): what the builder dialog
- * (components/workspace/CardBuilder.tsx) offers and writes.
+ * The card builder (pure): what the card editor
+ * (components/workspace/CardEditor.tsx — adding a card and the gear alike)
+ * offers and writes.
  *
  * - **Data**: the series of the bound runs, grouped by their automatic
  *   section, each with the cards that already show it; picked by name (one
  *   or several), by an anchored regex, or "whole runs" (no series: the run
- *   comparer, code diff, …).
+ *   comparer, code diff, …). While adding, also **groups**: a regex whose
+ *   capture groups split the matches into one card each (`newCards`).
  * - **Card types**: those that can show the picked data. A per-metric card
  *   shows series of its own kind (`image` series → image card); scalars can
  *   also feed the multi-run cards (value tile, bar, scatter, parallel
@@ -30,11 +32,23 @@ import type { MetricSelector, Panel, WorkspaceDoc } from "./doc.ts";
 import { compileSelectorRegex, deriveLayout, panelLabel, type MetricInfo, type RenderedSection } from "./layout.ts";
 import { compilePanelFilter, matchesAnyPattern } from "./panel-filter.ts";
 
-/** What a card shows. */
-export type BuilderData =
+/** What a card shows (a panel's data, see `panelData`). */
+export type PanelData =
   | { mode: "series"; names: string[] }
   | { mode: "regex"; regex: string }
   | { mode: "runs" };
+
+/**
+ * What the data picker picks: a panel's data, or — only while adding cards,
+ * since it makes several — **groups**: a regex whose capture groups split
+ * the matches into one card each. Metrics whose captures agree share a
+ * card, so `(train|val)\.loss` makes one card per split and
+ * `.*\.(loss|acc)` puts `train.loss` and `val.loss` on one card and the two
+ * accuracies on another; without capture groups every match lands on one
+ * card. Each group's card lists its metrics by name, titled by its captures
+ * joined by " · ".
+ */
+export type CardData = PanelData | { mode: "groups"; regex: string };
 
 // ---------------------------------------------------------------------------
 // Labels
@@ -112,7 +126,7 @@ export function multiRunSeries(type: CardType, settings: Record<string, unknown>
 }
 
 /** The data a panel shows, as the builder edits it. */
-export function panelData(panel: Pick<Panel, "type" | "selector" | "settings">): BuilderData {
+export function panelData(panel: Pick<Panel, "type" | "selector" | "settings">): PanelData {
   if (isMultiRunCardType(panel.type)) {
     const names = multiRunSeries(panel.type, panel.settings);
     return names.length ? { mode: "series", names } : { mode: "runs" };
@@ -131,9 +145,52 @@ export function regexMatches(regex: string, metrics: readonly MetricInfo[]): Reg
   return { ok: true, matches: metrics.filter((m) => re.test(m.name)).sort((a, b) => a.name.localeCompare(b.name)) };
 }
 
-/** The metrics of the bound runs the data resolves to. */
-export function dataMetrics(data: BuilderData, metrics: readonly MetricInfo[]): MetricInfo[] {
+/** One card of a capture-group regex. */
+export interface CardGroup {
+  /** The capture-group values joined by " · ", or the pattern when it has none. */
+  title: string;
+  /** Matched metric names, A–Z. */
+  names: string[];
+}
+
+export type GroupsResult = { ok: true; groups: CardGroup[] } | { ok: false; error: string };
+
+/** Split the metrics an (anchored) regex matches by their capture-group values, groups A–Z by title. */
+export function captureGroups(pattern: string, metrics: readonly Pick<MetricInfo, "name">[]): GroupsResult {
+  const p = pattern.trim();
+  if (!p) return { ok: false, error: "Enter a regular expression" };
+  const re = compileSelectorRegex(p);
+  if (!re) return { ok: false, error: "Not a valid regular expression" };
+  const groups = new Map<string, string[]>();
+  for (const name of [...new Set(metrics.map((m) => m.name))].sort()) {
+    const m = re.exec(name);
+    if (!m) continue;
+    const captures = m.slice(1);
+    const key = captures.length === 0 ? p : captures.map((c) => c ?? "").join(" · ");
+    const list = groups.get(key) ?? [];
+    list.push(name);
+    groups.set(key, list);
+  }
+  return {
+    ok: true,
+    groups: [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([title, names]) => ({ title, names })),
+  };
+}
+
+/** The cards' data: one part per capture group, else the data itself. */
+export function dataParts(data: CardData, metrics: readonly MetricInfo[]): Array<{ data: PanelData; title?: string }> {
+  if (data.mode !== "groups") return [{ data }];
+  const r = captureGroups(data.regex, metrics);
+  return r.ok ? r.groups.map((g) => ({ data: { mode: "series", names: g.names }, title: g.title })) : [];
+}
+
+/** The metrics of the bound runs the data resolves to (every group's, for groups). */
+export function dataMetrics(data: CardData, metrics: readonly MetricInfo[]): MetricInfo[] {
   if (data.mode === "runs") return [];
+  if (data.mode === "groups") {
+    const names = new Set(dataParts(data, metrics).flatMap((p) => (p.data.mode === "series" ? p.data.names : [])));
+    return metrics.filter((m) => names.has(m.name));
+  }
   if (data.mode === "regex") {
     const r = regexMatches(data.regex, metrics);
     return r.ok ? r.matches : [];
@@ -142,21 +199,26 @@ export function dataMetrics(data: BuilderData, metrics: readonly MetricInfo[]): 
   return data.names.map((n) => byName.get(n)).filter((m): m is MetricInfo => m != null);
 }
 
-/** Whether there is anything picked. */
-export function dataReady(data: BuilderData): boolean {
+/** Whether there is anything picked (for groups: at least one group). */
+export function dataReady(data: CardData, metrics: readonly MetricInfo[]): boolean {
   if (data.mode === "runs") return true;
+  if (data.mode === "groups") return dataParts(data, metrics).length > 0;
   if (data.mode === "regex") return compileSelectorRegex(data.regex.trim()) != null && data.regex.trim() !== "";
   return data.names.length > 0;
 }
 
-export function sameData(a: BuilderData, b: BuilderData): boolean {
+export function sameData(a: CardData, b: CardData): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/** A short description of the data: `loss`, `loss + 2 more`, `/val\..*\/`, `whole runs`. */
-export function dataLabel(data: BuilderData): string {
+/** A short description of the data: `loss`, `loss + 2 more`, `/val\..*\/`, `whole runs`, `/(.*)\.loss/ → 3 cards`. */
+export function dataLabel(data: CardData, metrics: readonly MetricInfo[]): string {
   if (data.mode === "runs") return "whole runs";
   if (data.mode === "regex") return `/${data.regex}/`;
+  if (data.mode === "groups") {
+    const n = dataParts(data, metrics).length;
+    return `/${data.regex}/ → ${n} card${n === 1 ? "" : "s"}`;
+  }
   const [first, ...rest] = data.names;
   return rest.length ? `${first} + ${rest.length} more` : (first ?? "");
 }
@@ -283,9 +345,36 @@ export function optionLabel(key: string, viewers: readonly ViewerInfo[] = []): s
  * custom viewer of `viewers` that accepts all of the data (custom data by
  * kind, or a built-in kind it takes over), as `custom:<name>` options.
  * `keepKey` (the option of a card being edited, see `optionKey`) is always offered.
+ * For groups: the options every group's card can take (an option
+ * unavailable for one group is unavailable, with that group's reason).
  */
 export function compatibleTypes(
-  data: BuilderData,
+  data: CardData,
+  metrics: readonly MetricInfo[],
+  runCount: number,
+  keepKey: string | null = null,
+  viewers: readonly ViewerInfo[] = [],
+): CompatResult {
+  if (data.mode !== "groups") return panelCompatibleTypes(data, metrics, runCount, keepKey, viewers);
+  const parts = dataParts(data, metrics);
+  if (parts.length === 0) {
+    const r = captureGroups(data.regex, metrics);
+    return { options: [], reason: r.ok ? "No series of these runs matches (yet)." : r.error };
+  }
+  const results = parts.map((p) => panelCompatibleTypes(p.data, metrics, runCount, null, viewers));
+  const options: TypeOption[] = [];
+  for (const o of results[0]!.options) {
+    const each = results.map((r) => r.options.find((x) => x.key === o.key));
+    if (each.some((x) => x == null)) continue;
+    const unavailable = each.map((x) => x!.unavailable).find((u) => u != null) ?? null;
+    options.push({ ...o, unavailable });
+  }
+  const reason = options.length ? null : (results.find((r) => r.reason)?.reason ?? "No card type fits every group.");
+  return { options, reason };
+}
+
+function panelCompatibleTypes(
+  data: PanelData,
   metrics: readonly MetricInfo[],
   runCount: number,
   keepKey: string | null = null,
@@ -324,7 +413,7 @@ export function compatibleTypes(
     keepKey && !r.options.some((o) => o.key === keepKey) ? { ...r, options: [keepOpt(keepKey), ...r.options] } : r;
 
   if (data.mode === "runs") return withKeep({ options: RUN_TYPES.map((t) => opt(t, null)), reason: null });
-  if (!dataReady(data)) return withKeep({ options: [], reason: "Pick the data first." });
+  if (!dataReady(data, metrics)) return withKeep({ options: [], reason: "Pick the data first." });
 
   const resolved = dataMetrics(data, metrics);
   const kinds = [...new Set(resolved.map((m) => m.object_type))];
@@ -386,7 +475,7 @@ export function multiRunSeed(type: CardType, names: readonly string[]): Record<s
  */
 export function seedPanel(
   type: CardType,
-  data: BuilderData,
+  data: PanelData,
   settings: Record<string, unknown> = {},
 ): { selector: MetricSelector; settings: Record<string, unknown> } {
   if (isMultiRunCardType(type)) {
@@ -400,9 +489,34 @@ export function seedPanel(
 }
 
 /** The title a new card starts with: multi-run cards name their data (`loss · Value`); others none. */
-export function defaultTitle(type: CardType, data: BuilderData): string {
+export function defaultTitle(type: CardType, data: PanelData): string {
   if (!isMultiRunCardType(type) || data.mode !== "series" || data.names.length === 0) return "";
   return `${data.names.join(", ")} · ${builderTypeLabel(type)}`;
+}
+
+/** A card the editor adds (the panel id comes on writing). */
+export interface NewCard {
+  type: CardType;
+  selector: MetricSelector;
+  settings: Record<string, unknown>;
+}
+
+/**
+ * The cards for the data and the chosen options (card types, or
+ * `custom:<viewer>`): one per option, times one per group. A group's card
+ * is titled by its captures; a multi-run card by its data (`loss · Value`).
+ */
+export function newCards(data: CardData, optionKeys: readonly string[], metrics: readonly MetricInfo[]): NewCard[] {
+  const out: NewCard[] = [];
+  for (const part of dataParts(data, metrics)) {
+    for (const key of optionKeys) {
+      const { type, seed } = parseOptionKey(key);
+      const title = part.title ?? defaultTitle(type, part.data);
+      const seeded = seedPanel(type, part.data, { ...(title ? { title } : {}), ...seed });
+      out.push({ type, selector: seeded.selector, settings: seeded.settings });
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -481,7 +595,7 @@ const pickKeys = (o: Record<string, unknown>, keys: readonly string[]) =>
   Object.fromEntries(Object.entries(o).filter(([k]) => keys.includes(k)));
 
 /** A title that is still its card's default (`loss · Value`) follows the data; one the user wrote stays. */
-export function followTitle(type: CardType, settings: Record<string, unknown>, data: BuilderData): Record<string, unknown> {
+export function followTitle(type: CardType, settings: Record<string, unknown>, data: PanelData): Record<string, unknown> {
   const was = defaultTitle(type, panelData({ type, selector: { names: [] }, settings }));
   if (!was || settings.title !== was) return settings;
   const next = { ...settings };
@@ -493,7 +607,7 @@ export function followTitle(type: CardType, settings: Record<string, unknown>, d
 
 /** What the gear's editor changes on a card: its data, its type (an option key), its title. */
 export interface PanelChange {
-  data?: BuilderData;
+  data?: PanelData;
   /** A card type, or `custom:<viewer>` (see optionKey). */
   option?: string;
   /** "" clears the title (the card is named by its data again). */
