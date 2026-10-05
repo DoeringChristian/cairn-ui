@@ -33,7 +33,8 @@ export const instanceDefaults = steppedMediaInstanceDefaults as (seed: { name: s
 
 export const meta: CardSettingsMeta<CustomSettings> = {
   builtin,
-  // The viewer and its settings carry over as section/workspace defaults like any card setting.
-  cascadeKeys: ["viewer", "viewerSettings", ...STEPPED_MEDIA_CASCADE],
+  // Viewer settings take section/workspace defaults (keys a viewer does not know are ignored);
+  // the viewer itself is per card (different kinds want different viewers).
+  cascadeKeys: ["viewerSettings", ...STEPPED_MEDIA_CASCADE],
   tabs: [],
 };
