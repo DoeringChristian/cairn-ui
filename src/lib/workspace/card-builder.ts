@@ -21,7 +21,6 @@
 
 import type { ViewerInfo } from "../../api/types.ts";
 import type { CardType } from "../cards/card-spec.ts";
-import { VIEWER_ICONS } from "../custom/manifest.ts";
 import { viewersFor } from "../custom/viewers.ts";
 import { isMultiRunCardType, minRunsFor } from "../comparisons/types.ts";
 import { deps, parse } from "../expr/index.ts";
@@ -307,7 +306,8 @@ export function compatibleTypes(
     key: `custom:${v.name}`,
     type: "custom",
     seed: { viewer: v.name },
-    ...(v.icon && (VIEWER_ICONS as readonly string[]).includes(v.icon) ? { icon: v.icon } : {}),
+    // The server checks the name against its icon list; here only that it is a plain name.
+    ...(v.icon && /^[a-z0-9-]+$/.test(v.icon) ? { icon: v.icon } : {}),
     label: v.title || v.name,
     hint: `${v.description ? `${v.description} ` : ""}Custom viewer ${v.name}${v.dev ? " (live dev source)" : v.version != null ? ` v${v.version}` : ""}.`,
     unavailable: v.error ? `the viewer is broken: ${v.error}` : null,
