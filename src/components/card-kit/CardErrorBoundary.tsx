@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { forceReload, isStaleChunkError, reloadForStaleBuild } from "../../lib/stale-build";
 
 interface Props {
   children: ReactNode;
@@ -16,7 +17,9 @@ interface State {
  * Keeps one card's render error inside that card. Without it, an exception
  * from a chart library (e.g. Plotly's "Something went wrong with axis
  * scaling") reaches the route's error boundary and blanks the whole page.
- * "Retry" re-mounts the children.
+ * "Retry" re-mounts the children. A code chunk of an older build that no
+ * longer exists (the server switched to a newer UI build) reloads the page
+ * once, else offers "Reload" (lib/stale-build.ts).
  */
 export default class CardErrorBoundary extends Component<Props, State> {
   state: State = { error: null };
@@ -26,13 +29,22 @@ export default class CardErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    // The page's build was replaced on the server: reload once into the new one.
+    if (isStaleChunkError(error) && reloadForStaleBuild()) return;
     console.error(`[cairn] card error${this.props.label ? ` (${this.props.label})` : ""}`, error, info.componentStack);
   }
 
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
-    const body = (
+    const body = isStaleChunkError(error) ? (
+      <div role="alert" className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-3 text-center text-xs text-fg-muted">
+        <span>A newer version of cairn is available.</span>
+        <button type="button" className="rounded border border-border px-2 py-0.5 text-fg hover:bg-bg-hover" onClick={forceReload}>
+          Reload
+        </button>
+      </div>
+    ) : (
       <div role="alert" className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-3 text-center text-xs text-fg-muted">
         <span className="text-status-failed">This card failed to render.</span>
         <span className="mono max-w-full break-words text-fg-subtle">{error.message}</span>

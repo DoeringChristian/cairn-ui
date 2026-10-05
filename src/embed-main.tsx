@@ -32,7 +32,10 @@ import type { CardSpec } from "./lib/cards/card-spec";
 import { CardMutationContext, saveCardOverrides, type CardOverrides } from "./lib/card-settings";
 import { CascadeScopeContext } from "./lib/settings-scope";
 import { useEmitAutoHeight } from "./lib/use-emit-auto-height";
+import { installStaleBuildReload } from "./lib/stale-build";
 import "./index.css";
+
+installStaleBuildReload();
 
 const queryClient = new QueryClient({
   defaultOptions: {

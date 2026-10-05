@@ -1,1 +1,0 @@
-import{j as s,cf as i,dT as n,dV as o}from"./index-D_JQEjb4.js";function u({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{values:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{u as default};
