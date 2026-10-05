@@ -147,6 +147,9 @@ export default function ViewerFrame({
   const [error, setError] = useState<FrameError | null>(viewer.error ? { message: viewer.error } : null);
   // A budgeted frame waits for the budget to let it in.
   const [live, setLive] = useState(!webgl);
+  /** `live` as of the budget's last call (a capture turn may start between a setLive and its render). */
+  const liveNow = useRef(!webgl);
+  const budgetCalls = useRef(0);
   /** The last picture of the frame, and what it showed (data, step, settings). */
   const [snap, setSnap] = useState<{ url: string; key: string } | null>(null);
   /** Running briefly (paused by the budget) to take a snapshot. */
@@ -405,7 +408,8 @@ export default function ViewerFrame({
     if (!capturingRef.current && !done) return;
     capturingRef.current = false;
     setCapturing(false);
-    setLoaded(false);
+    // A frame the budget made live meanwhile keeps running (and stays loaded).
+    if (!liveNow.current) setLoaded(false);
     done?.();
   };
 
@@ -431,6 +435,8 @@ export default function ViewerFrame({
     if (!webgl || !el) return;
     const r = glBudget.register(el, {
       activate: () => {
+        budgetCalls.current++;
+        liveNow.current = true;
         // Live now: a capture turn in progress is over (its frame stays as the live one).
         const done = captureDone.current;
         captureDone.current = null;
@@ -446,9 +452,13 @@ export default function ViewerFrame({
         setLive(true);
       },
       deactivate: async () => {
+        const call = ++budgetCalls.current;
         const key = dataKeyRef.current;
         const url = await requestSnapshot();
         if (url) setSnap({ url, key });
+        // Activated again while the snapshot was taken: stay live.
+        if (call !== budgetCalls.current) return;
+        liveNow.current = false;
         setLive(false);
         setLoaded(false);
       },
@@ -480,6 +490,8 @@ export default function ViewerFrame({
   useEffect(() => {
     if (!needsCapture) return;
     const cancel = captures.request(frameId, (done) => {
+      // Live by now (the budget let it in): no turn needed.
+      if (liveNow.current) return done();
       captureDone.current = done;
       capturingRef.current = true;
       setLoaded(false);
