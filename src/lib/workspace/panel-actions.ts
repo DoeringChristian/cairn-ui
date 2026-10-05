@@ -2,7 +2,7 @@
  * Panel-level things a workspace offers each card (the card components
  * themselves know nothing about panels): "duplicate" copies the card right
  * after itself, and `editor` lets the card's settings modal (the gear) edit
- * the panel itself — its data, card type, title and section — beside the
+ * the panel itself — its data, card type and title — beside the
  * card's own settings. The gear is the one editor of a card.
  */
 
@@ -13,14 +13,10 @@ import type { PanelChange } from "./card-builder";
 
 export interface PanelEditor {
   panel: Panel;
-  section: string;
-  sections: readonly string[];
   /** The series of the bound runs (what the card can show). */
   metrics: readonly MetricInfo[];
   runCount: number;
   change: (change: PanelChange) => void;
-  /** Move the card to a section (created when new). */
-  moveTo: (section: string) => void;
 }
 
 export interface PanelActions {
@@ -37,9 +33,3 @@ export const PanelActionsContext = createContext<PanelActions | null>(null);
  */
 export const PanelTitleContext = createContext<string | null>(null);
 
-/**
- * Where a card renders its settings panel instead of its detail modal: the
- * card builder's configure step provides an element, and `CardShell`
- * portals the card's own settings panel (the one its gear opens) into it.
- */
-export const CardSettingsSlotContext = createContext<HTMLElement | null>(null);

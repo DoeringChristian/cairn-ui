@@ -1,5 +1,4 @@
 import { useContext, useEffect, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { createPortal } from "react-dom";
 import { CardMutationContext, resolveCardHeight, type SetOptions } from "../lib/card-settings";
 import { InteractContext, useInteractState } from "../lib/use-interact";
 import { cardMinSize } from "./card-kit/card-min-sizes";
@@ -10,7 +9,7 @@ import CardDetailModal from "./CardDetailModal";
 import CardErrorBoundary from "./card-kit/CardErrorBoundary";
 import { useCardNavEntry, useOpenOnMount } from "../lib/card-nav";
 import { useReportExporting } from "../lib/reports/export-context";
-import { CardSettingsSlotContext, PanelActionsContext, PanelTitleContext } from "../lib/workspace/panel-actions";
+import { PanelActionsContext, PanelTitleContext } from "../lib/workspace/panel-actions";
 import { PanelEditorSettings } from "./workspace/PanelEditor";
 
 interface Props {
@@ -103,8 +102,6 @@ export default function CardShell({
   // Tap-to-interact (touch devices): content that captures gestures registers
   // through `useInteract`; the detail modal is always interactive.
   const interact = useInteractState(!!modalOpen);
-  // The card builder shows this card's settings panel beside its preview.
-  const settingsSlot = useContext(CardSettingsSlotContext);
   // Read-only cards (report viewers, embeds) keep their size.
   const mutable = useContext(CardMutationContext);
   // A workspace card: its gear also edits the panel (data, type, title, section).
@@ -160,7 +157,7 @@ export default function CardShell({
         {!collapsed && (
           <>
             <CardErrorBoundary label={shownTitle}>{children}</CardErrorBoundary>
-            {modalContent !== undefined && !settingsSlot && (
+            {modalContent !== undefined && (
               <CardDetailModal
                 open={!!modalOpen}
                 onClose={onModalClose ?? (() => {})}
@@ -175,8 +172,7 @@ export default function CardShell({
           </>
         )}
       </InteractContext.Provider>
-      {settingsSlot && settingsPanel != null && createPortal(settingsPanel, settingsSlot)}
-      {mutable && !settingsSlot && (
+      {mutable && (
         <CardResizeHandle
           onHeightChange={(h) => updateSettings({ height: h }, { mergeKey: "resize", label: "Resize card" })}
           colSpan={settings.colSpan ?? 3}

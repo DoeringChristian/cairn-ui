@@ -1,9 +1,11 @@
 /**
  * The workspace renderer: one layout document + a bound run set. The run
  * page (`runIds = [the run]`) and every comparison (`runIds = its runs`)
- * render exactly this component — toolbar, sections, panels, the card
- * builder (add / edit / manage cards, components/workspace/CardBuilder.tsx)
- * — and differ only in the ref and the runs.
+ * render exactly this component — toolbar, sections, panels, adding cards
+ * (the + of a section header, the "+ Add card" tile ending its grid, and
+ * "+ New section" below the last one; components/workspace/AddCardsPanel.tsx)
+ * and Manage cards (components/workspace/ManageCards.tsx) — and differ only
+ * in the ref and the runs.
  *
  * Every edit is an op on the workspace document (lib/workspace/doc.ts), so
  * it carries over to every run the workspace is bound to. Touching an
@@ -14,7 +16,7 @@
  * Read-only surfaces (`CardMutationContext` false) render the same page;
  * `useWorkspace(...).update` is then a no-op and card settings go to the
  * session layer (lib/card-settings.ts), so a viewer can explore without
- * persisting anything. Viewers get no card builder, manage view or
+ * persisting anything. Viewers get no + affordances, manage view or
  * duplicate: those only edit the layout.
  */
 
@@ -26,7 +28,8 @@ import SectionBlock from "../SectionBlock";
 import WorkspaceToolbar from "../WorkspaceToolbar";
 import RunColorByProvider from "../RunColorByProvider";
 import PanelCard from "./PanelCard";
-import CardBuilder, { DEFAULT_NEW_SECTION, type BuilderCard, type BuilderMode, type ManageActions } from "./CardBuilder";
+import AddCardsPanel from "./AddCardsPanel";
+import ManageCards, { type ManageActions } from "./ManageCards";
 import { useWorkspaceMetrics } from "./use-workspace-metrics";
 import { useSession } from "../../api/hooks";
 import { CardMutationContext, CardSettingsStoreContext, type CardOverrides, type CardSettingsKey, type CardSettingsStore } from "../../lib/card-settings";
@@ -40,21 +43,21 @@ import {
   autoPanelsOp,
   deriveLayout,
   panelsToMaterialize,
-  sectionAutoPanels,
   type RenderedPanel,
   type RenderedSection,
 } from "../../lib/workspace/layout";
 import { autoSectionOfPanel, cardCatalogue, changedPanel, seriesShownBy, type CatalogueEntry, type PanelChange } from "../../lib/workspace/card-builder";
+import { addToSectionOp, uniqueSectionName, type NewCard } from "../../lib/workspace/add-cards";
 import { compilePanelFilter } from "../../lib/workspace/panel-filter";
-import type { BuiltPanel } from "../../lib/workspace/panel-builder";
+import { moveCardOp, moveSectionOp, reorderBeforeId, type CardSpot } from "../../lib/workspace/reorder";
 import { PanelActionsContext } from "../../lib/workspace/panel-actions";
 import { refKey, WorkspaceRefContext, type WorkspaceRef } from "../../lib/workspace/ref";
 import { sendCardsToReport } from "../../lib/workspace/send-to-report";
 import { getWorkspace, subscribeWorkspace } from "../../lib/workspace/store";
 import { useWorkspace } from "../../lib/workspace/use-workspace";
 
-/** Where the quick panel builder puts its panels. */
-export const BUILDER_SECTION = DEFAULT_NEW_SECTION;
+/** What "+ New section" names a section (made unique: `New section 2`, …). */
+const NEW_SECTION_NAME = "New section";
 
 const EMPTY_SETTINGS: CardOverrides = Object.freeze({}) as CardOverrides;
 const identity: WorkspaceOp = (d) => d;
@@ -101,6 +104,8 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
   const shown = useMemo(() => (query.trim() ? deriveLayout(doc, metrics, { query }) : all), [doc, metrics, query, all]);
   const allRef = useRef(all);
   allRef.current = all;
+  const metricsRef = useRef(metrics);
+  metricsRef.current = metrics;
 
   /** Write an automatic panel (and those before it) so it can be edited. Computed now: deterministic on replay. */
   const materializeOp = useCallback((id: string): WorkspaceOp => {
@@ -136,34 +141,38 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
     [update],
   );
 
+  // --- moving cards and sections (drag & drop, Alt+↑/↓; lib/workspace/reorder.ts) --
+  /** Everything the page would render, hide patterns ignored: a move materializes those cards too. */
+  const unhidden = useCallback(() => deriveLayout(getWorkspace(key), metricsRef.current, { hidePatterns: false }), [key]);
+  const moveCard = useCallback(
+    (id: string, spot: CardSpot) => update(ops.seq(materializeOp(id), moveCardOp(unhidden(), id, spot)), { label: "Move card" }),
+    [update, materializeOp, unhidden],
+  );
+  const moveSection = useCallback(
+    (name: string, beforeName: string | null) =>
+      update(moveSectionOp(allRef.current.map((s) => s.name), name, beforeName), { label: `Move section ${name}` }),
+    [update],
+  );
+  /** A card dropped on card `toId` of section `target` takes its place. */
   const reorder = useCallback(
     (target: string, fromId: string, toId: string) => {
-      const secs = allRef.current;
-      const list = secs.find((s) => s.name === target)?.panels.map((p) => p.panel.id) ?? [];
-      const toIdx = list.indexOf(toId);
-      if (toIdx < 0) return;
-      const next = list.filter((id) => id !== fromId);
-      next.splice(toIdx, 0, fromId);
-      const beforeId = next[toIdx + 1] ?? null;
-      const source = secs.find((s) => s.panels.some((p) => p.panel.id === fromId));
-      update(
-        sectionOp(
-          ops.seq(
-            ops.addPanels(target, sectionAutoPanels(secs, target)),
-            source && source.name !== target ? ops.addPanels(source.name, sectionAutoPanels(secs, source.name)) : identity,
-            ops.movePanel(fromId, target, beforeId),
-          ),
-        ),
-        { label: "Move panel" },
-      );
+      const ids = allRef.current.find((s) => s.name === target)?.panels.map((p) => p.panel.id) ?? [];
+      if (!ids.includes(toId)) return;
+      moveCard(fromId, { section: target, beforeId: reorderBeforeId(ids, fromId, toId) });
     },
-    [update, sectionOp],
+    [moveCard],
   );
 
-  // --- the card builder -------------------------------------------------------
-  const metricsRef = useRef(metrics);
-  metricsRef.current = metrics;
-  const [builder, setBuilder] = useState<BuilderMode | null>(null);
+  // --- adding cards (a + of the layout) and Manage cards ----------------------
+  const [adding, setAdding] = useState<string | null>(null);
+  const addAnchor = useRef<HTMLElement | null>(null);
+  const openAdd = useCallback((section: string, anchor: HTMLElement) => {
+    addAnchor.current = anchor;
+    setAdding((cur) => (cur === section ? null : section));
+  }, []);
+  const [manageOpen, setManageOpen] = useState(false);
+  /** A section just made by "+ New section": its name is in edit. */
+  const [renaming, setRenaming] = useState<string | null>(null);
 
   // --- the card editor (the gear) -------------------------------------------
   // A card opens its editor on mount when asked (just added, picked in Manage
@@ -181,13 +190,43 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
     return () => clearTimeout(t);
   }, [openNow, editorTokens]);
 
+  /**
+   * The new cards go at the end of the section whose + was pressed. One new
+   * card opens in its editor (the gear); several (a card per group, or
+   * several types) stay on the page, the first scrolled into view.
+   */
   const addCards = useCallback(
-    (section: string, cards: BuilderCard[]) => {
+    (section: string, cards: NewCard[]) => {
       const panels: Panel[] = cards.map((c) => ({ id: newLayoutId("p_"), ...c }));
-      update(sectionOp(ops.addPanels(section, panels)), { label: `Add ${panels.length} card${panels.length === 1 ? "" : "s"}` });
-      if (panels[0]) openEditor(panels[0].id);
+      if (panels.length === 0) return;
+      update(addToSectionOp(allRef.current, section, panels), { label: `Add ${panels.length} card${panels.length === 1 ? "" : "s"}` });
+      setAdding(null);
+      if (panels.length === 1) openEditor(panels[0]!.id);
+      else setScrollTo(panels[0]!.id);
     },
-    [update, sectionOp, openEditor],
+    [update, openEditor],
+  );
+  const [scrollTo, setScrollTo] = useState<string | null>(null);
+  useEffect(() => {
+    if (!scrollTo) return;
+    const el = document.querySelector(`[data-card-key="${CSS.escape(scrollTo)}"] [data-cairn-card]`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    setScrollTo(null);
+  }, [scrollTo, doc]);
+
+  const addSection = useCallback(() => {
+    const name = uniqueSectionName(NEW_SECTION_NAME, allRef.current.map((s) => s.name));
+    update(sectionOp(ops.addSection(name)), { label: `Add section ${name}` });
+    setRenaming(name);
+  }, [update, sectionOp]);
+  /** The new section's name edit ended: Escape takes back a section still empty and unnamed. */
+  const endNewSectionRename = useCallback(
+    (name: string, cancelled: boolean) => {
+      setRenaming(null);
+      const s = getWorkspace(key).sections.find((x) => x.name === name);
+      if (cancelled && s && s.panels.length === 0) update(ops.removeSection(name), { noUndo: true });
+    },
+    [key, update],
   );
   const panelOf = useCallback(
     (id: string): Panel | undefined =>
@@ -207,13 +246,6 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
       if (next.type !== cur.type) openEditor(id);
     },
     [panelOf, update, sectionOp, materializeOp, openEditor],
-  );
-  const movePanelTo = useCallback(
-    (id: string, section: string) => {
-      update(sectionOp(ops.seq(materializeOp(id), ops.ensureSections([section]), ops.movePanel(id, section, null))), { label: `Move card to ${section}` });
-      openEditor(id);
-    },
-    [update, sectionOp, materializeOp, openEditor],
   );
   /** Copy a card (an automatic one is written first) right after itself. */
   const duplicate = useCallback(
@@ -241,13 +273,18 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
       duplicate: (e: CatalogueEntry) => duplicate(e.panel.id),
       remove: (e: CatalogueEntry) =>
         update(ops.removePanel(e.panel.id, claimedMetric(e.panel)), { label: `Delete ${e.label}` }),
-      move: (e: CatalogueEntry, to: string) =>
-        update(sectionOp(ops.seq(materializeOp(e.panel.id), ops.movePanel(e.panel.id, to, null))), { label: `Move ${e.label}` }),
+      edit: (e: CatalogueEntry) => {
+        setManageOpen(false);
+        if (e.status === "hidden") update(ops.setPanelHidden(e.panel.id, false), { label: `Show ${e.label}` });
+        openEditor(e.panel.id);
+      },
+      moveCard,
+      moveSection,
     }),
-    [update, sectionOp, materializeOp, duplicate],
+    [update, sectionOp, duplicate, openEditor, moveCard, moveSection],
   );
-  const shownBy = useMemo(() => seriesShownBy(all), [all]);
-  const catalogue = useMemo(() => (builder?.kind === "manage" ? cardCatalogue(doc, metrics) : []), [builder, doc, metrics]);
+  const shownBy = useMemo(() => (adding != null ? seriesShownBy(all) : new Map<string, string[]>()), [adding, all]);
+  const catalogue = useMemo(() => (manageOpen ? cardCatalogue(doc, metrics) : []), [manageOpen, doc, metrics]);
 
   // --- toolbar ---------------------------------------------------------------
   const matchCount = useMemo(() => {
@@ -255,21 +292,6 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
     const f = compilePanelFilter(query);
     return all.reduce((n, s) => n + s.panels.filter((p) => f.test(p.label)).length, 0);
   }, [all, query]);
-  const scalarNames = useMemo(() => metrics.filter((m) => m.object_type === "scalar").map((m) => m.name), [metrics]);
-  const buildPanels = useCallback(
-    (built: BuiltPanel[]) => {
-      const panels: Panel[] = built.map((p) => ({
-        id: newLayoutId("p_"),
-        type: "scalar",
-        selector: { names: p.metrics },
-        settings: { title: p.title },
-      }));
-      update(sectionOp(ops.seq(ops.addSection(BUILDER_SECTION, 0), ops.addPanels(BUILDER_SECTION, panels))), {
-        label: `Add ${panels.length} panel(s)`,
-      });
-    },
-    [update, sectionOp],
-  );
 
   const sendSection = useCallback(
     async (section: RenderedSection) => {
@@ -327,11 +349,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
           query={query}
           onQueryChange={setQuery}
           matchCount={matchCount}
-          builderMetrics={scalarNames}
-          onBuildPanels={buildPanels}
-          onAddSection={(name) => update(sectionOp(ops.addSection(name)), { label: `Add section ${name}` })}
-          onAddCards={() => setBuilder({ kind: "add", section: null })}
-          onManageCards={() => setBuilder({ kind: "manage" })}
+          onManageCards={() => setManageOpen(true)}
           onToggleAutoPanels={toggleAutoPanels}
           viewDoc={viewDoc}
           actions={toolbarActions}
@@ -340,7 +358,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
           <div className="flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => setBuilder({ kind: "manage" })}
+              onClick={() => setManageOpen(true)}
               disabled={!mutable}
               className="text-xs text-fg-muted underline underline-offset-2 hover:text-fg disabled:no-underline"
               title="Unlisted metrics are off: these series have no card"
@@ -370,6 +388,8 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
               first={i === 0}
               last={i === shown.length - 1}
               cardTypes={cardTypes}
+              renameOnMount={mutable && renaming === section.name}
+              onRenameEnd={renaming === section.name ? (cancelled) => endNewSectionRename(section.name, cancelled) : undefined}
               onToggleCollapse={() =>
                 update(sectionOp(ops.setSectionCollapsed(section.name, !section.collapsed)), {
                   label: section.collapsed ? "Expand section" : "Collapse section",
@@ -382,7 +402,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
               }
               onMove={(delta) => update(sectionOp(ops.moveSection(section.name, delta)), { label: "Move section" })}
               onRename={(name) => update(sectionOp(ops.renameSection(section.name, name)), { label: `Rename section to ${name}` })}
-              onAddPanel={mutable ? () => setBuilder({ kind: "add", section: section.name }) : undefined}
+              onAddPanel={mutable ? (anchor) => openAdd(section.name, anchor) : undefined}
               onSendToReport={section.panels.length > 0 ? () => sendSection(section) : undefined}
               onDelete={
                 section.inDoc && (full?.panels.length ?? 0) === 0
@@ -390,10 +410,8 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
                   : undefined
               }
             >
-              {section.panels.length === 0 ? (
-                <p className="text-sm text-fg-muted">
-                  No panels{mutable ? " — use + to add one, or drag a panel here." : "."}
-                </p>
+              {section.panels.length === 0 && !mutable ? (
+                <p className="text-sm text-fg-muted">No panels.</p>
               ) : (
                 <ReorderableCardGrid
                   cards={section.panels.map((rp) => ({
@@ -406,12 +424,9 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
                                 onDuplicate: () => duplicate(rp.panel.id),
                                 editor: {
                                   panel: rp.panel,
-                                  section: section.name,
-                                  sections: sectionNames,
                                   metrics,
                                   runCount: runIds.length,
                                   change: (c) => changePanel(rp.panel.id, c),
-                                  moveTo: (s) => movePanelTo(rp.panel.id, s),
                                 },
                               }
                             : null
@@ -431,29 +446,43 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
                     ),
                   }))}
                   onReorder={mutable && !section.sort ? (from, to) => reorder(section.name, from, to) : undefined}
+                  onDropEnd={mutable ? (from) => moveCard(from, { section: section.name, beforeId: null }) : undefined}
+                  trailing={mutable ? <AddCardTile section={section.name} onAdd={openAdd} /> : undefined}
                 />
               )}
             </SectionBlock>
           );
         })}
+        {mutable && !query.trim() && (
+          <button
+            type="button"
+            onClick={addSection}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border py-2 text-sm text-fg-muted transition-colors hover:border-accent hover:text-fg focus-visible:border-accent focus-visible:text-fg touch:min-h-10"
+            data-testid="add-section"
+          >
+            <i className="fa-solid fa-plus" aria-hidden="true" /> New section
+          </button>
+        )}
       </div>
-      {builder && mutable && (
-        <CardBuilder
-          mode={builder}
-          onModeChange={setBuilder}
+      {adding != null && mutable && (
+        <AddCardsPanel
+          key={adding}
+          section={adding}
+          anchorRef={addAnchor}
+          onClose={() => setAdding(null)}
           metrics={metrics}
           runIds={runIds}
           shownBy={shownBy}
-          sections={sectionNames}
+          onAdd={(cards) => addCards(adding, cards)}
+        />
+      )}
+      {manageOpen && mutable && (
+        <ManageCards
+          onClose={() => setManageOpen(false)}
           catalogue={catalogue}
+          sections={sectionNames}
           autoPanels={doc.autoPanels}
           onToggleAutoPanels={toggleAutoPanels}
-          onAdd={addCards}
-          onEditCard={(e) => {
-            setBuilder(null);
-            if (e.status === "hidden") update(ops.setPanelHidden(e.panel.id, false), { label: `Show ${e.label}` });
-            openEditor(e.panel.id);
-          }}
           manage={manage}
         />
       )}
@@ -463,5 +492,30 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
     </WorkspaceDefaultsProvider>
     </CardSettingsStoreContext.Provider>
     </WorkspaceRefContext.Provider>
+  );
+}
+
+/**
+ * The dashed tile ending a section's grid: adds cards to that section, from
+ * a panel anchored at the tile. The size of a small card; a card dragged
+ * onto it goes last in the section.
+ */
+function AddCardTile({ section, onAdd }: { section: string; onAdd: (section: string, anchor: HTMLElement) => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={() => ref.current && onAdd(section, ref.current)}
+      className="flex min-h-[170px] flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border text-sm text-fg-muted transition-colors hover:border-accent hover:text-fg focus-visible:border-accent focus-visible:text-fg"
+      style={{ gridColumn: "span 1" }}
+      aria-label={`Add cards to ${section}`}
+      title="Add cards to this section"
+      data-cairn-drop-end
+      data-testid="add-card-tile"
+    >
+      <i className="fa-solid fa-plus text-lg" aria-hidden="true" />
+      Add card
+    </button>
   );
 }

@@ -2,8 +2,9 @@
  * The workspace half of a card's settings modal (the gear): what the card
  * shows and where it lives, beside the card's own settings.
  *
- * - `PanelEditorHeader` (top of the settings column): the card's title and
- *   section.
+ * - `PanelEditorHeader` (top of the settings column): the card's title. Its
+ *   section is not edited here: cards move between sections by drag & drop
+ *   (the workspace grid, Manage cards).
  * - `PanelEditorData` (first in the Data tab): the card type (every
  *   compatible type, custom viewers included) and its data — picked series,
  *   an anchored regex with a live preview of its matches, or whole runs.
@@ -29,11 +30,7 @@ import type { PanelEditor } from "../../lib/workspace/panel-actions";
 import { Segmented, Select, SettingRow, SettingsSection, TextInput } from "../settings/palette";
 import { SettingsDataExtraContext } from "../settings/palette/SettingsTabs";
 
-const NEW_SECTION = "\u0000new";
-
 export function PanelEditorHeader({ editor, title }: { editor: PanelEditor; title: string }) {
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState("");
   const custom = typeof editor.panel.settings.title === "string" ? editor.panel.settings.title : "";
   return (
     <div className="mb-3 space-y-2 border-b border-border pb-3" data-testid="panel-editor-header">
@@ -45,33 +42,6 @@ export function PanelEditorHeader({ editor, title }: { editor: PanelEditor; titl
         overridden={custom !== ""}
         onReset={() => editor.change({ title: "" })}
       />
-      <Select
-        label="Section"
-        value={adding ? NEW_SECTION : editor.section}
-        onChange={(v) => {
-          if (v === NEW_SECTION) setAdding(true);
-          else {
-            setAdding(false);
-            editor.moveTo(v);
-          }
-        }}
-        options={[...editor.sections.map((s) => ({ value: s, label: s })), { value: NEW_SECTION, label: "New section…" }]}
-      />
-      {adding && (
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!draft.trim()) return;
-            editor.moveTo(draft.trim());
-            setAdding(false);
-            setDraft("");
-          }}
-        >
-          <input className="input min-w-0 flex-1 py-1 text-sm" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Section name" aria-label="New section name" autoFocus />
-          <button type="submit" className="btn btn-sm">Move</button>
-        </form>
-      )}
     </div>
   );
 }
@@ -171,7 +141,7 @@ export function PanelEditorData({ editor }: { editor: PanelEditor }) {
 
 /**
  * The settings column of a workspace card's modal: the panel's header
- * (title, section), then the card's own settings with the panel's data and
+ * (title), then the card's own settings with the panel's data and
  * type first in their Data tab — or above them when the card's settings
  * have no tabs.
  */

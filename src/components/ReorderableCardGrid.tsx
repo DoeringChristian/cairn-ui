@@ -5,6 +5,10 @@
  * Cards are wrapped in DraggableCard for the ≡ grip handle and the
  * move-up / move-down menu entries (touch screens have no HTML5 drag).
  *
+ * A card can come from another grid (a workspace's other sections): a drop
+ * on a card takes its place (`onReorder`), a drop anywhere else in the grid
+ * (the gaps, the trailing "+ Add card" tile) puts it last (`onDropEnd`).
+ *
  * The grid reports its rendered order to the enclosing `CardNavProvider`
  * (lib/card-nav.tsx) for ←/→ in the detail modal, and makes its own
  * provider when there is none.
@@ -23,6 +27,10 @@ interface CardEntry {
 interface Props {
   cards: CardEntry[];
   onReorder?: (fromKey: string, toKey: string) => void;
+  /** A card dropped on the grid but on no card: it goes last. */
+  onDropEnd?: (fromKey: string) => void;
+  /** After the cards, not draggable (the workspace's "+ Add card" tile). */
+  trailing?: ReactNode;
   className?: string;
   dataAttributes?: Record<string, string>;
 }
@@ -63,6 +71,8 @@ export default function ReorderableCardGrid(props: Props) {
 function Grid({
   cards,
   onReorder,
+  onDropEnd,
+  trailing,
   className,
   dataAttributes,
 }: Props) {
@@ -87,6 +97,7 @@ function Grid({
       if (!gridEl) return;
       const target = findCardUnderCursor(gridEl, e.clientX, e.clientY);
       if (target) target.el.classList.add("cairn-drop-target");
+      else gridEl.querySelector("[data-cairn-drop-end]")?.classList.add("cairn-drop-target");
     },
     [clearHighlight],
   );
@@ -104,16 +115,18 @@ function Grid({
     (e: React.DragEvent<HTMLDivElement>) => {
       clearHighlight();
       const fromKey = e.dataTransfer.getData(CAIRN_CARD_MIME);
-      if (!fromKey || !onReorder) return;
+      if (!fromKey || (!onReorder && !onDropEnd)) return;
       e.preventDefault();
       const gridEl = gridRef.current;
       if (!gridEl) return;
       const target = findCardUnderCursor(gridEl, e.clientX, e.clientY);
-      if (target && target.key !== fromKey) {
-        onReorder(fromKey, target.key);
+      if (target) {
+        if (target.key !== fromKey) onReorder?.(fromKey, target.key);
+      } else if (!cards.some((c) => c.key === fromKey) || cards[cards.length - 1]?.key !== fromKey) {
+        onDropEnd?.(fromKey);
       }
     },
-    [onReorder, clearHighlight],
+    [onReorder, onDropEnd, clearHighlight, cards],
   );
 
   return (
@@ -144,6 +157,7 @@ function Grid({
           <CardNavItem gridId={gridId} cardKey={card.key}>{card.content}</CardNavItem>
         </DraggableCard>
       ))}
+      {trailing}
     </div>
   );
 }

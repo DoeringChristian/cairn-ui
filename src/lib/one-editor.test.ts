@@ -36,3 +36,26 @@ test("every CardShell gets a Settings action", () => {
     .map(({ rel }) => rel);
   assert.deepEqual(missing, []);
 });
+
+const at = (rel: string, text: string, index: number | undefined) => `${rel}:${text.slice(0, index).split("\n").length}`;
+
+test("the gear editor has no section control: cards change section by drag & drop only", () => {
+  const editor = sources().find((s) => s.rel === "components/workspace/PanelEditor.tsx")!;
+  assert.ok(editor, "PanelEditor.tsx exists");
+  const hits = [...editor.text.matchAll(/label="Section"|aria-label="New section name"|moveTo|editor\.sections?\b/g)].map(
+    (m) => `${at(editor.rel, editor.text, m.index)}: ${m[0]}`,
+  );
+  assert.deepEqual(hits, []);
+  const actions = sources().find((s) => s.rel === "lib/workspace/panel-actions.ts")!;
+  assert.doesNotMatch(actions.text, /moveTo|sections:/, "PanelEditor (the context) offers no section move");
+});
+
+test("cards and sections are added from the layout's + only: no dialog, prompt or toolbar builder", () => {
+  const files = ["components/WorkspaceToolbar.tsx", "components/workspace/WorkspaceView.tsx", "components/SectionBlock.tsx"];
+  const hits = sources()
+    .filter(({ rel }) => files.includes(rel))
+    .flatMap(({ rel, text }) =>
+      [...text.matchAll(/\bprompt\(|Build panels|onAddCards|onAddSection|onBuildPanels|CardBuilder/g)].map((m) => `${at(rel, text, m.index)}: ${m[0]}`),
+    );
+  assert.deepEqual(hits, []);
+});

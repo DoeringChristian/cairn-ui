@@ -1,9 +1,10 @@
 /**
  * The toolbar of a workspace (the run page and every comparison render the
  * same one): search (⌘K, a regex over panel labels), "hide matching" (a
- * sticky hide pattern), "Add cards" and "Manage cards" (the card builder),
- * the quick panel builder, "+ Section", "include unlisted metrics", the
- * sync-zoom toggle, colour-by (with its legend) and saved views. Everything
+ * sticky hide pattern), "Manage cards", "include unlisted metrics", the
+ * sync-zoom toggle, colour-by (with its legend) and saved views. Cards and
+ * sections are added from the + buttons of the layout itself
+ * (components/workspace/WorkspaceView.tsx), not here. Everything
  * but search edits the enclosing workspace (`WorkspaceRefContext`), so a
  * read-only surface shows only the search box.
  */
@@ -21,7 +22,6 @@ import { useScalarExprs } from "../lib/use-scalar-exprs";
 import { Select, Stepper } from "./settings/palette";
 import ExprField from "./settings-panels/ExprField";
 import { compilePanelFilter } from "../lib/workspace/panel-filter";
-import { buildPanels, type BuiltPanel } from "../lib/workspace/panel-builder";
 import { useCurrentWorkspace } from "../lib/workspace/use-workspace";
 import { parseViewPayload, viewPayload } from "../lib/workspace/views";
 import { HeaderToggle } from "./card-header";
@@ -32,14 +32,7 @@ interface Props {
   onQueryChange: (q: string) => void;
   /** How many cards the query matches (shown on the "hide matching" chip). */
   matchCount?: number;
-  /** Scalar metric names the panel builder picks from; omit to hide the builder. */
-  builderMetrics?: readonly string[];
-  /** Add the builder's panels. */
-  onBuildPanels?: (panels: BuiltPanel[]) => void;
-  /** Add an empty section with this name. */
-  onAddSection?: (name: string) => void;
-  /** Open the card builder / its "Manage cards" view. */
-  onAddCards?: () => void;
+  /** Open "Manage cards". */
   onManageCards?: () => void;
   /** Flip "include unlisted metrics" (turning it off writes the automatic cards shown now). */
   onToggleAutoPanels?: () => void;
@@ -58,10 +51,6 @@ export default function WorkspaceToolbar({
   query,
   onQueryChange,
   matchCount,
-  builderMetrics,
-  onBuildPanels,
-  onAddSection,
-  onAddCards,
   onManageCards,
   onToggleAutoPanels,
   viewDoc,
@@ -145,31 +134,16 @@ export default function WorkspaceToolbar({
       {mutable && (
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {actions}
-          {onAddCards && (
-            <button type="button" className={TOOL_BTN} onClick={onAddCards} title="Card builder: pick data, card types and settings">
-              <i className="fa-solid fa-plus" aria-hidden="true" /> Add cards
-            </button>
-          )}
           {onManageCards && (
-            <button type="button" className={TOOL_BTN} onClick={onManageCards} title="Every card of this workspace: show, hide, edit, duplicate, move, delete">
-              <i className="fa-solid fa-table-list" aria-hidden="true" /> Manage cards
-            </button>
-          )}
-          {onAddSection && (
             <button
               type="button"
               className={TOOL_BTN}
-              onClick={() => {
-                const name = prompt("Section name:");
-                if (name && name.trim()) onAddSection(name.trim());
-              }}
-              title="Add an empty section"
+              onClick={onManageCards}
+              title="Every card of this workspace: show, hide, edit, duplicate, delete; drag to arrange cards and sections"
+              data-testid="manage-cards-open"
             >
-              <i className="fa-solid fa-plus" aria-hidden="true" /> Section
+              <i className="fa-solid fa-table-list" aria-hidden="true" /> Manage cards
             </button>
-          )}
-          {builderMetrics && onBuildPanels && (
-            <PanelBuilder metrics={builderMetrics} onBuild={onBuildPanels} />
           )}
           <ColorByControl />
           {onToggleAutoPanels && (
@@ -203,89 +177,6 @@ export default function WorkspaceToolbar({
         </div>
       )}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Quick panel builder
-// ---------------------------------------------------------------------------
-
-function PanelBuilder({ metrics, onBuild }: { metrics: readonly string[]; onBuild: (panels: BuiltPanel[]) => void }) {
-  const anchor = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
-  const [pattern, setPattern] = useState("");
-  const result = useMemo(() => (pattern.trim() ? buildPanels(pattern, metrics) : null), [pattern, metrics]);
-  const panels = result?.ok ? result.panels : [];
-
-  const add = () => {
-    if (panels.length === 0) return;
-    onBuild(panels);
-    setOpen(false);
-    setPattern("");
-  };
-
-  return (
-    <>
-      <button ref={anchor} type="button" className={TOOL_BTN} onClick={() => setOpen((v) => !v)} title="Build line plots from a regex">
-        <i className="fa-solid fa-wand-magic-sparkles" aria-hidden="true" /> Build panels
-      </button>
-      <Popover
-        open={open}
-        onClose={() => setOpen(false)}
-        anchorRef={anchor}
-        title="Build panels"
-        titleAnchored
-        width={360}
-        align="end"
-        initialFocus
-        bodyClassName="flex flex-col gap-2 p-4"
-      >
-        <p className="text-xs text-fg-muted">
-          A regex over the full metric name. Metrics whose capture groups agree share a line plot:{" "}
-          <code className="mono">(train|val)\.loss</code> makes one per split,{" "}
-          <code className="mono">.*\.(loss)</code> one with every loss.
-        </p>
-        <input
-          type="text"
-          value={pattern}
-          onChange={(e) => setPattern(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder="val\.(.*)"
-          aria-label="Metric regex"
-          aria-invalid={result != null && !result.ok}
-          className={`input mono w-full py-1 text-sm ${result && !result.ok ? "!border-status-failed" : ""}`}
-        />
-        {result && !result.ok && <p className="text-xs text-status-failed">{result.error}</p>}
-        {result?.ok && (
-          <div className="max-h-56 overflow-y-auto rounded border border-border">
-            {panels.length === 0 ? (
-              <p className="p-2 text-xs text-fg-muted">No metric matches.</p>
-            ) : (
-              <ul className="divide-y divide-border">
-                {panels.map((p) => (
-                  <li key={p.title} className="px-2 py-1.5 text-xs">
-                    <div className="font-medium text-fg">{p.title}</div>
-                    <div className="mono truncate text-fg-muted" title={p.metrics.join(", ")}>
-                      {p.metrics.join(", ")}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-        <div className="flex justify-end">
-          <button type="button" className="btn text-xs disabled:opacity-50" disabled={panels.length === 0} onClick={add}>
-            Add {panels.length || ""} panel{panels.length === 1 ? "" : "s"}
-          </button>
-        </div>
-      </Popover>
-    </>
   );
 }
 

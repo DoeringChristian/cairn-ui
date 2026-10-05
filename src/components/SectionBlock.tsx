@@ -4,9 +4,11 @@
  *
  * The header's actions are workspace edits the caller turns into document
  * ops: collapse, rename (double-click the name), move up / down, sort A–Z,
- * add a panel to this section (+), section defaults (the gear), send to a
- * report, delete an empty section. The section's defaults reach its cards
- * through `SectionDefaultsProvider`. Read-only surfaces show no actions.
+ * add cards to this section (+, which anchors the add panel), section
+ * defaults (the gear), send to a report, delete an empty section. A section
+ * just created opens with its name in edit (`renameOnMount`). The section's
+ * defaults reach its cards through `SectionDefaultsProvider`. Read-only
+ * surfaces show no actions.
  */
 
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
@@ -28,7 +30,8 @@ export interface SectionActions {
   onToggleSort?: () => void;
   onMove?: (delta: -1 | 1) => void;
   onRename?: (name: string) => void;
-  onAddPanel?: () => void;
+  /** The + was pressed: add cards here, from a panel anchored at `anchor`. */
+  onAddPanel?: (anchor: HTMLElement) => void;
   onSendToReport?: () => Promise<void> | void;
   /** Only offered for an empty section. */
   onDelete?: () => void;
@@ -46,6 +49,10 @@ export interface SectionBlockProps extends SectionActions {
   last?: boolean;
   /** Card types in the section; the defaults gear offers these first. */
   cardTypes?: readonly CardType[];
+  /** Open with the name in edit, all of it selected (a section just created). */
+  renameOnMount?: boolean;
+  /** The name edit ended: `cancelled` by Escape. */
+  onRenameEnd?: (cancelled: boolean) => void;
   children: ReactNode;
 }
 
@@ -58,6 +65,8 @@ export default function SectionBlock({
   first,
   last,
   cardTypes,
+  renameOnMount = false,
+  onRenameEnd,
   onToggleCollapse,
   onToggleSort,
   onMove,
@@ -77,17 +86,33 @@ export default function SectionBlock({
   const gearRef = useRef<HTMLButtonElement>(null);
   const [defaultsOpen, setDefaultsOpen] = useState(false);
   const [sending, setSending] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const addRef = useRef<HTMLButtonElement>(null);
+  const [editing, setEditing] = useState(renameOnMount && editable);
   const [draft, setDraft] = useState(sectionName);
   useEffect(() => {
     if (!editing) setDraft(sectionName);
   }, [sectionName, editing]);
+  useEffect(() => {
+    if (renameOnMount && editable) setEditing(true);
+  }, [renameOnMount, editable]);
 
-  const commitRename = () => {
+  // Enter, Escape and the blur that follows end one edit once.
+  const ended = useRef(false);
+  const startEditing = () => {
+    ended.current = false;
+    setEditing(true);
+  };
+  const endEdit = (cancelled: boolean) => {
+    if (ended.current) return;
+    ended.current = true;
     setEditing(false);
     const t = draft.trim();
-    if (t && t !== sectionName) onRename?.(t);
+    if (!cancelled && t && t !== sectionName) onRename?.(t);
+    onRenameEnd?.(cancelled);
   };
+  useEffect(() => {
+    if (editing) ended.current = false;
+  }, [editing]);
 
   const send = async () => {
     if (!onSendToReport || sending) return;
@@ -118,19 +143,22 @@ export default function SectionBlock({
             {editing ? (
               <input
                 autoFocus
+                onFocus={(e) => e.currentTarget.select()}
                 className="input py-0 text-sm font-semibold"
                 value={draft}
                 aria-label="Section name"
+                data-testid="section-name-input"
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => setDraft(e.target.value)}
-                onBlur={commitRename}
+                onBlur={() => endEdit(false)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    commitRename();
+                    endEdit(false);
                   } else if (e.key === "Escape") {
                     e.preventDefault();
-                    setEditing(false);
+                    e.stopPropagation();
+                    endEdit(true);
                   }
                 }}
               />
@@ -141,7 +169,7 @@ export default function SectionBlock({
                 onDoubleClick={(e) => {
                   if (!editable || !onRename) return;
                   e.stopPropagation();
-                  setEditing(true);
+                  startEditing();
                 }}
               >
                 {sectionName}
@@ -153,11 +181,12 @@ export default function SectionBlock({
               <>
                 {onAddPanel && (
                   <button
+                    ref={addRef}
                     type="button"
-                    onClick={onAddPanel}
+                    onClick={() => addRef.current && onAddPanel(addRef.current)}
                     className={ICON_BTN}
-                    aria-label={`Add a card to ${sectionName}`}
-                    title="Add a card to this section (card builder)"
+                    aria-label={`Add cards to ${sectionName}`}
+                    title="Add cards to this section"
                     data-testid="section-add-panel"
                   >
                     <i className="fa-solid fa-plus" aria-hidden="true" />
