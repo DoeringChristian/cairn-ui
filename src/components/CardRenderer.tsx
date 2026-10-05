@@ -10,6 +10,9 @@ import type { ComparisonSeriesRef, MultiRunCardType } from "../lib/comparisons";
 import type { CardType } from "../lib/cards/card-spec";
 import type { CardSettingsKey } from "../lib/card-settings";
 import { useSequence } from "../api/hooks";
+import { useCardOverridesReader } from "../lib/card-settings";
+import { useDefaultViewer, useViewerProject } from "../lib/custom/hooks";
+import { VIEWER_DEFAULT_TYPES } from "../lib/custom/viewers";
 import { api } from "../api/client";
 import { downloadArtifact, artifactFilename } from "../lib/download";
 import ImageCard from "./ImageCard";
@@ -207,6 +210,63 @@ function CardRendererInner(props: CardDescriptor) {
     );
   }
 
+  // A built-in type a custom viewer may be the default of: the gate decides.
+  if (VIEWER_DEFAULT_TYPES.has(props.metric.object_type)) return <DefaultViewerGate {...props} />;
+  return <BuiltinSeriesCard {...props} />;
+}
+
+type SeriesDescriptor = Exclude<CardDescriptor, { kind: "multi-run" }>;
+
+let webgl2: boolean | null = null;
+/** Whether this browser can run a WebGL2 viewer (checked once). */
+function hasWebGL2(): boolean {
+  if (webgl2 == null) {
+    try {
+      const gl = document.createElement("canvas").getContext("webgl2");
+      webgl2 = gl != null;
+      gl?.getExtension("WEBGL_lose_context")?.loseContext();
+    } catch {
+      webgl2 = false;
+    }
+  }
+  return webgl2;
+}
+
+/**
+ * A card of a built-in type, shown by its default viewer: the card's own
+ * `viewer` setting, else the kind's default (lib/custom/viewers.ts
+ * defaultViewerName: the project's, else a built-in viewer such as
+ * `cairn.volume`), else the type's built-in renderer — also where a WebGL
+ * viewer cannot run. A skeleton holds the place until the project's viewers
+ * and defaults are known, so the card does not swap renderers under the user.
+ */
+function DefaultViewerGate(props: SeriesDescriptor) {
+  const { runId, metric, settingsKeyOverride } = props;
+  const project = useViewerProject(runId);
+  const series = useMemo(() => ({ object_type: metric.object_type, kind: null }), [metric.object_type]);
+  const def = useDefaultViewer(project, series);
+  const pinned = useCardOverridesReader()(settingsKeyOverride ?? { runId, metricName: metric.name })?.viewer;
+  if (!def.ready) return <LazyCardFallback label="loading…" />;
+  const name = typeof pinned === "string" ? pinned : def.name;
+  const info = name ? def.list.find((v) => v.name === name) : undefined;
+  if (!name || (info?.webgl && !hasWebGL2())) return <BuiltinSeriesCard {...props} />;
+  return (
+    <Suspense fallback={<LazyCardFallback label="loading viewer…" />}>
+      <CustomCard
+        runId={runId}
+        metric={metric}
+        autoOpenSettings={props.autoOpenSettings}
+        extraSeries={props.extraSeries}
+        controlledSeries={props.controlledSeries}
+        settingsKeyOverride={settingsKeyOverride}
+        onRemove={props.onRemove}
+      />
+    </Suspense>
+  );
+}
+
+/** A series card in its type's own (built-in) renderer. */
+function BuiltinSeriesCard(props: SeriesDescriptor) {
   const {
     runId,
     metric,

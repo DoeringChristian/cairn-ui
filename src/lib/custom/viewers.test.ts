@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { ViewerInfo } from "../../api/types";
-import { currentViewers, resolveViewer, viewersFor } from "./viewers.ts";
+import { currentViewers, defaultViewerName, resolveViewer, viewersFor } from "./viewers.ts";
 
 const v = (o: Partial<ViewerInfo>): ViewerInfo => ({
   name: "a", title: "A", entry: "index.js", accepts: ["custom:*"], inputs: "single", webgl: false, view: false,
@@ -40,4 +40,29 @@ test("viewersFor: matching viewers, most specific first", () => {
 test("currentViewers: one per name, A–Z", () => {
   const list = [v({ name: "b", title: "B" }), v({ name: "a", title: "A", version: 2 }), v({ name: "a", title: "A", version: 1 })];
   assert.deepEqual(currentViewers(list).map((x) => `${x.name}${x.version}`), ["a2", "b1"]);
+});
+
+test("defaultViewerName: the project's default, else a built-in viewer's, else (custom data only) the best match", () => {
+  const list = [
+    v({ name: "cairn.volume", builtin: true, version: null, version_id: null, accepts: ["volume"] }),
+    v({ name: "ray", accepts: ["volume"] }),
+    v({ name: "g", accepts: ["custom:guiding/*"] }),
+    v({ name: "vmf", accepts: ["custom:guiding/vmf"] }),
+    v({ name: "img", accepts: ["image"] }),
+  ];
+  const vol = { object_type: "volume" };
+  const vmf = { object_type: "custom", kind: "guiding/vmf" };
+  const builtin = { volume: "cairn.volume" };
+  // A published viewer accepting volume does not take over the built-in default.
+  assert.equal(defaultViewerName({ defaults: {}, builtin }, list, vol), "cairn.volume");
+  assert.equal(defaultViewerName({ defaults: { volume: "ray" }, builtin }, list, vol), "ray");
+  // Built-in types without a default: their own renderer; a viewer accepting them never picks itself.
+  assert.equal(defaultViewerName({ defaults: {}, builtin }, list, { object_type: "image" }), null);
+  assert.equal(defaultViewerName({ defaults: { image: "img" }, builtin }, list, { object_type: "image" }), "img");
+  // Custom data: the most specific key; a missing viewer is skipped; no key: the best accepting viewer.
+  assert.equal(defaultViewerName({ defaults: { "custom:guiding/*": "g" }, builtin }, list, vmf), "g");
+  assert.equal(defaultViewerName({ defaults: { "custom:guiding/*": "g", "custom:guiding/vmf": "vmf" }, builtin }, list, vmf), "vmf");
+  assert.equal(defaultViewerName({ defaults: { "custom:guiding/*": "gone" }, builtin }, list, vmf), "vmf");
+  assert.equal(defaultViewerName(null, list, vmf), "vmf");
+  assert.equal(defaultViewerName(null, [], vol), null);
 });

@@ -27,8 +27,8 @@ import {
   type ViewerSettingSection,
   type ViewerSettingTab,
 } from "../../lib/custom/manifest";
-import { useViewer, useViewerList, useViewerProject } from "../../lib/custom/hooks";
-import { currentViewers, viewerFromInfo, viewersFor } from "../../lib/custom/viewers";
+import { useViewer, useViewerDefaults, useViewerList, useViewerProject } from "../../lib/custom/hooks";
+import { currentViewers, defaultViewerName, viewerFromInfo, viewersFor } from "../../lib/custom/viewers";
 import { useProjectId } from "../../lib/project-context";
 import { ExternalBaselinePicker } from "../card-kit/ExternalBaselinePicker";
 import {
@@ -200,14 +200,17 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
   const project = useViewerProject(ctx.runId) ?? ambient;
   const list = useViewerList(project).data ?? [];
   const s = ctl.value;
+  const defaults = useViewerDefaults(project).data;
   const offered = ctx.series.length ? viewersFor(list, ctx.series) : currentViewers(list);
-  const auto = offered[0];
+  // The kind's default viewer (lib/custom/viewers.ts defaultViewerName).
+  const autoName = ctx.series.length ? defaultViewerName(defaults, list, ctx.series[0]!) : (offered[0]?.name ?? null);
+  const auto = autoName ? list.find((v) => v.name === autoName) : undefined;
   const chosen = s.viewer ?? auto?.name ?? null;
   const resolved = useViewer(project, chosen, s.viewer_version ?? null);
   const manifest = resolved.viewer?.manifest ?? null;
-  const versions = useViewerList(project, true).data?.filter((v) => v.name === chosen && !v.dev) ?? [];
+  const versions = useViewerList(project, true).data?.filter((v) => v.name === chosen && !v.dev && !v.builtin) ?? [];
   const viewerOptions = [
-    { value: AUTO, label: auto ? `Automatic (${auto.title || auto.name})` : "Automatic" },
+    { value: AUTO, label: auto ? `Default (${auto.title || auto.name})` : "Default (none)" },
     ...offered.map((v) => ({ value: v.name, label: viewerLabel(v) })),
   ];
   if (s.viewer && !offered.some((v) => v.name === s.viewer)) viewerOptions.push({ value: s.viewer, label: `${s.viewer} (does not accept this data)` });
@@ -225,7 +228,7 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
           onReset={() => ctl.reset("viewer")}
           disabled={ctl.locked}
           label="Viewer"
-          description="A custom viewer of this project (cairn viewer publish / dev). Automatic picks the one that accepts this data most specifically."
+          description="Default follows the project's default viewer of this kind of data (Defaults page); pick a viewer to pin this card to it."
           options={viewerOptions}
         />
         {versions.length > 0 && (
@@ -241,7 +244,7 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
           />
         )}
         {resolved.viewer?.error && <p className="text-xs text-status-failed">{resolved.viewer.error}</p>}
-        {list.length === 0 && project && (
+        {offered.length === 0 && project && (
           <p className="text-xs text-fg-muted">
             No viewers in this project yet: <code className="mono">cairn viewer publish ./viewers/my-viewer --project {project}</code>
           </p>

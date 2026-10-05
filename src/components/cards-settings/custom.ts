@@ -9,7 +9,7 @@ import {
 
 /** Settings of a custom viewer card (`custom`): which viewer, its own settings, the shared view. */
 export interface CustomSettings extends SteppedMediaSettings {
-  /** The viewer's name; absent picks the most specific viewer accepting the data. */
+  /** The viewer's name; absent: the default viewer of the data's kind (lib/custom/viewers.ts defaultViewerName). */
   viewer?: string;
   /** Pin a published version (`vN`); absent/null follows `latest` (or a live dev source). */
   viewer_version?: number | null;

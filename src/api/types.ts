@@ -596,6 +596,8 @@ export interface ViewerInfo {
   icon?: string | null;
   /** A live `cairn viewer dev` source (preferred over the published one while it exists). */
   dev: boolean;
+  /** Shipped with cairn (`cairn.<name>`, files under /api/viewers/builtin/): in every project. */
+  builtin?: boolean;
   /** The published version (null for a dev source). */
   version_id: string | null;
   version: number | null;
@@ -603,9 +605,20 @@ export interface ViewerInfo {
   content_digest: string;
   /** Dev sources: bumps on every change. */
   revision?: number;
-  updated_at: string;
+  updated_at: string | null;
   /** Dev sources: why the folder's manifest is invalid right now. */
   error: string | null;
+}
+
+/**
+ * The project's default viewer per kind (server: GET
+ * /api/projects/{id}/viewer-defaults). Keys are built-in types (`volume`)
+ * or `custom:<kind glob>`; `builtin` holds the built-in viewers' defaults,
+ * which the project's override.
+ */
+export interface ViewerDefaults {
+  defaults: Record<string, string>;
+  builtin: Record<string, string>;
 }
 
 /** One file of a viewer (a dev source's file list). */

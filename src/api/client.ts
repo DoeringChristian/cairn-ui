@@ -435,6 +435,17 @@ export const api = {
     get<{ viewers: import("./types").ViewerInfo[] }>(
       `/api/projects/${encodeURIComponent(projectId)}/viewers${opts.allVersions ? "?all_versions=1" : ""}`,
     ),
+  /** The project's default viewer per kind (lib/custom/viewers.ts defaultViewerName). */
+  viewerDefaults: (projectId: string) =>
+    get<import("./types").ViewerDefaults>(`/api/projects/${encodeURIComponent(projectId)}/viewer-defaults`),
+  /** Set (a viewer's name) or clear (null: a built-in type's own renderer) one kind's default viewer. */
+  setViewerDefault: (projectId: string, kind: string, viewer: string | null) =>
+    put<import("./types").ViewerDefaults>(`/api/projects/${encodeURIComponent(projectId)}/viewer-defaults`, { kind, viewer }),
+  /** A built-in viewer's files (shipped with cairn). */
+  builtinViewerFiles: (name: string) =>
+    get<{ files: import("./types").ViewerFileInfo[] }>(`/api/viewers/builtin/${encodeURIComponent(name)}/files`),
+  builtinViewerFile: (name: string, path: string) =>
+    bytes(`/api/viewers/builtin/${encodeURIComponent(name)}/file?path=${encodeURIComponent(path)}`),
   /** A dev viewer's current files (404 once `cairn viewer dev` stopped). */
   viewerDevFiles: (projectId: string, name: string) =>
     get<{ revision: number; files: import("./types").ViewerFileInfo[] }>(

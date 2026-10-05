@@ -1,11 +1,13 @@
 /**
  * /p/:projectId/defaults — the project's card defaults: workspace-wide per
  * card type, then any section that sets its own (edited from a section's
- * gear too). Cards inherit card → section → workspace → builtin.
+ * gear too). Cards inherit card → section → workspace → builtin. Also the
+ * default viewer of each kind of data (ViewerDefaultsEditor).
  */
 
 import { useParams } from "react-router-dom";
 import DefaultsEditor, { cardTypeLabel } from "../components/DefaultsEditor";
+import ViewerDefaultsEditor from "../components/ViewerDefaultsEditor";
 import type { CardType } from "../lib/cards/card-spec";
 import { useMemo } from "react";
 import { useWorkspace } from "../lib/workspace/use-workspace";
@@ -28,6 +30,15 @@ export default function DefaultsPage() {
           own defaults (its sections&rsquo; gears). Reports and shared links use the built-in defaults.
         </p>
       </div>
+
+      <section className="card p-4">
+        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-fg-muted">Default viewer per type</h2>
+        <p className="mb-3 text-sm text-fg-muted">
+          Which viewer shows each kind of data, everywhere in this project (reports and shared links too). A card can
+          pin another in its settings (Viewer).
+        </p>
+        <ViewerDefaultsEditor projectId={projectId} />
+      </section>
 
       <section className="card p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-fg-muted">Workspace</h2>
