@@ -42,8 +42,10 @@ import {
   Switch,
   TextInput,
   type SectionName,
+  type SettingsTabId,
 } from "../settings/palette";
 import { LayoutSection, SliderSection, type PanelSurface } from "./media-panel-kit";
+import { CARD_SECTIONS, initialTab, placeSettings } from "../../lib/custom/placement";
 
 /** What a custom card's panel knows beyond the stepped media context. */
 export interface CustomPanelCtx extends SteppedMediaPanelCtx {
@@ -159,10 +161,11 @@ function viewerPlacement(ctl: SettingsController<CustomSettings>, viewer: string
     !!viewer && !!manifest?.settings.some((s) => s.tab === tab && (section == null || s.section === section));
   const own = (tab: ViewerSettingTab, section: ViewerSettingSection) =>
     has(tab, section) ? <ViewerControls ctl={ctl} viewer={viewer!} manifest={manifest!} tab={tab} section={section} /> : null;
-  const rest = (tab: ViewerSettingTab, skip: readonly ViewerSettingSection[] = []) => {
+  // Every setting has exactly one place (placement.ts): the card's own section of its name, else one of its own here.
+  const placement = placeSettings(manifest ?? { settings: [] });
+  const rest = (tab: ViewerSettingTab, skip: readonly ViewerSettingSection[] = CARD_SECTIONS[tab]) => {
     if (!viewer || !manifest) return null;
-    const sections: ViewerSettingSection[] = [];
-    for (const s of manifest.settings) if (s.tab === tab && !skip.includes(s.section) && !sections.includes(s.section)) sections.push(s.section);
+    const sections = placement[tab].filter((p) => !skip.includes(p.section)).map((p) => p.section);
     if (sections.length === 0) return null;
     return sections.map((section) => (
       <SettingsSection key={section} name={section as SectionName}>
@@ -170,7 +173,7 @@ function viewerPlacement(ctl: SettingsController<CustomSettings>, viewer: string
       </SettingsSection>
     ));
   };
-  return { has, own, rest };
+  return { has, own, rest, initialTab: initialTab(placement) as SettingsTabId };
 }
 
 function viewerLabel(v: ViewerInfo): string {
@@ -208,6 +211,7 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
   ];
   if (s.viewer && !offered.some((v) => v.name === s.viewer)) viewerOptions.push({ value: s.viewer, label: `${s.viewer} (does not accept this data)` });
   const vs = viewerPlacement(ctl, chosen, manifest);
+  const [tab, setTab] = useState<SettingsTabId | null>(null);
 
   const data = (
     <>
@@ -243,7 +247,7 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
         {vs.own("data", "Series")}
       </SettingsSection>
       <SliderSection ctl={ctl} ctx={ctx}>{vs.own("data", "Axes")}</SliderSection>
-      {vs.rest("data", ["Series", "Axes", "Compare"])}
+      {vs.rest("data")}
       <SettingsSection name="Compare">
         <SettingRow
           layout="stacked"
@@ -282,11 +286,18 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
   );
   const display = (
     <>
-      {vs.rest("display", ["Layout"])}
+      {vs.rest("display")}
       <LayoutSection ctl={ctl} modes ctx={ctx} mode={mode} paneKeys={ctx.paneKeys}>{vs.own("display", "Layout")}</LayoutSection>
     </>
   );
-  return <SettingsTabs tabs={{ data, grouping: vs.rest("grouping"), display, expressions: vs.rest("expressions") }} />;
+  // Open where the viewer's own settings are (most live under Display).
+  return (
+    <SettingsTabs
+      active={tab ?? vs.initialTab}
+      onActiveChange={setTab}
+      tabs={{ data, grouping: vs.rest("grouping"), display, expressions: vs.rest("expressions") }}
+    />
+  );
 }
 
 /** The defaults editor: the shell's defaults, and per viewer its settings' defaults. */
@@ -322,7 +333,7 @@ function DefaultsPanel({ ctl, mode }: { ctl: SettingsController<CustomSettings>;
         grouping: vs.rest("grouping"),
         display: (
           <>
-            {vs.rest("display", ["Layout"])}
+            {vs.rest("display")}
             <LayoutSection ctl={ctl} modes mode={mode}>{vs.own("display", "Layout")}</LayoutSection>
           </>
         ),

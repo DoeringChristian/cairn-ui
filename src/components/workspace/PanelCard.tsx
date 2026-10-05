@@ -73,6 +73,18 @@ export default function PanelCard({ rendered, runIds, settingsKey, onRemove, aut
   }
 
   const primary = series[0];
+  // A custom viewer card keeps its whole card (header, Settings) without data: its body says so.
+  const seedName = "names" in panel.selector ? panel.selector.names[0] : undefined;
+  if (!primary && panel.type === "custom" && visible.length > 0 && seedName) {
+    const seed: SequenceMeta = { name: seedName, object_type: "custom", min_step: 0, max_step: 0, count: 0 };
+    return (
+      <LazyPanel type={panel.type} settingsKey={settingsKey} title={label} eager={autoOpenSettings}>
+        <PanelTitleContext.Provider value={claimedMetric(panel) == null ? label : null}>
+          <CardRenderer runId={visible[0]!} metric={seed} settingsKeyOverride={settingsKey} onRemove={onRemove} autoOpenSettings={autoOpenSettings} />
+        </PanelTitleContext.Provider>
+      </LazyPanel>
+    );
+  }
   if (!primary) {
     return (
       <PanelPlaceholder
