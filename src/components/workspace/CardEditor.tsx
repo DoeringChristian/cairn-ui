@@ -264,15 +264,17 @@ function CardEditor({
   const [dataOpen, setDataOpen] = useState(adding);
   const [typeOpen, setTypeOpen] = useState(false);
   const [focus, setFocus] = useState<string | null>(null);
-  // Leaving "new" (a type was picked): both close, the card's settings come up.
-  const wasAdding = useRef(adding);
+  // Leaving "new" (a type was picked) or stepping to another card (←/→): both
+  // close, the card's settings come up.
+  const shownId = adding ? null : (edited?.id ?? null);
+  const wasShown = useRef(shownId);
   useEffect(() => {
-    if (wasAdding.current && !adding) {
-      setDataOpen(false);
-      setTypeOpen(false);
-    }
-    wasAdding.current = adding;
-  }, [adding]);
+    if (wasShown.current === shownId) return;
+    wasShown.current = shownId;
+    setDataOpen(false);
+    setTypeOpen(false);
+    setFocus(null);
+  }, [shownId]);
 
   const openTypes = () => {
     if (!ready) return;
