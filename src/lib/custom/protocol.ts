@@ -56,7 +56,7 @@ export interface ViewerInput {
   format: string;
   /** The custom data's kind (`guiding/vmf`), or the built-in object type. */
   kind: string;
-  /** The `meta` logged with the value. */
+  /** The `meta` logged with the value (custom data), or a built-in kind's artifact metadata (e.g. a volume's `shape`, `spacing`, `vmin`/`vmax`). */
   meta: Record<string, unknown>;
   step: number;
   run: string;

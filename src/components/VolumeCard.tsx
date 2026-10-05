@@ -18,6 +18,9 @@ import GalleryView from "./media/GalleryView";
 import { isGalleryPoint } from "../lib/media/gallery";
 import VolumeSettingsPanel from "./settings-panels/VolumeSettingsPanel";
 import type { Scene3DCardProps } from "./viewer3d/Scene3DCard";
+import CustomCard from "./custom/CustomCard";
+import { useViewerList, useViewerProject } from "../lib/custom/hooks";
+import { viewersFor } from "../lib/custom/viewers";
 
 interface VolumeMeta {
   shape: [number, number, number];
@@ -56,8 +59,30 @@ function VolumePlaceholder({ name, point }: { name: string; point: SequencePoint
   );
 }
 
+/**
+ * A volume card. When the project has a custom viewer accepting `volume`
+ * (e.g. examples/custom_viewers/volume), the most specific one shows it: the
+ * card is a custom viewer card (CustomCard picks that viewer, its settings
+ * are the viewer's). Otherwise volumes aren't rendered: one placeholder pane
+ * per run with the step's `.npz` to download.
+ */
+export default function VolumeCard(props: Scene3DCardProps) {
+  const project = useViewerProject(props.runId);
+  const list = useViewerList(project);
+  if (project == null || (list.data === undefined && !list.isError)) {
+    // Until the project's viewers are known: a skeleton, not a placeholder that a viewer replaces a moment later.
+    return (
+      <div data-cairn-card className="card p-4">
+        <div className="h-48 motion-safe:animate-pulse rounded bg-bg-hover" aria-label="loading volume" />
+      </div>
+    );
+  }
+  if (list.data && viewersFor(list.data, [{ object_type: "volume", kind: null }]).length > 0) return <CustomCard {...props} />;
+  return <VolumePlaceholderCard {...props} />;
+}
+
 /** Volumes aren't rendered: one placeholder pane per run with the step's `.npz` to download. */
-export default function VolumeCard({
+function VolumePlaceholderCard({
   runId,
   metric,
   extraSeries,

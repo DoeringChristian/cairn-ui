@@ -26,6 +26,7 @@ import { pointCaption } from "../../lib/caption";
 import type { ViewerBundle } from "../../lib/custom/bundle";
 import { decodeForViewer, parseCustomMeta } from "../../lib/custom/data";
 import { frameWeight } from "../../lib/custom/budget";
+import { registerFrameExport } from "../../lib/custom/frame-snapshots";
 import { CaptureQueue } from "../../lib/custom/capture-queue";
 import { artifactBytesQuery } from "../../lib/custom/hooks";
 import { loadViewerBundle, type Viewer } from "../../lib/custom/loader";
@@ -71,6 +72,19 @@ export function readViewerTheme(el: Element | null): ViewerTheme {
   };
 }
 
+/** A built-in kind's artifact metadata (a volume's shape, spacing, value range, …): its `meta` for a viewer. */
+function builtinMeta(raw: unknown): Record<string, unknown> {
+  let v = raw;
+  if (typeof raw === "string") {
+    try {
+      v = JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  return v != null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
 function inputOf(f: FrameInput, data: unknown): ViewerInput {
   const meta = parseCustomMeta(f.point.artifact_metadata);
   const caption = pointCaption(f.point.metadata);
@@ -78,7 +92,8 @@ function inputOf(f: FrameInput, data: unknown): ViewerInput {
     data,
     format: meta?.format ?? f.point.artifact_mime ?? "bytes",
     kind: meta?.kind ?? f.point.object_type,
-    meta: meta?.meta ?? {},
+    // Custom data: the `meta` logged with it; a built-in kind: its artifact metadata.
+    meta: meta ? meta.meta : builtinMeta(f.point.artifact_metadata),
     step: f.point.step,
     run: f.run,
     name: f.name,
@@ -145,6 +160,10 @@ export default function ViewerFrame({
   const [mountId, setMountId] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [stopped, setStopped] = useState(false);
+  /** A render was sent and has not returned yet (exports wait for it). */
+  const [renderPending, setRenderPending] = useState(false);
+  /** While printing: the snapshot shown in place of the frame (frame-snapshots.ts). */
+  const [printUrl, setPrintUrl] = useState<string | null>(null);
 
   // Latest props for the message handlers (which outlive renders).
   const viewCommitRef = useRef(onViewCommit);
@@ -222,6 +241,7 @@ export default function ViewerFrame({
             clearTimeout(renderTimer.current);
             renderTimer.current = null;
           }
+          if (msg.seq === seqRef.current) setRenderPending(false);
           // A capture turn: the picture is there, keep it and give the turn back.
           if (msg.seq === seqRef.current && capturingRef.current) {
             const key = dataKeyRef.current;
@@ -244,6 +264,7 @@ export default function ViewerFrame({
         }
         case "cairn:error":
           setError({ message: msg.message, stack: msg.stack });
+          setRenderPending(false);
           break;
         case "cairn:settings":
           settingsPatchRef.current?.(msg.patch);
@@ -283,9 +304,11 @@ export default function ViewerFrame({
         lastViewJson.current = JSON.stringify(viewRef.current ?? null);
         sentSettingsJson.current = JSON.stringify(settingsRef.current);
         post(msg, transferables(payload));
+        setRenderPending(true);
         if (renderTimer.current) clearTimeout(renderTimer.current);
         renderTimer.current = setTimeout(() => {
           renderTimer.current = null;
+          setRenderPending(false);
           setError({ message: `viewer ${viewer.info.name} did not finish rendering step ${step} within ${RENDER_TIMEOUT_MS / 1000} s` });
         }, RENDER_TIMEOUT_MS);
       } catch (e) {
@@ -385,6 +408,21 @@ export default function ViewerFrame({
     setLoaded(false);
     done?.();
   };
+
+  // Report exports: the viewer's snapshot while it runs, else the picture shown while paused.
+  const snapRef = useRef(snap);
+  snapRef.current = snap;
+  const liveRef = useRef(false);
+  liveRef.current = showFrame && loaded && !capturing;
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    return registerFrameExport(el, {
+      snapshot: async () => (liveRef.current ? ((await requestSnapshot()) ?? snapRef.current?.url ?? null) : (snapRef.current?.url ?? null)),
+      setPrint: setPrintUrl,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The WebGL budget: paused frames become their snapshot.
   const reg = useRef<GlRegistration | null>(null);
@@ -488,6 +526,7 @@ export default function ViewerFrame({
       data-viewer="custom"
       data-viewer-name={viewer.info.name}
       data-viewer-state={capturing ? "capturing" : showFrame ? (loaded ? "live" : "loading") : live ? "waiting" : snap ? "snapshot" : "paused"}
+      data-viewer-busy={String(!message && ((showFrame && (!loaded || !ready || renderPending)) || (live && !showFrame && !stopped)))}
       onPointerEnter={() => reg.current?.pin(true)}
       onPointerLeave={() => reg.current?.pin(false)}
       onPointerDown={() => reg.current?.touch()}
@@ -500,7 +539,7 @@ export default function ViewerFrame({
           sandbox="allow-scripts"
           srcDoc={viewerDocument()}
           title={title}
-          className="absolute inset-0 h-full w-full border-0"
+          className={`absolute inset-0 h-full w-full border-0${printUrl ? " print:hidden" : ""}`}
           onLoad={(e) => {
             // srcdoc loads once; a second load means the frame navigated itself away.
             const el = e.currentTarget as HTMLIFrameElement & { __cairnLoads?: number };
@@ -512,6 +551,8 @@ export default function ViewerFrame({
           }}
         />
       ) : null}
+      {/* Printing: the viewer's snapshot (its own canvas may print blank). */}
+      {printUrl && <img src={printUrl} alt={title} className="pointer-events-none absolute inset-0 hidden h-full w-full object-contain print:block" draggable={false} />}
       {/* While paused (or while a capture turn loads behind it): the last picture, else a skeleton. */}
       {(!showFrame || capturing) &&
         (snap ? (
