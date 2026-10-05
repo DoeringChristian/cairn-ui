@@ -111,54 +111,66 @@ function ViewerSettingControl({
   }
 }
 
-/** A viewer's settings of one tab, in its sections (manifest order). */
-function ViewerSettingsTab({
+/** The controls of a viewer's settings in one tab and section (manifest order). */
+function ViewerControls({
   ctl,
   viewer,
   manifest,
   tab,
+  section,
 }: {
   ctl: SettingsController<CustomSettings>;
   viewer: string;
   manifest: ViewerManifest;
   tab: ViewerSettingTab;
+  section: ViewerSettingSection;
 }) {
-  const settings = manifest.settings.filter((s) => s.tab === tab);
+  const settings = manifest.settings.filter((s) => s.tab === tab && s.section === section);
   if (settings.length === 0) return null;
   const values = settingValues(manifest.settings, storedViewerSettings(ctl.value as unknown as Record<string, unknown>, viewer));
-  const sections: ViewerSettingSection[] = [];
-  for (const s of settings) if (!sections.includes(s.section)) sections.push(s.section);
   return (
     <>
-      {sections.map((section) => (
-        <SettingsSection key={section} name={section as SectionName}>
-          {settings
-            .filter((s) => s.section === section)
-            .map((s) => {
-              const key = viewerSettingKey(viewer, s.key) as `vs:${string}`;
-              return (
-                <ViewerSettingControl
-                  key={s.key}
-                  setting={s}
-                  value={values[s.key]!}
-                  overridden={ctl.isOverridden(key)}
-                  onChange={(v) => ctl.set({ [key]: v } as Partial<CustomSettings>, { mergeKey: key })}
-                  onReset={() => ctl.reset(key)}
-                  disabled={ctl.locked}
-                />
-              );
-            })}
-        </SettingsSection>
-      ))}
+      {settings.map((s) => {
+        const key = viewerSettingKey(viewer, s.key) as `vs:${string}`;
+        return (
+          <ViewerSettingControl
+            key={s.key}
+            setting={s}
+            value={values[s.key]!}
+            overridden={ctl.isOverridden(key)}
+            onChange={(v) => ctl.set({ [key]: v } as Partial<CustomSettings>, { mergeKey: key })}
+            onReset={() => ctl.reset(key)}
+            disabled={ctl.locked}
+          />
+        );
+      })}
     </>
   );
 }
 
-/** Every tab's viewer settings, keyed by tab (null where the viewer has none). */
-function viewerTabs(ctl: SettingsController<CustomSettings>, viewer: string | null, manifest: ViewerManifest | null) {
-  const tab = (t: ViewerSettingTab) =>
-    viewer && manifest?.settings.some((s) => s.tab === t) ? <ViewerSettingsTab ctl={ctl} viewer={viewer} manifest={manifest} tab={t} /> : null;
-  return { data: tab("data"), grouping: tab("grouping"), display: tab("display"), expressions: tab("expressions") };
+/**
+ * A viewer's settings, placed by tab and section. `own(tab, section)` gives
+ * the controls of a section the card renders itself (so a manifest setting
+ * in "Series" joins the card's Series section); `rest(tab, skip)` renders
+ * the sections the card does not have, in manifest order.
+ */
+function viewerPlacement(ctl: SettingsController<CustomSettings>, viewer: string | null, manifest: ViewerManifest | null) {
+  const has = (tab: ViewerSettingTab, section?: ViewerSettingSection) =>
+    !!viewer && !!manifest?.settings.some((s) => s.tab === tab && (section == null || s.section === section));
+  const own = (tab: ViewerSettingTab, section: ViewerSettingSection) =>
+    has(tab, section) ? <ViewerControls ctl={ctl} viewer={viewer!} manifest={manifest!} tab={tab} section={section} /> : null;
+  const rest = (tab: ViewerSettingTab, skip: readonly ViewerSettingSection[] = []) => {
+    if (!viewer || !manifest) return null;
+    const sections: ViewerSettingSection[] = [];
+    for (const s of manifest.settings) if (s.tab === tab && !skip.includes(s.section) && !sections.includes(s.section)) sections.push(s.section);
+    if (sections.length === 0) return null;
+    return sections.map((section) => (
+      <SettingsSection key={section} name={section as SectionName}>
+        <ViewerControls ctl={ctl} viewer={viewer} manifest={manifest} tab={tab} section={section} />
+      </SettingsSection>
+    ));
+  };
+  return { has, own, rest };
 }
 
 function viewerLabel(v: ViewerInfo): string {
@@ -195,7 +207,7 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
     ...offered.map((v) => ({ value: v.name, label: viewerLabel(v) })),
   ];
   if (s.viewer && !offered.some((v) => v.name === s.viewer)) viewerOptions.push({ value: s.viewer, label: `${s.viewer} (does not accept this data)` });
-  const own = viewerTabs(ctl, chosen, manifest);
+  const vs = viewerPlacement(ctl, chosen, manifest);
 
   const data = (
     <>
@@ -228,9 +240,10 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
             No viewers in this project yet: <code className="mono">cairn viewer publish ./viewers/my-viewer --project {project}</code>
           </p>
         )}
+        {vs.own("data", "Series")}
       </SettingsSection>
-      <SliderSection ctl={ctl} ctx={ctx} />
-      {own.data}
+      <SliderSection ctl={ctl} ctx={ctx}>{vs.own("data", "Axes")}</SliderSection>
+      {vs.rest("data", ["Series", "Axes", "Compare"])}
       <SettingsSection name="Compare">
         <SettingRow
           layout="stacked"
@@ -263,16 +276,17 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
             description="Off follows the slider; on keeps the reference fixed."
           />
         )}
+        {vs.own("data", "Compare")}
       </SettingsSection>
     </>
   );
   const display = (
     <>
-      {own.display}
-      <LayoutSection ctl={ctl} modes ctx={ctx} mode={mode} paneKeys={ctx.paneKeys} />
+      {vs.rest("display", ["Layout"])}
+      <LayoutSection ctl={ctl} modes ctx={ctx} mode={mode} paneKeys={ctx.paneKeys}>{vs.own("display", "Layout")}</LayoutSection>
     </>
   );
-  return <SettingsTabs tabs={{ data, grouping: own.grouping, display, expressions: own.expressions }} />;
+  return <SettingsTabs tabs={{ data, grouping: vs.rest("grouping"), display, expressions: vs.rest("expressions") }} />;
 }
 
 /** The defaults editor: the shell's defaults, and per viewer its settings' defaults. */
@@ -282,7 +296,7 @@ function DefaultsPanel({ ctl, mode }: { ctl: SettingsController<CustomSettings>;
   const [picked, setPicked] = useState<string | null>(null);
   const info = list.find((v) => v.name === picked) ?? list[0] ?? null;
   const manifest = info ? viewerFromInfo(info).manifest : null;
-  const own = viewerTabs(ctl, info?.name ?? null, manifest);
+  const vs = viewerPlacement(ctl, info?.name ?? null, manifest);
   const picker = list.length > 0 && (
     <SettingsSection name="Series">
       <Select
@@ -292,6 +306,7 @@ function DefaultsPanel({ ctl, mode }: { ctl: SettingsController<CustomSettings>;
         description="Defaults are kept per viewer: pick the viewer whose settings to set."
         options={list.map((v) => ({ value: v.name, label: v.title || v.name }))}
       />
+      {vs.own("data", "Series")}
     </SettingsSection>
   );
   return (
@@ -300,18 +315,18 @@ function DefaultsPanel({ ctl, mode }: { ctl: SettingsController<CustomSettings>;
         data: (
           <>
             {picker}
-            <SliderSection ctl={ctl} />
-            {own.data}
+            <SliderSection ctl={ctl}>{vs.own("data", "Axes")}</SliderSection>
+            {vs.rest("data", list.length > 0 ? ["Series", "Axes"] : ["Axes"])}
           </>
         ),
-        grouping: own.grouping,
+        grouping: vs.rest("grouping"),
         display: (
           <>
-            {own.display}
-            <LayoutSection ctl={ctl} modes mode={mode} />
+            {vs.rest("display", ["Layout"])}
+            <LayoutSection ctl={ctl} modes mode={mode}>{vs.own("display", "Layout")}</LayoutSection>
           </>
         ),
-        expressions: own.expressions,
+        expressions: vs.rest("expressions"),
       }}
     />
   );
