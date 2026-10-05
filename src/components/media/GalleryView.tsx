@@ -156,7 +156,7 @@ export default function GalleryView({ point, frame: given, renderItem, columns =
                 </div>
               )}
               <div className={fill ? "flex min-h-0 flex-1 flex-col" : "flex min-w-0 flex-col"}>
-                <ArtifactMark hash={item.artifact_hash} mime={item.artifact_mime}>
+                <ArtifactMark hash={item.artifact_hash} mime={item.artifact_mime} objectType={item.object_type}>
                   {renderItem(item, i, count)}
                 </ArtifactMark>
               </div>

@@ -21,6 +21,7 @@ const MIME_EXT: Record<string, string> = {
   "application/octet-stream": ".bin",
   "image/x-exr": ".exr",
   "application/x-npy": ".npy",
+  "application/x-npz": ".npz",
 };
 
 /** Trigger a browser download for the given URL. */
@@ -151,7 +152,7 @@ const EXT: Record<string, string> = {
   "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/x-exr": "exr",
   "audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3", "video/mp4": "mp4", "video/webm": "webm",
   "text/plain": "txt", "text/html": "html", "text/markdown": "md", "application/json": "json",
-  "application/x-npy": "npy", "application/python-pickle": "pkl",
+  "application/x-npy": "npy", "application/x-npz": "npz", "application/python-pickle": "pkl",
 };
 
 /** Download what card `card` shows (its `data-cairn-artifact` marks): one artifact as itself, several as `<name>.zip`. Returns how many. */

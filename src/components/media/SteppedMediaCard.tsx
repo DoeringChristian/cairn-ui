@@ -300,7 +300,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       return single ? <div className="min-h-0 flex-1 overflow-auto">{gallery}</div> : gallery;
     }
     return (
-      <ArtifactMark hash={point.artifact_hash} name={name} step={point.step} mime={point.artifact_mime ?? defaultMime}>
+      <ArtifactMark hash={point.artifact_hash} name={name} step={point.step} mime={point.artifact_mime ?? defaultMime} objectType={point.object_type}>
         {renderArtifact({
           ...common,
           point,

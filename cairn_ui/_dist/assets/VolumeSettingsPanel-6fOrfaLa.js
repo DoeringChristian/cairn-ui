@@ -1,1 +1,0 @@
-import{j as s,cd as i,dT as n,dV as o}from"./index-C25SOY8g.js";function u({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{values:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{u as default};
