@@ -4,7 +4,7 @@
  * security contract before touching either).
  */
 
-import { artifactTextQuery } from "../lib/viewers/source";
+import { htmlDocumentQuery } from "../lib/viewers/source";
 import SteppedMediaCard, { type SteppedMediaCardProps } from "./media/SteppedMediaCard";
 import type { HtmlSettings } from "./cards-settings/html";
 import HtmlSettingsPanel from "./settings-panels/HtmlSettingsPanel";
@@ -20,8 +20,8 @@ export default function HtmlCard(props: SteppedMediaCardProps) {
       defaultHeight={360}
       nearest
       settingsPanel={(ctl, ctx) => <HtmlSettingsPanel ctl={ctl} ctx={ctx} mode="card" />}
-      prefetch={(qc, point) => qc.prefetchQuery(artifactTextQuery(point.artifact_hash!))}
-      peek={(qc, point) => qc.getQueryData(artifactTextQuery(point.artifact_hash!).queryKey) !== undefined}
+      prefetch={(qc, point) => qc.prefetchQuery(htmlDocumentQuery(point.artifact_hash!))}
+      peek={(qc, point) => qc.getQueryData(htmlDocumentQuery(point.artifact_hash!).queryKey) !== undefined}
       renderArtifact={({ point, hash, name, settings, single }) => {
         const frame = (
           <HtmlViewer

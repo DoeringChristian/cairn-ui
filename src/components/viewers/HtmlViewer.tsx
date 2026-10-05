@@ -3,71 +3,45 @@
  * HTML card's pane, and every HTML file.
  *
  * Security contract (do not weaken): logged HTML is NEVER rendered inline in
- * the host document. It only ever runs inside an `<iframe sandbox="allow-scripts"
- * srcdoc=...>` — no `allow-same-origin`, no `allow-top-navigation`, no
- * `allow-popups`, no `allow-forms`. This gives the iframe an opaque origin
- * (no access to cairn's cookies/localStorage/DOM) while still letting the
- * user's inline `<script>` run for interactive reports.
+ * the host document. It is its own document, served by the server
+ * (`GET /api/artifacts/{hash}/html`, cairn/server/routes/artifacts.py) with
+ * `Content-Security-Policy: sandbox allow-scripts allow-popups
+ * allow-popups-to-escape-sandbox`, and framed with the same `sandbox`
+ * attribute — never `allow-same-origin` (the document would be cairn's
+ * origin: its cookies, storage and API) and never `allow-top-navigation`.
+ * Like wandb.Html it may load anything else: CDN scripts, images, external
+ * iframes (it does not inherit the app shell's `frame-src`, as a srcdoc
+ * frame would). Its own navigation is still checked against the app shell's
+ * `frame-src 'self' blob:`.
  *
- * Auto-height: a tiny shim is injected into the srcdoc; it watches the
- * document body with a ResizeObserver and posts `cairn:resize` to the host
- * (received by card-kit's useIframeAutoHeight). If no resize message ever
- * arrives, the frame keeps `fixedHeight`.
+ * Custom viewers (custom/ViewerFrame.tsx) are a different contract: their
+ * code gets no network at all.
+ *
+ * Auto-height: the server injects a shim that posts `cairn:resize` to the
+ * host (received by card-kit's useIframeAutoHeight). If no resize message
+ * ever arrives, the frame keeps `fixedHeight`.
  */
 
-import { useMemo, useRef } from "react";
+import { useRef } from "react";
+import { api } from "../../api/client";
 import type { ViewerSource } from "../../lib/viewers/source";
 import { useIframeAutoHeight } from "../card-kit/use-iframe-auto-height";
 import { HTML_MAX_HEIGHT as MAX_HEIGHT, HTML_MIN_HEIGHT as MIN_HEIGHT, builtin as HTML_DEFAULTS } from "../cards-settings/html";
-import { TruncatedNote, useViewerText } from "./use-viewer-text";
+import { TruncatedNote } from "./use-viewer-text";
 
-/**
- * Resize shim injected into the srcdoc.
- *
- * A sandboxed `srcdoc` iframe's layout is not guaranteed to have settled by
- * the time `load` fires or `ResizeObserver.observe()` delivers its initial
- * callback — both can (and do) report `scrollHeight === 0` a moment before
- * the real content lays out, with no further ResizeObserver callback ever
- * firing afterward for static content. So on top of the (always-on, event
- * driven) ResizeObserver/MutationObserver, re-post on a short bounded
- * schedule of timeouts anchored to `load` to catch that late settle. The
- * schedule is fixed-length (never an unbounded interval/poll), so content
- * that legitimately never grows past height 0 just stops posting after the
- * last scheduled retry instead of spinning forever.
- *
- * Measurement: the height is taken from `document.body`, NOT from
- * `document.documentElement.scrollHeight` — the latter is clamped by the
- * browser to be at least the iframe's current viewport height, so once the
- * host makes the iframe tall the reported height can never go back down
- * (it ratchets: whatever height the host applies becomes the floor the
- * shim reports back, and the card can grow but never shrink).
- * `body.scrollHeight` has no such clamp; we take
- * max(body.scrollHeight, body.offsetHeight) — scrollHeight wins when
- * content overflows the body's box, offsetHeight when the body has
- * explicit height/borders — and add the body's top/bottom margins (8px
- * each by default) so content isn't clipped by them. Fallback for a
- * document with no body: the html element's own border-box rect height
- * (its box tracks content when `height` is auto, and is not viewport
- * clamped, unlike its scrollHeight). Known limitation: absolutely
- * positioned content that escapes the body's scrollable overflow
- * (positioned against the initial containing block) isn't counted — the
- * only measure that would catch it is the clamped
- * documentElement.scrollHeight, which would reintroduce the ratchet.
- */
-const RESIZE_SHIM = `<script>(function(){function height(){var b=document.body;if(!b)return Math.ceil(document.documentElement.getBoundingClientRect().height);var m=0;try{var s=getComputedStyle(b);m=(parseFloat(s.marginTop)||0)+(parseFloat(s.marginBottom)||0)}catch(e){}return Math.ceil(Math.max(b.scrollHeight,b.offsetHeight)+m)}function post(){try{parent.postMessage({type:"cairn:resize",height:height(),protocolVersion:1},"*")}catch(e){}}try{new ResizeObserver(post).observe(document.body||document.documentElement)}catch(e){}try{new MutationObserver(post).observe(document.body||document.documentElement,{childList:true,subtree:true})}catch(e){}window.addEventListener("load",function(){post();[0,100,300,1000].forEach(function(d){setTimeout(post,d)})});post();})();</script>`;
+/** The iframe's sandbox: the same flags as the document's CSP sandbox (HTML_DOC_SANDBOX on the server). */
+export const HTML_FRAME_SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox";
 
-function injectResizeShim(html: string): string {
-  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${RESIZE_SHIM}</body>`);
-  if (/<\/html>/i.test(html)) return html.replace(/<\/html>/i, `${RESIZE_SHIM}</html>`);
-  return html + RESIZE_SHIM;
+/** Where the frame loads `source` from (its head only when it is bigger than `maxBytes`). */
+export function htmlDocumentUrl(source: Pick<ViewerSource, "hash" | "size">, maxBytes?: number): { url: string; cut: boolean } {
+  const cut = maxBytes != null && source.size != null && source.size > maxBytes;
+  return { url: api.artifactHtmlUrl(source.hash, cut ? maxBytes : undefined), cut };
 }
 
 /**
  * One HTML artifact in a sandboxed iframe, sized by the resize shim or
- * `fixedHeight`. The text comes through the query cache (prefetched around
- * the slider), and the previous step's document stays until the next one's
- * text is in; the browser then holds the old paint until the new document
- * renders, so a step change never flashes an empty frame.
+ * `fixedHeight`. A step change navigates the same frame: the browser holds
+ * the old paint until the next document renders, so it never flashes empty.
  */
 export default function HtmlViewer({
   source,
@@ -81,12 +55,11 @@ export default function HtmlViewer({
   name: string;
   autoHeight?: boolean;
   fixedHeight?: number;
-  /** Read at most this many bytes (the head of a big file). */
+  /** Show at most this many bytes (the head of a big file). */
   maxBytes?: number;
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const t = useViewerText(source, maxBytes);
-  const doc = useMemo(() => (t.text != null ? injectResizeShim(t.text) : undefined), [t.text]);
+  const { url, cut } = htmlDocumentUrl(source, maxBytes);
 
   // Until the first resize message arrives this is undefined and the frame
   // keeps `fixedHeight`.
@@ -96,25 +69,19 @@ export default function HtmlViewer({
     enabled: autoHeight,
   });
 
-  if (t.error) {
-    return <div className="rounded bg-bg p-2 text-xs text-status-failed overflow-auto"><pre>{String(t.error)}</pre></div>;
-  }
-  const frame = (
-    <iframe
-      ref={iframeRef}
-      sandbox="allow-scripts"
-      srcDoc={doc}
-      className="w-full rounded border-0 bg-bg"
-      style={{ height: autoHeight ? (measuredHeight ?? fixedHeight) : fixedHeight }}
-      title={`HTML: ${name}`}
-      data-viewer="html"
-    />
-  );
   // One tree shape whether or not the text is cut: the frame never remounts.
   return (
     <div className="flex flex-col gap-1">
-      {t.cut && maxBytes != null && <TruncatedNote shown={maxBytes} total={source.size} />}
-      {frame}
+      {cut && maxBytes != null && <TruncatedNote shown={maxBytes} total={source.size} />}
+      <iframe
+        ref={iframeRef}
+        sandbox={HTML_FRAME_SANDBOX}
+        src={url}
+        className="w-full rounded border-0 bg-bg"
+        style={{ height: autoHeight ? (measuredHeight ?? fixedHeight) : fixedHeight }}
+        title={`HTML: ${name}`}
+        data-viewer="html"
+      />
     </div>
   );
 }
