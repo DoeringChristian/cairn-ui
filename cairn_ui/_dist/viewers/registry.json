@@ -1,0 +1,6 @@
+{
+  "//": "Viewers shipped with cairn: in every project without publishing. Each folder is an ordinary viewer (cairn-viewer.json + ES modules) named cairn.<name>; default_for lists the kinds it is the default viewer of until a project changes it.",
+  "viewers": [
+    {"folder": "volume", "default_for": ["volume"]}
+  ]
+}
