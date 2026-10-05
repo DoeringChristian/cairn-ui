@@ -389,6 +389,16 @@ export const ops = {
     sections.splice(to, 0, s!);
     return { ...d, sections };
   },
+  /** Move a section right before section `beforeName` (null: last). */
+  placeSection: (name: string, beforeName: string | null): WorkspaceOp => (d) => {
+    if (name === beforeName) return d;
+    const s = d.sections.find((x) => x.name === name);
+    if (!s) return d;
+    const sections = d.sections.filter((x) => x !== s);
+    const at = beforeName == null ? -1 : sections.findIndex((x) => x.name === beforeName);
+    sections.splice(at < 0 ? sections.length : at, 0, s);
+    return sections.every((x, i) => x === d.sections[i]) ? d : { ...d, sections };
+  },
   /** Remove a section that holds no panels. */
   removeSection: (name: string): WorkspaceOp => (d) => {
     const s = d.sections.find((x) => x.name === name);
