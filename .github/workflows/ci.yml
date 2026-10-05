@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ui:
+    name: typecheck, tests, schema, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # test:unit runs the .ts tests with --experimental-strip-types (22.6+).
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run check:card-schema
+      - run: npm run build
+
+      # The bundle at cairn_ui/_dist is committed (installing never needs
+      # Node), so it IS the wheel's payload: a commit whose sources changed
+      # without a rebuild would ship a stale viewer. The build is
+      # deterministic, so a fresh one must match the committed one exactly.
+      - name: committed bundle matches the sources
+        run: |
+          git add --intent-to-add cairn_ui/_dist
+          if ! git diff --exit-code --stat -- cairn_ui/_dist; then
+            echo "::error::cairn_ui/_dist is stale: run 'npm run build' and commit the result"
+            exit 1
+          fi

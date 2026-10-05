@@ -5,8 +5,8 @@
 #
 # Install (once per clone): git config core.hooksPath .githooks
 
-if git diff --cached --name-only | grep -qE '^(src/|index.html|embed.html|package-lock.json)'; then
-    echo "UI source changed — rebuilding bundle..."
+if git diff --cached --name-only | grep -qE '^(src/|builtin-viewers/|index.html|embed.html|package.json|package-lock.json|vite.config.ts|tailwind.config.ts|postcss.config.js)'; then
+    echo "UI source or built-in viewers changed — rebuilding bundle..."
     # Captured rather than streamed (a green build is 40 lines of chunk sizes),
     # but a failure is useless without it — print the whole log before bailing.
     build_log=$(npx vite build 2>&1)
