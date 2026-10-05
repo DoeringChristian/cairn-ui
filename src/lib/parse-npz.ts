@@ -10,7 +10,7 @@
  * data descriptor).
  */
 
-import { parseNpy, type NpyArray } from "./parse-npy";
+import { parseNpy, type NpyArray } from "./parse-npy.ts";
 
 const EOCD_SIG = 0x06054b50; // PK\x05\x06
 const CDH_SIG = 0x02014b50; // PK\x01\x02
@@ -19,12 +19,20 @@ const CDH_SIG = 0x02014b50; // PK\x01\x02
 export async function parseNpz(
   buffer: ArrayBuffer,
 ): Promise<Record<string, NpyArray>> {
+  const members = await npzMembers(buffer);
+  const out: Record<string, NpyArray> = {};
+  for (const [key, bytes] of Object.entries(members)) out[key] = parseNpy(bytes);
+  return out;
+}
+
+/** An `.npz` buffer's members (name without `.npy`) as standalone `.npy` buffers. */
+export async function npzMembers(buffer: ArrayBuffer): Promise<Record<string, ArrayBuffer>> {
   const view = new DataView(buffer);
   const eocd = findEocd(view);
   const cdOffset = view.getUint32(eocd + 16, true);
   const total = view.getUint16(eocd + 10, true);
 
-  const out: Record<string, NpyArray> = {};
+  const out: Record<string, ArrayBuffer> = {};
   let p = cdOffset;
   for (let i = 0; i < total; i++) {
     if (view.getUint32(p, true) !== CDH_SIG) break;
@@ -56,9 +64,7 @@ export async function parseNpz(
     const key = name.replace(/\.npy$/i, "");
     // Copy into a standalone buffer so parseNpy can build aligned typed views.
     const copy = npyBytes.slice();
-    out[key] = parseNpy(
-      copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength),
-    );
+    out[key] = copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength);
 
     p += 46 + nameLen + extraLen + commentLen;
   }

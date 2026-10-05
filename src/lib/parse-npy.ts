@@ -54,6 +54,14 @@ function halfToFloat(bits: number): number {
 }
 
 export function parseNpy(buffer: ArrayBuffer): NpyArray {
+  const { descr, shape, fortranOrder, dataOffset } = parseNpyHeader(buffer);
+  const count = shape.reduce((a, b) => a * b, 1);
+  const data = decodeData(buffer, dataOffset, descr, count);
+  return { dtype: descr, shape, fortranOrder, data };
+}
+
+/** An `.npy` header: dtype descr, shape, order and where the data starts. */
+function parseNpyHeader(buffer: ArrayBuffer): { descr: string; shape: number[]; fortranOrder: boolean; dataOffset: number } {
   const bytes = new Uint8Array(buffer);
   for (let i = 0; i < MAGIC.length; i++) {
     if (bytes[i] !== MAGIC[i]) throw new Error("parseNpy: not a .npy file");
@@ -85,11 +93,7 @@ export function parseNpy(buffer: ArrayBuffer): NpyArray {
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
     .map(Number);
-  const count = shape.reduce((a, b) => a * b, 1);
-  const dataOffset = headerStart + headerLen;
-
-  const data = decodeData(buffer, dataOffset, descr, count);
-  return { dtype: descr, shape, fortranOrder, data };
+  return { descr, shape, fortranOrder, dataOffset: headerStart + headerLen };
 }
 
 function toF64(arr: ArrayLike<number>): Float64Array {
@@ -169,4 +173,71 @@ function decodeData(
     }
   }
   return out;
+}
+
+/** The array types {@link parseNpyTyped} returns. */
+export type NativeArray =
+  | Float32Array | Float64Array
+  | Int8Array | Int16Array | Int32Array
+  | Uint8Array | Uint16Array | Uint32Array;
+
+/** An `.npy` array in its own dtype (custom viewers get these). */
+export interface TypedNpyArray {
+  /** The array's values in stored order, in a standalone (transferable) buffer. */
+  data: NativeArray;
+  shape: number[];
+  /** Numpy dtype name: `float32`, `int64`, `bool`, … (the stored dtype, also when `data` widens it). */
+  dtype: string;
+  /** `"F"` when stored column-major (numpy `fortran_order`), else `"C"`. */
+  order: "C" | "F";
+}
+
+const DTYPE_NAMES: Record<string, string> = {
+  f2: "float16", f4: "float32", f8: "float64",
+  i1: "int8", i2: "int16", i4: "int32", i8: "int64",
+  u1: "uint8", u2: "uint16", u4: "uint32", u8: "uint64",
+  b1: "bool",
+};
+
+/**
+ * `.npy` → its values in the matching native typed array (a copy in a
+ * standalone buffer, so it can be transferred). Widened where JS has no such
+ * array: float16 → Float32Array; int64/uint64 → Float64Array (exact up to
+ * 2^53). Big-endian input is converted to the platform's order.
+ */
+export function parseNpyTyped(buffer: ArrayBuffer): TypedNpyArray {
+  const head = parseNpyHeader(buffer);
+  const { descr, shape, fortranOrder, dataOffset } = head;
+  const count = shape.reduce((a, b) => a * b, 1);
+  const kind = descr[1]!;
+  const itemsize = parseInt(descr.slice(2) || "1", 10);
+  const code = kind + itemsize;
+  const dtype = DTYPE_NAMES[code];
+  if (!dtype) throw new Error(`parseNpy: unsupported dtype '${descr}' (supported: ${SUPPORTED_DTYPES})`);
+  const little = descr[0] !== ">";
+  const order = fortranOrder ? "F" : "C";
+  const view = new DataView(buffer, dataOffset, count * itemsize);
+  const read = <T extends NativeArray>(make: (n: number) => T, get: (i: number) => number): T => {
+    const out = make(count);
+    for (let i = 0; i < count; i++) out[i] = get(i);
+    return out;
+  };
+  // Little-endian, natively sized: one copy of the bytes.
+  const copy = <T extends NativeArray>(ctor: { new (b: ArrayBuffer): T }): T =>
+    new ctor(buffer.slice(dataOffset, dataOffset + count * itemsize));
+  let data: NativeArray;
+  switch (code) {
+    case "f4": data = little ? copy(Float32Array) : read((n) => new Float32Array(n), (i) => view.getFloat32(i * 4, false)); break;
+    case "f8": data = little ? copy(Float64Array) : read((n) => new Float64Array(n), (i) => view.getFloat64(i * 8, false)); break;
+    case "f2": data = read((n) => new Float32Array(n), (i) => halfToFloat(view.getUint16(i * 2, little))); break;
+    case "i1": data = copy(Int8Array); break;
+    case "u1": case "b1": data = copy(Uint8Array); break;
+    case "i2": data = little ? copy(Int16Array) : read((n) => new Int16Array(n), (i) => view.getInt16(i * 2, false)); break;
+    case "u2": data = little ? copy(Uint16Array) : read((n) => new Uint16Array(n), (i) => view.getUint16(i * 2, false)); break;
+    case "i4": data = little ? copy(Int32Array) : read((n) => new Int32Array(n), (i) => view.getInt32(i * 4, false)); break;
+    case "u4": data = little ? copy(Uint32Array) : read((n) => new Uint32Array(n), (i) => view.getUint32(i * 4, false)); break;
+    case "i8": data = read((n) => new Float64Array(n), (i) => Number(view.getBigInt64(i * 8, little))); break;
+    default: data = read((n) => new Float64Array(n), (i) => Number(view.getBigUint64(i * 8, little))); break;
+  }
+  return { data, shape, dtype, order };
 }
