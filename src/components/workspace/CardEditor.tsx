@@ -151,12 +151,17 @@ export function CardEditorHost({
     (id: string): RenderedPanel | undefined => sections.flatMap((s) => s.panels).find((p) => p.panel.id === id),
     [sections],
   );
-  // A card that does not open again in time (deleted meanwhile, an undo): the editor closes.
+  // A card that is gone (an undo took it away) or does not open again in time: the editor closes.
+  const pendingGone = pending != null && find(pending) == null;
   useEffect(() => {
     if (pending == null) return;
+    if (pendingGone) {
+      setPending(null);
+      return;
+    }
     const t = setTimeout(() => setPending(null), PENDING_MS);
     return () => clearTimeout(t);
-  }, [pending]);
+  }, [pending, pendingGone]);
 
   const close = useCallback(() => {
     stepping.current = false;

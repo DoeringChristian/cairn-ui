@@ -53,9 +53,8 @@ export function useModalBehavior(open: boolean, onClose: () => void): void {
   // the first paint reflows the modal once it is already on screen — and any
   // consumer that measures the modal's box on open (card-kit/use-overlay-slot)
   // would measure the pre-lock layout and then have to correct itself.
-  // Counted: modals may close in any order (the add-cards modal hands over
-  // to the new card's editor and closes after it opened), and the body
-  // scrolls again only when the last one closes.
+  // Counted: modals may close in any order (a dialog opened from the card
+  // editor), and the body scrolls again only when the last one closes.
   useLayoutEffect(() => {
     if (!open) return;
     if (scrollLocks++ === 0) {
