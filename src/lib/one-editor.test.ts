@@ -127,3 +127,23 @@ test("no second series picker in a workspace card's settings", () => {
     "TableSettingsPanel.tsx: Group by",
   ]);
 });
+
+test("the editor's settings column: one tab row + × in a header that does not scroll; no folds of its own", () => {
+  const all = sources();
+  const editor = all.find((s) => s.rel === "components/workspace/CardEditor.tsx")!.text;
+  // The tab row is the modal's settings header: Data | Type | the card's other tabs.
+  assert.match(editor, /settingsHeader=\{<SettingsTabBar items=\{tabs\} current=\{tab\} onSelect=\{onTab\} \/>\}/);
+  assert.match(editor, /\{ id: "data" as EditorTab, label: "Data" \},\s*\{ id: "type" as EditorTab, label: "Type", disabled: !ready \},\s*\.\.\.SETTINGS_TABS\.filter\(\(t\) => t\.id !== "data" && cardTabs\.includes\(t\.id\)\)/);
+  // No folds, headings or extra buttons of the editor's own.
+  assert.doesNotMatch(editor, /aria-expanded|function Fold|<SettingsSection|<h[3-4]\b|Choose a card type|Into <|>Card</);
+  // The header sits outside the scrolling body, with the close button beside the tabs.
+  const modal = all.find((s) => s.rel === "components/CardDetailModal.tsx")!.text;
+  assert.match(
+    modal,
+    /<div className=\{`h-12 shrink-0[^`]*`\}>\s*<div className="flex min-w-0 flex-1 items-stretch">\s*\{settingsHeader \?\?[\s\S]*?aria-label="Close"[\s\S]*?<\/div>\s*<div className="min-h-0 flex-1 overflow-y-auto p-4">\{settingsContent\}<\/div>/,
+  );
+  // Under the editor a card's settings panel draws no tab row of its own: it reports its tabs.
+  const tabs = all.find((s) => s.rel === "components/settings/palette/SettingsTabs.tsx")!.text;
+  assert.match(tabs, /host\?\.report\([\s\S]*?if \(host\) return host\.active && visible\.includes\(host\.active\) \? <div>\{tabs\[host\.active\]\}<\/div> : null;/);
+  assert.match(all.find((s) => s.rel === "components/workspace/card-editor-host.tsx")!.text, /<SettingsTabsHostContext\.Provider value=\{tabs\}>\{settings\}/);
+});

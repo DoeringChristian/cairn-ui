@@ -30,18 +30,18 @@
  * modal with their (session-only) settings.
  */
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
 import { CardEditorHostContext, type CardEditorClaim, type Host, type Slots } from "./card-editor-host";
 import CardDetailModal from "../CardDetailModal";
 import CardPreview from "./CardPreview";
 import CardDataPicker from "./CardDataPicker";
 import CardTypePicker, { CardTypeTiles, Hint, MAX_PREVIEWS } from "./CardTypePicker";
-import { TextInput } from "../settings/palette";
+import { SettingsTabBar } from "../settings/palette/SettingsTabs";
+import { SETTINGS_TABS, type SettingsTabId } from "../settings/palette/logic";
 import { useViewerDefaults, useViewerList } from "../../lib/custom/hooks";
 import { useProjectId } from "../../lib/project-context";
 import {
   compatibleTypes,
-  dataLabel,
   dataParts,
   dataReady,
   newCards,
@@ -110,13 +110,17 @@ export function CardEditorHost({
     [],
   );
 
-  const slots = useRef<Slots>({ card: null, settings: null });
+  const slots = useRef<Slots>({ card: null, settings: null, tab: "data" });
   const slotSubs = useRef(new Set<() => void>());
-  const setSlot = useCallback((k: keyof Slots, el: HTMLElement | null) => {
-    if (slots.current[k] === el) return;
-    slots.current = { ...slots.current, [k]: el };
+  const setSlot = useCallback(<K extends keyof Slots>(k: K, v: Slots[K]) => {
+    if (slots.current[k] === v) return;
+    slots.current = { ...slots.current, [k]: v };
     for (const fn of slotSubs.current) fn();
   }, []);
+
+  // The one tab row: Data | Type | the card's other tabs (its settings panel reports them).
+  const [tab, setTab] = useState<EditorTab>("data");
+  const [cardTabs, setCardTabs] = useState<SettingsTabId[]>([]);
 
   const host = useMemo<Host>(
     () => ({
@@ -129,6 +133,7 @@ export function CardEditorHost({
         if (claimRef.current?.id !== id || !alive.current) return;
         claimRef.current = null;
         setClaim(null);
+        setCardTabs([]);
         if (how === "unmount") {
           // A type change remounts the card: it opens again under the editor.
           setPending(id);
@@ -139,6 +144,7 @@ export function CardEditorHost({
       },
       touch,
       getSlots: () => slots.current,
+      reportTabs: (tabs) => setCardTabs((prev) => (prev.join(" ") === tabs.join(" ") ? prev : tabs)),
       subscribeSlots: (fn) => {
         slotSubs.current.add(fn);
         return () => slotSubs.current.delete(fn);
@@ -168,6 +174,7 @@ export function CardEditorHost({
     const c = claimRef.current;
     setClaim(null);
     setPending(null);
+    setTab("data");
     if (adding != null) onAddingDone();
     c?.info.current.onClose();
   }, [adding, onAddingDone]);
@@ -182,6 +189,9 @@ export function CardEditorHost({
       go();
     });
   const info = claim?.info.current;
+  // A tab the card under the editor lacks (after ←/→) shows Data, and comes back with a card that has it.
+  const shownTab: EditorTab = tab === "type" || tab === "data" || cardTabs.includes(tab) ? tab : "data";
+  useLayoutEffect(() => setSlot("tab", shownTab === "type" ? null : shownTab), [setSlot, shownTab]);
 
   return (
     <CardEditorHostContext.Provider value={enabled ? host : null}>
@@ -189,7 +199,10 @@ export function CardEditorHost({
       {enabled && mode != null && (
         <CardEditor
           mode={mode}
-          title={mode === "new" ? `Add a card to “${adding}”` : (info?.title ?? rendered?.label ?? "")}
+          title={mode === "new" ? `New card in “${adding}”` : (info?.title ?? rendered?.label ?? "")}
+          tab={shownTab}
+          onTab={setTab}
+          cardTabs={cardTabs}
           onClose={close}
           onPrev={mode === "edit" ? step(info?.onPrev) : undefined}
           onNext={mode === "edit" ? step(info?.onNext) : undefined}
@@ -201,6 +214,7 @@ export function CardEditorHost({
           onCreate={(cards) => {
             const first = adding != null ? onAdd(adding, cards) : undefined;
             setPending(first ?? null);
+            setTab("data");
             onAddingDone();
           }}
           onChange={(c) => {
@@ -218,12 +232,16 @@ export function CardEditorHost({
 // ---------------------------------------------------------------------------
 
 type EditorMode = "new" | "pending" | "edit";
+type EditorTab = SettingsTabId | "type";
 
 const NO_VIEWERS: ViewerInfo[] = [];
 
 function CardEditor({
   mode,
   title,
+  tab,
+  onTab,
+  cardTabs,
   onClose,
   onPrev,
   onNext,
@@ -238,6 +256,10 @@ function CardEditor({
 }: {
   mode: EditorMode;
   title: string;
+  tab: EditorTab;
+  onTab: (tab: EditorTab) => void;
+  /** The card's own settings tabs. */
+  cardTabs: SettingsTabId[];
   onClose: () => void;
   onPrev?: () => void;
   onNext?: () => void;
@@ -248,7 +270,7 @@ function CardEditor({
   runIds: readonly string[];
   onCreate: (cards: NewCard[]) => void;
   onChange: (change: PanelChange) => void;
-  setSlot: (k: keyof Slots, el: HTMLElement | null) => void;
+  setSlot: <K extends keyof Slots>(k: K, v: Slots[K]) => void;
 }) {
   const adding = mode === "new";
   const project = useProjectId();
@@ -265,55 +287,43 @@ function CardEditor({
     [data, metrics, runIds.length, adding, current, viewers, viewerDefaults],
   );
   const shownBy = useMemo(() => seriesShownBy(sections), [sections]);
-
-  const [dataOpen, setDataOpen] = useState(adding);
-  const [typeOpen, setTypeOpen] = useState(false);
   const [focus, setFocus] = useState<string | null>(null);
-  // Leaving "new" (a type was picked) or stepping to another card (←/→): both
-  // close, the card's settings come up.
+
+  // Stepping to another card (←/→) leaves the type list.
   const shownId = adding ? null : (edited?.id ?? null);
   const wasShown = useRef(shownId);
   useEffect(() => {
     if (wasShown.current === shownId) return;
     wasShown.current = shownId;
-    setDataOpen(false);
-    setTypeOpen(false);
     setFocus(null);
-  }, [shownId]);
+    if (tab === "type") onTab("data");
+  }, [shownId, tab, onTab]);
 
-  const openTypes = () => {
-    if (!ready) return;
-    setFocus(null);
-    setTypeOpen(true);
-    if (adding) setDataOpen(false);
-  };
-  const toggleData = () => {
-    const next = !dataOpen;
-    setDataOpen(next);
-    if (next && adding) setTypeOpen(false);
-  };
+  const typeTab = tab === "type" && ready;
   const pick = (key: string) => {
     if (mode === "pending") return;
     if (adding) {
       onCreate(newCards(data, [key], metrics));
       return;
     }
-    setTypeOpen(false);
+    onTab("data");
     if (key !== current) onChange({ option: key });
   };
-
-  const typeOption = compat.options.find((o) => o.key === current);
   const cardCount = adding && ready ? dataParts(data, metrics).length : 0;
-  const custom = panel && typeof panel.panel.settings.title === "string" ? panel.panel.settings.title : "";
 
-  // --- the left side -----------------------------------------------------------
   const cardSlot = useCallback((el: HTMLElement | null) => setSlot("card", el), [setSlot]);
   const settingsSlot = useCallback((el: HTMLElement | null) => setSlot("settings", el), [setSlot]);
-  const showTiles = typeOpen && ready;
+
+  const tabs = [
+    { id: "data" as EditorTab, label: "Data" },
+    { id: "type" as EditorTab, label: "Type", disabled: !ready },
+    ...SETTINGS_TABS.filter((t) => t.id !== "data" && cardTabs.includes(t.id)),
+  ];
+
   const left = (
     <>
-      <div className={showTiles || mode !== "edit" ? "hidden" : "h-full"} ref={cardSlot} data-testid="card-editor-card" />
-      {showTiles ? (
+      <div className={typeTab || mode !== "edit" ? "hidden" : "h-full"} ref={cardSlot} data-testid="card-editor-card" />
+      {typeTab ? (
         <CardTypeTiles
           options={compat.options}
           current={adding ? null : current}
@@ -337,21 +347,9 @@ function CardEditor({
   );
 
   const column = (
-    <div data-testid="card-editor" data-mode={mode} data-section={section ?? undefined}>
-      <section className="mb-3 border-b border-border pb-3" aria-label="Card">
-        <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted">Card</h4>
-        {adding && (
-          <p className="mb-2 text-xs text-fg-muted">
-            Into <span className="font-semibold text-fg">{section}</span>
-          </p>
-        )}
-        <Fold
-          label="Data"
-          summary={ready ? <span className="mono">{dataLabel(data, metrics)}</span> : "nothing picked"}
-          open={dataOpen}
-          onToggle={toggleData}
-          testId="card-editor-data"
-        >
+    <div data-testid="card-editor" data-mode={mode} data-tab={tab} data-section={section ?? undefined}>
+      {tab === "data" && (
+        <div className="mb-3 border-b border-border pb-3">
           <CardDataPicker
             key={adding ? "new" : (panel?.panel.id ?? "")}
             data={data}
@@ -362,31 +360,13 @@ function CardEditor({
             metrics={metrics}
             shownBy={shownBy}
             allowGroups={adding}
-            onSubmit={openTypes}
+            onSubmit={() => ready && onTab("type")}
             autoFocus={adding}
           />
-        </Fold>
-        <Fold
-          label="Card type"
-          summary={
-            adding ? (
-              ready ? (
-                cardCount > 1 ? `${cardCount} cards` : "pick one"
-              ) : (
-                "pick the data first"
-              )
-            ) : (
-              <>
-                {typeOption?.icon && <i className={`fa-solid fa-${typeOption.icon} mr-1`} aria-hidden="true" />}
-                {typeOption?.label ?? current}
-              </>
-            )
-          }
-          open={typeOpen}
-          onToggle={() => (typeOpen ? setTypeOpen(false) : openTypes())}
-          disabled={!ready && !typeOpen}
-          testId="card-editor-type"
-        >
+        </div>
+      )}
+      {tab === "type" && (
+        <>
           <CardTypePicker
             options={compat.options}
             reason={compat.reason}
@@ -396,31 +376,14 @@ function CardEditor({
             onPick={pick}
             busy={mode === "pending"}
           />
-          {adding && (
-            <p className="mt-2 text-xs text-fg-muted">
-              {cardCount > 1 ? `Picking a type adds ${cardCount} cards; the first opens here.` : "Picking a type adds the card; its settings open here."}
-            </p>
-          )}
-        </Fold>
-        {adding && ready && !typeOpen && (
-          <button type="button" className="btn mt-2 w-full text-sm touch:min-h-10" onClick={openTypes} data-testid="card-editor-choose-type">
-            Choose a card type
-          </button>
-        )}
-      </section>
-      {mode === "edit" && panel && (
-        <div className="mb-3 border-b border-border pb-3" data-testid="card-editor-title">
-          <TextInput
-            label="Title"
-            value={custom}
-            placeholder={panel.label}
-            onChange={(v) => onChange({ title: v })}
-            overridden={custom !== ""}
-            onReset={() => onChange({ title: "" })}
-          />
-        </div>
+          {cardCount > 1 && <p className="mt-2 text-xs text-fg-muted">Adds {cardCount} cards; the first opens here.</p>}
+        </>
       )}
-      <div ref={settingsSlot} data-testid="card-editor-settings" />
+      <div
+        className={tab === "type" || (tab !== "data" && cardTabs.length === 0) ? "hidden" : undefined}
+        ref={settingsSlot}
+        data-testid="card-editor-settings"
+      />
     </div>
   );
 
@@ -429,11 +392,13 @@ function CardEditor({
       open
       onClose={onClose}
       title={title}
-      settingsLabel={adding ? "Add a card" : "Settings"}
+      titleNode={mode === "edit" && panel ? <InlineTitle title={title} custom={typeof panel.panel.settings.title === "string" ? panel.panel.settings.title : ""} onChange={(t) => onChange({ title: t })} /> : undefined}
+      settingsLabel={adding ? "New card" : "Settings"}
       cardLabel={adding ? "Preview" : "Card"}
       initialTab={adding ? "settings" : "card"}
       onPrev={onPrev}
       onNext={onNext}
+      settingsHeader={<SettingsTabBar items={tabs} current={tab} onSelect={onTab} />}
       settingsContent={column}
     >
       {left}
@@ -441,39 +406,52 @@ function CardEditor({
   );
 }
 
-/** A collapsible row of the Card section: label, a summary while closed. */
-function Fold({
-  label,
-  summary,
-  open,
-  onToggle,
-  disabled,
-  testId,
-  children,
-}: {
-  label: string;
-  summary: ReactNode;
-  open: boolean;
-  onToggle: () => void;
-  disabled?: boolean;
-  testId: string;
-  children: ReactNode;
-}) {
+/** The card's title in the editor's header, with ✎: Enter or blur saves, Escape cancels, empty is the default title. */
+function InlineTitle({ title, custom, onChange }: { title: string; custom: string; onChange: (title: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const done = useRef(false);
+  if (draft == null) {
+    return (
+      <span className="inline-flex max-w-full items-center gap-2">
+        <span className="truncate" onDoubleClick={() => ((done.current = false), setDraft(custom))}>
+          {title}
+        </span>
+        <button
+          type="button"
+          onClick={() => ((done.current = false), setDraft(custom))}
+          className="shrink-0 text-sm text-fg-subtle hover:text-fg"
+          aria-label="Edit title"
+          title="Edit title"
+        >
+          <i className="fa-solid fa-pencil" aria-hidden="true" />
+        </button>
+      </span>
+    );
+  }
+  const end = (keep: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    if (keep && draft.trim() !== custom) onChange(draft.trim());
+    setDraft(null);
+  };
+  const key = (e: KeyboardEvent) => {
+    if (e.key === "Enter") end(true);
+    else if (e.key === "Escape") {
+      e.stopPropagation();
+      end(false);
+    }
+  };
   return (
-    <div className="py-0.5" data-testid={testId} data-open={open ? "" : undefined}>
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={disabled}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 rounded py-1.5 text-left text-sm hover:text-fg disabled:cursor-not-allowed disabled:opacity-60 touch:min-h-10"
-      >
-        <i aria-hidden="true" className={`fa-solid fa-chevron-down text-[9px] text-fg-muted transition-transform ${open ? "" : "-rotate-90"}`} />
-        <span className="font-medium text-fg">{label}</span>
-        {!open && <span className="min-w-0 flex-1 truncate text-right text-xs text-fg-muted">{summary}</span>}
-      </button>
-      {open && <div className="pb-2 pt-1">{children}</div>}
-    </div>
+    <input
+      className="input mono w-full py-0.5 text-base font-semibold"
+      value={draft}
+      placeholder="Default title"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => end(true)}
+      onKeyDown={key}
+      aria-label="Title"
+      autoFocus
+    />
   );
 }
 

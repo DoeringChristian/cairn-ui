@@ -9,8 +9,10 @@
  * state.
  */
 
-import { createContext, useContext, useLayoutEffect, useRef, useSyncExternalStore, type MutableRefObject, type ReactNode } from "react";
+import { createContext, useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type MutableRefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { SettingsTabsHostContext } from "../settings/palette/SettingsTabs";
+import type { SettingsTabId } from "../settings/palette/logic";
 
 /** What the card under the editor tells it. */
 export interface CardEditorClaim {
@@ -24,6 +26,8 @@ export interface CardEditorClaim {
 export interface Slots {
   card: HTMLElement | null;
   settings: HTMLElement | null;
+  /** The editor's active tab among the card's own (null: Type, or a tab the card lacks). */
+  tab: SettingsTabId | null;
 }
 
 export interface Host {
@@ -34,6 +38,8 @@ export interface Host {
   /** The claim's info changed (title, neighbours). */
   touch: () => void;
   getSlots: () => Slots;
+  /** The card's settings panel shows these tabs (the editor draws them in its one tab row). */
+  reportTabs: (tabs: SettingsTabId[]) => void;
   subscribeSlots: (fn: () => void) => () => void;
 }
 
@@ -76,11 +82,13 @@ export function CardEditorSlots({
     if (open) host.touch();
   }, [open, host, title, hasPrev, hasNext]);
   const slots = useSyncExternalStore(host.subscribeSlots, host.getSlots);
+  const tabs = useMemo(() => ({ active: slots.tab, report: host.reportTabs }), [slots.tab, host]);
   if (!open) return null;
   return (
     <>
       {slots.card && createPortal(content, slots.card)}
-      {slots.settings && createPortal(settings, slots.settings)}
+      {slots.settings &&
+        createPortal(<SettingsTabsHostContext.Provider value={tabs}>{settings}</SettingsTabsHostContext.Provider>, slots.settings)}
     </>
   );
 }

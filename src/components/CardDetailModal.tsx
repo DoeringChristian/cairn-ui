@@ -16,6 +16,10 @@ interface Props {
   cardLabel?: string;
   /** The phone tab it opens on (default the card). */
   initialTab?: "card" | "settings";
+  /** Shown in place of the title text (the card editor's inline title edit). */
+  titleNode?: ReactNode;
+  /** The settings column's header in place of its label (the card editor's tab row); shown on phones too. */
+  settingsHeader?: ReactNode;
 }
 
 /** Arrow keys belong to a focused control (a slider, a select), not to card navigation. */
@@ -50,6 +54,8 @@ export default function CardDetailModal({
   settingsLabel = "Settings",
   cardLabel = "Card",
   initialTab = "card",
+  titleNode,
+  settingsHeader,
 }: Props) {
   useModalBehavior(open, onClose);
   const hasNav = !!onPrev || !!onNext;
@@ -108,8 +114,8 @@ export default function CardDetailModal({
         {/* Phone header: title, close, tabs */}
         <div className="sticky top-0 z-10 shrink-0 border-b border-border bg-bg md:hidden">
           <div className="flex items-center gap-2 pl-4 pr-1">
-            <h2 className="mono min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
-          {hasNav && <NavButtons onPrev={onPrev} onNext={onNext} size="h-11 w-11" />}
+            {hasNav && <NavButtons onPrev={onPrev} onNext={onNext} size="h-11 w-11" />}
+            <h2 className="mono min-w-0 flex-1 truncate text-base font-semibold">{titleNode ?? title}</h2>
             <button
               type="button"
               onClick={onClose}
@@ -127,39 +133,39 @@ export default function CardDetailModal({
           )}
         </div>
 
-        {/* Card at full size */}
-        <div
-          className={`min-h-0 min-w-0 flex-1 flex-col overflow-auto p-3 md:flex md:p-6 ${
-            showSettings ? "hidden" : "flex"
-          }`}
-        >
-          <div className="mb-4 hidden shrink-0 items-center gap-2 md:flex">
-            <h2 className="mono min-w-0 flex-1 truncate text-lg font-semibold">{title}</h2>
+        {/* Card at full size; its header and the settings column's are one row that never scrolls */}
+        <div className={`min-h-0 min-w-0 flex-1 flex-col md:flex ${showSettings ? "hidden" : "flex"}`}>
+          <div className="hidden h-12 shrink-0 items-center gap-2 border-b border-border px-6 md:flex">
             {hasNav && <NavButtons onPrev={onPrev} onNext={onNext} size="h-7 w-7" />}
+            <h2 className="mono min-w-0 flex-1 truncate text-lg font-semibold">{titleNode ?? title}</h2>
           </div>
-          <div className="flex-1 min-h-0">{children}</div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-auto p-3 md:p-6">
+            <div className="flex-1 min-h-0">{children}</div>
+          </div>
         </div>
 
         {/* Settings panel */}
         <div
-          className={`min-h-0 flex-1 overflow-y-auto bg-bg-elevated p-4 md:block md:w-96 md:flex-none md:shrink-0 md:border-l md:border-border ${
-            showSettings ? "block" : "hidden"
+          className={`min-h-0 flex-1 flex-col bg-bg-elevated md:flex md:w-96 md:flex-none md:shrink-0 md:border-l md:border-border ${
+            showSettings ? "flex" : "hidden"
           }`}
         >
-          <div className="mb-4 hidden items-center justify-between md:flex">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">
-              {settingsLabel}
-            </h3>
+          <div className={`h-12 shrink-0 items-stretch gap-2 border-b border-border px-4 ${settingsHeader ? "flex" : "hidden md:flex"}`}>
+            <div className="flex min-w-0 flex-1 items-stretch">
+              {settingsHeader ?? (
+                <h3 className="self-center text-xs font-semibold uppercase tracking-wide text-fg-muted">{settingsLabel}</h3>
+              )}
+            </div>
             <button
               type="button"
               onClick={onClose}
-              className="h-6 w-6 inline-flex items-center justify-center rounded hover:bg-bg-hover text-fg-muted hover:text-fg text-lg"
+              className="hidden h-6 w-6 shrink-0 items-center justify-center self-center rounded text-lg text-fg-muted hover:bg-bg-hover hover:text-fg md:inline-flex"
               aria-label="Close"
             >
               {"×"}
             </button>
           </div>
-          {settingsContent}
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">{settingsContent}</div>
         </div>
       </div>
     </div>
