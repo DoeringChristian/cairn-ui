@@ -49,6 +49,7 @@ include = [
     "cairn_ui/",
     "src/",
     "scripts/",
+    "builtin-viewers/",
     "docs/",
     "*.html",
     "*.json",
