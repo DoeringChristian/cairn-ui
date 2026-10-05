@@ -189,6 +189,9 @@ export const api = {
       `/api/runs/${runId}/updates?since=${since}`,
     ),
   artifactUrl: (hash: string) => `/api/artifacts/${hash}`,
+  /** A stored HTML file as its own sandboxed document (resize shim injected); `maxBytes` serves its head only. */
+  artifactHtmlUrl: (hash: string, maxBytes?: number) =>
+    `/api/artifacts/${hash}/html${maxBytes != null ? `?max_bytes=${maxBytes}` : ""}`,
   logs: (
     runId: string,
     opts: { offset?: number; limit?: number; stream?: string; search?: string } = {},
