@@ -31,6 +31,8 @@ export interface MetricInfo {
   count: number;
   /** Bound runs that log it. */
   runIds: string[];
+  /** Custom data: its kind (`guiding/vmf`), for matching custom viewers. */
+  kind?: string | null;
 }
 
 export interface RenderedPanel {

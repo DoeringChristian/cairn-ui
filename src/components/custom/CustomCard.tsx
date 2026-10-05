@@ -43,8 +43,10 @@ export default function CustomCard(props: SteppedMediaCardProps) {
   const { runId, metric } = props;
   const project = useViewerProject(runId);
   const seqs = useSequences(runId);
-  const listedKind = seqs.data?.sequences.find((s) => s.name === metric.name)?.kind ?? metric.kind ?? null;
-  const objectType = metric.object_type || "custom";
+  // The series as listed: a viewer may take over a built-in kind (the card's metric then says "custom").
+  const listed = seqs.data?.sequences.find((s) => s.name === metric.name);
+  const listedKind = listed?.kind ?? metric.kind ?? null;
+  const objectType = listed?.object_type ?? (metric.object_type || "custom");
   const series = useMemo<SeriesKind[]>(() => [{ object_type: objectType, kind: listedKind }], [objectType, listedKind]);
   const list = useViewerList(project).data;
   const bus = useMemo(() => new ZoomViewSync<unknown>(), []);

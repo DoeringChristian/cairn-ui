@@ -19,7 +19,9 @@
  *   removed and (with unlisted metrics off) not shown — for "Manage cards".
  */
 
+import type { ViewerInfo } from "../../api/types.ts";
 import type { CardType } from "../cards/card-spec.ts";
+import { viewersFor } from "../custom/viewers.ts";
 import { isMultiRunCardType, minRunsFor } from "../comparisons/types.ts";
 import { deps, parse } from "../expr/index.ts";
 import { quoteMetric } from "../scalar-exprs.ts";
@@ -51,6 +53,7 @@ const TYPE_LABELS: Partial<Record<CardType, string>> = {
   boxes3d: "3D boxes",
   preset: "Confusion / PR / ROC",
   html: "HTML",
+  custom: "Custom viewer",
 };
 
 const TYPE_HINTS: Partial<Record<CardType, string>> = {
@@ -220,7 +223,11 @@ export function seriesCatalogue(
 // ---------------------------------------------------------------------------
 
 export interface TypeOption {
+  /** Unique among the options: the card type, or `custom:<viewer>` for one custom viewer. */
+  key: string;
   type: CardType;
+  /** Settings the option seeds a new card with (a custom viewer's `viewer`). */
+  seed?: Record<string, unknown>;
   label: string;
   hint: string;
   /** Why it cannot be added now (too few runs, too many series), else null. */
@@ -251,28 +258,66 @@ export interface CompatResult {
   reason: string | null;
 }
 
+/** The option a card is: its type, or `custom:<viewer>` for a custom card naming its viewer. */
+export function optionKey(type: CardType, settings: Record<string, unknown>): string {
+  return type === "custom" && typeof settings.viewer === "string" ? `custom:${settings.viewer}` : type;
+}
+
+/** An option key's card type and the settings it seeds. */
+export function parseOptionKey(key: string): { type: CardType; seed: Record<string, unknown> } {
+  return key.startsWith("custom:") ? { type: "custom", seed: { viewer: key.slice("custom:".length) } } : { type: key as CardType, seed: {} };
+}
+
+/** A card's label in the builder: its type, or its custom viewer's title. */
+export function optionLabel(key: string, viewers: readonly ViewerInfo[] = []): string {
+  const { type, seed } = parseOptionKey(key);
+  if (type !== "custom" || typeof seed.viewer !== "string") return builderTypeLabel(type);
+  const v = viewers.find((x) => x.name === seed.viewer);
+  return v?.title || seed.viewer;
+}
+
 /**
- * The card types that can show `data` for `runCount` bound runs.
- * `keepType` (the type of a card being edited) is always offered.
+ * The card types that can show `data` for `runCount` bound runs, plus every
+ * custom viewer of `viewers` that accepts all of the data (custom data by
+ * kind, or a built-in kind it takes over), as `custom:<name>` options.
+ * `keepKey` (the option of a card being edited, see `optionKey`) is always offered.
  */
 export function compatibleTypes(
   data: BuilderData,
   metrics: readonly MetricInfo[],
   runCount: number,
-  keepType: CardType | null = null,
+  keepKey: string | null = null,
+  viewers: readonly ViewerInfo[] = [],
 ): CompatResult {
   const runsNote = (t: CardType) => {
     const need = minRunsFor(t);
     return runCount < need ? `needs ${need}+ runs` : null;
   };
   const opt = (type: CardType, unavailable: string | null): TypeOption => ({
+    key: type,
     type,
     label: builderTypeLabel(type),
     hint: TYPE_HINTS[type] ?? `The ${builderTypeLabel(type).toLowerCase()} card of this series.`,
     unavailable: unavailable ?? runsNote(type),
   });
+  const viewerOpt = (v: ViewerInfo): TypeOption => ({
+    key: `custom:${v.name}`,
+    type: "custom",
+    seed: { viewer: v.name },
+    label: v.title || v.name,
+    hint: `${v.description ? `${v.description} ` : ""}Custom viewer ${v.name}${v.dev ? " (live dev source)" : v.version != null ? ` v${v.version}` : ""}.`,
+    unavailable: v.error ? `the viewer is broken: ${v.error}` : null,
+  });
+  const keepOpt = (key: string): TypeOption => {
+    const { type, seed } = parseOptionKey(key);
+    if (type === "custom" && typeof seed.viewer === "string") {
+      const v = viewers.find((x) => x.name === seed.viewer);
+      return v ? viewerOpt(v) : { key, type, seed, label: seed.viewer, hint: `Custom viewer ${seed.viewer}.`, unavailable: null };
+    }
+    return opt(type, null);
+  };
   const withKeep = (r: CompatResult): CompatResult =>
-    keepType && !r.options.some((o) => o.type === keepType) ? { ...r, options: [opt(keepType, null), ...r.options] } : r;
+    keepKey && !r.options.some((o) => o.key === keepKey) ? { ...r, options: [keepOpt(keepKey), ...r.options] } : r;
 
   if (data.mode === "runs") return withKeep({ options: RUN_TYPES.map((t) => opt(t, null)), reason: null });
   if (!dataReady(data)) return withKeep({ options: [], reason: "Pick the data first." });
@@ -298,7 +343,12 @@ export function compatibleTypes(
       options.push(opt(type, n));
     }
   }
-  return withKeep({ options, reason: options.length ? null : `No card shows ${kind} series.` });
+  if (kind !== "scalar") {
+    const matching = viewersFor(viewers, resolved.map((m) => ({ object_type: m.object_type, kind: m.kind ?? null })));
+    options.push(...matching.map(viewerOpt));
+  }
+  const custom = kind === "custom" ? ` No custom viewer accepts ${[...new Set(resolved.map((m) => m.kind ?? "?"))].join(", ")} yet: publish one with \`cairn viewer publish\`.` : "";
+  return withKeep({ options, reason: options.length ? null : `No card shows ${kind} series.${custom}` });
 }
 
 // ---------------------------------------------------------------------------

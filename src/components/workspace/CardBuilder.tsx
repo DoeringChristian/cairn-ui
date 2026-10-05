@@ -44,9 +44,14 @@ import { ChartSyncProvider } from "../../lib/chart-sync";
 import { NoUndo } from "../../lib/undo-context";
 import { newLayoutId, type MetricSelector, type Panel } from "../../lib/workspace/doc";
 import { panelLabel, resolvePanelMetrics, type MetricInfo, type RenderedPanel } from "../../lib/workspace/layout";
+import { useViewerList } from "../../lib/custom/hooks";
+import { useProjectId } from "../../lib/project-context";
 import {
   builderTypeLabel,
   compatibleTypes,
+  optionKey,
+  optionLabel,
+  parseOptionKey,
   dataLabel,
   dataMetrics,
   dataReady,
@@ -160,7 +165,11 @@ interface Draft {
   key: string;
   type: CardType;
   settings: Record<string, unknown>;
+  /** The card's label in the builder (its type, or its custom viewer's title). */
+  label?: string;
 }
+
+const draftLabel = (d: Draft) => d.label ?? builderTypeLabel(d.type);
 
 const NEW_SECTION = "\u0000new";
 /** Settings a type change keeps (the card's frame, not its content). */
@@ -186,8 +195,11 @@ function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "
 
   const [step, setStep] = useState<Step>(editing ? "configure" : "data");
   const [data, setData] = useState<BuilderData>(() => (editing ? panelData(editing) : { mode: "series", names: [] }));
-  const [types, setTypes] = useState<CardType[]>(() => (editing ? [editing.type] : []));
-  const [focus, setFocus] = useState<CardType | null>(editing?.type ?? null);
+  // Chosen options: card types, or `custom:<viewer>` (see optionKey).
+  const editingKey = editing ? optionKey(editing.type, editing.settings) : null;
+  const [types, setTypes] = useState<string[]>(() => (editingKey ? [editingKey] : []));
+  const [focus, setFocus] = useState<string | null>(editingKey);
+  const viewers = useViewerList(useProjectId()).data ?? [];
   const [drafts, setDrafts] = useState<Draft[]>(() =>
     editing ? [{ key: editing.id, type: editing.type, settings: editing.settings }] : [],
   );
@@ -197,18 +209,20 @@ function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "
   const [newSection, setNewSection] = useState(initialSection ? "" : DEFAULT_NEW_SECTION);
 
   const compat = useMemo(
-    () => compatibleTypes(data, metrics, runIds.length, editing?.type ?? null),
-    [data, metrics, runIds.length, editing],
+    () => compatibleTypes(data, metrics, runIds.length, editingKey, viewers),
+    [data, metrics, runIds.length, editingKey, viewers],
   );
-  const available = compat.options.filter((o) => o.unavailable == null).map((o) => o.type);
+  const available = compat.options.filter((o) => o.unavailable == null).map((o) => o.key);
 
   // The draft list for the chosen types: kept drafts follow the data; new types start seeded.
-  const buildDrafts = (chosen: readonly CardType[]): Draft[] => {
+  const buildDrafts = (chosen: readonly string[]): Draft[] => {
     const out: Draft[] = [];
-    for (const t of chosen) {
-      const kept = drafts.filter((d) => d.type === t);
+    for (const k of chosen) {
+      const { type: t, seed } = parseOptionKey(k);
+      const label = optionLabel(k, viewers);
+      const kept = drafts.filter((d) => optionKey(d.type, d.settings) === k);
       if (kept.length) {
-        for (const d of kept) out.push({ ...d, settings: seedPanel(t, data, followTitle(t, d.settings, data)).settings });
+        for (const d of kept) out.push({ ...d, label, settings: seedPanel(t, data, followTitle(t, d.settings, data)).settings });
         continue;
       }
       if (editing && drafts[0]) {
@@ -220,11 +234,11 @@ function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "
         if (prevDefault && frame.title === prevDefault) delete frame.title;
         const title = defaultTitle(t, data);
         if (frame.title == null && title) frame.title = title;
-        out.push({ key: drafts[0].key, type: t, settings: seedPanel(t, data, frame).settings });
+        out.push({ key: drafts[0].key, type: t, label, settings: seedPanel(t, data, { ...frame, ...seed }).settings });
         continue;
       }
       const title = defaultTitle(t, data);
-      out.push({ key: newLayoutId("d_"), type: t, settings: seedPanel(t, data, title ? { title } : {}).settings });
+      out.push({ key: newLayoutId("d_"), type: t, label, settings: seedPanel(t, data, { ...(title ? { title } : {}), ...seed }).settings });
     }
     return out;
   };
@@ -294,7 +308,7 @@ function BuildFlow(props: Props & { mode: Extract<BuilderMode, { kind: "add" | "
         ))}
         <span className="ml-auto min-w-0 truncate text-fg-subtle" title={dataLabel(data)}>
           {dataReady(data) ? <span className="mono">{dataLabel(data)}</span> : "no data picked"}
-          {types.length > 0 && step !== "data" && <> · {types.map(builderTypeLabel).join(", ")}</>}
+          {types.length > 0 && step !== "data" && <> · {types.map((k) => optionLabel(k, viewers)).join(", ")}</>}
         </span>
       </nav>
 
@@ -500,7 +514,7 @@ function DataStep({
                 {(regex?.ok ? regex.matches : []).map((m) => (
                   <li key={m.name} className="flex items-center gap-2">
                     <span className="mono min-w-0 flex-1 truncate text-fg">{m.name}</span>
-                    <span className={KIND_BADGE}>{kindLabel(m.object_type)}</span>
+                    <span className={KIND_BADGE}>{kindLabel(m.object_type === "custom" && m.kind ? m.kind : m.object_type)}</span>
                     <ShownBy labels={shownBy.get(m.name) ?? []} />
                   </li>
                 ))}
@@ -562,16 +576,16 @@ function TypeStep({
   options: ReturnType<typeof compatibleTypes>["options"];
   reason: string | null;
   single: boolean;
-  types: CardType[];
-  onTypes: (t: CardType[]) => void;
-  focus: CardType | null;
-  onFocus: (t: CardType) => void;
+  types: string[];
+  onTypes: (t: string[]) => void;
+  focus: string | null;
+  onFocus: (t: string) => void;
   data: BuilderData;
   metrics: readonly MetricInfo[];
   runIds: readonly string[];
 }) {
-  const focused = options.find((o) => o.type === focus) ?? options[0] ?? null;
-  const toggle = (t: CardType) => {
+  const focused = options.find((o) => o.key === focus) ?? options[0] ?? null;
+  const toggle = (t: string) => {
     onFocus(t);
     if (single) onTypes([t]);
     else onTypes(types.includes(t) ? types.filter((x) => x !== t) : [...types, t]);
@@ -579,7 +593,7 @@ function TypeStep({
   const seeded = useMemo(() => {
     if (!focused) return null;
     const title = defaultTitle(focused.type, data);
-    return seedPanel(focused.type, data, title ? { title } : {});
+    return seedPanel(focused.type, data, { ...(title ? { title } : {}), ...focused.seed });
   }, [focused, data]);
 
   return (
@@ -588,22 +602,22 @@ function TypeStep({
         {reason && <p className="p-4 text-sm text-fg-muted">{reason}</p>}
         <ul className="divide-y divide-border-subtle" role="listbox" aria-label="Card types" aria-multiselectable={!single}>
           {options.map((o) => (
-            <li key={o.type}>
+            <li key={o.key}>
               <div
-                className={`flex items-start gap-2 px-3 py-2 text-sm ${focused?.type === o.type ? "bg-bg-hover" : ""}`}
-                onMouseEnter={() => onFocus(o.type)}
+                className={`flex items-start gap-2 px-3 py-2 text-sm ${focused?.key === o.key ? "bg-bg-hover" : ""}`}
+                onMouseEnter={() => onFocus(o.key)}
               >
                 <input
                   type={single ? "radio" : "checkbox"}
                   name="builder-type"
                   className="mt-0.5"
-                  checked={types.includes(o.type)}
+                  checked={types.includes(o.key)}
                   disabled={o.unavailable != null}
-                  onChange={() => toggle(o.type)}
+                  onChange={() => toggle(o.key)}
                   aria-label={o.label}
-                  data-type={o.type}
+                  data-type={o.key}
                 />
-                <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onFocus(o.type)}>
+                <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onFocus(o.key)}>
                   <span className={`block font-medium ${o.unavailable ? "text-fg-subtle" : "text-fg"}`}>{o.label}</span>
                   <span className="block text-[11px] text-fg-muted">{o.hint}</span>
                   {o.unavailable && <span className="block text-[11px] text-status-failed">{o.unavailable}</span>}
@@ -624,8 +638,8 @@ function TypeStep({
             <>
               <p className="mb-2 text-[11px] uppercase tracking-wide text-fg-subtle">Preview · {focused.label}</p>
               <CardPreview
-                key={`type:${focused.type}`}
-                draftKey={`type:${focused.type}`}
+                key={`type:${focused.key}`}
+                draftKey={`type:${focused.key}`}
                 type={focused.type}
                 selector={seeded.selector}
                 settings={seeded.settings}
@@ -669,14 +683,14 @@ function ConfigureStep({
   const setSettings = (key: string, settings: Record<string, unknown>) =>
     onDrafts(draftsRef.current.map((d) => (d.key === key ? { ...d, settings } : d)));
   const another = (d: Draft) => {
-    const copy: Draft = { key: newLayoutId("d_"), type: d.type, settings: structuredClone(d.settings) };
+    const copy: Draft = { key: newLayoutId("d_"), type: d.type, label: d.label, settings: structuredClone(d.settings) };
     const at = drafts.indexOf(d);
     onDrafts([...drafts.slice(0, at + 1), copy, ...drafts.slice(at + 1)]);
     onActive(copy.key);
   };
   if (!draft) return <p className="p-4 text-sm text-fg-muted">Pick a card type first.</p>;
   const seeded = seedPanel(draft.type, data, draft.settings);
-  const titleOf = (d: Draft) => (typeof d.settings.title === "string" && d.settings.title) || builderTypeLabel(d.type);
+  const titleOf = (d: Draft) => (typeof d.settings.title === "string" && d.settings.title) || draftLabel(d);
   const setTitle = (t: string) => {
     const next = { ...draft.settings };
     if (t) next.title = t;
@@ -700,14 +714,14 @@ function ConfigureStep({
                 }`}
                 title={titleOf(d)}
               >
-                {i + 1}. {builderTypeLabel(d.type)}
+                {i + 1}. {draftLabel(d)}
               </button>
               <button
                 type="button"
                 onClick={() => another(d)}
                 className="bg-bg-hover px-1.5 py-1 text-xs text-fg-muted hover:text-fg touch:min-h-10"
-                aria-label={`Another ${builderTypeLabel(d.type)} card`}
-                title={`Another ${builderTypeLabel(d.type)} card of the same data (its own settings)`}
+                aria-label={`Another ${draftLabel(d)} card`}
+                title={`Another ${draftLabel(d)} card of the same data (its own settings)`}
               >
                 <i className="fa-solid fa-clone" aria-hidden="true" />
               </button>
@@ -819,12 +833,12 @@ function PlaceStep({
       <ul className="divide-y divide-border-subtle rounded border border-border">
         {drafts.map((d) => (
           <li key={d.key} className="flex items-center gap-2 px-3 py-1.5">
-            <span className="w-40 shrink-0 text-xs text-fg-muted">{builderTypeLabel(d.type)}</span>
+            <span className="w-40 shrink-0 text-xs text-fg-muted">{draftLabel(d)}</span>
             <input
               className="input min-w-0 flex-1 py-1 text-sm"
               value={typeof d.settings.title === "string" ? d.settings.title : ""}
               placeholder="(the series name)"
-              aria-label={`Title of the ${builderTypeLabel(d.type)} card`}
+              aria-label={`Title of the ${draftLabel(d)} card`}
               onChange={(e) => {
                 const settings = { ...d.settings };
                 if (e.target.value) settings.title = e.target.value;

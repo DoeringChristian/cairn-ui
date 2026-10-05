@@ -125,3 +125,66 @@ test("the card catalogue lists listed, hidden, automatic, removed and unlisted c
   const off = ops.setAutoPanels(false)(base);
   assert.deepEqual(st(off), ["listed:a", "hidden:b", "unlisted:auto:train.loss!", "unlisted:auto:val.loss", "unlisted:auto:samples", "removed:auto:hist"]);
 });
+
+// --- custom viewers ----------------------------------------------------------
+
+import type { ViewerInfo } from "../../api/types.ts";
+import { optionKey, optionLabel, parseOptionKey } from "./card-builder.ts";
+
+const viewer = (o: Partial<ViewerInfo>): ViewerInfo => ({
+  name: "v", title: "V", entry: "index.js", accepts: [], inputs: "single", webgl: false, view: false, settings: [],
+  imports: {}, dev: false, version_id: "id", version: 1, digest: "d", content_digest: "c", updated_at: "", error: null, ...o,
+});
+const CUSTOM: MetricInfo[] = [
+  { name: "guide", object_type: "custom", kind: "guiding/vmf", count: 5, runIds: ["r1"] },
+  { name: "field", object_type: "custom", kind: "field/2d", count: 5, runIds: ["r1"] },
+  { name: "vol", object_type: "volume", count: 5, runIds: ["r1"] },
+];
+const VIEWERS = [
+  viewer({ name: "vmf", title: "Guiding", accepts: ["custom:guiding/*"] }),
+  viewer({ name: "any", title: "Any custom", accepts: ["custom:*"] }),
+  viewer({ name: "ray", title: "Raymarcher", accepts: ["volume"], dev: true, version: null, version_id: null }),
+  viewer({ name: "broken", title: "Broken", accepts: ["custom:guiding/vmf"], dev: true, error: "bad manifest" }),
+];
+
+test("custom data: every accepting viewer is an option, the most specific first", () => {
+  const r = compatibleTypes({ mode: "series", names: ["guide"] }, CUSTOM, 1, null, VIEWERS);
+  assert.deepEqual(r.options.map((o) => o.key), ["custom:broken", "custom:vmf", "custom:any"]);
+  assert.equal(r.options[0]!.unavailable, "the viewer is broken: bad manifest");
+  assert.deepEqual(r.options[1]!.seed, { viewer: "vmf" });
+  assert.equal(r.options[1]!.label, "Guiding");
+  assert.equal(r.reason, null);
+});
+
+test("several custom series: viewers that accept them all", () => {
+  const r = compatibleTypes({ mode: "series", names: ["guide", "field"] }, CUSTOM, 1, null, VIEWERS);
+  assert.deepEqual(r.options.map((o) => o.key), ["custom:any"]);
+});
+
+test("a built-in kind: its own card, then the viewers taking it over", () => {
+  const r = compatibleTypes({ mode: "series", names: ["vol"] }, CUSTOM, 1, null, VIEWERS);
+  assert.deepEqual(r.options.map((o) => o.key), ["volume", "custom:ray"]);
+  assert.match(r.options[1]!.hint, /live dev source/);
+});
+
+test("custom data no viewer accepts: the reason says how to add one", () => {
+  const r = compatibleTypes({ mode: "series", names: ["field"] }, CUSTOM, 1, null, [VIEWERS[0]!]);
+  assert.deepEqual(r.options, []);
+  assert.match(r.reason!, /No custom viewer accepts field\/2d yet/);
+});
+
+test("editing a custom card keeps its viewer option", () => {
+  const r = compatibleTypes({ mode: "series", names: ["field"] }, CUSTOM, 1, "custom:gone", [VIEWERS[0]!]);
+  assert.deepEqual(r.options.map((o) => o.key), ["custom:gone"]);
+});
+
+test("option keys", () => {
+  assert.equal(optionKey("custom", { viewer: "vmf" }), "custom:vmf");
+  assert.equal(optionKey("custom", {}), "custom");
+  assert.equal(optionKey("image", { viewer: "x" }), "image");
+  assert.deepEqual(parseOptionKey("custom:vmf"), { type: "custom", seed: { viewer: "vmf" } });
+  assert.deepEqual(parseOptionKey("scalar"), { type: "scalar", seed: {} });
+  assert.equal(optionLabel("custom:vmf", VIEWERS), "Guiding");
+  assert.equal(optionLabel("custom:gone", VIEWERS), "gone");
+  assert.equal(optionLabel("scalar"), "Line chart");
+});
