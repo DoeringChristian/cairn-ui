@@ -25,8 +25,7 @@ Charts are drawn with [uPlot](https://github.com/leeoniya/uPlot) (scalar
 lines) and Plotly (everything else), images with
 [react-zoom-pan-pinch](https://github.com/BetterTyped/react-zoom-pan-pinch),
 and 3D with three.js. Images the browser can't decode (EXR, npy) show their
-thumbnail and a download. cairn-plot is not a dependency; it is the separate
-library for notebooks and standalone HTML reports (`cairn.plot`).
+thumbnail and a download.
 
 `cairn_ui/__init__.py` exposes exactly one function, `dist_path()`. Everything
 about *serving* the bundle — routes and shells — lives in

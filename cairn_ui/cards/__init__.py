@@ -4,9 +4,9 @@ The authoring half of the viewer: it builds card specs the browser's renderer
 consumes, and elements that embed those cards in a notebook. It renders nothing
 itself — the browser does, at ``/embed/card``.
 
-Reached as :mod:`cairn.ui`, which is a thin binding onto this module, the way
-:mod:`cairn.plot` binds onto ``cairn_plot``. It lives here rather than in
-cairn-track because it is part of the viewer, not part of the tracker.
+Reached as :mod:`cairn.ui`, which is a thin binding onto this module. It lives
+here rather than in cairn-track because it is part of the viewer, not part of
+the tracker.
 
 Deliberately NOT imported by ``cairn_ui/__init__.py``: ``cairn.viewer`` imports
 that package to locate the bundle, and pulling this in would make the server

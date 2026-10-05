@@ -3,8 +3,7 @@
 Each ``*_compare(...)`` resolves ``run[tag]`` sources into a schema-validated
 :class:`~cairn.ui.card_spec.CardSpec` and returns a
 :class:`~cairn.ui.elements.CardElement` — a live ``/embed/card`` iframe. These
-render nothing themselves: the browser's card renderer does the work, which is
-why they live here rather than in :mod:`cairn.plot`.
+render nothing themselves: the browser's card renderer does the work.
 
 They need a reachable cairn server that is serving the viewer. Without one the
 element degrades to an inline notice rather than raising.

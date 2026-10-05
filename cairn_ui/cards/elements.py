@@ -6,8 +6,8 @@ to get a short-lived ``sid``, then returns an
 ``<iframe src=".../embed/card?sid=...">`` pointed at the viewer's
 ``/embed/card`` entry — the same React ``CardRenderer`` every card in the app
 uses. It implements the Jupyter/marimo display protocol, so it renders inline
-as the last expression of a cell, and composes into any report that accepts
-objects with ``_repr_html_`` (e.g. ``cairn.plot.Report``).
+as the last expression of a cell, and composes into anything that accepts
+objects with ``_repr_html_``.
 """
 
 from __future__ import annotations
