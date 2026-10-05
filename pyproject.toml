@@ -3,7 +3,7 @@ name = "cairn-ui"
 # MUST equal cairn-track's version. The bundle encodes the /api/* response
 # shapes and the card-spec schema that server produces, so skew is a bug rather
 # than a compatibility window. Pinned by a test in the root project.
-version = "0.2.0"
+version = "0.3.0"
 description = "The Cairn browser viewer: the built bundle, plus the Python surface that drives it."
 readme = "README.md"
 requires-python = ">=3.10"
