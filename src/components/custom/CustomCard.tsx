@@ -63,6 +63,8 @@ export default function CustomCard(props: SteppedMediaCardProps) {
       prefetch={(qc, point) => qc.prefetchQuery(artifactBytesQuery(point.artifact_hash!))}
       peek={(qc, point) => qc.getQueryData(artifactBytesQuery(point.artifact_hash!).queryKey) !== undefined}
       reference={(s) => (s.reference ? { name: s.reference.name, step: s.referenceStep } : null)}
+      // A stored view (a viewer's camera): the header's reset button clears it, and the viewer gets onView(null).
+      viewReset={(s, update) => (s.view != null ? { modified: true, reset: () => update({ view: undefined }) } : undefined)}
       renderArtifact={(view) => (
         <CustomPane view={view} project={project} auto={list ? viewersFor(list, [seriesKindOf(view.point, series[0]!)])[0]?.name ?? null : null} bus={bus} />
       )}

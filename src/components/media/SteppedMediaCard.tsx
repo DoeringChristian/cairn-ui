@@ -122,8 +122,13 @@ interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
    * own run), at a pinned step or following the pane's; null for none.
    */
   reference?: (settings: S) => { name: string; step?: number } | null;
-  /** A zoom/pan the card's panes share: the header's reset-view button. */
-  viewReset?: { modified: boolean; reset: () => void };
+  /**
+   * A zoom/pan the card's panes share: the header's reset-view button; or a
+   * function of the card's settings when the view lives in them.
+   */
+  viewReset?:
+    | { modified: boolean; reset: () => void }
+    | ((settings: S, update: (patch: Partial<S>) => void) => { modified: boolean; reset: () => void } | undefined);
 }
 
 function Placeholder({ loading, noun }: { loading: boolean; noun: string }) {
@@ -164,6 +169,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       instanceDefaults: steppedMediaInstanceDefaults as (seed: { name: string }) => Partial<S>,
     });
   const settings = ctl.value;
+  const reset = typeof viewReset === "function" ? viewReset(settings, (patch) => ctl.set(patch)) : viewReset;
   const cardId = cardOverridesStorageKey(settingsKeyOverride ?? { runId, metricName: metric.name });
 
   // Patches of the shell-owned fields; generic S can't prove they are Partial<S>.
@@ -407,8 +413,8 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       addToReportSlot={<AddToReportButton cardType={kind} series={compSeries} settingsKey={settingsKeyOverride ?? { runId, metricName: metric.name }} />}
       dropHighlight={dropHighlight}
       dropProps={dropProps}
-      onResetView={viewReset?.reset}
-      viewModified={viewReset?.modified}
+      onResetView={reset?.reset}
+      viewModified={reset?.modified}
       settingsPanel={settingsPanel(ctl, {
         runId,
         metricName: metric.name,
