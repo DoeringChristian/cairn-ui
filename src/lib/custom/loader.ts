@@ -11,27 +11,13 @@
  */
 
 import { api } from "../../api/client";
-import type { ViewerInfo } from "../../api/types";
 import { buildViewerBundle, isModulePath, type ProvidedModule, type SourceFile, type ViewerBundle } from "./bundle.ts";
-import { parseManifest, type ViewerManifest } from "./manifest.ts";
+import type { ViewerManifest } from "./manifest.ts";
+import type { Viewer } from "./viewers.ts";
+
+export type { Viewer } from "./viewers.ts";
 import { SDK_SOURCE } from "./sdk-runtime.ts";
 import { threePackage } from "./three-package.ts";
-
-/** A listed viewer with its manifest parsed (`error` set when it is unusable). */
-export interface Viewer {
-  info: ViewerInfo;
-  manifest: ViewerManifest | null;
-  error: string | null;
-  /** Cache key of its files: the version, or a dev source's revision. */
-  key: string;
-}
-
-export function viewerFromInfo(info: ViewerInfo): Viewer {
-  const key = info.dev ? `dev:${info.name}:${info.revision ?? 0}` : `v:${info.version_id}`;
-  if (info.error) return { info, manifest: null, error: info.error, key };
-  const r = parseManifest(info);
-  return r.ok ? { info, manifest: r.manifest, error: null, key } : { info, manifest: null, error: r.errors.join("; "), key };
-}
 
 const SDK: ProvidedModule = {
   specifier: "cairn:sdk",

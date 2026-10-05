@@ -37,6 +37,7 @@ const JsonViewer = lazy(() => import("./JsonViewer"));
 const FigureViewer = lazy(() => import("./FigureViewer"));
 const Scene3DViewer = lazy(() => import("./Scene3DViewer"));
 const NpzViewer = lazy(() => import("./NpzViewer"));
+const CustomContent = lazy(() => import("../custom/CustomContent"));
 
 /** Text-like viewers read at most this much of a file (its head, by a Range request). */
 export const VIEWER_TEXT_BYTES = 256 * 1024;
@@ -104,6 +105,8 @@ export default function ContentViewer({ source, kind: given, fill = false, loadS
         return <TextViewer source={source} lang={langFromPath(source.name)} maxBytes={maxBytes} className="max-h-[70vh]" />;
       case "pickle":
         return <PickleInfo meta={source.meta} loadSnippet={loadSnippet} />;
+      case "custom":
+        return <CustomContent source={source} fill={fill} />;
       default:
         return (
           <div className="h-48">

@@ -35,6 +35,8 @@ import type { ZoomViewSync, ZoomViewFollower } from "../../lib/media/zoom-view-s
 /** One value the pane shows: a logged point and where it comes from. */
 export interface FrameInput {
   point: SequencePoint;
+  /** Where the bytes load from (an artifact version's file); default `/api/artifacts/{hash}`. */
+  url?: string;
   run: string;
   name: string;
   label: string;
@@ -162,7 +164,7 @@ export default function ViewerFrame({
 
   // The inputs' bytes.
   const byteQueries = useQueries({
-    queries: inputs.map((f) => ({ ...artifactBytesQuery(f.point.artifact_hash ?? ""), enabled: !!f.point.artifact_hash })),
+    queries: inputs.map((f) => ({ ...artifactBytesQuery(f.point.artifact_hash ?? "", f.url), enabled: !!f.point.artifact_hash })),
   });
   const buffers = byteQueries.map((q) => q.data);
   const ready = buffers.every((b) => b != null);

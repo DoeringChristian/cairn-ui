@@ -9,7 +9,7 @@
  */
 
 import type { ViewerInfo } from "../../api/types";
-import { acceptScore, type SeriesKind } from "./manifest.ts";
+import { acceptScore, parseManifest, type SeriesKind, type ViewerManifest } from "./manifest.ts";
 
 /** The entry a card with `name` (pinned to `version`, if any) uses; null when there is none. */
 export function resolveViewer(list: readonly ViewerInfo[], name: string, version?: number | null): ViewerInfo | null {
@@ -41,3 +41,20 @@ export function viewersFor(list: readonly ViewerInfo[], series: readonly SeriesK
     .filter((x) => x.score >= 0);
   return scored.sort((a, b) => b.score - a.score || (a.v.title || a.v.name).localeCompare(b.v.title || b.v.name)).map((x) => x.v);
 }
+
+/** A listed viewer with its manifest parsed (`error` set when it is unusable). */
+export interface Viewer {
+  info: ViewerInfo;
+  manifest: ViewerManifest | null;
+  error: string | null;
+  /** Cache key of its files: the version, or a dev source's revision. */
+  key: string;
+}
+
+export function viewerFromInfo(info: ViewerInfo): Viewer {
+  const key = info.dev ? `dev:${info.name}:${info.revision ?? 0}` : `v:${info.version_id}`;
+  if (info.error) return { info, manifest: null, error: info.error, key };
+  const r = parseManifest(info);
+  return r.ok ? { info, manifest: r.manifest, error: null, key } : { info, manifest: null, error: r.errors.join("; "), key };
+}
+

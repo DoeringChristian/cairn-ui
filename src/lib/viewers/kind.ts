@@ -23,6 +23,8 @@ export type ViewerKind =
   | "json"
   | "text"
   | "pickle"
+  /** Custom data (`cairn.Data`): a project's custom viewer, else its arrays / JSON / bytes. */
+  | "custom"
   /** Bytes cairn does not store (an artifact entry's URI reference). */
   | "reference"
   | "binary";
@@ -63,6 +65,7 @@ const BY_OBJECT_TYPE: Record<string, ViewerKind> = {
   tensor: "tensor",
   text: "text",
   pickle: "pickle",
+  custom: "custom",
 };
 
 const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "exr", "tif", "tiff"]);
@@ -140,6 +143,8 @@ export function kindIcon(kind: ViewerKind): string {
       return "fa-box";
     case "reference":
       return "fa-link";
+    case "custom":
+      return "fa-shapes";
     default:
       return "fa-file";
   }

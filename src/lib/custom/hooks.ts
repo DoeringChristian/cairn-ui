@@ -10,8 +10,7 @@ import { api } from "../../api/client";
 import { qk } from "../../api/query-keys";
 import type { ViewerInfo } from "../../api/types";
 import { useProjectId } from "../project-context";
-import { resolveViewer } from "./viewers.ts";
-import { viewerFromInfo, type Viewer } from "./loader.ts";
+import { resolveViewer, viewerFromInfo, type Viewer } from "./viewers.ts";
 
 const DEV_POLL_MS = 2000;
 const POLL_MS = 15_000;
@@ -57,10 +56,10 @@ export function useViewer(project: string | null, name: string | null | undefine
 }
 
 /** A logged value's bytes (cached; the frame decodes a fresh copy per render). */
-export const artifactBytesQuery = (hash: string) => ({
+export const artifactBytesQuery = (hash: string, url?: string) => ({
   queryKey: ["artifact-bytes", hash] as const,
   queryFn: async () => {
-    const res = await fetch(api.artifactUrl(hash));
+    const res = await fetch(url ?? api.artifactUrl(hash));
     if (!res.ok) throw new Error(`artifact ${hash.slice(0, 8)}: HTTP ${res.status}`);
     return res.arrayBuffer();
   },
