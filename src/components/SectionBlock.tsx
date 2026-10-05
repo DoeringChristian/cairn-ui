@@ -4,8 +4,9 @@
  *
  * The header's actions are workspace edits the caller turns into document
  * ops: collapse, rename (double-click the name), move up / down, sort A–Z,
- * add cards to this section (+, which anchors the add panel), section
- * defaults (the gear), send to a report, delete an empty section. A section
+ * section defaults (the gear), send to a report, delete an empty section.
+ * Cards are added by the "Add card" ghost card ending the section's grid
+ * (workspace/WorkspaceView.tsx), not from the header. A section
  * just created opens with its name in edit (`renameOnMount`). The section's
  * defaults reach its cards through `SectionDefaultsProvider`. Read-only
  * surfaces show no actions.
@@ -30,8 +31,6 @@ export interface SectionActions {
   onToggleSort?: () => void;
   onMove?: (delta: -1 | 1) => void;
   onRename?: (name: string) => void;
-  /** The + was pressed: add cards here, from a panel anchored at `anchor`. */
-  onAddPanel?: (anchor: HTMLElement) => void;
   onSendToReport?: () => Promise<void> | void;
   /** Only offered for an empty section. */
   onDelete?: () => void;
@@ -71,7 +70,6 @@ export default function SectionBlock({
   onToggleSort,
   onMove,
   onRename,
-  onAddPanel,
   onSendToReport,
   onDelete,
   children,
@@ -86,7 +84,6 @@ export default function SectionBlock({
   const gearRef = useRef<HTMLButtonElement>(null);
   const [defaultsOpen, setDefaultsOpen] = useState(false);
   const [sending, setSending] = useState(false);
-  const addRef = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState(renameOnMount && editable);
   const [draft, setDraft] = useState(sectionName);
   useEffect(() => {
@@ -179,19 +176,6 @@ export default function SectionBlock({
           <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
             {editable && (
               <>
-                {onAddPanel && (
-                  <button
-                    ref={addRef}
-                    type="button"
-                    onClick={() => addRef.current && onAddPanel(addRef.current)}
-                    className={ICON_BTN}
-                    aria-label={`Add cards to ${sectionName}`}
-                    title="Add cards to this section"
-                    data-testid="section-add-panel"
-                  >
-                    <i className="fa-solid fa-plus" aria-hidden="true" />
-                  </button>
-                )}
                 <button
                   ref={gearRef}
                   type="button"

@@ -2,10 +2,10 @@
  * The workspace renderer: one layout document + a bound run set. The run
  * page (`runIds = [the run]`) and every comparison (`runIds = its runs`)
  * render exactly this component — toolbar, sections, panels, adding cards
- * (the + of a section header, the "+ Add card" tile ending its grid, and
- * "+ New section" below the last one; components/workspace/AddCardsPanel.tsx)
- * and Manage cards (components/workspace/ManageCards.tsx) — and differ only
- * in the ref and the runs.
+ * (the one way: the dashed "Add card" ghost card ending each section's grid,
+ * components/workspace/AddCardsModal.tsx), "+ New section" below the last
+ * section, and Manage cards (components/workspace/ManageCards.tsx) — and
+ * differ only in the ref and the runs.
  *
  * Every edit is an op on the workspace document (lib/workspace/doc.ts), so
  * it carries over to every run the workspace is bound to. Touching an
@@ -16,7 +16,7 @@
  * Read-only surfaces (`CardMutationContext` false) render the same page;
  * `useWorkspace(...).update` is then a no-op and card settings go to the
  * session layer (lib/card-settings.ts), so a viewer can explore without
- * persisting anything. Viewers get no + affordances, manage view or
+ * persisting anything. Viewers get no ghost cards, "+ New section", manage view or
  * duplicate: those only edit the layout.
  */
 
@@ -28,7 +28,7 @@ import SectionBlock from "../SectionBlock";
 import WorkspaceToolbar from "../WorkspaceToolbar";
 import RunColorByProvider from "../RunColorByProvider";
 import PanelCard from "./PanelCard";
-import AddCardsPanel from "./AddCardsPanel";
+import AddCardsModal from "./AddCardsModal";
 import ManageCards, { type ManageActions } from "./ManageCards";
 import { useWorkspaceMetrics } from "./use-workspace-metrics";
 import { useSession } from "../../api/hooks";
@@ -58,6 +58,8 @@ import { useWorkspace } from "../../lib/workspace/use-workspace";
 
 /** What "+ New section" names a section (made unique: `New section 2`, …). */
 const NEW_SECTION_NAME = "New section";
+/** An empty workspace shows this section (not stored until a card is added to it). */
+const FIRST_SECTION_NAME = "Charts";
 
 const EMPTY_SETTINGS: CardOverrides = Object.freeze({}) as CardOverrides;
 const identity: WorkspaceOp = (d) => d;
@@ -100,7 +102,12 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
   const [query, setQuery] = useState("");
 
   // Unfiltered (edits resolve against it) and as shown (search applied).
-  const all = useMemo(() => deriveLayout(doc, metrics), [doc, metrics]);
+  const derived = useMemo(() => deriveLayout(doc, metrics), [doc, metrics]);
+  // An empty workspace still shows one section, with its ghost card (written on the first add).
+  const all = useMemo<RenderedSection[]>(
+    () => (derived.length === 0 && mutable ? [{ name: FIRST_SECTION_NAME, inDoc: false, collapsed: false, sort: false, panels: [] }] : derived),
+    [derived, mutable],
+  );
   const shown = useMemo(() => (query.trim() ? deriveLayout(doc, metrics, { query }) : all), [doc, metrics, query, all]);
   const allRef = useRef(all);
   allRef.current = all;
@@ -165,11 +172,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
 
   // --- adding cards (a + of the layout) and Manage cards ----------------------
   const [adding, setAdding] = useState<string | null>(null);
-  const addAnchor = useRef<HTMLElement | null>(null);
-  const openAdd = useCallback((section: string, anchor: HTMLElement) => {
-    addAnchor.current = anchor;
-    setAdding((cur) => (cur === section ? null : section));
-  }, []);
+  const closeAdd = useCallback(() => setAdding(null), []);
   const [manageOpen, setManageOpen] = useState(false);
   /** A section just made by "+ New section": its name is in edit. */
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -191,28 +194,20 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
   }, [openNow, editorTokens]);
 
   /**
-   * The new cards go at the end of the section whose + was pressed. One new
-   * card opens in its editor (the gear); several (a card per group, or
-   * several types) stay on the page, the first scrolled into view.
+   * The new cards go at the end of the section whose ghost card was
+   * pressed, and the first opens in its editor (the gear): the add modal
+   * hands over to it in place. Returns that card's id.
    */
   const addCards = useCallback(
-    (section: string, cards: NewCard[]) => {
+    (section: string, cards: NewCard[]): string | undefined => {
       const panels: Panel[] = cards.map((c) => ({ id: newLayoutId("p_"), ...c }));
-      if (panels.length === 0) return;
+      if (panels.length === 0) return undefined;
       update(addToSectionOp(allRef.current, section, panels), { label: `Add ${panels.length} card${panels.length === 1 ? "" : "s"}` });
-      setAdding(null);
-      if (panels.length === 1) openEditor(panels[0]!.id);
-      else setScrollTo(panels[0]!.id);
+      openEditor(panels[0]!.id);
+      return panels[0]!.id;
     },
     [update, openEditor],
   );
-  const [scrollTo, setScrollTo] = useState<string | null>(null);
-  useEffect(() => {
-    if (!scrollTo) return;
-    const el = document.querySelector(`[data-card-key="${CSS.escape(scrollTo)}"] [data-cairn-card]`);
-    el?.scrollIntoView({ block: "center", behavior: "smooth" });
-    setScrollTo(null);
-  }, [scrollTo, doc]);
 
   const addSection = useCallback(() => {
     const name = uniqueSectionName(NEW_SECTION_NAME, allRef.current.map((s) => s.name));
@@ -369,7 +364,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
           </div>
         )}
         {error != null && <p className="text-sm text-status-failed">Error: {String(error)}</p>}
-        {!loading && metrics.length === 0 && all.length === 0 && (
+        {!loading && metrics.length === 0 && derived.length === 0 && (
           <p className="text-fg-muted">{runIds.length === 0 ? "No runs yet." : "No metrics logged yet."}</p>
         )}
         {query.trim() && shown.every((s) => s.panels.length === 0) && <p className="text-sm text-fg-muted">No panels match.</p>}
@@ -402,7 +397,6 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
               }
               onMove={(delta) => update(sectionOp(ops.moveSection(section.name, delta)), { label: "Move section" })}
               onRename={(name) => update(sectionOp(ops.renameSection(section.name, name)), { label: `Rename section to ${name}` })}
-              onAddPanel={mutable ? (anchor) => openAdd(section.name, anchor) : undefined}
               onSendToReport={section.panels.length > 0 ? () => sendSection(section) : undefined}
               onDelete={
                 section.inDoc && (full?.panels.length ?? 0) === 0
@@ -447,7 +441,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
                   }))}
                   onReorder={mutable && !section.sort ? (from, to) => reorder(section.name, from, to) : undefined}
                   onDropEnd={mutable ? (from) => moveCard(from, { section: section.name, beforeId: null }) : undefined}
-                  trailing={mutable ? <AddCardTile section={section.name} onAdd={openAdd} /> : undefined}
+                  trailing={mutable ? <AddCardTile section={section.name} onAdd={setAdding} /> : undefined}
                 />
               )}
             </SectionBlock>
@@ -465,11 +459,10 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
         )}
       </div>
       {adding != null && mutable && (
-        <AddCardsPanel
+        <AddCardsModal
           key={adding}
           section={adding}
-          anchorRef={addAnchor}
-          onClose={() => setAdding(null)}
+          onClose={closeAdd}
           metrics={metrics}
           runIds={runIds}
           shownBy={shownBy}
@@ -496,18 +489,16 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
 }
 
 /**
- * The dashed tile ending a section's grid: adds cards to that section, from
- * a panel anchored at the tile. The size of a small card; a card dragged
- * onto it goes last in the section.
+ * The dashed "Add card" ghost card ending a section's grid — the one way to
+ * add a card: it opens the add modal for that section. The size of a small
+ * card; a card dragged onto it goes last in the section.
  */
-function AddCardTile({ section, onAdd }: { section: string; onAdd: (section: string, anchor: HTMLElement) => void }) {
-  const ref = useRef<HTMLButtonElement>(null);
+function AddCardTile({ section, onAdd }: { section: string; onAdd: (section: string) => void }) {
   return (
     <button
-      ref={ref}
       type="button"
-      onClick={() => ref.current && onAdd(section, ref.current)}
-      className="flex min-h-[170px] flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border text-sm text-fg-muted transition-colors hover:border-accent hover:text-fg focus-visible:border-accent focus-visible:text-fg"
+      onClick={() => onAdd(section)}
+      className="flex h-[170px] flex-col items-center justify-center gap-2 self-start rounded-lg border-2 border-dashed border-border text-sm text-fg-muted transition-colors hover:border-accent hover:text-fg focus-visible:border-accent focus-visible:text-fg"
       style={{ gridColumn: "span 1" }}
       aria-label={`Add cards to ${section}`}
       title="Add cards to this section"

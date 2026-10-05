@@ -50,12 +50,23 @@ test("the gear editor has no section control: cards change section by drag & dro
   assert.doesNotMatch(actions.text, /moveTo|sections:/, "PanelEditor (the context) offers no section move");
 });
 
-test("cards and sections are added from the layout's + only: no dialog, prompt or toolbar builder", () => {
-  const files = ["components/WorkspaceToolbar.tsx", "components/workspace/WorkspaceView.tsx", "components/SectionBlock.tsx"];
-  const hits = sources()
+test("the one way to add a card is the ghost card ending a section's grid", () => {
+  const all = sources();
+  // One add modal, opened from one place.
+  const modalUsers = all.filter(({ text }) => /<AddCardsModal\b/.test(text)).map(({ rel }) => rel);
+  assert.deepEqual(modalUsers, ["components/workspace/WorkspaceView.tsx"]);
+  const view = all.find((s) => s.rel === "components/workspace/WorkspaceView.tsx")!;
+  const opens = [...view.text.matchAll(/setAdding\(([^)]*)\)|onAdd=\{setAdding\}/g)].map((m) => m[0]);
+  assert.deepEqual(opens.filter((o) => o !== "setAdding(null)"), ["onAdd={setAdding}"], "only the ghost card opens the add modal");
+  assert.match(view.text, /<AddCardTile section=\{section\.name\} onAdd=\{setAdding\} \/>/);
+  // No other add affordance: section header, toolbar, Manage cards, prompts, the old builder.
+  const files = ["components/WorkspaceToolbar.tsx", "components/workspace/WorkspaceView.tsx", "components/SectionBlock.tsx", "components/workspace/ManageCards.tsx"];
+  const hits = all
     .filter(({ rel }) => files.includes(rel))
     .flatMap(({ rel, text }) =>
-      [...text.matchAll(/\bprompt\(|Build panels|onAddCards|onAddSection|onBuildPanels|CardBuilder/g)].map((m) => `${at(rel, text, m.index)}: ${m[0]}`),
+      [...text.matchAll(/\bprompt\(|Build panels|onAddCards|onAddSection|onBuildPanels|onAddPanel|section-add-panel|CardBuilder|>\s*Add cards\s*</g)].map(
+        (m) => `${at(rel, text, m.index)}: ${m[0]}`,
+      ),
     );
   assert.deepEqual(hits, []);
 });

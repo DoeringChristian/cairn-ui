@@ -11,6 +11,9 @@ interface Props {
   /** Step to the previous / next card (lib/card-nav.tsx); omitted at either end. */
   onPrev?: () => void;
   onNext?: () => void;
+  /** The settings column's heading and phone tab (default "Settings"); the card side's phone tab (default "Card"). */
+  settingsLabel?: string;
+  cardLabel?: string;
 }
 
 /** Arrow keys belong to a focused control (a slider, a select), not to card navigation. */
@@ -22,7 +25,9 @@ function isControl(t: EventTarget | null): boolean {
 }
 
 /**
- * The card at full size beside its settings panel. Below `md` it fills the
+ * The card at full size beside its settings panel. Adding cards to a
+ * workspace uses the same shell (workspace/AddCardsModal.tsx): the preview
+ * where the card is, the add steps where its settings are. Below `md` it fills the
  * screen instead: a sticky header (title, close, Card / Settings tabs) over
  * one of the two panels. The inactive panel is hidden, not unmounted, so the
  * card's content keeps its state across tab switches.
@@ -39,6 +44,8 @@ export default function CardDetailModal({
   title,
   onPrev,
   onNext,
+  settingsLabel = "Settings",
+  cardLabel = "Card",
 }: Props) {
   useModalBehavior(open, onClose);
   const hasNav = !!onPrev || !!onNext;
@@ -108,8 +115,8 @@ export default function CardDetailModal({
           </div>
           {hasSettings && (
             <div role="tablist" className="flex">
-              {tabButton("card", "Card")}
-              {tabButton("settings", "Settings")}
+              {tabButton("card", cardLabel)}
+              {tabButton("settings", settingsLabel)}
             </div>
           )}
         </div>
@@ -135,7 +142,7 @@ export default function CardDetailModal({
         >
           <div className="mb-4 hidden items-center justify-between md:flex">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">
-              Settings
+              {settingsLabel}
             </h3>
             <button
               type="button"
