@@ -1,0 +1,1 @@
+import{j as s,ca as i,dQ as n,dS as o}from"./index-DlwGYz7B.js";function d({ctl:a,ctx:t,mode:e}){return s.jsx(i,{tabs:{data:s.jsx(o,{ctl:a,ctx:t}),display:s.jsx(n,{ctl:a,ctx:t,mode:e})}})}export{d as default};
