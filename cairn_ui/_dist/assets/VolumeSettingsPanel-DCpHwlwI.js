@@ -1,1 +1,0 @@
-import{j as s,d3 as i,eX as n,eZ as o}from"./index-ksUsMKJY.js";function u({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{data:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{u as default};

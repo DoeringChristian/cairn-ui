@@ -43,9 +43,13 @@ interface ArtifactPoint {
   version: ArtifactVersionInfo | null;
 }
 
-/** A version's entries, each a download link (references link nowhere). */
+/** A version's zip download (uploaded entries; references are listed, not fetched). */
+const versionZipName = (version: ArtifactVersionInfo) => `${version.name}-v${version.version}.zip`;
+
+/** A version's entries, each a download link (references link nowhere), plus the whole version as a zip. */
 function VersionFiles({ version }: { version: ArtifactVersionInfo }) {
   const files: ArtifactEntryInfo[] = version.files ?? [];
+  const uploaded = files.filter((f) => f.digest).length;
   return (
     <div className="rounded border border-border bg-bg p-3 text-xs">
       <div className="mb-2 flex flex-wrap items-baseline gap-2">
@@ -55,6 +59,16 @@ function VersionFiles({ version }: { version: ArtifactVersionInfo }) {
           <span key={a} className="rounded border border-border px-1 text-[10px] text-fg-muted">{a}</span>
         ))}
         <span className="mono num text-fg-muted">{formatBytes(version.size)}</span>
+        {uploaded > 0 && (
+          <a
+            href={api.artifactVersionDownloadUrl(version.id)}
+            download={versionZipName(version)}
+            className="ml-auto inline-flex items-center gap-1.5 rounded border border-accent px-2 py-0.5 text-accent hover:bg-accent/10"
+            title={files.length > uploaded ? "References are not included in the zip" : undefined}
+          >
+            {"\u2913"} Download all (.zip)
+          </a>
+        )}
       </div>
       <ul className="flex flex-col gap-0.5">
         {files.map((f) => (
@@ -241,7 +255,13 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
       title={metric.name}
       subtitle={subtitle}
       onRemove={onRemove}
-      onDownload={current?.artifact_hash ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), downloadName) : undefined}
+      onDownload={
+        current?.artifact_hash
+          ? () => downloadArtifact(api.artifactUrl(current.artifact_hash!), downloadName)
+          : current?.version && (current.version.files ?? []).some((f) => f.digest)
+            ? () => downloadArtifact(api.artifactVersionDownloadUrl(current.version!.id), versionZipName(current.version!))
+            : undefined
+      }
       headerActions={
         <span className="inline-flex items-center rounded bg-bg-hover px-1.5 py-0.5 text-[10px] text-fg-muted">
           artifact
