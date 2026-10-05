@@ -112,7 +112,7 @@ function FullPanel() {
   return (
     <SettingsTabs
       tabs={{
-        data: (
+        values: (
           <>
             <SettingsSection name="Axes">
               <FieldPicker {...xAxis} label="X axis" options={FIELDS} placeholder="Step" clearable />

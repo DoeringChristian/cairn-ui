@@ -53,7 +53,7 @@ export interface MediaPanelCtx {
 
 export type PanelSurface = "card" | "defaults";
 
-/** The slider: its key and whether it follows the section. Data tab. */
+/** The slider: its key and whether it follows the section. Values tab. */
 export function SliderSection<T extends MediaSliderSettings>({
   ctl,
   ctx,
@@ -183,7 +183,7 @@ export interface ReferencePanelCtx {
 /**
  * The reference every pane splits against: another tag of the card's kind,
  * resolved in each pane's own run, following the slider or pinned to a
- * step. Data tab; cards only (nothing to pick from in the defaults editor).
+ * step. Values tab; cards only (nothing to pick from in the defaults editor).
  */
 export function CompareSection<T extends MediaCompareSettings>({
   ctl,

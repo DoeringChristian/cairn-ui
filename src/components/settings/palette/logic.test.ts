@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   activeTab,
+  landingTab,
   addAll,
   colormapGradient,
   fieldMatcher,
@@ -66,19 +67,19 @@ test("addAll appends new matches in order, without duplicates", () => {
 });
 
 test("tabs: fixed order, empty tabs hidden, bar only with two or more", () => {
-  assert.deepEqual(visibleTabs({ display: true, data: true }), ["data", "display"]);
+  assert.deepEqual(visibleTabs({ display: true, values: true }), ["values", "display"]);
   assert.deepEqual(visibleTabs({ expressions: true, grouping: false }), ["expressions"]);
   assert.deepEqual(visibleTabs({}), []);
-  assert.equal(showTabBar(["data", "display"]), true);
+  assert.equal(showTabBar(["values", "display"]), true);
   assert.equal(showTabBar(["display"]), false);
   assert.equal(showTabBar([]), false);
 });
 
 test("activeTab falls back to the first visible tab", () => {
-  assert.equal(activeTab("display", ["data", "display"]), "display");
-  assert.equal(activeTab("grouping", ["data", "display"]), "data");
+  assert.equal(activeTab("display", ["values", "display"]), "display");
+  assert.equal(activeTab("grouping", ["values", "display"]), "values");
   assert.equal(activeTab(null, ["display"]), "display");
-  assert.equal(activeTab("data", []), null);
+  assert.equal(activeTab("values", []), null);
 });
 
 test("section open state round-trips through its stored flag", () => {
@@ -123,4 +124,11 @@ test("colormapGradient covers both stop lists and plotly names", () => {
   assert.match(colormapGradient("magma"), /^linear-gradient\(to right, rgb\(0,0,4\) 0\.0%, .* 100\.0%\)$/);
   assert.match(colormapGradient("viridis"), /#440154 0\.0%.*#fde725 100\.0%/);
   assert.match(colormapGradient("greys"), /#000000 0\.0%, #ffffff 100\.0%/);
+});
+
+test("after a type is picked the card opens on Values, else its first tab — never on Data", () => {
+  assert.equal(landingTab(["values", "display", "expressions"]), "values");
+  assert.equal(landingTab(["display", "expressions"]), "display");
+  assert.equal(landingTab(["grouping", "display"]), "grouping");
+  assert.equal(landingTab([]), null);
 });

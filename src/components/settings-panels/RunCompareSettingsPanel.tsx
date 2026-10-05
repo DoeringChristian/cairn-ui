@@ -63,5 +63,5 @@ export default function RunCompareSettingsPanel({ ctl, ctx, mode }: Props) {
       <Switch label="Only differences" description="Hide rows that are the same in every run" {...bind(ctl, "onlyDiffs")} />
     </SettingsSection>
   );
-  return <SettingsTabs tabs={{ data, display }} />;
+  return <SettingsTabs tabs={{ values: data, display }} />;
 }

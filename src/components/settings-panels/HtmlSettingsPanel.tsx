@@ -1,10 +1,10 @@
 import type { SettingsController } from "../../lib/card-settings";
 import { HTML_MAX_HEIGHT, HTML_MIN_HEIGHT, type HtmlSettings } from "../cards-settings/html";
 import type { SteppedMediaPanelCtx } from "../media/SteppedMediaCard";
-import { SettingsSection, Slider, Switch } from "../settings/palette";
+import { SettingsSection, Slider, Switch, SettingsTabs } from "../settings/palette";
 import { LayoutSection, SliderSection, bind, type PanelSurface } from "./media-panel-kit";
 
-/** HTML is a simple card: its sections without tabs. */
+/** HTML: the slider under Values, the layout and appearance under Display. */
 export default function HtmlSettingsPanel({
   ctl,
   ctx,
@@ -15,8 +15,11 @@ export default function HtmlSettingsPanel({
   mode: PanelSurface;
 }) {
   return (
-    <>
-      <SliderSection ctl={ctl} ctx={ctx} />
+    <SettingsTabs
+      tabs={{
+        values: <SliderSection ctl={ctl} ctx={ctx} />,
+        display: (
+          <>
       <LayoutSection ctl={ctl} modes ctx={ctx} mode={mode} paneKeys={ctx?.paneKeys} />
       <SettingsSection name="Appearance">
         <Switch
@@ -33,6 +36,9 @@ export default function HtmlSettingsPanel({
           format={(v) => `${v}px`}
         />
       </SettingsSection>
-    </>
+          </>
+        ),
+      }}
+    />
   );
 }

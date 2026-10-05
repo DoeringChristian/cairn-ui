@@ -11,7 +11,7 @@ import type { ViewerManifest, ViewerSettingSection, ViewerSettingTab } from "./m
 
 /** The sections the card's own settings fill, per tab. */
 export const CARD_SECTIONS: Record<ViewerSettingTab, readonly ViewerSettingSection[]> = {
-  data: ["Series", "Axes", "Compare"],
+  values: ["Series", "Axes", "Compare"],
   grouping: [],
   display: ["Layout"],
   expressions: [],
@@ -28,7 +28,7 @@ export interface SectionPlacement {
 export type Placement = Record<ViewerSettingTab, SectionPlacement[]>;
 
 export function placeSettings(manifest: Pick<ViewerManifest, "settings">, cardSections = CARD_SECTIONS): Placement {
-  const out: Placement = { data: [], grouping: [], display: [], expressions: [] };
+  const out: Placement = { values: [], grouping: [], display: [], expressions: [] };
   for (const s of manifest.settings) {
     const list = out[s.tab];
     let p = list.find((x) => x.section === s.section);
@@ -41,11 +41,11 @@ export function placeSettings(manifest: Pick<ViewerManifest, "settings">, cardSe
   return out;
 }
 
-/** The tab the settings open on: where the viewer's settings are (display first), else data. */
+/** The tab the settings open on: where the viewer's settings are (display first), else values. */
 export function initialTab(placement: Placement): ViewerSettingTab {
   if (placement.display.length) return "display";
-  if (placement.data.length) return "data";
+  if (placement.values.length) return "values";
   if (placement.grouping.length) return "grouping";
   if (placement.expressions.length) return "expressions";
-  return "data";
+  return "values";
 }

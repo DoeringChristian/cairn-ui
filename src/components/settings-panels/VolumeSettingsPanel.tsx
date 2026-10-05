@@ -15,7 +15,7 @@ export default function VolumeSettingsPanel({
   return (
     <SettingsTabs
       tabs={{
-        data: <SliderSection ctl={ctl} ctx={ctx} />,
+        values: <SliderSection ctl={ctl} ctx={ctx} />,
         display: <LayoutSection ctl={ctl} ctx={ctx} mode={mode} />,
       }}
     />

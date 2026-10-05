@@ -138,11 +138,11 @@ test("a normalized listing (nulls for none, extra fields) parses", () => {
 
 test("settings placement, help and icon", () => {
   const m = ok({ name: "a", accepts: ["x"], icon: "globe", settings: [
-    { key: "lobes", type: "number", tab: "data", section: "Series", help: "How many lobes." },
+    { key: "lobes", type: "number", tab: "values", section: "Series", help: "How many lobes." },
     { key: "e", type: "slider", min: 0, max: 1 },
   ] });
   assert.equal(m.icon, "globe");
-  assert.deepEqual([m.settings[0]!.tab, m.settings[0]!.section, m.settings[0]!.help], ["data", "Series", "How many lobes."]);
+  assert.deepEqual([m.settings[0]!.tab, m.settings[0]!.section, m.settings[0]!.help], ["values", "Series", "How many lobes."]);
   assert.deepEqual([m.settings[1]!.tab, m.settings[1]!.section, m.settings[1]!.help], ["display", "Appearance", undefined]);
   assert.match(errs({ name: "a", accepts: ["x"], icon: "skull" }), /"icon" must be one of/);
   assert.match(errs({ name: "a", accepts: ["x"], settings: [{ key: "a", type: "text", tab: "advanced" }] }), /"tab" must be one of/);

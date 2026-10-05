@@ -34,5 +34,5 @@ export function instanceDefaults(seed: { name: string }): Partial<PresetSettings
 export const meta: CardSettingsMeta<PresetSettings> = {
   builtin,
   cascadeKeys: ["normalize", ...MEDIA_SLIDER_CASCADE, ...MEDIA_COLUMNS_CASCADE],
-  tabs: ["data", "display"],
+  tabs: ["values", "display"],
 };

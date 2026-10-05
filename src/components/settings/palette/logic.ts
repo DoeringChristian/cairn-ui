@@ -93,11 +93,11 @@ export function addAll(value: readonly string[], matches: readonly FieldOption[]
 // ---------------------------------------------------------------------------
 // Tabs (SettingsTabs)
 
-export type SettingsTabId = "data" | "grouping" | "display" | "expressions";
+export type SettingsTabId = "values" | "grouping" | "display" | "expressions";
 
 /** The fixed tab order. */
 export const SETTINGS_TABS: ReadonlyArray<{ id: SettingsTabId; label: string }> = [
-  { id: "data", label: "Data" },
+  { id: "values", label: "Values" },
   { id: "grouping", label: "Grouping" },
   { id: "display", label: "Display" },
   { id: "expressions", label: "Expressions" },
@@ -111,6 +111,11 @@ export function visibleTabs(hasContent: Partial<Record<SettingsTabId, boolean>>)
 /** The tab bar shows only when more than one tab has content. */
 export function showTabBar(visible: readonly SettingsTabId[]): boolean {
   return visible.length > 1;
+}
+
+/** The tab a card opens on after its type is picked (adding it, or changing it): Values, else its first tab. */
+export function landingTab(visible: readonly SettingsTabId[]): SettingsTabId | null {
+  return visible.includes("values") ? "values" : (visible[0] ?? null);
 }
 
 /** `requested` when it is visible, else the first visible tab (null when none). */
@@ -127,8 +132,6 @@ export function activeTab(
 
 /** The shared section names; every card's panel picks its sections from here. */
 export const SECTION_NAMES = [
-  // The gear editor's own section (the card's type and data), first in the Data tab.
-  "Card",
   "Axes",
   "Smoothing",
   "Outliers",

@@ -131,5 +131,5 @@ export default function BarSettingsPanel({ ctl, ctx, mode }: Props) {
     </SettingsSection>
   );
 
-  return <SettingsTabs tabs={{ data, grouping, display }} />;
+  return <SettingsTabs tabs={{ values: data, grouping, display }} />;
 }

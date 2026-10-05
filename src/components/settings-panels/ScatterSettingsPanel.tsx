@@ -219,5 +219,5 @@ export default function ScatterSettingsPanel({ ctl, ctx, mode }: Props) {
     </>
   );
 
-  return <SettingsTabs tabs={{ data, display: (card || show("showPareto")) && display }} />;
+  return <SettingsTabs tabs={{ values: data, display: (card || show("showPareto")) && display }} />;
 }

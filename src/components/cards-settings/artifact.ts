@@ -12,4 +12,4 @@ export function instanceDefaults(_seed: { name: string }): Partial<ArtifactSetti
   return {};
 }
 
-export const meta: CardSettingsMeta<ArtifactSettings> = { builtin, cascadeKeys: [], tabs: [] };
+export const meta: CardSettingsMeta<ArtifactSettings> = { builtin, cascadeKeys: [], tabs: ["values"] };

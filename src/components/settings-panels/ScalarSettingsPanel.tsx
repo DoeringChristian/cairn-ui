@@ -247,7 +247,7 @@ function DerivedRow({
 }
 
 /**
- * The scalar card's settings: Data · Grouping · Display · Expressions. In
+ * The scalar card's settings: Values · Grouping · Display · Expressions. In
  * `defaults` mode (workspace / section defaults) only the cascading keys show:
  * no series, ranges, titles, per-series styles or derived series.
  */
@@ -595,5 +595,5 @@ export default function ScalarSettingsPanel({ ctl, ctx, mode }: Props) {
     </>
   );
 
-  return <SettingsTabs tabs={{ data, grouping, display, expressions }} />;
+  return <SettingsTabs tabs={{ values: data, grouping, display, expressions }} />;
 }

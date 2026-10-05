@@ -82,5 +82,5 @@ export default function FigureSettingsPanel({
       </SettingsSection>
     </>
   );
-  return <SettingsTabs tabs={{ data, display }} />;
+  return <SettingsTabs tabs={{ values: data, display }} />;
 }

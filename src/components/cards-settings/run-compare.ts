@@ -30,5 +30,5 @@ export function instanceDefaults(): Partial<RunCompareSettings> {
 export const meta: CardSettingsMeta<RunCompareSettings> = {
   builtin,
   cascadeKeys: ["sections", "onlyDiffs"],
-  tabs: ["data", "display"],
+  tabs: ["values", "display"],
 };

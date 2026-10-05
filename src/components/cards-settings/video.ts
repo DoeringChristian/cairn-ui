@@ -33,5 +33,5 @@ export const instanceDefaults = steppedMediaInstanceDefaults as (seed: { name: s
 export const meta: CardSettingsMeta<VideoSettings> = {
   builtin,
   cascadeKeys: ["autoplay", "loop", "muted", "preload", "syncPlayback", ...MEDIA_COMPARE_CASCADE, ...STEPPED_MEDIA_CASCADE],
-  tabs: ["data", "display"],
+  tabs: ["values", "display"],
 };

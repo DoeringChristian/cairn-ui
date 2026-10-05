@@ -368,7 +368,7 @@ export default function TableSettingsPanel({ ctl, ctx, mode }: Props) {
   return (
     <SettingsTabs
       tabs={{
-        data: (
+        values: (
           <SettingsSection name="Compare">
             <CombineEditor ctl={ctl} ctx={ctx} />
           </SettingsSection>

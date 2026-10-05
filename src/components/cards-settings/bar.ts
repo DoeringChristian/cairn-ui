@@ -41,5 +41,5 @@ export function instanceDefaults(): Partial<BarSettings> {
 export const meta: CardSettingsMeta<BarSettings> = {
   builtin,
   cascadeKeys: ["sortBy", "sortDesc", "groupPlot"],
-  tabs: ["data", "grouping", "display"],
+  tabs: ["values", "grouping", "display"],
 };

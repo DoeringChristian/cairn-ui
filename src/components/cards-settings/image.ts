@@ -53,5 +53,5 @@ export const meta: CardSettingsMeta<ImageCardSettings> = {
     ...MEDIA_SLIDER_CASCADE,
     ...MEDIA_LAYOUT_CASCADE,
   ],
-  tabs: ["data", "display"],
+  tabs: ["values", "display"],
 };

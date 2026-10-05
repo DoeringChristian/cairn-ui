@@ -20,5 +20,5 @@ export function instanceDefaults(_seed: { name: string }): Partial<TextSettings>
 export const meta: CardSettingsMeta<TextSettings> = {
   builtin,
   cascadeKeys: ["fontSize", "wordWrap"],
-  tabs: [],
+  tabs: ["display"],
 };

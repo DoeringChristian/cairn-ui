@@ -58,5 +58,5 @@ export function instanceDefaults(seed?: Partial<ScatterSettings>): Partial<Scatt
 export const meta: CardSettingsMeta<ScatterSettings> = {
   builtin,
   cascadeKeys: ["showPareto", "dimNonFrontier", "running", "regression"],
-  tabs: ["data", "display"],
+  tabs: ["values", "display"],
 };

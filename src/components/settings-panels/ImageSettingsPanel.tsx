@@ -110,5 +110,5 @@ export default function ImageSettingsPanel({
     </>
   );
 
-  return <SettingsTabs tabs={{ data, display }} />;
+  return <SettingsTabs tabs={{ values: data, display }} />;
 }

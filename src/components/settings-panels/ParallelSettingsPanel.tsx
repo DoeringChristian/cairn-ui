@@ -83,5 +83,5 @@ export default function ParallelSettingsPanel({ ctl, ctx, mode }: Props) {
     </SettingsSection>
   );
 
-  return <SettingsTabs tabs={{ data }} />;
+  return <SettingsTabs tabs={{ values: data }} />;
 }

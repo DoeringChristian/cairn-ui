@@ -25,7 +25,7 @@ export const VIEWER_ICONS = [
 ] as const;
 
 /** The settings tabs and sections a setting can sit in (the settings palette's). */
-export const SETTING_TABS = ["data", "grouping", "display", "expressions"] as const;
+export const SETTING_TABS = ["values", "grouping", "display", "expressions"] as const;
 export const SETTING_SECTIONS = ["Axes", "Smoothing", "Outliers", "Series", "Appearance", "Overlays", "Layout", "Playback", "Compare"] as const;
 export type ViewerSettingTab = (typeof SETTING_TABS)[number];
 export type ViewerSettingSection = (typeof SETTING_SECTIONS)[number];

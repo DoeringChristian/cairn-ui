@@ -23,5 +23,5 @@ export function instanceDefaults(): Partial<ImportanceSettings> {
 export const meta: CardSettingsMeta<ImportanceSettings> = {
   builtin,
   cascadeKeys: ["method"],
-  tabs: ["data"],
+  tabs: ["values"],
 };

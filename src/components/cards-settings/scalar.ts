@@ -123,5 +123,5 @@ export const meta: CardSettingsMeta<ScalarSettings> = {
     "groupBy", "agg", "band", "hideMembers", "latestPerGroup",
     "lineType", "legend", "tooltip", "showOriginal", "stack", "fullFidelity",
   ],
-  tabs: ["data", "grouping", "display", "expressions"],
+  tabs: ["values", "grouping", "display", "expressions"],
 };

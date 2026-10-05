@@ -56,5 +56,5 @@ export default function HistogramSettingsPanel({ ctl, ctx, mode }: Props) {
     </SettingsSection>
   );
 
-  return <SettingsTabs tabs={{ data, display }} />;
+  return <SettingsTabs tabs={{ values: data, display }} />;
 }

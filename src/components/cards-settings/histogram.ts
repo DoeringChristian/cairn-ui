@@ -24,5 +24,5 @@ export function instanceDefaults(_seed: { name: string }): Partial<HistogramSett
 export const meta: CardSettingsMeta<HistogramSettings> = {
   builtin,
   cascadeKeys: ["viewMode", "logY", "colormap"],
-  tabs: ["data", "display"],
+  tabs: ["values", "display"],
 };

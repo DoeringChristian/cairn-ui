@@ -31,5 +31,5 @@ export function instanceDefaults(_seed: { name: string }): Partial<TensorSetting
 export const meta: CardSettingsMeta<TensorSettings> = {
   builtin,
   cascadeKeys: ["viewMode", "colormap", "logY", "bins", ...MEDIA_SLIDER_CASCADE],
-  tabs: ["data", "display"],
+  tabs: ["values", "display"],
 };

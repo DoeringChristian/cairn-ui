@@ -35,5 +35,5 @@ export function instanceDefaults(): Partial<CodeDiffSettings> {
 export const meta: CardSettingsMeta<CodeDiffSettings> = {
   builtin,
   cascadeKeys: ["layout", "onlyChanged", "context"],
-  tabs: ["data", "display"],
+  tabs: ["values", "display"],
 };

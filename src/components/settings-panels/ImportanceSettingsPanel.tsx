@@ -48,5 +48,5 @@ export default function ImportanceSettingsPanel({ ctl, ctx, mode }: Props) {
       />
     </SettingsSection>
   );
-  return <SettingsTabs tabs={{ data }} />;
+  return <SettingsTabs tabs={{ values: data }} />;
 }

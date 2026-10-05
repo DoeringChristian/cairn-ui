@@ -33,5 +33,5 @@ export default function Scene3DSettingsPanel({
       <LayoutSection ctl={ctl} ctx={ctx} mode={mode} />
     </>
   );
-  return <SettingsTabs tabs={{ data, display }} />;
+  return <SettingsTabs tabs={{ values: data, display }} />;
 }

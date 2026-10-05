@@ -23,5 +23,5 @@ export function instanceDefaults(seed: { name: string }): Partial<VolumeSettings
 export const meta: CardSettingsMeta<VolumeSettings> = {
   builtin,
   cascadeKeys: [...MEDIA_SLIDER_CASCADE, ...MEDIA_COLUMNS_CASCADE],
-  tabs: ["data", "display"],
+  tabs: ["values", "display"],
 };

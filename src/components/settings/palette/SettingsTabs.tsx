@@ -64,7 +64,7 @@ export function SettingsTabBar<K extends string>({
 }
 
 /**
- * The fixed Data · Grouping · Display · Expressions tabs of a settings panel.
+ * The fixed Values · Grouping · Display · Expressions tabs of a settings panel.
  * Tabs without content are hidden; with a single tab left there is no bar.
  */
 export default function SettingsTabs({ tabs, active, onActiveChange }: Props) {
@@ -72,7 +72,7 @@ export default function SettingsTabs({ tabs, active, onActiveChange }: Props) {
   const host = useContext(SettingsTabsHostContext);
   const [own, setOwn] = useState<SettingsTabId | null>(null);
   const visible = visibleTabs({
-    data: hasContent(tabs.data),
+    values: hasContent(tabs.values),
     grouping: hasContent(tabs.grouping),
     display: hasContent(tabs.display),
     expressions: hasContent(tabs.expressions),

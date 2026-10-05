@@ -133,7 +133,11 @@ test("the editor's settings column: one tab row + × in a header that does not s
   const editor = all.find((s) => s.rel === "components/workspace/CardEditor.tsx")!.text;
   // The tab row is the modal's settings header: Data | Type | the card's other tabs.
   assert.match(editor, /settingsHeader=\{<SettingsTabBar items=\{tabs\} current=\{tab\} onSelect=\{onTab\} \/>\}/);
-  assert.match(editor, /\{ id: "data" as EditorTab, label: "Data" \},\s*\{ id: "type" as EditorTab, label: "Type", disabled: !ready \},\s*\.\.\.SETTINGS_TABS\.filter\(\(t\) => t\.id !== "data" && cardTabs\.includes\(t\.id\)\)/);
+  assert.match(editor, /\{ id: "data" as EditorTab, label: "Data" \},\s*\{ id: "type" as EditorTab, label: "Type", disabled: !ready \},\s*\.\.\.SETTINGS_TABS\.filter\(\(t\) => cardTabs\.includes\(t\.id\)\)/);
+  // Data is the data picker only: the card's own settings (Values, Display, …) never show under it.
+  assert.match(editor, /className=\{tab === "data" \|\| tab === "type" \? "hidden" : undefined\}\s*ref=\{settingsSlot\}/);
+  const logic = all.find((s) => s.rel === "components/settings/palette/logic.ts")!.text;
+  assert.match(logic, /export type SettingsTabId = "values" \| "grouping" \| "display" \| "expressions";/);
   // No folds, headings or extra buttons of the editor's own.
   assert.doesNotMatch(editor, /aria-expanded|function Fold|<SettingsSection|<h[3-4]\b|Choose a card type|Into <|>Card</);
   // The header sits outside the scrolling body, with the close button beside the tabs.
@@ -146,4 +150,16 @@ test("the editor's settings column: one tab row + × in a header that does not s
   const tabs = all.find((s) => s.rel === "components/settings/palette/SettingsTabs.tsx")!.text;
   assert.match(tabs, /host\?\.report\([\s\S]*?if \(host\) return host\.active && visible\.includes\(host\.active\) \? <div>\{tabs\[host\.active\]\}<\/div> : null;/);
   assert.match(all.find((s) => s.rel === "components/workspace/card-editor-host.tsx")!.text, /<SettingsTabsHostContext\.Provider value=\{tabs\}>\{settings\}/);
+});
+
+test("picking a type (adding a card, or changing its type) lands on Values, else the card's first tab", () => {
+  const editor = sources().find((s) => s.rel === "components/workspace/CardEditor.tsx")!.text;
+  // Both flows go through land(): adding (onCreate) and changing the type (pick → onLand).
+  assert.match(editor, /const land = \(\) => \{\s*setTab\("values"\);\s*setLanding\(true\);\s*\};/);
+  assert.match(editor, /onAdd\(adding, cards\)[^]*?setPending\(first \?\? null\);\s*land\(\);/);
+  assert.match(editor, /onLand\(\);\s*if \(key !== current\) onChange\(\{ option: key \}\);/);
+  // Once the card reports its tabs: Values, else its first one (palette logic `landingTab`).
+  assert.match(editor, /setTab\(landingTab\(cardTabs\) \?\? "data"\);/);
+  // Nothing else sends a type pick back to Data.
+  assert.doesNotMatch(editor, /pick = \(key: string\) => \{[^}]*onTab\("data"\)/);
 });

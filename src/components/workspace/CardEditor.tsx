@@ -37,7 +37,7 @@ import CardPreview from "./CardPreview";
 import CardDataPicker from "./CardDataPicker";
 import CardTypePicker, { CardTypeTiles, Hint, MAX_PREVIEWS } from "./CardTypePicker";
 import { SettingsTabBar } from "../settings/palette/SettingsTabs";
-import { SETTINGS_TABS, type SettingsTabId } from "../settings/palette/logic";
+import { SETTINGS_TABS, landingTab, type SettingsTabId } from "../settings/palette/logic";
 import { useViewerDefaults, useViewerList } from "../../lib/custom/hooks";
 import { useProjectId } from "../../lib/project-context";
 import {
@@ -110,7 +110,7 @@ export function CardEditorHost({
     [],
   );
 
-  const slots = useRef<Slots>({ card: null, settings: null, tab: "data" });
+  const slots = useRef<Slots>({ card: null, settings: null, tab: null });
   const slotSubs = useRef(new Set<() => void>());
   const setSlot = useCallback(<K extends keyof Slots>(k: K, v: Slots[K]) => {
     if (slots.current[k] === v) return;
@@ -118,8 +118,10 @@ export function CardEditorHost({
     for (const fn of slotSubs.current) fn();
   }, []);
 
-  // The one tab row: Data | Type | the card's other tabs (its settings panel reports them).
+  // The one tab row: Data | Type | the card's own tabs (its settings panel reports them).
   const [tab, setTab] = useState<EditorTab>("data");
+  /** A type was just picked (a new card, or another type): open the card on Values, else its first tab, once it reports them. */
+  const [landing, setLanding] = useState(false);
   const [cardTabs, setCardTabs] = useState<SettingsTabId[]>([]);
 
   const host = useMemo<Host>(
@@ -175,6 +177,7 @@ export function CardEditorHost({
     setClaim(null);
     setPending(null);
     setTab("data");
+    setLanding(false);
     if (adding != null) onAddingDone();
     c?.info.current.onClose();
   }, [adding, onAddingDone]);
@@ -189,9 +192,18 @@ export function CardEditorHost({
       go();
     });
   const info = claim?.info.current;
+  const land = () => {
+    setTab("values");
+    setLanding(true);
+  };
+  useLayoutEffect(() => {
+    if (!landing || !claim || cardTabs.length === 0) return;
+    setLanding(false);
+    setTab(landingTab(cardTabs) ?? "data");
+  }, [landing, claim, cardTabs]);
   // A tab the card under the editor lacks (after ←/→) shows Data, and comes back with a card that has it.
-  const shownTab: EditorTab = tab === "type" || tab === "data" || cardTabs.includes(tab) ? tab : "data";
-  useLayoutEffect(() => setSlot("tab", shownTab === "type" ? null : shownTab), [setSlot, shownTab]);
+  const shownTab: EditorTab = landing || tab === "type" || tab === "data" || cardTabs.includes(tab) ? tab : "data";
+  useLayoutEffect(() => setSlot("tab", shownTab === "type" || shownTab === "data" ? null : shownTab), [setSlot, shownTab]);
 
   return (
     <CardEditorHostContext.Provider value={enabled ? host : null}>
@@ -214,12 +226,13 @@ export function CardEditorHost({
           onCreate={(cards) => {
             const first = adding != null ? onAdd(adding, cards) : undefined;
             setPending(first ?? null);
-            setTab("data");
+            land();
             onAddingDone();
           }}
           onChange={(c) => {
             if (id != null) onChange(id, c);
           }}
+          onLand={land}
           setSlot={setSlot}
         />
       )}
@@ -232,7 +245,7 @@ export function CardEditorHost({
 // ---------------------------------------------------------------------------
 
 type EditorMode = "new" | "pending" | "edit";
-type EditorTab = SettingsTabId | "type";
+type EditorTab = "data" | "type" | SettingsTabId;
 
 const NO_VIEWERS: ViewerInfo[] = [];
 
@@ -252,6 +265,7 @@ function CardEditor({
   runIds,
   onCreate,
   onChange,
+  onLand,
   setSlot,
 }: {
   mode: EditorMode;
@@ -270,6 +284,8 @@ function CardEditor({
   runIds: readonly string[];
   onCreate: (cards: NewCard[]) => void;
   onChange: (change: PanelChange) => void;
+  /** A type was picked: the card opens on Values (else its first tab). */
+  onLand: () => void;
   setSlot: <K extends keyof Slots>(k: K, v: Slots[K]) => void;
 }) {
   const adding = mode === "new";
@@ -306,7 +322,7 @@ function CardEditor({
       onCreate(newCards(data, [key], metrics));
       return;
     }
-    onTab("data");
+    onLand();
     if (key !== current) onChange({ option: key });
   };
   const cardCount = adding && ready ? dataParts(data, metrics).length : 0;
@@ -317,7 +333,7 @@ function CardEditor({
   const tabs = [
     { id: "data" as EditorTab, label: "Data" },
     { id: "type" as EditorTab, label: "Type", disabled: !ready },
-    ...SETTINGS_TABS.filter((t) => t.id !== "data" && cardTabs.includes(t.id)),
+    ...SETTINGS_TABS.filter((t) => cardTabs.includes(t.id)),
   ];
 
   const left = (
@@ -349,7 +365,6 @@ function CardEditor({
   const column = (
     <div data-testid="card-editor" data-mode={mode} data-tab={tab} data-section={section ?? undefined}>
       {tab === "data" && (
-        <div className="mb-3 border-b border-border pb-3">
           <CardDataPicker
             key={adding ? "new" : (panel?.panel.id ?? "")}
             data={data}
@@ -363,7 +378,6 @@ function CardEditor({
             onSubmit={() => ready && onTab("type")}
             autoFocus={adding}
           />
-        </div>
       )}
       {tab === "type" && (
         <>
@@ -380,7 +394,7 @@ function CardEditor({
         </>
       )}
       <div
-        className={tab === "type" || (tab !== "data" && cardTabs.length === 0) ? "hidden" : undefined}
+        className={tab === "data" || tab === "type" ? "hidden" : undefined}
         ref={settingsSlot}
         data-testid="card-editor-settings"
       />

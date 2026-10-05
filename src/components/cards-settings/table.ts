@@ -69,5 +69,5 @@ export function instanceDefaults(seed: { name: string }): Partial<TableSettings>
 export const meta: CardSettingsMeta<TableSettings> = {
   builtin,
   cascadeKeys: ["rowsPerPage", "textDiff"],
-  tabs: ["data", "grouping", "display", "expressions"],
+  tabs: ["values", "grouping", "display", "expressions"],
 };

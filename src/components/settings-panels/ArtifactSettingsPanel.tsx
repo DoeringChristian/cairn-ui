@@ -1,6 +1,6 @@
 import type { SettingsController } from "../../lib/card-settings";
 import type { ArtifactSettings } from "../cards-settings/artifact";
-import { Segmented } from "../settings/palette";
+import { Segmented, SettingsTabs } from "../settings/palette";
 
 interface Props {
   ctl: SettingsController<ArtifactSettings>;
@@ -9,12 +9,15 @@ interface Props {
 }
 
 /**
- * Settings of the artifact card (a simple card: no tabs). It has no
+ * Settings of the artifact card: its slider axis (Values). It has no
  * cascading settings, so the defaults editor shows nothing.
  */
 export default function ArtifactSettingsPanel({ ctl, mode }: Props) {
   if (mode === "defaults") return null;
   return (
+    <SettingsTabs
+      tabs={{
+        values: (
     <div>
       <Segmented
         label="Slider axis"
@@ -31,5 +34,8 @@ export default function ArtifactSettingsPanel({ ctl, mode }: Props) {
         ]}
       />
     </div>
+        ),
+      }}
+    />
   );
 }

@@ -30,5 +30,5 @@ export const instanceDefaults = steppedMediaInstanceDefaults as (seed: { name: s
 export const meta: CardSettingsMeta<HtmlSettings> = {
   builtin,
   cascadeKeys: ["autoHeight", "fixedHeight", ...STEPPED_MEDIA_CASCADE],
-  tabs: [],
+  tabs: ["values", "display"],
 };

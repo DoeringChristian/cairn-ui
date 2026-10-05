@@ -78,5 +78,5 @@ export default function TensorSettingsPanel({
     </>
   );
 
-  return <SettingsTabs tabs={{ data, display }} />;
+  return <SettingsTabs tabs={{ values: data, display }} />;
 }

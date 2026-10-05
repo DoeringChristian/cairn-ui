@@ -13,4 +13,4 @@ export function instanceDefaults(seed?: Partial<ParallelSettings>): Partial<Para
   return seed ?? {};
 }
 
-export const meta: CardSettingsMeta<ParallelSettings> = { builtin, cascadeKeys: [], tabs: ["data"] };
+export const meta: CardSettingsMeta<ParallelSettings> = { builtin, cascadeKeys: [], tabs: ["values"] };

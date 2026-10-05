@@ -1,6 +1,6 @@
 import type { SettingsController } from "../../lib/card-settings";
 import type { TextSettings } from "../cards-settings/text";
-import { Segmented, Switch, type Bound } from "../settings/palette";
+import { Segmented, SettingsTabs, Switch, type Bound } from "../settings/palette";
 
 interface Props {
   ctl: SettingsController<TextSettings>;
@@ -18,9 +18,12 @@ function bind<K extends keyof TextSettings & string>(ctl: SettingsController<Tex
   };
 }
 
-/** Settings of the text card (a simple card: no tabs). */
+/** Settings of the text card: its display. */
 export default function TextSettingsPanel({ ctl }: Props) {
   return (
+    <SettingsTabs
+      tabs={{
+        display: (
     <div>
       <Segmented
         label="Font size"
@@ -37,5 +40,8 @@ export default function TextSettingsPanel({ ctl }: Props) {
         {...bind(ctl, "wordWrap")}
       />
     </div>
+        ),
+      }}
+    />
   );
 }

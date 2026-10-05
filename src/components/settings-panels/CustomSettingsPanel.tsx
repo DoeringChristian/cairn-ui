@@ -252,10 +252,10 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
             No viewers in this project yet: <code className="mono">cairn viewer publish ./viewers/my-viewer --project {project}</code>
           </p>
         )}
-        {vs.own("data", "Series")}
+        {vs.own("values", "Series")}
       </SettingsSection>
-      <SliderSection ctl={ctl} ctx={ctx}>{vs.own("data", "Axes")}</SliderSection>
-      {vs.rest("data")}
+      <SliderSection ctl={ctl} ctx={ctx}>{vs.own("values", "Axes")}</SliderSection>
+      {vs.rest("values")}
       <SettingsSection name="Compare">
         <SettingRow
           layout="stacked"
@@ -288,7 +288,7 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
             description="Off follows the slider; on keeps the reference fixed."
           />
         )}
-        {vs.own("data", "Compare")}
+        {vs.own("values", "Compare")}
       </SettingsSection>
     </>
   );
@@ -303,7 +303,7 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
     <SettingsTabs
       active={tab ?? vs.initialTab}
       onActiveChange={setTab}
-      tabs={{ data, grouping: vs.rest("grouping"), display, expressions: vs.rest("expressions") }}
+      tabs={{ values: data, grouping: vs.rest("grouping"), display, expressions: vs.rest("expressions") }}
     />
   );
 }
@@ -325,17 +325,17 @@ function DefaultsPanel({ ctl, mode }: { ctl: SettingsController<CustomSettings>;
         description="Defaults are kept per viewer: pick the viewer whose settings to set."
         options={list.map((v) => ({ value: v.name, label: v.title || v.name }))}
       />
-      {vs.own("data", "Series")}
+      {vs.own("values", "Series")}
     </SettingsSection>
   );
   return (
     <SettingsTabs
       tabs={{
-        data: (
+        values: (
           <>
             {picker}
-            <SliderSection ctl={ctl}>{vs.own("data", "Axes")}</SliderSection>
-            {vs.rest("data", list.length > 0 ? ["Series", "Axes"] : ["Axes"])}
+            <SliderSection ctl={ctl}>{vs.own("values", "Axes")}</SliderSection>
+            {vs.rest("values", list.length > 0 ? ["Series", "Axes"] : ["Axes"])}
           </>
         ),
         grouping: vs.rest("grouping"),

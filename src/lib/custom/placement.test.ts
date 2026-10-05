@@ -16,7 +16,7 @@ test("every setting is placed exactly once, in its tab and section", () => {
   const settings: unknown[] = [];
   for (const tab of SETTING_TABS) for (const section of SETTING_SECTIONS) settings.push({ key: `${tab}_${section}`, type: "switch", tab, section });
   settings.push({ key: "noTab", type: "switch", section: "Overlays" });
-  settings.push({ key: "noSection", type: "switch", tab: "data" });
+  settings.push({ key: "noSection", type: "switch", tab: "values" });
   settings.push({ key: "neither", type: "slider", min: 0, max: 1 });
   const m = manifest(settings);
   const p = placeSettings(m);
@@ -25,7 +25,7 @@ test("every setting is placed exactly once, in its tab and section", () => {
   assert.equal(new Set(placed.map((x) => x.split("/")[2])).size, m.settings.length);
   for (const s of m.settings) assert.ok(placed.includes(`${s.tab}/${s.section}/${s.key}`), s.key);
   assert.ok(placed.includes("display/Overlays/noTab"));
-  assert.ok(placed.includes("data/Appearance/noSection"));
+  assert.ok(placed.includes("values/Appearance/noSection"));
   assert.ok(placed.includes("display/Appearance/neither"));
 });
 
@@ -33,7 +33,7 @@ test("sections the card renders merge; others are added in manifest order", () =
   const m = manifest([
     { key: "wire", type: "switch", section: "Overlays" },
     { key: "exposure", type: "slider", min: 0, max: 4 },
-    { key: "lobes", type: "number", tab: "data", section: "Series" },
+    { key: "lobes", type: "number", tab: "values", section: "Series" },
     { key: "cols", type: "number", section: "Layout" },
     { key: "pointSize", type: "number" },
   ]);
@@ -43,11 +43,11 @@ test("sections the card renders merge; others are added in manifest order", () =
     { section: "Appearance", keys: ["exposure", "pointSize"], merged: false },
     { section: "Layout", keys: ["cols"], merged: true },
   ]);
-  assert.deepEqual(p.data, [{ section: "Series", keys: ["lobes"], merged: true }]);
+  assert.deepEqual(p.values, [{ section: "Series", keys: ["lobes"], merged: true }]);
 });
 
 test("the settings open where the viewer's settings are", () => {
   assert.equal(initialTab(placeSettings(manifest([{ key: "a", type: "switch" }]))), "display");
-  assert.equal(initialTab(placeSettings(manifest([{ key: "a", type: "switch", tab: "data" }]))), "data");
-  assert.equal(initialTab(placeSettings(manifest([]))), "data");
+  assert.equal(initialTab(placeSettings(manifest([{ key: "a", type: "switch", tab: "values" }]))), "values");
+  assert.equal(initialTab(placeSettings(manifest([]))), "values");
 });

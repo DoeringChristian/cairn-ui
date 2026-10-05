@@ -37,5 +37,5 @@ export default function PresetSettingsPanel({
       )}
     </>
   );
-  return <SettingsTabs tabs={{ data, display: confusion ? display : null }} />;
+  return <SettingsTabs tabs={{ values: data, display: confusion ? display : null }} />;
 }

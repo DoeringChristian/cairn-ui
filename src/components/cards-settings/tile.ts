@@ -27,5 +27,5 @@ export function instanceDefaults(): Partial<TileSettings> {
 export const meta: CardSettingsMeta<TileSettings> = {
   builtin,
   cascadeKeys: ["reduce", "bestDir"],
-  tabs: ["data"],
+  tabs: ["values"],
 };

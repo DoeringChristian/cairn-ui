@@ -22,7 +22,7 @@ export function scene3dMeta(): CardSettingsMeta<Scene3DSettings> {
   return {
     builtin: { version: 1, ...mediaSliderBuiltin, ...mediaColumnsBuiltin, metrics: [], syncCameras: true, view: {} },
     cascadeKeys: ["syncCameras", ...MEDIA_SLIDER_CASCADE, ...MEDIA_COLUMNS_CASCADE],
-    tabs: ["data", "display"],
+    tabs: ["values", "display"],
   };
 }
 
