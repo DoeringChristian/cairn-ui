@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { copyText } from "../../lib/clipboard";
-import { getHighlighter } from "../../lib/syntax-highlight";
+import { getHighlighter, SHIKI_THEME } from "../../lib/syntax-highlight";
 
 /**
  * Code with a copy button, highlighted with the shared shiki highlighter
@@ -25,7 +25,7 @@ export default function CodeBlock({
     let live = true;
     getHighlighter()
       .then((h) => {
-        if (live) setHtml(h.codeToHtml(code, { lang, theme: "github-dark" }));
+        if (live) setHtml(h.codeToHtml(code, { lang, theme: SHIKI_THEME }));
       })
       .catch(() => undefined);
     return () => {
