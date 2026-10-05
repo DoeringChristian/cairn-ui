@@ -63,6 +63,9 @@ const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const RESERVED_KEYS = new Set(["viewer", "viewer_version"]);
 
 const isObj = (v: unknown): v is Record<string, unknown> => v != null && typeof v === "object" && !Array.isArray(v);
+/** The object without its null-valued fields (a normalized manifest writes `null` for "none"). */
+const dropNulls = (o: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null));
 
 /** Normalise a folder-relative path (`./a/../b.js` → `b.js`); null when it leaves the folder. */
 export function normalizePath(path: string): string | null {
@@ -79,15 +82,16 @@ export function normalizePath(path: string): string | null {
 
 /** Parse and validate a manifest (a JSON string or the parsed value). */
 export function parseManifest(input: unknown): ManifestResult {
-  let raw: unknown = input;
+  let parsed: unknown = input;
   if (typeof input === "string") {
     try {
-      raw = JSON.parse(input);
+      parsed = JSON.parse(input);
     } catch (e) {
       return { ok: false, errors: [`cairn-viewer.json is not JSON: ${(e as Error).message}`] };
     }
   }
-  if (!isObj(raw)) return { ok: false, errors: ["cairn-viewer.json must be an object"] };
+  if (!isObj(parsed)) return { ok: false, errors: ["cairn-viewer.json must be an object"] };
+  const raw = dropNulls(parsed);
   const errors: string[] = [];
   const str = (k: string, required: boolean): string | undefined => {
     const v = raw[k];
@@ -192,9 +196,10 @@ export function parseManifest(input: unknown): ManifestResult {
   };
 }
 
-function parseSetting(s: unknown, i: number): ViewerSetting | string {
+function parseSetting(setting: unknown, i: number): ViewerSetting | string {
   const at = `settings[${i}]`;
-  if (!isObj(s)) return `${at} must be an object`;
+  if (!isObj(setting)) return `${at} must be an object`;
+  const s = dropNulls(setting);
   const key = s.key;
   if (typeof key !== "string" || !KEY_RE.test(key)) return `${at}: "key" must be an identifier`;
   if (RESERVED_KEYS.has(key)) return `${at}: "${key}" is a card setting; pick another key`;

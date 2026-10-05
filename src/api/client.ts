@@ -69,6 +69,11 @@ async function get<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function bytes(path: string, init?: RequestInit): Promise<ArrayBuffer> {
+  const res = await checkOk(await fetch(path, init), path);
+  return res.arrayBuffer();
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await checkOk(
     await fetch(path, {
@@ -425,6 +430,21 @@ export const api = {
       `/api/projects/${encodeURIComponent(projectId)}/resolve-artifact-ref`,
       { ref },
     ),
+  /** The project's custom viewers: each family's latest version, plus live dev sources (`cairn viewer dev`). */
+  viewers: (projectId: string, opts: { allVersions?: boolean } = {}) =>
+    get<{ viewers: import("./types").ViewerInfo[] }>(
+      `/api/projects/${encodeURIComponent(projectId)}/viewers${opts.allVersions ? "?all_versions=1" : ""}`,
+    ),
+  /** A dev viewer's current files (404 once `cairn viewer dev` stopped). */
+  viewerDevFiles: (projectId: string, name: string) =>
+    get<{ revision: number; files: import("./types").ViewerFileInfo[] }>(
+      `/api/projects/${encodeURIComponent(projectId)}/viewers/dev/${encodeURIComponent(name)}/files`,
+    ),
+  viewerDevFile: (projectId: string, name: string, path: string) =>
+    bytes(`/api/projects/${encodeURIComponent(projectId)}/viewers/dev/${encodeURIComponent(name)}/file?path=${encodeURIComponent(path)}`, { cache: "no-store" }),
+  /** One file of a published version's entries, as bytes. */
+  artifactVersionFileBytes: (versionId: string, path: string) =>
+    bytes(`/api/artifact-versions/${versionId}/file?path=${encodeURIComponent(path)}`),
   artifactVersionFiles: (versionId: string) =>
     get<{ files: import("./types").ArtifactEntryInfo[] }>(
       `/api/artifact-versions/${versionId}/files`,

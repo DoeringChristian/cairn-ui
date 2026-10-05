@@ -575,3 +575,39 @@ export interface ReportCommentCreate {
   quote?: string | null;
   parent_id?: string | null;
 }
+
+// ── Custom viewers (server: GET /api/projects/{id}/viewers) ────────────
+
+/** One custom viewer as listed: its normalized manifest plus where its files are. */
+export interface ViewerInfo {
+  name: string;
+  title: string;
+  entry: string;
+  accepts: string[];
+  inputs: "single" | "compare";
+  webgl: boolean;
+  view: boolean;
+  settings: unknown[];
+  imports: Record<string, string>;
+  description?: string | null;
+  /** A live `cairn viewer dev` source (preferred over the published one while it exists). */
+  dev: boolean;
+  /** The published version (null for a dev source). */
+  version_id: string | null;
+  version: number | null;
+  digest: string | null;
+  content_digest: string;
+  /** Dev sources: bumps on every change. */
+  revision?: number;
+  updated_at: string;
+  /** Dev sources: why the folder's manifest is invalid right now. */
+  error: string | null;
+}
+
+/** One file of a viewer (a dev source's file list). */
+export interface ViewerFileInfo {
+  path: string;
+  size: number;
+  digest: string;
+  mime: string;
+}

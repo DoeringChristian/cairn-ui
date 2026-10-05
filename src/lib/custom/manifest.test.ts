@@ -122,3 +122,13 @@ test("acceptScore prefers the most specific pattern", () => {
   assert.equal(acceptScore({ accepts: ["volume"] }, s), -1);
   assert.equal(acceptScore({ accepts: ["volume", "custom:*", "custom:guiding/vmf"] }, s), exact);
 });
+
+test("a normalized listing (nulls for none, extra fields) parses", () => {
+  const m = ok({
+    name: "v", title: "V", entry: "index.js", accepts: ["custom:*"], inputs: "single", webgl: true, view: false,
+    settings: [{ key: "c", type: "colormap", label: "c", default: "turbo", options: null }], imports: {}, description: null,
+    dev: false, version_id: "abc", version: 3, error: null,
+  });
+  assert.equal(m.description, undefined);
+  assert.equal(m.settings[0]!.options, undefined);
+});
