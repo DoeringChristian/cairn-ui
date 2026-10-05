@@ -16,16 +16,17 @@
 
 import type { ZoomView } from "./view-geometry.ts";
 
-export interface ZoomViewFollower {
+export interface ZoomViewFollower<V = ZoomView> {
   /** Show `view` now (imperatively; no React render). */
-  show(view: ZoomView): void;
+  show(view: V): void;
 }
 
-export class ZoomViewSync {
-  private readonly panes = new Set<ZoomViewFollower>();
+/** The bus; `V` is the view's type (a zoom/pan, or a custom viewer's opaque camera). */
+export class ZoomViewSync<V = ZoomView> {
+  private readonly panes = new Set<ZoomViewFollower<V>>();
 
   /** Add a pane; returns its leave function. */
-  join(pane: ZoomViewFollower): () => void {
+  join(pane: ZoomViewFollower<V>): () => void {
     this.panes.add(pane);
     return () => {
       this.panes.delete(pane);
@@ -33,7 +34,7 @@ export class ZoomViewSync {
   }
 
   /** `from`'s user moved the view: every other pane shows it now. */
-  publish(view: ZoomView, from: ZoomViewFollower): void {
+  publish(view: V, from: ZoomViewFollower<V>): void {
     for (const p of this.panes) if (p !== from) p.show(view);
   }
 
