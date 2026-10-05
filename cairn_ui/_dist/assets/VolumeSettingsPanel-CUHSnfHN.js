@@ -1,0 +1,1 @@
+import{j as s,d0 as i,eU as n,eW as o}from"./index-DgL_ovl3.js";function u({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{data:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{u as default};
