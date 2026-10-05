@@ -30,6 +30,7 @@ import {
 import { useViewer, useViewerDefaults, useViewerList, useViewerProject } from "../../lib/custom/hooks";
 import { currentViewers, defaultViewerName, viewerFromInfo, viewersFor } from "../../lib/custom/viewers";
 import { useProjectId } from "../../lib/project-context";
+import { useCardEditorHost } from "../workspace/card-editor-host";
 import { ExternalBaselinePicker } from "../card-kit/ExternalBaselinePicker";
 import {
   ColormapSelect,
@@ -214,11 +215,14 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
   ];
   if (s.viewer && !offered.some((v) => v.name === s.viewer)) viewerOptions.push({ value: s.viewer, label: `${s.viewer} (does not accept this data)` });
   const vs = viewerPlacement(ctl, chosen, manifest);
+  // In the workspace's card editor the viewer is the card type (Default, or one viewer): picked there.
+  const typePicksViewer = useCardEditorHost();
   const [tab, setTab] = useState<SettingsTabId | null>(null);
 
   const data = (
     <>
       <SettingsSection name="Series">
+        {!typePicksViewer && (
         <Select
           value={s.viewer ?? AUTO}
           onChange={(v) => ctl.set({ viewer: v === AUTO ? undefined : v, viewer_version: undefined })}
@@ -229,6 +233,7 @@ function CardPanel({ ctl, ctx, mode }: { ctl: SettingsController<CustomSettings>
           description="Default follows the project's default viewer of this kind of data (Defaults page); pick a viewer to pin this card to it."
           options={viewerOptions}
         />
+        )}
         {versions.length > 0 && (
           <Select
             value={s.viewer_version == null ? AUTO : String(s.viewer_version)}

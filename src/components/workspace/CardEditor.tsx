@@ -22,7 +22,7 @@
  * Cards own their content and settings panel (each card component builds
  * them), so the editor hosts them: a workspace card's CardShell portals its
  * enlarged content and settings panel into this editor's slots
- * (`CardEditorSlots`) instead of opening a modal of its own. The editor
+ * (./card-editor-host.tsx `CardEditorSlots`) instead of opening a modal of its own. The editor
  * stays mounted while the card underneath it changes — a new card, a type
  * change remounting the card, ←/→ — and only the slots' contents swap.
  *
@@ -30,27 +30,14 @@
  * modal with their (session-only) settings.
  */
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type MutableRefObject,
-  type ReactNode,
-} from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { CardEditorHostContext, type CardEditorClaim, type Host, type Slots } from "./card-editor-host";
 import CardDetailModal from "../CardDetailModal";
 import CardPreview from "./CardPreview";
 import CardDataPicker from "./CardDataPicker";
 import CardTypePicker, { CardTypeTiles, Hint, MAX_PREVIEWS } from "./CardTypePicker";
 import { TextInput } from "../settings/palette";
-import { useViewerList } from "../../lib/custom/hooks";
+import { useViewerDefaults, useViewerList } from "../../lib/custom/hooks";
 import { useProjectId } from "../../lib/project-context";
 import {
   compatibleTypes,
@@ -67,83 +54,7 @@ import {
   type TypeOption,
 } from "../../lib/workspace/card-builder";
 import type { MetricInfo, RenderedPanel, RenderedSection } from "../../lib/workspace/layout";
-
-// ---------------------------------------------------------------------------
-// The host: what a workspace card's CardShell talks to
-// ---------------------------------------------------------------------------
-
-/** What the card under the editor tells it. */
-export interface CardEditorClaim {
-  title: string;
-  /** Close the card's detail state (the editor closes with it). */
-  onClose: () => void;
-  onPrev?: () => void;
-  onNext?: () => void;
-}
-
-interface Slots {
-  card: HTMLElement | null;
-  settings: HTMLElement | null;
-}
-
-interface Host {
-  /** The card `id` is open: the editor shows it. */
-  claim: (id: string, info: MutableRefObject<CardEditorClaim>) => void;
-  /** Its detail state closed (`close`), or the card unmounted while open (`unmount`). */
-  release: (id: string, how: "close" | "unmount") => void;
-  /** The claim's info changed (title, neighbours). */
-  touch: () => void;
-  getSlots: () => Slots;
-  subscribeSlots: (fn: () => void) => () => void;
-}
-
-const CardEditorHostContext = createContext<Host | null>(null);
-
-/** Whether this card's detail opens in the workspace's card editor. */
-export function useCardEditorHost(): boolean {
-  return useContext(CardEditorHostContext) != null;
-}
-
-/**
- * For CardShell: while `open`, show card `id` in the editor, its enlarged
- * `content` and `settings` panel in the editor's slots. Kept in the card's
- * React tree (portals), so they keep the card's contexts and state.
- */
-export function CardEditorSlots({
-  id,
-  open,
-  title,
-  onClose,
-  onPrev,
-  onNext,
-  content,
-  settings,
-}: CardEditorClaim & { id: string; open: boolean; content: ReactNode; settings: ReactNode }) {
-  const host = useContext(CardEditorHostContext)!;
-  const info = useRef<CardEditorClaim>({ title, onClose, onPrev, onNext });
-  info.current = { title, onClose, onPrev, onNext };
-  // Read at cleanup: still true there when the card unmounts while open.
-  const openRef = useRef(open);
-  openRef.current = open;
-  useLayoutEffect(() => {
-    if (!open) return;
-    host.claim(id, info);
-    return () => host.release(id, openRef.current ? "unmount" : "close");
-  }, [open, id, host]);
-  const hasPrev = !!onPrev;
-  const hasNext = !!onNext;
-  useLayoutEffect(() => {
-    if (open) host.touch();
-  }, [open, host, title, hasPrev, hasNext]);
-  const slots = useSyncExternalStore(host.subscribeSlots, host.getSlots);
-  if (!open) return null;
-  return (
-    <>
-      {slots.card && createPortal(content, slots.card)}
-      {slots.settings && createPortal(settings, slots.settings)}
-    </>
-  );
-}
+import type { ViewerInfo } from "../../api/types";
 
 /** How long the editor waits for a card to (re)open under it: a new card, a remount. */
 const PENDING_MS = 5000;
@@ -303,6 +214,8 @@ export function CardEditorHost({
 
 type EditorMode = "new" | "pending" | "edit";
 
+const NO_VIEWERS: ViewerInfo[] = [];
+
 function CardEditor({
   mode,
   title,
@@ -333,7 +246,9 @@ function CardEditor({
   setSlot: (k: keyof Slots, el: HTMLElement | null) => void;
 }) {
   const adding = mode === "new";
-  const viewers = useViewerList(useProjectId()).data ?? [];
+  const project = useProjectId();
+  const viewers = useViewerList(project).data ?? NO_VIEWERS;
+  const viewerDefaults = useViewerDefaults(project).data ?? null;
   const [draft, setDraft] = useState<CardData>({ mode: "series", names: [] });
   const edited = panel?.panel;
   const panelDataNow = useMemo(() => (edited ? panelData(edited) : null), [edited]);
@@ -341,8 +256,8 @@ function CardEditor({
   const current = panel ? optionKey(panel.panel.type, panel.panel.settings) : null;
   const ready = dataReady(data, metrics);
   const compat = useMemo(
-    () => compatibleTypes(data, metrics, runIds.length, adding ? null : current, viewers),
-    [data, metrics, runIds.length, adding, current, viewers],
+    () => compatibleTypes(data, metrics, runIds.length, adding ? null : current, viewers, viewerDefaults),
+    [data, metrics, runIds.length, adding, current, viewers, viewerDefaults],
   );
   const shownBy = useMemo(() => seriesShownBy(sections), [sections]);
 

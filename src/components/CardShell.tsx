@@ -10,7 +10,7 @@ import CardErrorBoundary from "./card-kit/CardErrorBoundary";
 import { useCardNavEntry, useOpenOnMount } from "../lib/card-nav";
 import { useReportExporting } from "../lib/reports/export-context";
 import { PanelActionsContext, PanelTitleContext } from "../lib/workspace/panel-actions";
-import { CardEditorSlots, useCardEditorHost } from "./workspace/CardEditor";
+import { CardEditorSlots, useCardEditorHost } from "./workspace/card-editor-host";
 
 interface Props {
   cardRef: RefObject<HTMLDivElement>;

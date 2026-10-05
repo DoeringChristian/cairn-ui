@@ -150,26 +150,38 @@ const VIEWERS = [
   viewer({ name: "broken", title: "Broken", accepts: ["custom:guiding/vmf"], dev: true, error: "bad manifest" }),
 ];
 
-test("custom data: every accepting viewer is an option, the most specific first", () => {
+test("custom data: the default viewer first, then every accepting viewer, the most specific first", () => {
   const r = compatibleTypes({ mode: "series", names: ["guide"] }, CUSTOM, 1, null, VIEWERS);
-  assert.deepEqual(r.options.map((o) => o.key), ["custom:broken", "custom:vmf", "custom:any"]);
-  assert.equal(r.options[0]!.unavailable, "the viewer is broken: bad manifest");
-  assert.deepEqual(r.options[1]!.seed, { viewer: "vmf" });
-  assert.equal(r.options[1]!.label, "Guiding");
-  assert.equal(r.options[1]!.icon, "globe");
-  assert.equal(r.options[2]!.icon, undefined);
+  assert.deepEqual(r.options.map((o) => o.key), ["custom", "custom:broken", "custom:vmf", "custom:any"]);
+  // No project default: the most specific accepting viewer is the default.
+  assert.equal(r.options[0]!.label, "Default (Broken)");
+  assert.deepEqual(r.options[0]!.seed, undefined);
+  assert.equal(r.options[1]!.unavailable, "the viewer is broken: bad manifest");
+  assert.deepEqual(r.options[2]!.seed, { viewer: "vmf" });
+  assert.equal(r.options[2]!.label, "Guiding");
+  assert.equal(r.options[2]!.icon, "globe");
+  assert.equal(r.options[3]!.icon, undefined);
   assert.equal(r.reason, null);
+  // The project's default (the Defaults page) names it.
+  const d = compatibleTypes({ mode: "series", names: ["guide"] }, CUSTOM, 1, null, VIEWERS, { defaults: { "custom:guiding/*": "any" }, builtin: {} });
+  assert.equal(d.options[0]!.label, "Default (Any custom)");
 });
 
 test("several custom series: viewers that accept them all", () => {
   const r = compatibleTypes({ mode: "series", names: ["guide", "field"] }, CUSTOM, 1, null, VIEWERS);
-  assert.deepEqual(r.options.map((o) => o.key), ["custom:any"]);
+  assert.deepEqual(r.options.map((o) => o.key), ["custom", "custom:any"]);
 });
 
 test("a built-in kind: its own card, then the viewers taking it over", () => {
   const r = compatibleTypes({ mode: "series", names: ["vol"] }, CUSTOM, 1, null, VIEWERS);
   assert.deepEqual(r.options.map((o) => o.key), ["volume", "custom:ray"]);
+  assert.equal(r.options[0]!.label, "Volume");
   assert.match(r.options[1]!.hint, /live dev source/);
+  // A viewer that is the type's default (built in, or the project's) shows it: the type follows it.
+  const d = compatibleTypes({ mode: "series", names: ["vol"] }, CUSTOM, 1, null, VIEWERS, { defaults: {}, builtin: { volume: "ray" } });
+  assert.deepEqual(d.options.map((o) => o.key), ["volume", "custom:ray"]);
+  assert.equal(d.options[0]!.label, "Volume (default: Raymarcher)");
+  assert.match(d.options[0]!.hint, /default viewer, Raymarcher/);
 });
 
 test("custom data no viewer accepts: the reason says how to add one", () => {
@@ -186,7 +198,9 @@ test("editing a custom card keeps its viewer option", () => {
 test("option keys", () => {
   assert.equal(optionKey("custom", { viewer: "vmf" }), "custom:vmf");
   assert.equal(optionKey("custom", {}), "custom");
-  assert.equal(optionKey("image", { viewer: "x" }), "image");
+  // A built-in type a viewer can show, pinned to one: that viewer's option.
+  assert.equal(optionKey("image", { viewer: "x" }), "custom:x");
+  assert.equal(optionKey("scalar", { viewer: "x" }), "scalar");
   assert.deepEqual(parseOptionKey("custom:vmf"), { type: "custom", seed: { viewer: "vmf" } });
   assert.deepEqual(parseOptionKey("scalar"), { type: "scalar", seed: {} });
   assert.equal(optionLabel("custom:vmf", VIEWERS), "Guiding");
@@ -217,6 +231,10 @@ test("changedPanel: a new type keeps the frame, not the content", () => {
   const other = changedPanel({ ...c, settings: { ...c.settings, viewer_version: 2, "vs:vmf:e": 1 } }, { option: "custom:ray" });
   assert.deepEqual(other.settings, { title: "Mine", height: 400, viewer: "ray", "vs:vmf:e": 1 }, "another viewer: settings kept, pin dropped");
   assert.deepEqual(changedPanel(p, { option: "image" }), { type: "image", selector: p.selector, settings: p.settings }, "the same option changes nothing");
+  // Back to the data's default viewer: the pin goes, the viewer settings stay.
+  assert.deepEqual(changedPanel(other, { option: "custom" }).settings, { title: "Mine", height: 400, "vs:vmf:e": 1 });
+  const pinned = { type: "volume" as const, selector: { names: ["vol"] }, settings: { viewer: "ray", height: 300 } };
+  assert.deepEqual(changedPanel(pinned, { option: "volume" }).settings, { height: 300 }, "a built-in type's default again");
 });
 
 test("changedPanel: title set and cleared", () => {

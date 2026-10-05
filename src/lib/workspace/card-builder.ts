@@ -21,9 +21,9 @@
  *   removed and (with unlisted metrics off) not shown — for "Manage cards".
  */
 
-import type { ViewerInfo } from "../../api/types.ts";
+import type { ViewerDefaults, ViewerInfo } from "../../api/types.ts";
 import type { CardType } from "../cards/card-spec.ts";
-import { viewersFor } from "../custom/viewers.ts";
+import { defaultViewerName, VIEWER_DEFAULT_TYPES, viewersFor, type SeriesKind } from "../custom/viewers.ts";
 import { isMultiRunCardType, minRunsFor } from "../comparisons/types.ts";
 import { deps, parse } from "../expr/index.ts";
 import { quoteMetric } from "../scalar-exprs.ts";
@@ -322,9 +322,14 @@ export interface CompatResult {
   reason: string | null;
 }
 
-/** The option a card is: its type, or `custom:<viewer>` for a custom card naming its viewer. */
+/**
+ * The option a card is: `custom:<viewer>` for a card pinned to a viewer (a
+ * custom card naming its viewer, or a built-in type a viewer can show), else
+ * its type (`custom`: the data's default viewer).
+ */
 export function optionKey(type: CardType, settings: Record<string, unknown>): string {
-  return type === "custom" && typeof settings.viewer === "string" ? `custom:${settings.viewer}` : type;
+  const pinned = typeof settings.viewer === "string" && (type === "custom" || VIEWER_DEFAULT_TYPES.has(type));
+  return pinned ? `custom:${settings.viewer}` : type;
 }
 
 /** An option key's card type and the settings it seeds. */
@@ -354,14 +359,15 @@ export function compatibleTypes(
   runCount: number,
   keepKey: string | null = null,
   viewers: readonly ViewerInfo[] = [],
+  defaults: ViewerDefaults | null = null,
 ): CompatResult {
-  if (data.mode !== "groups") return panelCompatibleTypes(data, metrics, runCount, keepKey, viewers);
+  if (data.mode !== "groups") return panelCompatibleTypes(data, metrics, runCount, keepKey, viewers, defaults);
   const parts = dataParts(data, metrics);
   if (parts.length === 0) {
     const r = captureGroups(data.regex, metrics);
     return { options: [], reason: r.ok ? "No series of these runs matches (yet)." : r.error };
   }
-  const results = parts.map((p) => panelCompatibleTypes(p.data, metrics, runCount, null, viewers));
+  const results = parts.map((p) => panelCompatibleTypes(p.data, metrics, runCount, null, viewers, defaults));
   const options: TypeOption[] = [];
   for (const o of results[0]!.options) {
     const each = results.map((r) => r.options.find((x) => x.key === o.key));
@@ -377,8 +383,9 @@ function panelCompatibleTypes(
   data: PanelData,
   metrics: readonly MetricInfo[],
   runCount: number,
-  keepKey: string | null = null,
-  viewers: readonly ViewerInfo[] = [],
+  keepKey: string | null,
+  viewers: readonly ViewerInfo[],
+  defaults: ViewerDefaults | null,
 ): CompatResult {
   const runsNote = (t: CardType) => {
     const need = minRunsFor(t);
@@ -401,13 +408,43 @@ function panelCompatibleTypes(
     hint: `${v.description ? `${v.description} ` : ""}Custom viewer ${v.name}${v.dev ? " (live dev source)" : v.version != null ? ` v${v.version}` : ""}.`,
     unavailable: v.error ? `the viewer is broken: ${v.error}` : null,
   });
+  /** The kind's default viewer (the Defaults page; lib/custom/viewers.ts defaultViewerName). */
+  const defaultOf = (series: SeriesKind): ViewerInfo | null => {
+    const name = defaultViewerName(defaults, viewers, series);
+    return name ? (viewers.find((v) => v.name === name) ?? null) : null;
+  };
+  /**
+   * A built-in type a viewer is the default of shows in that viewer; custom
+   * data without a pinned viewer (`custom`) in its kind's default. Either
+   * follows the default when it changes.
+   */
+  const defaultOpt = (type: CardType, series: SeriesKind | null, unavailable: string | null): TypeOption => {
+    const d = series ? defaultOf(series) : null;
+    if (type === "custom") {
+      const title = d ? d.title || d.name : null;
+      return {
+        key: "custom",
+        type,
+        label: title ? `Default (${title})` : "Default viewer",
+        hint: `The default viewer of this data (the Defaults page)${title ? `, now ${title}` : ""}: the card follows it.`,
+        unavailable,
+      };
+    }
+    const o = opt(type, unavailable);
+    if (!d) return o;
+    return {
+      ...o,
+      label: `${o.label} (default: ${d.title || d.name})`,
+      hint: `Shown by its default viewer, ${d.title || d.name} (the Defaults page): the card follows that default.`,
+    };
+  };
   const keepOpt = (key: string): TypeOption => {
     const { type, seed } = parseOptionKey(key);
     if (type === "custom" && typeof seed.viewer === "string") {
       const v = viewers.find((x) => x.name === seed.viewer);
       return v ? viewerOpt(v) : { key, type, seed, label: seed.viewer, hint: `Custom viewer ${seed.viewer}.`, unavailable: null };
     }
-    return opt(type, null);
+    return type === "custom" ? defaultOpt(type, null, null) : opt(type, null);
   };
   const withKeep = (r: CompatResult): CompatResult =>
     keepKey && !r.options.some((o) => o.key === keepKey) ? { ...r, options: [keepOpt(keepKey), ...r.options] } : r;
@@ -426,9 +463,11 @@ function panelCompatibleTypes(
   const kind = kinds[0]!;
   const count = data.mode === "series" ? data.names.length : resolved.length;
   const options: TypeOption[] = [];
+  const first: SeriesKind = { object_type: kind, kind: resolved[0]!.kind ?? null };
   if (SERIES_TYPES.has(kind)) {
     const type = kind as CardType;
-    options.push(opt(type, SINGLE_SERIES.has(kind) && count > 1 ? "shows one series" : null));
+    const note = SINGLE_SERIES.has(kind) && count > 1 ? "shows one series" : null;
+    options.push(VIEWER_DEFAULT_TYPES.has(kind) ? defaultOpt(type, first, note) : opt(type, note));
   }
   if (kind === "scalar" && data.mode === "series") {
     for (const [type, lo, hi] of SCALAR_MULTI_RUN) {
@@ -438,6 +477,7 @@ function panelCompatibleTypes(
   }
   if (kind !== "scalar") {
     const matching = viewersFor(viewers, resolved.map((m) => ({ object_type: m.object_type, kind: m.kind ?? null })));
+    if (kind === "custom" && matching.length > 0) options.push(defaultOpt("custom", first, null));
     options.push(...matching.map(viewerOpt));
   }
   const custom = kind === "custom" ? ` No custom viewer accepts ${[...new Set(resolved.map((m) => m.kind ?? "?"))].join(", ")} yet: publish one with \`cairn viewer publish\`.` : "";
@@ -616,9 +656,10 @@ export interface PanelChange {
 
 /**
  * The card after an edit. A new type keeps the card's frame (title, size)
- * and starts its own settings; another custom viewer keeps the card's
- * settings (each viewer's are stored apart) but not a pinned version. New
- * data keeps the settings (a default title follows the data).
+ * and starts its own settings; another viewer of the same type — or its
+ * default viewer again — keeps the card's settings (each viewer's are stored
+ * apart) but not a pinned version. New data keeps the settings (a default
+ * title follows the data).
  */
 export function changedPanel(
   panel: Pick<Panel, "type" | "selector" | "settings">,
@@ -631,6 +672,7 @@ export function changedPanel(
     const next = parseOptionKey(change.option);
     if (next.type === panel.type) {
       settings = { ...panel.settings, ...next.seed };
+      if (next.seed.viewer == null) delete settings.viewer;
       delete settings.viewer_version;
     } else {
       const frame = pickKeys(panel.settings, FRAME_KEYS);
