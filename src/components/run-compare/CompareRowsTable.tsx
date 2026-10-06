@@ -4,6 +4,7 @@ import { formatValue } from "../../lib/plot-utils/format";
 import { shortRunId } from "../../lib/run-label";
 import type { CompareRow } from "../../lib/run-compare";
 import { diffCellClassName } from "../../lib/table-diff";
+import FoldedText from "../FoldedText";
 
 export interface CompareColumnsProps {
   /** Column order. */
@@ -30,6 +31,11 @@ interface Props extends CompareColumnsProps {
   /** Suffix after a key (e.g. the ↓ of a lower-is-better metric). */
   keySuffix?: (row: CompareRow) => ReactNode;
 }
+
+/** A differing row's tint (the row's `bg-accent/5`), as a layer over an opaque cell. */
+const DIFF_TINT = "linear-gradient(rgb(var(--color-accent-rgb) / 0.05), rgb(var(--color-accent-rgb) / 0.05))";
+/** Below this a value column stops shrinking and the table scrolls sideways. */
+const VALUE_MIN_WIDTH = "12rem";
 
 /** Rows = keys, columns = runs; differing rows are marked, numeric cells tinted best/worst. */
 export default function CompareRowsTable({
@@ -61,7 +67,7 @@ export default function CompareRowsTable({
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-fg-muted">
               <tr>
-                <th className="pb-1 pr-4 sticky left-0 bg-bg-surface">{keyHeader}</th>
+                <th className="pb-1 pr-4 sticky left-0 z-10 w-px whitespace-nowrap bg-bg">{keyHeader}</th>
                 {runIds.map((id) => (
                   <th key={id} className="pb-1 pr-4 whitespace-nowrap">
                     <span className="inline-flex items-center gap-1.5">
@@ -84,9 +90,12 @@ export default function CompareRowsTable({
                 return (
                   <tr key={row.key} className={`group border-t border-border-subtle ${row.differs ? "bg-accent/5" : ""}`}>
                     <td
-                      className={`py-1 pr-4 sticky left-0 ${mono ? "mono" : "text-fg-muted"} ${
-                        row.differs ? "bg-accent/5 border-l-2 border-accent" : "bg-bg-surface"
+                      // Opaque: values scroll underneath this sticky column, so the
+                      // row's diff tint is painted over the solid surface colour.
+                      className={`py-1 pr-4 sticky left-0 z-10 w-px whitespace-nowrap bg-bg ${mono ? "mono" : "text-fg-muted"} ${
+                        row.differs ? "border-l-2 border-accent" : ""
                       }`}
+                      style={row.differs ? { backgroundImage: DIFF_TINT } : undefined}
                     >
                       <span className="inline-flex items-center gap-1">
                         {onTogglePin && (
@@ -113,9 +122,16 @@ export default function CompareRowsTable({
                       return (
                         <td
                           key={runIds[i]}
-                          className={`mono py-1 pr-4 whitespace-nowrap tabular-nums text-fg-muted ${diffCls}`}
+                          className={`mono py-1 pr-4 tabular-nums text-fg-muted ${diffCls}`}
+                          // The value columns share the width beside the keys; a
+                          // value folds to its column instead of widening the table.
+                          style={{ width: `${100 / runIds.length}%` }}
                         >
-                          {formatValue(v, { exact })}
+                          {/* `contain: inline-size` keeps a long value out of the
+                              table's column sizing; the minimum still holds. */}
+                          <div style={{ minWidth: VALUE_MIN_WIDTH, contain: "inline-size" }}>
+                            <FoldedText>{formatValue(v, { exact })}</FoldedText>
+                          </div>
                         </td>
                       );
                     })}

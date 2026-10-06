@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import FoldedText from "../FoldedText";
 
 /**
  * The one collapsible JSON tree: an artifact's metadata, a run's config, a
@@ -93,7 +94,7 @@ function Node({
 }
 
 function Leaf({ value }: { value: unknown }) {
-  if (typeof value === "string") return <span className="break-all text-[#0a3069]">"{value}"</span>;
+  if (typeof value === "string") return <FoldedText className="text-[#0a3069]">"{value}"</FoldedText>;
   if (typeof value === "number") return <span className="num text-[#0550ae]">{String(value)}</span>;
   if (typeof value === "boolean") return <span className="text-[#8250df]">{String(value)}</span>;
   if (value === null) return <span className="text-fg-subtle">null</span>;
