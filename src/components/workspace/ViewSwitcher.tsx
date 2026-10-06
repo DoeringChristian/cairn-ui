@@ -129,7 +129,7 @@ function ViewTiles({
   return (
     <div className="flex flex-col gap-2">
       {error && <p className="text-xs text-status-failed">{error}</p>}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3" data-testid="view-tiles">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(12.5rem,1fr))] gap-3" data-testid="view-tiles">
         {list.map((v) => (
           <ViewTile
             key={v.id}
@@ -198,7 +198,7 @@ function ViewTile({
         }
       }}
       aria-current={current ? "true" : undefined}
-      className={`flex cursor-pointer flex-col overflow-hidden rounded-lg border bg-bg text-left transition-colors hover:border-accent focus-visible:border-accent focus-visible:outline-none ${current ? "border-accent" : "border-border"}`}
+      className={`flex cursor-pointer flex-col overflow-hidden rounded-lg border bg-bg text-left transition-colors hover:border-accent focus-visible:border-accent focus-visible:outline-none border-border`}
       data-testid="view-tile"
       data-view-id={view.id}
     >
