@@ -240,7 +240,7 @@ export default function PresetCard({
       mode="card"
       ctx={{
         confusion: kind === "confusion_matrix",
-        multi: effectiveMetrics.length > 1,
+        multi: panes.visibleCount > 1,
         scalarMetrics,
         following: slider.sync != null,
       }}

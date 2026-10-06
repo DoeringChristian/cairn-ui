@@ -160,7 +160,7 @@ export default function VolumeCard({
         <VolumeSettingsPanel
           ctl={ctl}
           mode="card"
-          ctx={{ multi: panes.shown.length > 1, scalarMetrics, following: slider.sync != null }}
+          ctx={{ multi: panes.visibleCount > 1, scalarMetrics, following: slider.sync != null }}
         />
       }
       modalOpen={settingsOpen}

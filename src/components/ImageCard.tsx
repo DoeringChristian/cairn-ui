@@ -289,7 +289,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
         currentStep,
         overlays: overlaySummary,
         paneKeys,
-        multi: series.length > 1,
+        multi: panes.visibleCount > 1,
         following: slider.sync != null,
         scalarMetrics,
       }}

@@ -1,0 +1,1 @@
+import{j as s,B as i,E as n,M as o}from"./index-Dc-y3E9e.js";function u({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{values:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{u as default};

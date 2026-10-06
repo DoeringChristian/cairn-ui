@@ -585,7 +585,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
       ctl={ctl}
       mode="card"
       ctx={{
-        multi: isMulti,
+        multi: panes.visibleCount > 1,
         merge: figureMergeCheck,
         scalarMetrics,
         following: slider.sync != null,

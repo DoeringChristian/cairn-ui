@@ -413,7 +413,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
         globalSteps: slider.globalSteps,
         currentStep: slider.currentStep,
         paneKeys,
-        multi: shown.length > 1,
+        multi: panes.visibleCount > 1,
         following,
         scalarMetrics,
       })}

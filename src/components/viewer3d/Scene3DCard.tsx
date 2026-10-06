@@ -198,7 +198,6 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   const paneKeys = panes.keys;
   const paneLabels = panes.labels;
 
-  const isMulti = effectiveMetrics.length > 1;
   const subtitle = values.length > 0
     ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})`
     : `${metric.count} pts`;
@@ -235,7 +234,7 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
           ctx={{
             viewSettings: spec.viewSettings({ view, setView, meta: seedMeta, properties: propertyNames(seedMeta) }),
             onResetCamera: () => setResetKey((k) => k + 1),
-            multi: isMulti,
+            multi: panes.visibleCount > 1,
             scalarMetrics,
             following: slider.sync != null,
           }}

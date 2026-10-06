@@ -9,6 +9,12 @@ import { useRunInfo } from "./use-run-info";
 export interface MediaPanes<T> {
   /** The series shown: hidden runs dropped, pinned runs first, at most `maxRuns` runs. */
   shown: T[];
+  /**
+   * Series after hiding runs, before the `maxRuns` limit. Settings that only
+   * matter with several runs (columns, max runs) go by this, not by `shown`:
+   * else a limit of 1 would hide the very setting that undoes it.
+   */
+  visibleCount: number;
   /** `seriesKey` per shown series. */
   keys: string[];
   /** Run id per shown series. */
@@ -62,7 +68,7 @@ export function useMediaPanes<T extends { runId?: string; name: string }>(
         if (c) paneColors.set(k, c);
       });
     }
-    return { shown, keys, runIds, allRunIds, multiRun, labels, colors, paneColors };
+    return { shown, visibleCount: visible.length, keys, runIds, allRunIds, multiRun, labels, colors, paneColors };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, fallbackRunId, maxRuns, visibleRuns, allRunIds, colors, runMetaVersion]);
 }
