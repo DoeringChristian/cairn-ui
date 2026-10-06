@@ -8,7 +8,7 @@
  * Pure (storage is injected): tested in `section-sync.test.ts`.
  */
 
-import { STEP_KEY, unionValues } from "./slider-key.ts";
+import { STEP_KEY, storedSliderValue, unionValues } from "./slider-key.ts";
 
 export interface SectionSyncState {
   /** The section's slider value; `null` until someone moves it (cards then show their first position). */
@@ -78,6 +78,7 @@ export class SectionSyncStore {
   }
 
   setValue(value: number | null): void {
+    if (value != null) value = storedSliderValue(this.state.values, value);
     if (value === this.state.value) return;
     this.state = { ...this.state, value };
     this.persist();

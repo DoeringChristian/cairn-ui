@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SectionSyncStore, parsePersisted, type PersistedSectionSync } from "./section-sync.ts";
-import { resolveAtValue, sliderIndex, sliderTrack } from "./slider-key.ts";
+import { SLIDER_LATEST, resolveAtValue, sliderIndex, sliderTrack } from "./slider-key.ts";
 
 function memory(initial: PersistedSectionSync | null = null) {
   let saved = initial;
@@ -59,4 +59,18 @@ test("end to end: two cards follow one section value, each at its own step", () 
   const v = store.getSnapshot().value!;
   assert.equal(resolveAtValue(a, v), 300);
   assert.equal(resolveAtValue(b, v), 150);
+});
+
+test("the section slider at the last position follows new steps; elsewhere it stays", () => {
+  const store = new SectionSyncStore();
+  store.register("image", [10, 20, 30]);
+  store.setValue(30);
+  assert.equal(store.getSnapshot().value, SLIDER_LATEST);
+  store.register("image", [10, 20, 30, 40]);
+  const s = store.getSnapshot();
+  assert.equal(s.values[sliderIndex(s.values, s.value)], 40);
+  store.setValue(20);
+  store.register("image", [10, 20, 30, 40, 50]);
+  const t = store.getSnapshot();
+  assert.equal(t.values[sliderIndex(t.values, t.value)], 20);
 });

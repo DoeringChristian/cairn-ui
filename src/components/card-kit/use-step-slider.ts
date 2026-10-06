@@ -5,6 +5,7 @@ import {
   resolveAtValue,
   sliderIndex,
   sliderTrack,
+  storedSliderValue,
   unionValues,
   type SliderPosition,
 } from "../../lib/media/slider-key";
@@ -118,6 +119,8 @@ export function useStepSlider(args: {
       s.setValue(value);
       return;
     }
+    // At the last position the card keeps following new steps.
+    value = storedSliderValue(valuesRef.current, value);
     // Read-only cards move too: their settings writes land in the session layer.
     setLocal(value);
     pendingPersistRef.current = value;

@@ -1,11 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  SLIDER_LATEST,
   STEP_KEY,
   indexAsOf,
   resolveAtValue,
   sliderIndex,
   sliderTrack,
+  storedSliderValue,
   unionValues,
 } from "./slider-key.ts";
 
@@ -93,3 +95,11 @@ test("indexAsOf and sliderIndex land on the value or the one below", () => {
   assert.equal(sliderIndex([], 20), 0);
 });
 
+
+test("the last position is stored as SLIDER_LATEST and resolves to the newest value", () => {
+  assert.equal(storedSliderValue([0, 10, 20], 20), SLIDER_LATEST);
+  assert.equal(storedSliderValue([0, 10, 20], 10), 10);
+  assert.equal(storedSliderValue([], 5), 5);
+  assert.equal(sliderIndex([0, 10, 20, 30], SLIDER_LATEST), 3);
+  assert.equal(JSON.parse(JSON.stringify(SLIDER_LATEST)), SLIDER_LATEST);
+});

@@ -121,9 +121,25 @@ export function indexAsOf(values: readonly number[], value: number): number {
 }
 
 /**
+ * The value a slider stores for "the last position": larger than any step or
+ * key value, so `sliderIndex` resolves it to whatever the last position is
+ * now, and a slider left at the end follows new steps as they arrive.
+ * JSON-safe (unlike `Infinity`), so it persists like any value.
+ */
+export const SLIDER_LATEST = Number.MAX_SAFE_INTEGER;
+
+/**
+ * The value to store for a move to `value`: `SLIDER_LATEST` when it is the
+ * last position, so the slider keeps following the newest step; else `value`.
+ */
+export function storedSliderValue(values: readonly number[], value: number): number {
+  return values.length > 0 && value === values[values.length - 1] ? SLIDER_LATEST : value;
+}
+
+/**
  * The slider index a persisted value lands on: the value itself, else the
- * largest value below it; below every value (or nothing persisted) the
- * first position.
+ * largest value below it (the last position for `SLIDER_LATEST`); below
+ * every value (or nothing persisted) the first position.
  */
 export function sliderIndex(values: readonly number[], value: number | null | undefined): number {
   if (value == null || values.length === 0) return 0;
