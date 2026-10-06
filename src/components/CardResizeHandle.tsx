@@ -151,7 +151,6 @@ export default function CardResizeHandle({
 
       let currentSpan = colSpan;
       let lastH = startHeight;
-      const heightTouched = new Set<HTMLElement>();
 
       // Add temporary spacer so the last card has room to resize into.
       // Append to the grid's parent (a <section>), which is in the document
@@ -162,41 +161,56 @@ export default function CardResizeHandle({
       spacer.style.flexShrink = "0";
       spacerParent.appendChild(spacer);
 
+      // Nothing moves during the drag: a preview box from the card's top-left
+      // corner shows the size it will snap to, and the section takes the new
+      // size once, on release. Reflowing live moved the card away from the
+      // pointer whenever the section rewrapped.
+      const gap = parseFloat(gridStyle?.columnGap ?? "") || 0;
+      const trackWidth = (gridWidth - gap * (actualCols - 1)) / actualCols;
+      const spanWidth = (span: number) => span * trackWidth + (span - 1) * gap;
+      const startRect = card.getBoundingClientRect();
+      const preview = document.createElement("div");
+      preview.setAttribute("aria-hidden", "true");
+      preview.dataset.cairnResizePreview = "";
+      Object.assign(preview.style, {
+        position: "absolute",
+        left: `${startRect.left + window.scrollX}px`,
+        top: `${startRect.top + window.scrollY}px`,
+        width: `${startRect.width}px`,
+        height: `${startRect.height}px`,
+        border: "2px solid rgb(var(--color-fg-muted-rgb) / 0.6)",
+        background: "rgb(var(--color-fg-muted-rgb) / 0.15)",
+        borderRadius: getComputedStyle(card).borderRadius,
+        boxSizing: "border-box",
+        pointerEvents: "none",
+        zIndex: "40",
+      });
+      document.body.appendChild(preview);
+
       let scrollRaf = 0;
       let resizeRaf = 0;
       let lastClientX = e.clientX;
       let lastClientY = e.clientY;
 
       const applyResize = () => {
-        // Batch every geometry read before style writes to avoid a forced layout
-        // per sibling on each pointer event.
         const pageY = lastClientY + window.scrollY;
-        const newH = Math.round(
-          Math.min(MAX_HEIGHT, Math.max(rowFloor, startHeight + (pageY - startPageY))),
-        );
-        const cardTop = card.getBoundingClientRect().top;
-        const siblingTops = allSiblings.map((sib) => sib.getBoundingClientRect().top);
-        lastH = newH;
-        card.style.height = `${newH}px`;
-        allSiblings.forEach((sib, index) => {
-          if (Math.abs(siblingTops[index]! - cardTop) < ROW_TOP_EPSILON_PX) {
-            sib.style.height = `${newH}px`;
-            heightTouched.add(sib);
-          } else if (heightTouched.has(sib)) {
-            sib.style.height = "";
-            heightTouched.delete(sib);
-          }
-        });
-
+        lastH = Math.round(Math.min(MAX_HEIGHT, Math.max(rowFloor, startHeight + (pageY - startPageY))));
+        preview.style.height = `${lastH}px`;
         if (actualCols > 1) {
           const targetWidth = startWidth + (lastClientX - startX);
           const rawSpan = Math.max(1, Math.min(actualCols, Math.round(targetWidth / colWidth)));
-          const newSpan = Math.max(spanFloor, snapToValidSpan(rawSpan));
-          if (newSpan !== currentSpan) {
-            currentSpan = newSpan;
-            card.style.gridColumn = `span ${newSpan}`;
-            for (const sib of allSiblings) sib.style.gridColumn = `span ${newSpan}`;
-          }
+          currentSpan = Math.max(spanFloor, snapToValidSpan(rawSpan));
+          preview.style.width = `${spanWidth(currentSpan)}px`;
+        }
+      };
+
+      // On release: every card takes the span, the resized card (and, through
+      // the broadcast below, its row after the reflow) the height.
+      const commitResize = () => {
+        card.style.height = `${lastH}px`;
+        if (actualCols > 1) {
+          card.style.gridColumn = `span ${currentSpan}`;
+          for (const sib of allSiblings) sib.style.gridColumn = `span ${currentSpan}`;
         }
       };
 
@@ -239,9 +253,10 @@ export default function CardResizeHandle({
         cancelAnimationFrame(resizeRaf);
         resizeRaf = 0;
         applyResize();
+        preview.remove();
+        commitResize();
         spacer.remove();
-        // Persist final dimensions to React state only once. During the drag
-        // direct styles keep feedback smooth without re-rendering every plot.
+        // Persist final dimensions to React state only once.
         onHeightChange(lastH);
         onColSpanChange(currentSpan);
         // Broadcast changes to all sibling cards via custom events.
