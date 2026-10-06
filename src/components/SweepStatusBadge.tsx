@@ -5,6 +5,7 @@ const colors: Record<string, string> = {
   finished: "bg-status-completed/15 text-status-completed",
   failed: "bg-status-failed/15 text-status-failed",
   killed: "bg-status-killed/15 text-status-killed",
+  stopped: "bg-status-stopped/15 text-status-stopped",
   cancelled: "bg-status-killed/15 text-status-killed",
 };
 

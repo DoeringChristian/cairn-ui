@@ -14,8 +14,9 @@ const ScatterPlotCard = lazy(() => import("../components/ScatterPlotCard"));
 
 /** The status changes a sweep in `status` accepts. */
 function actionsFor(status: SweepDetail["status"]): SweepAction[] {
-  if (status === "running") return ["pause", "cancel"];
-  if (status === "paused") return ["resume", "cancel"];
+  if (status === "running") return ["pause", "stop", "cancel"];
+  if (status === "paused") return ["resume", "stop", "cancel"];
+  if (status === "stopped") return ["cancel"];
   return [];
 }
 
@@ -100,7 +101,7 @@ export default function SweepDetailPage() {
             ` (${Object.entries(sweep.counts).map(([s, n]) => `${n} ${s}`).join(", ")})`}
         </Fact>
         <div className="col-span-2 md:col-span-4">
-          <Fact label="Command">{sweep.command ?? "(in-process: cairn.sweep(...).run(fn))"}</Fact>
+          <Fact label="Command">{sweep.command?.join(" ") ?? "(in-process: cairn.sweep(...).run(fn))"}</Fact>
         </div>
         <div className="col-span-2 md:col-span-4">
           <Fact label="Agent">{`cairn agent ${sweep.id}`}</Fact>

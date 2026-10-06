@@ -415,7 +415,7 @@ export interface RunArtifactInput extends ArtifactVersionInfo {
 
 // ---- Sweeps ------------------------------------------------------------------
 
-export type SweepStatus = "running" | "paused" | "cancelled" | "finished";
+export type SweepStatus = "running" | "paused" | "stopped" | "cancelled" | "finished";
 export type SweepMethod = "grid" | "random" | "bayes";
 
 /** One claimed set of params and its outcome (`GET /api/sweeps/{id}`). */
@@ -440,7 +440,8 @@ export interface Sweep {
   space: Record<string, unknown>;
   metric: string | null;
   goal: "minimize" | "maximize";
-  command: string | null;
+  /** wandb's argument list, macros unexpanded; null for an in-process sweep. */
+  command: string[] | null;
   status: SweepStatus;
   created_at: string;
   trial_count: number;
@@ -454,7 +455,7 @@ export interface SweepDetail extends Sweep {
   trials: SweepTrial[];
 }
 
-export type SweepAction = "pause" | "resume" | "cancel";
+export type SweepAction = "pause" | "resume" | "stop" | "cancel";
 
 // ── Workspace views + comparisons (server: routes/project_docs.py) ────
 
