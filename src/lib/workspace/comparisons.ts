@@ -1,15 +1,15 @@
 /**
  * Comparisons are workspaces with a run set (doc.ts `runs`). Creating one
- * copies the project workspace's layout — sections, panels and their
- * settings, hidden and removed panels, "include unlisted metrics", hide
- * patterns, defaults, prefs — and binds the
- * given runs; afterwards the two documents are independent.
+ * copies the layout of the project's current view (the run page's) —
+ * sections, panels and their settings, hidden and removed panels, "include
+ * unlisted metrics", hide patterns, defaults, prefs — and binds the given
+ * runs; afterwards the two documents are independent.
  */
 
 import { api } from "../../api/client";
 import type { RunSelector } from "../run-selector";
 import { layoutOf, type WorkspaceDoc } from "./doc";
-import { projectRef, refKey } from "./ref";
+import { refKey, viewRef } from "./ref";
 import { dropWorkspace, getWorkspace } from "./store";
 import { fetchWorkspace, flushWorkspace } from "./sync";
 
@@ -19,7 +19,8 @@ export async function createComparison(
   runIds: readonly string[],
   selector: RunSelector | null = null,
 ): Promise<string> {
-  const ref = projectRef(projectId);
+  const { current } = await api.views(projectId);
+  const ref = viewRef(projectId, current);
   // Copy what the server has plus this tab's unsaved edits.
   await fetchWorkspace(ref, { force: true });
   await flushWorkspace(ref);

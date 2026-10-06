@@ -1,6 +1,6 @@
 /**
- * The in-tab working copy of each workspace document (the project workspace
- * and every open comparison), keyed by `refKey`.
+ * The in-tab working copy of each workspace document (every workspace view
+ * and comparison this tab opened), keyed by `refKey`.
  *
  * Per document it holds the last version the server confirmed (`base`, at
  * `rev`), the local ops not yet written (`pending`) and the document every
@@ -83,6 +83,15 @@ export function adoptServer(key: string, rev: number, payload: unknown): void {
   s.doc = rebase(s.base, s.pending);
   saveJson(localStorage, storageKeys.workspace(key), { rev, payload: s.base });
   notifyWorkspace(key);
+}
+
+/**
+ * Adopt a document listed elsewhere (a project's view list) only when it is
+ * newer than what this tab has, so a list fetched before this tab's last
+ * write never steps a view back.
+ */
+export function seedWorkspace(key: string, rev: number, payload: unknown): void {
+  if (rev > workspaceState(key).rev) adoptServer(key, rev, payload);
 }
 
 /** The first `n` pending ops were written as `payload` at `rev`. */

@@ -130,12 +130,12 @@ test("undo restores only the fields an op changed", () => {
   assert.deepEqual(undone.sections.map((s) => s.name), ["val"]);
 });
 
-test("saved views round-trip the layout and keep the run set", async () => {
-  const { viewPayload, parseViewPayload } = await import("./views.ts");
+test("a view copied into a comparison round-trips the layout and keeps the run set", async () => {
+  const { layoutPayload, viewLayout } = await import("./views.ts");
   const doc = ops.addPanels("a", [P("1", ["x"])])(normalizeWorkspace({ runs: { ids: ["r1"] } }));
-  const p = JSON.parse(JSON.stringify(viewPayload(doc)));
-  assert.equal("runs" in p.layout, false);
-  const layout = parseViewPayload(p);
+  const p = JSON.parse(JSON.stringify(layoutPayload(doc)));
+  assert.equal("runs" in p, false);
+  const layout = viewLayout(p);
   const other = normalizeWorkspace({ runs: { ids: ["r2"] } });
   const applied = ops.replaceLayout(layout)(other);
   assert.deepEqual(names(applied), ["a:1"]);

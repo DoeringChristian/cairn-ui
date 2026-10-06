@@ -148,7 +148,7 @@ export default function ComparePage() {
                     <button type="button" className="text-accent hover:underline" onClick={() => void handleCreate()}>
                       Create one
                     </button>{" "}
-                    — it starts with a copy of the project workspace&rsquo;s layout. Or select runs in the runs table and
+                    — it starts with a copy of the current view&rsquo;s layout. Or select runs in the runs table and
                     click Compare.
                   </p>
                 </>

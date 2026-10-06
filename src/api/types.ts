@@ -456,7 +456,7 @@ export interface SweepDetail extends Sweep {
 
 export type SweepAction = "pause" | "resume" | "cancel";
 
-// ── Project workspace + saved views (server: routes/project_docs.py) ────
+// ── Workspace views + comparisons (server: routes/project_docs.py) ────
 
 /** A comparison as listed (routes/project_docs.py). */
 export interface ComparisonSummary {
@@ -479,17 +479,21 @@ export type WorkspacePutResult =
   | { ok: { rev: number; updated_at: string }; conflict?: undefined }
   | { ok?: undefined; conflict: { rev: number; payload: Record<string, unknown> | null } };
 
-export interface SavedViewSummary {
+/** One workspace view: a named layout (lib/workspace/views.ts). */
+export interface WorkspaceViewDoc {
   id: string;
   name: string;
+  /** 0 (with a null payload and timestamps) for a project's first view before it is stored. */
   rev: number;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
+  payload: Record<string, unknown> | null;
 }
 
-export interface SavedView extends SavedViewSummary {
-  project_id: string;
-  payload: Record<string, unknown>;
+/** A project's views, oldest first, and the one the run page shows. */
+export interface WorkspaceViews {
+  views: WorkspaceViewDoc[];
+  current: string;
 }
 
 // ── Report share links (server: routes/shares.py) — wave 3 / I ──────────

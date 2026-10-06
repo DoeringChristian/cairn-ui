@@ -33,6 +33,8 @@ export interface PopoverProps {
   title?: string;
   /** Show `title` as a heading in the anchored panel too (the sheet always shows it). */
   titleAnchored?: boolean;
+  /** With `titleAnchored`: a × beside the anchored heading closes it (the sheet always has one). */
+  closeAnchored?: boolean;
   /** Anchored panel width in px, or `"anchor"` to match the anchor (at least `minWidth`). */
   width?: number | "anchor";
   minWidth?: number;
@@ -69,6 +71,7 @@ export default function Popover({
   children,
   title,
   titleAnchored = false,
+  closeAnchored = false,
   width = 320,
   minWidth = 0,
   align = "end",
@@ -165,8 +168,21 @@ export default function Popover({
   const body = (
     <div className="min-h-0 overflow-y-auto overscroll-contain">
       <div ref={contentRef} className={bodyClassName}>
-        {title && titleAnchored && !sheet && (
+        {title && titleAnchored && !sheet && !closeAnchored && (
           <h3 className="mb-3 text-xs uppercase tracking-wide text-fg-muted">{title}</h3>
+        )}
+        {title && titleAnchored && !sheet && closeAnchored && (
+          <div className="-mr-2 -mt-2 mb-2 flex items-center justify-between gap-2">
+            <h3 className="truncate text-xs uppercase tracking-wide text-fg-muted">{title}</h3>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-lg text-fg-muted hover:bg-bg-hover hover:text-fg"
+            >
+              {"×"}
+            </button>
+          </div>
         )}
         {children}
       </div>

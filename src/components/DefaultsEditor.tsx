@@ -37,7 +37,7 @@ const TYPE_LABELS: Partial<Record<CardType, string>> = {
 export const cardTypeLabel = (t: CardType) => TYPE_LABELS[t] ?? t[0]!.toUpperCase() + t.slice(1);
 
 interface Props {
-  /** The workspace whose defaults are edited (the project workspace or a comparison). */
+  /** The workspace whose defaults are edited (a view or a comparison). */
   wsRef: WorkspaceRef;
   where: DefaultsLevel;
   /** Types offered first (e.g. those in the section); the rest follow. */

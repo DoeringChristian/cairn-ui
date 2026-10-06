@@ -4,7 +4,7 @@
  * The user picks parameter keys, selects allowed values, chooses a strategy
  * (latest run per param combo, or all matching), previews results, then
  * creates a comparison of the matched runs (a static run set) with a copy
- * of the project workspace's layout.
+ * of the current view's layout.
  */
 
 import { useEffect, useMemo, useState } from "react";

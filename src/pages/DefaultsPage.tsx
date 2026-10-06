@@ -11,11 +11,13 @@ import ViewerDefaultsEditor from "../components/ViewerDefaultsEditor";
 import type { CardType } from "../lib/cards/card-spec";
 import { useMemo } from "react";
 import { useWorkspace } from "../lib/workspace/use-workspace";
-import { projectRef } from "../lib/workspace/ref";
+import { viewRef } from "../lib/workspace/ref";
+import { useViews } from "../lib/workspace/use-views";
 
 export default function DefaultsPage() {
   const { projectId } = useParams<{ projectId: string }>();
-  const wsRef = useMemo(() => (projectId ? projectRef(projectId) : null), [projectId]);
+  const current = useViews(projectId ?? null).data?.current ?? null;
+  const wsRef = useMemo(() => (projectId && current ? viewRef(projectId, current) : null), [projectId, current]);
   const { doc } = useWorkspace(wsRef);
   if (!projectId || !wsRef) return null;
   const sections = Object.keys(doc.sectionDefaults).sort();
@@ -25,7 +27,7 @@ export default function DefaultsPage() {
       <div>
         <h1 className="text-lg font-semibold">Card defaults</h1>
         <p className="mt-1 text-sm text-fg-muted">
-          Defaults for every card of a type in this project&rsquo;s workspace (the run page). A section&rsquo;s gear
+          Defaults for every card of a type in this project&rsquo;s current workspace view (the run page). A section&rsquo;s gear
           sets defaults for that section only, and a card&rsquo;s own settings win over both. Each comparison has its
           own defaults (its sections&rsquo; gears). Reports and shared links use the built-in defaults.
         </p>

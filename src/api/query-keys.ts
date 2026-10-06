@@ -50,7 +50,7 @@ export const qk = {
   reportComments: (projectId: string, reportId: string) => ["report-comments", projectId, reportId] as const,
   sweeps: (projectId: string) => ["sweeps", projectId] as const,
   sweep: (sweepId: string) => ["sweep", sweepId] as const,
-  // Saved workspace views (lib/workspace/views.ts).
+  // The project's workspace views and its current one (lib/workspace/use-views.ts).
   views: (projectId: string) => ["views", projectId] as const,
   /** The project's comparisons (names + run counts); each one's document lives in lib/workspace/store.ts. */
   comparisons: (projectId: string) => ["comparisons", projectId] as const,

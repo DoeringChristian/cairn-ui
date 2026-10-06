@@ -13,6 +13,7 @@
 
 import { seedRunCursor, seedRunEpoch } from "./live-updates-core";
 import { SeriesBatcher, type SeriesBatchResponse } from "./series-batch";
+import { refUrl } from "../lib/workspace/ref";
 
 function redirectToLogin(): void {
   if (typeof window === "undefined") return;
@@ -108,12 +109,6 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
     path,
   );
   return (await res.json()) as T;
-}
-
-function workspaceDocUrl(ref: import("../lib/workspace/ref").WorkspaceRef): string {
-  return ref.kind === "project"
-    ? `/api/projects/${ref.projectId}/workspace`
-    : `/api/projects/${ref.projectId}/comparisons/${ref.id}`;
 }
 
 async function del_<T>(path: string): Promise<T> {
@@ -516,17 +511,17 @@ export const api = {
   sweepAction: (sweepId: string, action: import("./types").SweepAction) =>
     post<import("./types").SweepDetail>(`/api/sweeps/${sweepId}/${action}`, {}),
 
-  // ── Workspace documents + saved views (lib/workspace/*) ──────────────
-  /** The project workspace or a comparison: `{rev, payload}` (rev 0 / null payload before the first save). */
+  // ── Workspace documents: views and comparisons (lib/workspace/*) ──────
+  /** A view or a comparison: `{rev, payload}` (rev 0 / null payload: a project's first view before it is stored). */
   workspaceDoc: (ref: import("../lib/workspace/ref").WorkspaceRef) =>
-    get<import("./types").WorkspaceGet>(workspaceDocUrl(ref)),
+    get<import("./types").WorkspaceGet>(refUrl(ref)),
   /** A stale `baseRev` resolves to `{conflict}` (the server's document), not an error. */
   putWorkspaceDoc: async (
     ref: import("../lib/workspace/ref").WorkspaceRef,
     baseRev: number,
     payload: Record<string, unknown>,
   ): Promise<import("./types").WorkspacePutResult> => {
-    const path = workspaceDocUrl(ref);
+    const path = refUrl(ref);
     const res = await fetch(path, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -539,17 +534,20 @@ export const api = {
     await checkOk(res, path);
     return { ok: (await res.json()) as { rev: number; updated_at: string } };
   },
-  views: (projectId: string) =>
-    get<{ views: import("./types").SavedViewSummary[] }>(`/api/projects/${projectId}/views`),
-  view: (projectId: string, id: string) =>
-    get<import("./types").SavedView>(`/api/projects/${projectId}/views/${id}`),
+  /** Every view with its layout, oldest first, and the current one (the run page's). */
+  views: (projectId: string) => get<import("./types").WorkspaceViews>(`/api/projects/${projectId}/views`),
   createView: (projectId: string, name: string, payload: Record<string, unknown>) =>
     post<{ id: string; name: string; rev: number; created_at: string }>(
       `/api/projects/${projectId}/views`,
       { name, payload },
     ),
+  renameView: (projectId: string, id: string, name: string) =>
+    patch<{ id: string; name: string }>(`/api/projects/${projectId}/views/${id}`, { name }),
+  /** Refused (409) for the last view. */
   deleteView: (projectId: string, id: string) =>
     del_<{ deleted: string }>(`/api/projects/${projectId}/views/${id}`),
+  setCurrentView: (projectId: string, viewId: string) =>
+    put<{ view_id: string }>(`/api/projects/${projectId}/current-view`, { view_id: viewId }),
 
   // Report share links (routes/shares.py) — wave 3 / I
   reportShares: (projectId: string, reportId: string) =>

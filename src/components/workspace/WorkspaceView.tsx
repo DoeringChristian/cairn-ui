@@ -323,14 +323,6 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
           ),
     [doc, metrics],
   );
-  /** The document a saved view stores, with "include unlisted metrics" as chosen. */
-  const viewDoc = useCallback(
-    (autoPanels: boolean) => {
-      const d = getWorkspace(key);
-      return d.autoPanels === autoPanels ? d : autoPanelsOp(autoPanels, allRef.current)(d);
-    },
-    [key],
-  );
 
   return (
     <WorkspaceRefContext.Provider value={wsRef}>
@@ -357,7 +349,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
           matchCount={matchCount}
           onManageCards={() => setManageOpen(true)}
           onToggleAutoPanels={toggleAutoPanels}
-          viewDoc={viewDoc}
+          metrics={metrics}
           actions={toolbarActions}
         />
         {unlisted > 0 && (

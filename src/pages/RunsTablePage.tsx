@@ -444,7 +444,7 @@ export default function RunsTablePage() {
   }, [selected]);
 
   const onCompare = async () => {
-    // The selected runs, with a copy of the project workspace's layout.
+    // The selected runs, with a copy of the current view's layout.
     const now = new Date();
     const label = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
     const id = await createComparison(projectId!, `Comparison ${label}`, Array.from(selected));

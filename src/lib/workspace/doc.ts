@@ -5,10 +5,11 @@
  * Two kinds of workspace share this one type, its ops, the store/sync/undo
  * machinery and the renderer (components/workspace/WorkspaceView.tsx):
  *
- * - the **project workspace** (`runs: null`): the run page's layout, one per
- *   project, bound to whichever run is being viewed;
+ * - a **view** (`runs: null`, lib/workspace/views.ts): one of the project's
+ *   named layouts; the run page shows the current one, bound to whichever
+ *   run is being viewed;
  * - a **comparison** (`runs` set): its own layout plus its run set. Creating
- *   one copies the project workspace; afterwards the two are independent.
+ *   one copies the current view; afterwards the two are independent.
  *
  * Edits are ops, not snapshots, so a write that loses a race (409, see
  * sync.ts) is rebased by replaying the pending ops onto the server's
@@ -108,7 +109,7 @@ export interface WorkspaceDoc {
    */
   autoPanels: boolean;
   prefs: WorkspacePrefs;
-  /** null: the project workspace (bound to the viewed run). A comparison's run set otherwise. */
+  /** null: a view (bound to the viewed run). A comparison's run set otherwise. */
   runs: RunSet | null;
 }
 
@@ -210,7 +211,7 @@ function runsOf(v: unknown): RunSet | null {
   };
 }
 
-/** Coerce anything (a server payload, a saved view, null) into a valid document. */
+/** Coerce anything (a server payload, null) into a valid document. */
 export function normalizeWorkspace(raw: unknown): WorkspaceDoc {
   if (!isObj(raw)) return EMPTY_WORKSPACE;
   const prefs = isObj(raw.prefs) ? raw.prefs : {};
@@ -259,7 +260,7 @@ export function restoreFields(before: WorkspaceDoc, fields: readonly (keyof Work
   };
 }
 
-/** The layout part of a document: what a saved view stores and a new comparison copies. */
+/** The layout part of a document: what a view stores and a new comparison copies. */
 export type WorkspaceLayout = Omit<WorkspaceDoc, "runs">;
 
 export function layoutOf(doc: WorkspaceDoc): WorkspaceLayout {
@@ -524,13 +525,13 @@ export const ops = {
   setAutoPanels: (on: boolean): WorkspaceOp => (d) => (d.autoPanels === on ? d : { ...d, autoPanels: on }),
 
   // --- runs (comparisons) --------------------------------------------------
-  /** Patch a comparison's run set (no-op on the project workspace). */
+  /** Patch a comparison's run set (no-op on a view). */
   setRuns: (patch: Partial<RunSet>): WorkspaceOp => (d) => (d.runs ? { ...d, runs: { ...d.runs, ...patch } } : d),
   addRuns: (ids: readonly string[]): WorkspaceOp => (d) =>
     d.runs ? { ...d, runs: { ...d.runs, ids: union(d.runs.ids, ids) } } : d,
   removeRun: (id: string): WorkspaceOp => (d) =>
     d.runs ? { ...d, runs: { ...d.runs, ids: d.runs.ids.filter((x) => x !== id) } } : d,
 
-  /** Replace the layout (applying a saved view); the run set stays. */
+  /** Replace the layout (a comparison copying a view in); the run set stays. */
   replaceLayout: (layout: WorkspaceLayout): WorkspaceOp => (d) => ({ ...layout, runs: d.runs }),
 };
