@@ -15,6 +15,7 @@ import { api } from "../../api/client";
 import { qk } from "../../api/query-keys";
 import type { WorkspaceViews } from "../../api/types";
 import { normalizeWorkspace, type WorkspaceDoc, type WorkspaceLayout } from "./doc";
+import { useUndoStack } from "../undo-context";
 import { refKey, viewRef } from "./ref";
 import { dropWorkspace, getWorkspace, seedWorkspace, workspaceState } from "./store";
 import { layoutPayload, viewAfterDelete, withAdded, withCurrent, withRemoved, withRenamed } from "./views";
@@ -32,6 +33,7 @@ export interface UseViews {
 
 export function useViews(projectId: string | null): UseViews {
   const qc = useQueryClient();
+  const undo = useUndoStack();
   const pid = projectId ?? "";
   const q = useQuery({ queryKey: qk.views(pid), queryFn: () => api.views(pid), enabled: !!projectId });
 
@@ -57,6 +59,9 @@ export function useViews(projectId: string | null): UseViews {
 
   const switchTo = useCallback(
     async (id: string) => {
+      // Switching is navigation: the undo history belongs to the view left
+      // behind, where ⌘Z would change what is no longer on screen.
+      undo?.clear();
       set((l) => withCurrent(l, id));
       try {
         await api.setCurrentView(pid, id);
@@ -64,7 +69,7 @@ export function useViews(projectId: string | null): UseViews {
         await refetch();
       }
     },
-    [pid, set, refetch],
+    [pid, set, refetch, undo],
   );
 
   const create = useCallback(
