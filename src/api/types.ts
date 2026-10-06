@@ -1,7 +1,7 @@
 // Types mirroring the Cairn server's response shapes.
 // Keep loose: these are what the frontend needs, not full schema validation.
 
-export type RunStatus = "running" | "completed" | "failed" | "killed" | "stopped";
+export type RunStatus = "running" | "completed" | "failed" | "crashed" | "killed" | "stopped";
 
 export interface Health {
   status: string;

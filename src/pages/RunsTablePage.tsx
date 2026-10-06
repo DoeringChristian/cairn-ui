@@ -63,6 +63,7 @@ const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "running", label: "running" },
   { value: "completed", label: "completed" },
   { value: "failed", label: "failed" },
+  { value: "crashed", label: "crashed" },
   { value: "killed", label: "killed" },
   { value: "stopped", label: "stopped" },
   { value: "archived", label: "archived" },
