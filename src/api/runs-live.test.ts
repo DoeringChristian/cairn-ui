@@ -59,3 +59,10 @@ test("a polled run missing from the answer refetches the pages", () => {
   const live = page([run("a", "running")], 0, 1);
   assert.equal(mergeLiveRuns(data(), head, live, ["a", "d"]), null);
 });
+
+test("with nothing running, the head alone notices a new run", () => {
+  const done: RunsPages = { pages: [page([run("a"), run("b")], 0, 2)], pageParams: [0] };
+  const empty = page([], 0, 0);
+  assert.equal(mergeLiveRuns(done, page([run("a")], 0, 2), empty, []), done);
+  assert.equal(mergeLiveRuns(done, page([run("n", "running")], 0, 3), empty, []), null);
+});

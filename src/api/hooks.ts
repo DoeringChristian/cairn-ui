@@ -67,15 +67,16 @@ export function useInfiniteRuns(params: Omit<RunsQuery, "limit" | "offset">) {
     },
   });
 
-  // Live poll: while loaded runs are running, re-read just those runs (plus
-  // the list head, to notice new runs) every 3 s and merge them into the
-  // pages, instead of refetching every loaded page. See runs-live-core.ts.
+  // Live poll, every 3 s: the list head (to notice new and deleted runs,
+  // even when nothing on screen is running) plus just the running runs,
+  // merged into the pages instead of refetching every loaded page. See
+  // runs-live-core.ts.
   const running = useMemo(() => runningIds(q.data?.pages), [q.data]);
   useQuery({
     // Not under the "runs-infinite" prefix: invalidating the lists (after a
     // mutation) refetches the pages, and must not also fire this poll.
     queryKey: ["runs-live", params, running],
-    enabled: running.length > 0,
+    enabled: q.data != null,
     // The pages were just fetched: the first poll is due in one interval.
     initialData: 0,
     staleTime: 3_000,
@@ -88,10 +89,10 @@ export function useInfiniteRuns(params: Omit<RunsQuery, "limit" | "offset">) {
       }
       const [head, live] = await Promise.all([
         api.runs({ ...params, include: undefined, limit: 1 }),
-        api.runs({ ...params, ids: running, limit: running.length }),
+        running.length > 0 ? api.runs({ ...params, ids: running, limit: running.length }) : null,
       ]);
       const cached = qc.getQueryData<InfiniteData<RunsListResponse>>(key);
-      const merged = cached ? mergeLiveRuns(cached, head, live, running) : null;
+      const merged = cached ? mergeLiveRuns(cached, head, live ?? { ...head, runs: [] }, running) : null;
       if (merged === null) await refetchPages();
       else if (merged !== cached) qc.setQueryData(key, merged);
       return Date.now();
