@@ -139,10 +139,12 @@ export function storedSliderValue(values: readonly number[], value: number): num
 /**
  * The slider index a persisted value lands on: the value itself, else the
  * largest value below it (the last position for `SLIDER_LATEST`); below
- * every value (or nothing persisted) the first position.
+ * every value the first position. Nothing persisted (a slider never moved)
+ * is the last position, following new steps like `SLIDER_LATEST`.
  */
 export function sliderIndex(values: readonly number[], value: number | null | undefined): number {
-  if (value == null || values.length === 0) return 0;
+  if (values.length === 0) return 0;
+  if (value == null) return values.length - 1;
   return Math.max(0, indexAsOf(values, value));
 }
 

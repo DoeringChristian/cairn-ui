@@ -91,7 +91,7 @@ test("indexAsOf and sliderIndex land on the value or the one below", () => {
   assert.equal(sliderIndex(values, 25), 1);
   assert.equal(sliderIndex(values, 5), 0);
   assert.equal(sliderIndex(values, 1e9), 2);
-  assert.equal(sliderIndex(values, undefined), 0);
+  assert.equal(sliderIndex(values, undefined), values.length - 1); // never moved: the newest
   assert.equal(sliderIndex([], 20), 0);
 });
 
