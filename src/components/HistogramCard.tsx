@@ -93,10 +93,12 @@ export default function HistogramCard({
   const ctl = useCardSettings<HistogramSettings>(settingsKey, "histogram");
   const settings = ctl.value;
 
-  const { safeIdx, currentStep, onSliderChange } = useStepSlider({
+  const ownSeries = useMemo(() => [{ runId, name: metric.name }], [runId, metric.name]);
+  const { safeIdx, currentStep, onSliderChange, summary } = useStepSlider({
     seriesPoints: [points],
     persistedIdx: settings.sliderStep,
     updateSettings: ctl.set,
+    series: ownSeries,
   });
   const current = useMemo(
     () => resolveAtStep(points, currentStep) ?? points[0],
@@ -210,7 +212,7 @@ export default function HistogramCard({
           )}
         </div>
         <StepSlider
-          points={points}
+          points={summary ? [] : points}
           currentIndex={safeIdx}
           onChange={onSliderChange}
           xAxis={settings.xAxis}

@@ -51,12 +51,14 @@ export default function TensorCard({
 
   const seriesPoints = useMemo(() => [points], [points]);
   const seriesRunIds = useMemo(() => [runId], [runId]);
+  const ownSeries = useMemo(() => [{ runId, name: metric.name }], [runId, metric.name]);
   const slider = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
     updateSettings: ctl.set,
     sliderKey: settings.sliderKey,
     seriesRunIds,
+    series: ownSeries,
     sync: { cardId: cardOverridesStorageKey(settingsKey), follow: settings.followSection },
   });
   const { safeIdx, currentStep, onSliderChange } = slider;

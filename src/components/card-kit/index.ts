@@ -16,3 +16,4 @@ export type { OverlaySlot } from "./use-overlay-slot";
 export { useStepSlider } from "./use-step-slider";
 export { useRunInfo } from "./use-run-info";
 export { default as MultiPaneGrid } from "./MultiPaneGrid";
+export { useSummarySeries } from "./use-summary-series";

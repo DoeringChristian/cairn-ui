@@ -213,6 +213,10 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     return arr;
   }, [effectiveMetrics.length, points, multiQueries]);
 
+  const sliderSeries = useMemo(
+    () => [{ runId, name: metric.name }, ...panes.refs],
+    [runId, metric.name, panes.refs],
+  );
   // seriesPoints[0] is the card's own series; pane i is seriesPoints[i + 1].
   const seriesRunIds = useMemo(
     () => [runId, ...(effectiveMetrics.length > 1 ? effectiveMetrics.map((m) => m.runId ?? runId) : [])],
@@ -224,6 +228,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
     updateSettings: ctl.set,
     sliderKey: settings.sliderKey,
     seriesRunIds,
+    series: sliderSeries,
     sync: {
       cardId: cardOverridesStorageKey(settingsKeyOverride ?? { runId, metricName: metric.name }),
       follow: settings.followSection,

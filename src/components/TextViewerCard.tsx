@@ -12,6 +12,7 @@ import GalleryView from "./media/GalleryView";
 import { artifactTextQuery } from "../lib/viewers/source";
 import { isGalleryPoint } from "../lib/media/gallery";
 import TextViewer, { TextView } from "./viewers/TextViewer";
+import { useSummarySeries } from "./card-kit/use-summary-series";
 
 interface Props {
   runId: string;
@@ -28,6 +29,9 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
   const safeIdx = Math.min(Math.max(0, idx), Math.max(0, points.length - 1));
   const current = points[safeIdx];
   const qc = useQueryClient();
+  const ownSeries = useMemo(() => [{ runId, name: metric.name }], [runId, metric.name]);
+  // A summary media value has one stepless value: no slider.
+  const summary = useSummarySeries(ownSeries);
 
   const settingsKey = useMemo(
     () => settingsKeyOverride ?? {
@@ -73,7 +77,7 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
         <TextView text="" {...textView} className="flex-1 min-h-0" />
       )}
       <StepSlider
-        points={points}
+        points={summary ? [] : points}
         currentIndex={safeIdx}
         onChange={setIdx}
         xAxis={settings.xAxis}

@@ -163,12 +163,13 @@ export default function TableCard({
   const seqLoading = seqQueries.some((q) => q.isLoading);
 
   const seriesPoints = useMemo(() => series.map((s) => pointsByKey.get(skey(s)) ?? []), [series, pointsByKey]);
-  const { globalSteps, safeIdx, currentStep, onSliderChange } = useStepSlider({
+  const { globalSteps, safeIdx, currentStep, onSliderChange, summary } = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
     updateSettings: ctl.set,
+    series,
   });
-  const sliderPoints = seriesPoints.find((p) => p.length > 0) ?? [];
+  const sliderPoints = summary ? [] : seriesPoints.find((p) => p.length > 0) ?? [];
 
   // What to fetch: one table per pane, or one per combine source (a fixed
   // step resolves as-of that step; the slider's also falls forward to a

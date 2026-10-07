@@ -115,6 +115,12 @@ export interface SequenceMeta {
   count: number;
   /** Custom data (`object_type: "custom"`): the kind of the latest point (`guiding/vmf`). */
   kind?: string | null;
+  /**
+   * A summary media value (`run.summary(fig=cairn.Figure(f))`): one stepless
+   * value, its one point at step 0 (lib/media/summary-series.ts). Absent for
+   * tracked series.
+   */
+  summary?: boolean;
 }
 
 export interface SequencePoint {

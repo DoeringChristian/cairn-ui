@@ -135,10 +135,12 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
   const settings = ctl.value;
 
   const seriesPoints = useMemo(() => [points], [points]);
-  const { safeIdx, currentStep, onSliderChange } = useStepSlider({
+  const ownSeries = useMemo(() => [{ runId, name: metric.name }], [runId, metric.name]);
+  const { safeIdx, currentStep, onSliderChange, summary } = useStepSlider({
     seriesPoints,
     persistedIdx: settings.sliderStep,
     updateSettings: ctl.set,
+    series: ownSeries,
   });
   const current = useMemo(() => resolveAtStep<ArtifactPoint>(points, currentStep), [points, currentStep]);
   const meta = useMemo(
@@ -237,7 +239,7 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
       )}
 
       <StepSlider
-        points={points}
+        points={summary ? [] : points}
         currentIndex={safeIdx}
         onChange={onSliderChange}
         xAxis={settings.xAxis}

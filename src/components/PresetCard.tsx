@@ -137,6 +137,7 @@ export default function PresetCard({
     updateSettings: ctl.set,
     sliderKey: settings.sliderKey,
     seriesRunIds: panes.runIds,
+    series: panes.refs,
     sync: {
       cardId: cardOverridesStorageKey(settingsKeyOverride ?? { runId, metricName: metric.name }),
       follow: settings.followSection,

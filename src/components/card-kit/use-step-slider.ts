@@ -11,6 +11,8 @@ import {
 } from "../../lib/media/slider-key";
 import { stepUnion } from "./resolve-at-step";
 import { useMediaSync, useSectionSyncState, type MediaSync } from "./media-sync";
+import { useSummarySeries } from "./use-summary-series";
+import type { SeriesRef } from "../../lib/media/summary-series";
 
 export interface StepSliderState {
   /** Sorted union of steps across all series' points. */
@@ -43,6 +45,12 @@ export interface StepSliderState {
   onSliderChange: (idx: number) => void;
   /** Move to a value directly. */
   setValue: (value: number) => void;
+  /**
+   * Every series is a summary media value (one stepless value, see
+   * lib/media/summary-series.ts): no slider (`sliderPoints` is empty), no
+   * section sync, and the step key.
+   */
+  summary: boolean;
 }
 
 /**
@@ -67,12 +75,15 @@ export function useStepSlider(args: {
   seriesRunIds?: readonly string[];
   /** Follow the section's media sync when there is one. */
   sync?: { cardId: string; follow: boolean };
+  /** The series shown (run + name): a card whose series are all summary media values has no slider. */
+  series?: readonly SeriesRef[];
 }): StepSliderState {
   const { seriesPoints, persistedIdx, updateSettings, sliderKey, seriesRunIds, sync: syncOpt } = args;
 
-  const follow = syncOpt?.follow ?? false;
+  const summary = useSummarySeries(args.series ?? NO_SERIES);
+  const follow = (syncOpt?.follow ?? false) && !summary;
   const section = useSectionSyncState(follow);
-  const keyName = section?.key ?? (sliderKey || STEP_KEY);
+  const keyName = summary ? STEP_KEY : section?.key ?? (sliderKey || STEP_KEY);
   const metricKey = keyName !== STEP_KEY;
 
   const globalSteps = useMemo(() => stepUnion(seriesPoints), [seriesPoints]);
@@ -157,6 +168,7 @@ export function useStepSlider(args: {
   const currentStep = tracks ? (stepFor(0, currentValue, { nearest: true }) ?? 0) : currentValue;
 
   const sliderPoints = useMemo(() => {
+    if (summary) return [];
     if (metricKey) return values.map((step) => ({ step }));
     const wall = new Map<number, string | null>();
     for (const pts of seriesPoints) {
@@ -165,7 +177,7 @@ export function useStepSlider(args: {
       }
     }
     return values.map((step) => ({ step, wall_time: wall.get(step) ?? null }));
-  }, [metricKey, values, seriesPoints]);
+  }, [summary, metricKey, values, seriesPoints]);
 
   return {
     globalSteps,
@@ -179,5 +191,8 @@ export function useStepSlider(args: {
     sync,
     onSliderChange,
     setValue: moveTo,
+    summary,
   };
 }
+
+const NO_SERIES: readonly SeriesRef[] = [];

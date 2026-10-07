@@ -164,6 +164,7 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
     updateSettings: ctl.set,
     sliderKey: settings.sliderKey,
     seriesRunIds: panes.runIds,
+    series: panes.refs,
     sync: {
       cardId: cardOverridesStorageKey(settingsKeyOverride ?? { runId, metricName: metric.name }),
       follow: settings.followSection,

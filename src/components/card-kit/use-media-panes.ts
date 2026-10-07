@@ -19,6 +19,8 @@ export interface MediaPanes<T> {
   keys: string[];
   /** Run id per shown series. */
   runIds: string[];
+  /** Run and name per shown series (`useStepSlider`'s `series`). */
+  refs: Array<{ runId: string; name: string }>;
   /** Distinct runs of every series (before hiding / limiting), for labels and run info. */
   allRunIds: string[];
   multiRun: boolean;
@@ -59,6 +61,7 @@ export function useMediaPanes<T extends { runId?: string; name: string }>(
     const runIds = shown.map(runOf);
     const multiRun = new Set(runIds).size > 1;
     const keys = shown.map((s) => seriesKey({ runId: runOf(s), name: s.name }));
+    const refs = shown.map((s) => ({ runId: runOf(s), name: s.name }));
     const labels = new Map<string, string>();
     const paneColors = new Map<string, string>();
     if (multiRun) {
@@ -68,7 +71,7 @@ export function useMediaPanes<T extends { runId?: string; name: string }>(
         if (c) paneColors.set(k, c);
       });
     }
-    return { shown, visibleCount: visible.length, keys, runIds, allRunIds, multiRun, labels, colors, paneColors };
+    return { shown, visibleCount: visible.length, keys, runIds, refs, allRunIds, multiRun, labels, colors, paneColors };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, fallbackRunId, maxRuns, visibleRuns, allRunIds, colors, runMetaVersion]);
 }

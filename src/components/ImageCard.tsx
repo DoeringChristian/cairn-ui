@@ -98,6 +98,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     updateSettings: ctl.set,
     sliderKey: settings.sliderKey,
     seriesRunIds: panes.runIds,
+    series: panes.refs,
     sync: { cardId: cardOverridesStorageKey(settingsKey), follow: settings.followSection },
   });
   const { globalSteps, values, safeIdx, currentValue, currentStep, stepFor, keyName } = slider;

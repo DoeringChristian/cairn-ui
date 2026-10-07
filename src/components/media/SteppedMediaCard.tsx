@@ -202,6 +202,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
     updateSettings: updateShared,
     sliderKey: settings.sliderKey,
     seriesRunIds: panes.runIds,
+    series: panes.refs,
     sync: { cardId, follow: settings.followSection },
   });
   const { values, safeIdx, currentValue, keyName, stepFor } = slider;
