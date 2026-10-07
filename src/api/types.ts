@@ -20,6 +20,19 @@ export interface Project {
   last_run_at: string | null;
 }
 
+/**
+ * A run's progress: `run.total_steps` against the highest step logged
+ * (unit "step"), or an explicit `run.progress(i, total)` (unit "progress").
+ * `eta_seconds` is null until there are enough samples, and for ended runs.
+ */
+export interface RunProgress {
+  fraction: number;
+  current: number;
+  total: number;
+  unit: "step" | "progress";
+  eta_seconds: number | null;
+}
+
 export interface Run {
   id: string;
   project_id: string;
@@ -55,6 +68,8 @@ export interface Run {
   /** When the run was archived; null when it is not. Archiving never changes `status`. */
   archived_at: string | null;
   archived: boolean;
+  /** How far the run is through its declared total; null when it has none. */
+  progress?: RunProgress | null;
   /**
    * The run's config as `{key: value}` (dotted keys, values JSON-decoded).
    * Only present when the list was fetched with `include: ["params"]`.

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useRunsDetails } from "../api/hooks";
 import type { Run, RunDetailResponse } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
+import { RunProgressCompact } from "../components/RunProgress";
 import EnvDiffTable from "../components/run-compare/EnvDiffTable";
 import MetricsSummaryTable from "../components/run-compare/MetricsSummaryTable";
 import ParamsDiffTable from "../components/run-compare/ParamsDiffTable";
@@ -16,7 +17,7 @@ interface Props {
 export default function ComparisonOverviewTab({ compRunIds }: Props) {
   const [onlyDiffs, setOnlyDiffs] = useState(true);
 
-  const queries = useRunsDetails(compRunIds);
+  const queries = useRunsDetails(compRunIds, { live: true });
 
   const loading = queries.some((q) => q.isLoading);
   const runData = useMemo(
@@ -112,6 +113,14 @@ function RunSummaryCard({ run, label }: { run: Run; label: string }) {
         <dd className="mono text-fg">{run.git_sha?.slice(0, 10) ?? "—"}</dd>
         <dt className="text-fg-muted">Duration</dt>
         <dd className="mono text-fg">{formatDuration(run.created_at, run.ended_at)}</dd>
+        {run.progress && (
+          <>
+            <dt className="text-fg-muted">Progress</dt>
+            <dd className="text-fg">
+              <RunProgressCompact status={run.status} progress={run.progress} />
+            </dd>
+          </>
+        )}
         {tags.length > 0 && (
           <>
             <dt className="text-fg-muted">Tags</dt>

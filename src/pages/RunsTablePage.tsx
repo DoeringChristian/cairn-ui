@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useBulkRunMutation, useInfiniteRuns, useSetTags } from "../api/hooks";
 import type { Run, RunStatus } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
+import { RunProgressLine, RunProgressPct } from "../components/RunProgress";
 import { formatDuration, formatRelative, safeJsonParse } from "../lib/format";
 import { formatValue } from "../lib/plot-utils/format";
 import { createComparison } from "../lib/workspace/comparisons";
@@ -587,7 +588,15 @@ export default function RunsTablePage() {
           );
         }
         case "status":
-          return <span className="dim"><RunStatusBadge status={r.status} archived={r.archived} /></span>;
+          return (
+            <span className="dim">
+              <span className="inline-flex items-center">
+                <RunStatusBadge status={r.status} archived={r.archived} />
+                <RunProgressPct status={r.status} progress={r.progress} />
+              </span>
+              <RunProgressLine status={r.status} progress={r.progress} />
+            </span>
+          );
         case "created_at":
           return <span className="dim whitespace-nowrap text-fg-muted">{formatCreated(r.created_at)}</span>;
         case "duration":

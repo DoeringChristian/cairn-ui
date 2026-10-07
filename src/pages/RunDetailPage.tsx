@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet, useParams } from "react-router-dom";
 import { useRun, useStopRun } from "../api/hooks";
 import type { Run } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
+import { RunProgressHeader } from "../components/RunProgress";
 import RunAlertBanners from "../components/alerts/RunAlertBanners";
 import { formatDuration, formatRelative } from "../lib/format";
 import { RunViewContext } from "../lib/run-view";
@@ -52,6 +53,7 @@ export default function RunDetailPage() {
           <span className="mono num">{formatDuration(run.created_at, run.ended_at)}</span>
         </span>
       </div>
+      <RunProgressHeader status={run.status} progress={run.progress} />
       <RunAlertBanners projectId={projectId} runId={run.id} />
       <nav className="mb-6 flex gap-1 overflow-x-auto whitespace-nowrap border-b border-border">
         {TABS.map((t) => (

@@ -124,13 +124,19 @@ export function useRun(runId: string) {
   return q;
 }
 
-/** Fetch run details for a set of runs (e.g. comparison tabs). */
-export function useRunsDetails(runIds: string[]): UseQueryResult<RunDetailResponse>[] {
+/** Fetch run details for a set of runs (e.g. comparison tabs). `live`
+ * re-fetches running runs every 2 s, as `useRun` does (their progress). */
+export function useRunsDetails(
+  runIds: string[],
+  { live = false }: { live?: boolean } = {},
+): UseQueryResult<RunDetailResponse>[] {
   const results = useQueries({
     queries: runIds.map((rid) => ({
       queryKey: qk.run(rid),
       queryFn: () => api.run(rid),
       staleTime: 5_000,
+      refetchInterval: (q: { state: { data?: RunDetailResponse } }) =>
+        live && q.state.data?.run.status === "running" ? 2_000 : false,
     })),
   });
 
