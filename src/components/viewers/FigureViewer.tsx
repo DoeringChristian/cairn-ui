@@ -14,10 +14,10 @@ import { safeJsonParse } from "../../lib/format";
 import { decodeImage, peekDecoded } from "../../lib/media/decoded-image";
 import { applyViewOverrides, extractViewState, type SharedView } from "../../lib/plot-utils/view-overrides";
 import { toWebGL } from "../../lib/plot-utils/webgl";
-import { scene3dLayout, type CameraFollower, type CameraLink } from "../../lib/plot-utils/scene3d";
+import { scene3dLayout, type ViewFollower, type ViewLink } from "../../lib/plot-utils/scene3d";
 import type { PlotlyFigureLike } from "../../lib/plot-utils/types";
 import type { ViewerSource } from "../../lib/viewers/source";
-import PlotlyChart, { showSceneCamera } from "../../charts/PlotlyChart";
+import PlotlyChart, { showAxisRanges, showSceneCamera } from "../../charts/PlotlyChart";
 import { readChartTheme, type ChartTheme } from "../../charts/theme";
 import { builtin as FIGURE_DEFAULTS, type FigureSettings } from "../cards-settings/figure";
 import ImageViewer from "./ImageViewer";
@@ -133,7 +133,7 @@ function figureId(fig: object): number {
  * One user Plotly figure, styled by the interaction settings, with the
  * shared view (zoom/pan/camera synced across panes) applied on top.
  * `revision` bumps reset the view to the figure's own. A drag rotates a 3D
- * scene whatever the card's 2D drag mode, and every plot on `cameraLink`
+ * scene whatever the card's 2D drag mode, and every plot on `viewLink`
  * follows the camera live while it is dragged. Scatter traces draw
  * with WebGL per the card's `webgl` setting (the stored figure unchanged).
  * `fallbackSrc` (the stored PNG) stands in while the plot is paused by the
@@ -147,7 +147,7 @@ export function InteractiveFigure({
   revision = 0,
   className,
   style,
-  cameraLink,
+  viewLink,
   fallbackSrc,
 }: {
   figure: PlotlyFigure;
@@ -159,7 +159,7 @@ export function InteractiveFigure({
   className?: string;
   style?: React.CSSProperties;
   /** The card's 3D camera link: this plot follows the others' drags live, and they follow its. */
-  cameraLink?: CameraLink;
+  viewLink?: ViewLink;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const { hoverMode, dragMode, showLegend, displayModeBar, scrollZoom, webgl } = settings;
@@ -188,13 +188,14 @@ export function InteractiveFigure({
     if (view) onRelayout!(view);
   }, [onRelayout]);
 
-  const follower = useMemo<CameraFollower>(() => ({
+  const follower = useMemo<ViewFollower>(() => ({
     showCamera: (sceneId, camera) => showSceneCamera(hostRef.current?.querySelector(".js-plotly-plot") ?? null, sceneId, camera),
+    showRanges: (ranges) => showAxisRanges(hostRef.current?.querySelector(".js-plotly-plot") ?? null, ranges),
   }), []);
-  useEffect(() => cameraLink?.join(follower), [cameraLink, follower]);
+  useEffect(() => viewLink?.join(follower), [viewLink, follower]);
   const handleRelayouting = useCallback(
-    (e: Record<string, unknown>) => cameraLink?.moved(follower, e),
-    [cameraLink, follower],
+    (e: Record<string, unknown>) => viewLink?.moved(follower, e),
+    [viewLink, follower],
   );
 
   return (
@@ -218,7 +219,7 @@ export interface FigureSync {
   viewOverrides?: SharedView;
   onRelayout?: (view: SharedView) => void;
   revision?: number;
-  cameraLink?: CameraLink;
+  viewLink?: ViewLink;
 }
 
 /**
@@ -248,7 +249,7 @@ export default function FigureViewer({
         viewOverrides={sync?.viewOverrides}
         onRelayout={sync?.onRelayout}
         revision={sync?.revision}
-        cameraLink={sync?.cameraLink}
+        viewLink={sync?.viewLink}
         fallbackSrc={source.url}
         className={className}
       />

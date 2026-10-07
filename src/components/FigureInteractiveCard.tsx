@@ -23,7 +23,7 @@ import {
 } from "./cards-settings/figure";
 import { checkFigureMergeable, mergeFigures, type FigureMergeEntry } from "../lib/plot-utils/figure-merge";
 import { mergeRelayout, sceneCameras, type SharedView } from "../lib/plot-utils/view-overrides";
-import { createCameraLink, type CameraLink } from "../lib/plot-utils/scene3d";
+import { createViewLink, type ViewLink } from "../lib/plot-utils/scene3d";
 import FigureViewer, {
   InteractiveFigure,
   peekFigure,
@@ -108,7 +108,7 @@ function FigurePane({
   viewOverrides,
   onRelayout,
   revision,
-  cameraLink,
+  viewLink,
   galleryFrame,
 }: {
   /** This pane's gallery frame, settled by the card with every other pane's. */
@@ -121,7 +121,7 @@ function FigurePane({
   viewOverrides?: SharedView;
   onRelayout?: (view: SharedView) => void;
   revision?: number;
-  cameraLink?: CameraLink;
+  viewLink?: ViewLink;
 }) {
   const rid = m.runId ?? runId;
   const q = useSequence(rid, m.name);
@@ -141,7 +141,7 @@ function FigurePane({
   if (!current?.artifact_hash) {
     return <div className="text-sm text-fg-muted">no figure logged yet</div>;
   }
-  const sync = { settings, viewOverrides, onRelayout, revision, cameraLink };
+  const sync = { settings, viewOverrides, onRelayout, revision, viewLink };
   if (isGalleryPoint(current)) {
     return (
       <div className="h-full overflow-auto">
@@ -381,7 +381,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
 
   // Live 3D camera sync while a plot is dragged (the shared view above gets
   // the camera when the drag ends).
-  const cameraLink = useMemo(createCameraLink, []);
+  const viewLink = useMemo(createViewLink, []);
   const handlePaneRelayout = useCallback((view: SharedView) => {
     // Replace an axis's (or scene's) previous keys with the ones this event
     // carries: a reset (`autorange: true`) and a later zoom (`range[0/1]`) must
@@ -449,7 +449,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
             <FigureGallery
               point={current}
               name={metric.name}
-              sync={{ settings, viewOverrides: sharedView, onRelayout: handlePaneRelayout, revision: plotRevision, cameraLink }}
+              sync={{ settings, viewOverrides: sharedView, onRelayout: handlePaneRelayout, revision: plotRevision, viewLink }}
             />
           </div>
         ) : (
@@ -457,7 +457,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
             <FigureViewer
               source={figureSource(current)}
               label={`${metric.name} @ step ${current.step}`}
-              sync={{ settings, viewOverrides: sharedView, onRelayout: handlePaneRelayout, revision: plotRevision, cameraLink }}
+              sync={{ settings, viewOverrides: sharedView, onRelayout: handlePaneRelayout, revision: plotRevision, viewLink }}
               className={`rounded bg-bg ${heightClass}`}
             />
           </ArtifactMark>
@@ -519,7 +519,7 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
             viewOverrides={sharedView}
             onRelayout={handlePaneRelayout}
             revision={plotRevision}
-            cameraLink={cameraLink}
+            viewLink={viewLink}
             galleryFrame={paneGalleries?.get(String(i))}
           />
         );

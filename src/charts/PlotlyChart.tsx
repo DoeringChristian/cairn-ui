@@ -94,6 +94,30 @@ export function showSceneCamera(el: HTMLElement | null, sceneId: string, camera:
   }
 }
 
+/**
+ * Show 2D axis ranges on a drawn plot right away: another plot's view while
+ * its user pans or wheel-zooms it. Applied with `Plotly.relayout`, whose own
+ * `plotly_relayout` is not reported back (the plot is following, the host
+ * learns the final view from the dragged plot). Axes the plot lacks are
+ * skipped; a paused or undrawn plot is left alone.
+ */
+export function showAxisRanges(el: HTMLElement | null, ranges: Record<string, [unknown, unknown]>): void {
+  const div = el as (PlotlyDiv & { _cairnFollowing?: number }) | null;
+  const full = div?._fullLayout as Record<string, unknown> | undefined;
+  if (!div || !full || !Plotly) return;
+  const update: Record<string, unknown> = {};
+  for (const [axis, range] of Object.entries(ranges)) if (full[axis]) update[`${axis}.range`] = [...range];
+  if (Object.keys(update).length === 0) return;
+  div._cairnFollowing = (div._cairnFollowing ?? 0) + 1;
+  Promise.resolve(Plotly.relayout(div, update))
+    .catch(() => {
+      // Plot mid-teardown.
+    })
+    .finally(() => {
+      div._cairnFollowing = (div._cairnFollowing ?? 1) - 1;
+    });
+}
+
 /** The current camera of every drawn 3D scene, as relayout keys; null without any. */
 function liveSceneCameras(el: PlotlyDiv): Record<string, unknown> | null {
   const fl = el._fullLayout as Record<string, { _scene?: PlotlyScene } | undefined> | undefined;
@@ -299,6 +323,8 @@ export default function PlotlyChart({
           el.removeAllListeners(event);
         }
         el.on("plotly_relayout", (e: never) => {
+          // A view shown while following another plot (`showAxisRanges`).
+          if ((el as { _cairnFollowing?: number })._cairnFollowing) return;
           // A 3D scene reports a wheel zoom before applying it (the camera it
           // sends is the one before this wheel tick); the wheel watcher below
           // reports the real camera instead.

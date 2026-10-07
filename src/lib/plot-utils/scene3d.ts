@@ -64,39 +64,91 @@ export function cameraUpdates(event: Record<string, unknown>): Array<[string, Re
   return out;
 }
 
-/** A plot in a camera link: shows a camera without emitting any event. */
-export interface CameraFollower {
+/**
+ * 2D axis ranges carried by a Plotly relayout(ing) event, by axis
+ * (`xaxis`, `yaxis2`, …). A pan or a wheel zoom reports both ends
+ * (`xaxis.range[0]` and `[1]`, or `xaxis.range`); an axis with only one end
+ * reported is left out.
+ */
+export function axisRangeUpdates(event: Record<string, unknown>): Record<string, [unknown, unknown]> {
+  const ends: Record<string, [unknown, unknown]> = {};
+  for (const [k, v] of Object.entries(event)) {
+    const whole = k.match(/^([xy]axis\d*)\.range$/);
+    if (whole && Array.isArray(v) && v.length === 2) {
+      ends[whole[1]!] = [v[0], v[1]];
+      continue;
+    }
+    const end = k.match(/^([xy]axis\d*)\.range\[([01])\]$/);
+    if (end) (ends[end[1]!] ??= [undefined, undefined])[Number(end[2])] = v;
+  }
+  for (const [axis, r] of Object.entries(ends)) if (r[0] === undefined || r[1] === undefined) delete ends[axis];
+  return ends;
+}
+
+/** A plot in a view link: shows a camera or axis ranges without reporting them back. */
+export interface ViewFollower {
   showCamera(sceneId: string, camera: Record<string, unknown>): void;
+  showRanges(ranges: Record<string, [unknown, unknown]>): void;
 }
 
 /**
- * The plots of one card that share a 3D camera. While a user drags one
- * plot's scene, every other plot follows it frame by frame through
- * `showCamera` — straight to the plots, not through host state: re-rendering
- * the dragged plot mid-drag would reset its scene to a stale camera (the
- * rotation snapping back and stalling). The host learns the final camera
- * from the drag's end (`plotly_relayout`) as usual.
+ * The plots of one card that share a view. While a user drags one plot (a
+ * 3D scene's camera, a 2D pan or wheel zoom), every other plot follows it
+ * frame by frame through `showCamera` / `showRanges` — straight to the
+ * plots, not through host state: re-rendering the dragged plot mid-drag
+ * would reset it to a stale view (the drag snapping back and stalling). The
+ * host learns the final view from the drag's end (`plotly_relayout`) as
+ * usual. A 2D box zoom has no in-between views: it applies on release.
  */
-export interface CameraLink {
+export interface ViewLink {
   /** Join the link; returns the leave function. */
-  join(follower: CameraFollower): () => void;
-  /** A camera moved on `from`'s plot: show it on every other plot. */
-  moved(from: CameraFollower, event: Record<string, unknown>): void;
+  join(follower: ViewFollower): () => void;
+  /** The view moved on `from`'s plot: show it on every other plot. */
+  moved(from: ViewFollower, event: Record<string, unknown>): void;
 }
 
-export function createCameraLink(): CameraLink {
-  const members = new Set<CameraFollower>();
+export function createViewLink(
+  /** Runs the queued updates once per frame (injectable for tests). */
+  schedule: (flush: () => void) => void = (flush) => requestAnimationFrame(() => flush()),
+): ViewLink {
+  const members = new Set<ViewFollower>();
+  // Drag events come faster than frames, and every shown view redraws a
+  // plot: queue the latest view per plot, show it once per frame.
+  type Pending = { cams: Map<string, Record<string, unknown>>; ranges: Record<string, [unknown, unknown]> };
+  const pending = new Map<ViewFollower, Pending>();
+  let scheduled = false;
+  const flush = () => {
+    scheduled = false;
+    const batch = [...pending];
+    pending.clear();
+    for (const [m, p] of batch) {
+      if (!members.has(m)) continue;
+      for (const [id, cam] of p.cams) m.showCamera(id, cam);
+      if (Object.keys(p.ranges).length > 0) m.showRanges(p.ranges);
+    }
+  };
   return {
     join(f) {
       members.add(f);
-      return () => { members.delete(f); };
+      return () => {
+        members.delete(f);
+        pending.delete(f);
+      };
     },
     moved(from, event) {
       const cams = cameraUpdates(event);
-      if (cams.length === 0) return;
+      const ranges = axisRangeUpdates(event);
+      if (cams.length === 0 && Object.keys(ranges).length === 0) return;
       for (const m of members) {
         if (m === from) continue;
-        for (const [id, cam] of cams) m.showCamera(id, cam);
+        let p = pending.get(m);
+        if (!p) pending.set(m, (p = { cams: new Map(), ranges: {} }));
+        for (const [id, cam] of cams) p.cams.set(id, cam);
+        Object.assign(p.ranges, ranges);
+      }
+      if (!scheduled && pending.size > 0) {
+        scheduled = true;
+        schedule(flush);
       }
     },
   };

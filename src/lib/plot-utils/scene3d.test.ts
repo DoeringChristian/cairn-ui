@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cameraUpdates, createCameraLink, scene3dLayout, sceneIds, type CameraFollower } from "./scene3d.ts";
+import { axisRangeUpdates, cameraUpdates, createViewLink, scene3dLayout, sceneIds, type ViewFollower } from "./scene3d.ts";
 
 test("sceneIds lists the 3D scenes the traces draw into", () => {
   assert.deepEqual(sceneIds([{ type: "surface" }, { type: "scatter3d", scene: "scene2" }, { type: "scatter" }]), ["scene", "scene2"]);
@@ -36,11 +36,23 @@ test("cameraUpdates reads scene cameras out of a relayouting event", () => {
   assert.deepEqual(cameraUpdates({ "scene.camera": cam, "scene2.camera": cam, "xaxis.range[0]": 1, "scene.aspectratio": {} }), [["scene", cam], ["scene2", cam]]);
 });
 
-test("a camera link shows a dragged plot's camera on every other plot, never back on the dragged one", () => {
-  const link = createCameraLink();
+test("axis ranges of a relayout event: both ends, by axis", () => {
+  assert.deepEqual(axisRangeUpdates({ "xaxis.range[0]": 1, "xaxis.range[1]": 5, "yaxis2.range": [0, 2] }), { xaxis: [1, 5], yaxis2: [0, 2] });
+  assert.deepEqual(axisRangeUpdates({ "xaxis.range[0]": 1 }), {}); // one end only
+  assert.deepEqual(axisRangeUpdates({ "xaxis.autorange": true, "scene.camera": {} }), {});
+});
+
+function follower(name: string, seen: string[]): ViewFollower {
+  return {
+    showCamera: (id, cam) => seen.push(`${name}:${id}:${(cam.eye as { x: number }).x}`),
+    showRanges: (ranges) => seen.push(`${name}:${JSON.stringify(ranges)}`),
+  };
+}
+
+test("a view link shows a dragged plot's camera and ranges on every other plot, never back on the dragged one", () => {
+  const link = createViewLink((flush) => flush());
   const seen: string[] = [];
-  const mk = (name: string): CameraFollower => ({ showCamera: (id, cam) => seen.push(`${name}:${id}:${(cam.eye as { x: number }).x}`) });
-  const a = mk("a"), b = mk("b"), c = mk("c");
+  const a = follower("a", seen), b = follower("b", seen), c = follower("c", seen);
   link.join(a);
   const leaveB = link.join(b);
   link.join(c);
@@ -48,7 +60,21 @@ test("a camera link shows a dragged plot's camera on every other plot, never bac
   assert.deepEqual(seen, ["b:scene:1", "c:scene:1"]);
   seen.length = 0;
   leaveB();
-  link.moved(c, { "scene.camera": { eye: { x: 2 } } });
-  link.moved(c, { "xaxis.range[0]": 0 });
-  assert.deepEqual(seen, ["a:scene:2"]);
+  link.moved(c, { "xaxis.range[0]": 0, "xaxis.range[1]": 4 });
+  link.moved(c, { "xaxis.autorange": true });
+  assert.deepEqual(seen, ['a:{"xaxis":[0,4]}']);
+});
+
+test("a view link shows only the latest view per plot, once per frame", () => {
+  const frames: Array<() => void> = [];
+  const link = createViewLink((flush) => frames.push(flush));
+  const seen: string[] = [];
+  const a = follower("a", seen), b = follower("b", seen);
+  link.join(a);
+  link.join(b);
+  for (let x = 1; x <= 5; x++) link.moved(a, { "xaxis.range": [x, x + 10] });
+  assert.equal(frames.length, 1);
+  assert.deepEqual(seen, []);
+  frames.shift()!();
+  assert.deepEqual(seen, ['b:{"xaxis":[5,15]}']);
 });
