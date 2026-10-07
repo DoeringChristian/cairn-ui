@@ -34,6 +34,7 @@ export default {
           running: "#bf8700",
           completed: "#1a7f37",
           failed: "#cf222e",
+          crashed: "#bf3989",
           killed: "#8b949e",
           stopped: "#8250df",
         },
