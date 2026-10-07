@@ -35,6 +35,8 @@ interface Props {
   settingsKey: CardSettingsKey;
   onRemove?: () => void;
   autoOpenSettings?: boolean;
+  /** Mount now (not when near the viewport): the card is being jumped to. */
+  focused?: boolean;
 }
 
 export default function PanelCard(props: Props) {
@@ -56,7 +58,7 @@ export default function PanelCard(props: Props) {
   );
 }
 
-function PanelCardBody({ rendered, runIds, settingsKey, onRemove, autoOpenSettings }: Props) {
+function PanelCardBody({ rendered, runIds, settingsKey, onRemove, autoOpenSettings, focused }: Props) {
   const { panel, metrics, label } = rendered;
   const visible = useVisibleRuns(useMemo(() => [...runIds], [runIds]));
 
@@ -81,7 +83,7 @@ function PanelCardBody({ rendered, runIds, settingsKey, onRemove, autoOpenSettin
       );
     }
     return (
-      <LazyPanel type={panel.type} settingsKey={settingsKey} title={label} eager={autoOpenSettings}>
+      <LazyPanel type={panel.type} settingsKey={settingsKey} title={label} eager={autoOpenSettings || focused}>
         <CardRenderer
           kind="multi-run"
           cardType={panel.type}
@@ -100,7 +102,7 @@ function PanelCardBody({ rendered, runIds, settingsKey, onRemove, autoOpenSettin
   if (!primary && panel.type === "custom" && visible.length > 0 && seedName) {
     const seed: SequenceMeta = { name: seedName, object_type: "custom", min_step: 0, max_step: 0, count: 0 };
     return (
-      <LazyPanel type={panel.type} settingsKey={settingsKey} title={label} eager={autoOpenSettings}>
+      <LazyPanel type={panel.type} settingsKey={settingsKey} title={label} eager={autoOpenSettings || focused}>
         <PanelTitleContext.Provider value={claimedMetric(panel) == null ? label : null}>
           <CardRenderer runId={visible[0]!} metric={seed} settingsKeyOverride={settingsKey} onRemove={onRemove} autoOpenSettings={autoOpenSettings} />
         </PanelTitleContext.Provider>
@@ -140,7 +142,7 @@ function PanelCardBody({ rendered, runIds, settingsKey, onRemove, autoOpenSettin
   };
   const valueCard = panel.type === "scalar" && seed.count === 1;
   return (
-    <LazyPanel type={panel.type} settingsKey={settingsKey} title={label} valueCard={valueCard} eager={autoOpenSettings}>
+    <LazyPanel type={panel.type} settingsKey={settingsKey} title={label} valueCard={valueCard} eager={autoOpenSettings || focused}>
     <PanelTitleContext.Provider value={claimedMetric(panel) == null ? label : null}>
     <CardRenderer
       runId={primary.runId}

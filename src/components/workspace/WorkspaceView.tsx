@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import CardErrorBoundary from "../card-kit/CardErrorBoundary";
 import ReorderableCardGrid from "../ReorderableCardGrid";
 import SectionBlock from "../SectionBlock";
@@ -111,6 +111,58 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
     [derived, mutable],
   );
   const shown = useMemo(() => (query.trim() ? deriveLayout(doc, metrics, { query }) : all), [doc, metrics, query, all]);
+
+  // `?card=<series>` (the Overview's "show in Metrics & Media"): mount the
+  // first card showing that series, scroll to it and highlight it briefly,
+  // then drop the parameter.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusName = searchParams.get("card");
+  const focusId = useMemo(() => {
+    if (!focusName) return null;
+    for (const s of shown) for (const rp of s.panels) if (rp.metrics.some((m) => m.name === focusName)) return rp.panel.id;
+    return null;
+  }, [focusName, shown]);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusId) return;
+    let frame = 0;
+    let tries = 0;
+    let rescroll = 0;
+    const cardEl = () =>
+      document.querySelector(`[data-panel-id="${CSS.escape(focusId)}"] [data-cairn-card]`) as HTMLElement | null;
+    const find = () => {
+      const card = cardEl();
+      if (!card) {
+        if (++tries < 120) frame = requestAnimationFrame(find);
+        return;
+      }
+      card.scrollIntoView({ block: "center" });
+      // Again while the cards above it mount and grow (they push it down).
+      const again = (n: number) => {
+        rescroll = window.setTimeout(() => {
+          cardEl()?.scrollIntoView({ block: "center" });
+          if (n > 1) again(n - 1);
+        }, 250);
+      };
+      again(4);
+      setHighlighted(focusId);
+      setSearchParams((p) => {
+        const next = new URLSearchParams(p);
+        next.delete("card");
+        return next;
+      }, { replace: true });
+    };
+    frame = requestAnimationFrame(find);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(rescroll);
+    };
+  }, [focusId, setSearchParams]);
+  useEffect(() => {
+    if (!highlighted) return;
+    const t = window.setTimeout(() => setHighlighted(null), 2000);
+    return () => window.clearTimeout(t);
+  }, [highlighted]);
   const allRef = useRef(all);
   allRef.current = all;
   const metricsRef = useRef(metrics);
@@ -420,6 +472,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
                         }
                       >
                         <CardErrorBoundary variant="card">
+                          <div className="contents" data-panel-id={rp.panel.id} data-focused={highlighted === rp.panel.id ? "" : undefined}>
                           <PanelCard
                             // Another viewer (or type) remounts the card, so the open editor lands on the new one's tabs.
                             key={`${rp.panel.id}:${editorTokens.get(rp.panel.id) ?? 0}:${optionKey(rp.panel.type, rp.panel.settings)}`}
@@ -428,7 +481,9 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
                             runIds={runIds}
                             settingsKey={settingsKeyOf(rp.panel.id)}
                             onRemove={mutable ? () => removePanel(rp) : undefined}
+                            focused={focusId === rp.panel.id}
                           />
+                          </div>
                         </CardErrorBoundary>
                       </PanelActionsContext.Provider>
                     ),

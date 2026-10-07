@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GALLERY_MIME } from "./gallery.ts";
-import { summaryLeafCount, summaryMediaOf, summaryThumb } from "./summary-media.ts";
+import { summaryLeafCount, summaryMediaLabel, summaryMediaOf } from "./summary-media.ts";
 
 const fig = { $media: { hash: "f", object_type: "figure", mime_type: "image/png", caption: "c" } };
 const gal = { $media: { hash: "g", object_type: "image", mime_type: GALLERY_MIME } };
@@ -17,21 +17,13 @@ test("summaryMediaOf reads markers only", () => {
   assert.equal(summaryMediaOf([fig]), null);
 });
 
-test("a figure or image is one thumbnail; other kinds an icon", () => {
-  assert.deepEqual(summaryThumb(summaryMediaOf(fig)!), { kind: "images", hashes: ["f"], more: 0 });
-  assert.deepEqual(summaryThumb(summaryMediaOf(vid)!), { kind: "icon", objectType: "video" });
-  const exr = summaryMediaOf({ $media: { hash: "e", object_type: "image", mime_type: "image/x-exr" } })!;
-  assert.deepEqual(summaryThumb(exr), { kind: "icon", objectType: "image" });
-});
-
-test("a gallery shows up to four thumbnails plus +N", () => {
+test("the Overview names a value's kind, a gallery with its item count", () => {
+  assert.equal(summaryMediaLabel(summaryMediaOf(fig)!), "figure");
+  assert.equal(summaryMediaLabel(summaryMediaOf(vid)!), "video");
   const m = summaryMediaOf(gal)!;
-  assert.deepEqual(summaryThumb(m), { kind: "images", hashes: [], more: 0 }); // manifest loading
-  const eight = Array.from({ length: 8 }, (_, i) => item(`i${i}`));
-  assert.deepEqual(summaryThumb(m, eight), { kind: "images", hashes: ["i0", "i1", "i2", "i3"], more: 4 });
-  assert.deepEqual(summaryThumb(m, eight.slice(0, 3)), { kind: "images", hashes: ["i0", "i1", "i2"], more: 0 });
-  const videos = summaryMediaOf({ $media: { hash: "gv", object_type: "video", mime_type: GALLERY_MIME } })!;
-  assert.deepEqual(summaryThumb(videos, [item("a", "video/mp4")]), { kind: "icon", objectType: "video" });
+  assert.equal(summaryMediaLabel(m), "images"); // manifest loading
+  assert.equal(summaryMediaLabel(m, Array.from({ length: 6 }, (_, i) => item(`i${i}`))), "6 images");
+  assert.equal(summaryMediaLabel(m, [item("a")]), "1 image");
 });
 
 test("the header counts leaves, a media value as one", () => {
