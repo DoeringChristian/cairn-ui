@@ -24,23 +24,12 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:unit
       - run: npm run check:card-schema
-      - run: npm run build
-
       # The bundle at cairn_ui/_dist is committed (installing never needs
       # Node), so it IS the wheel's payload: a commit whose sources changed
-      # without a rebuild would ship a stale viewer. The build is
-      # deterministic, so a fresh one must match the committed one exactly.
+      # without a rebuild would ship a stale viewer. Checked against a
+      # fingerprint of the inputs, before this job's own build rewrites it:
+      # builds are not byte-identical across platforms (Linux and macOS
+      # minify differently), the inputs are.
       - name: committed bundle matches the sources
-        run: |
-          git add --intent-to-add cairn_ui/_dist
-          if ! git diff --exit-code --stat -- cairn_ui/_dist; then
-            echo "::error::cairn_ui/_dist is stale: run 'npm run build' and commit the result"
-            exit 1
-          fi
-      # The bundle CI built, to compare with the committed one when they differ.
-      - name: upload the bundle CI built
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-dist
-          path: cairn_ui/_dist
+        run: node scripts/source-hash.mjs check
+      - run: npm run build

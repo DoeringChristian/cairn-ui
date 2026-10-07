@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/source-hash.mjs write",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test:unit": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
