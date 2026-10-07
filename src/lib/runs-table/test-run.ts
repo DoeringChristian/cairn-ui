@@ -24,6 +24,7 @@ export function makeRun(id: string, extra: Partial<Run> = {}): Run {
     fork_step: null,
     data_epoch: 0,
     group: null,
+    version: null,
     job_type: null,
     sweep_id: null,
     stop_requested: null,

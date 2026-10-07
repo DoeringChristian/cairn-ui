@@ -573,6 +573,9 @@ export default function RunsTablePage() {
               >
                 {r.display_name ?? r.id}
               </Link>
+              {r.version != null && (
+                <span className="mono num shrink-0 text-xs text-fg-muted">v{r.version}</span>
+              )}
               {isBaseline && (
                 <span className="shrink-0 rounded bg-accent/15 px-1 text-[10px] font-medium text-accent">baseline</span>
               )}

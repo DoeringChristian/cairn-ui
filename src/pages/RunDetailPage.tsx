@@ -36,6 +36,9 @@ export default function RunDetailPage() {
         <h1 className="mono min-w-0 break-all text-xl font-semibold">
           {run.display_name ?? run.id}
         </h1>
+        {run.version != null ? (
+          <span className="mono num text-sm text-fg-muted">v{run.version}</span>
+        ) : null}
         <RunStatusBadge status={run.status} archived={run.archived} />
         {run.status === "running" && <StopButton run={run} />}
         {run.display_name ? (

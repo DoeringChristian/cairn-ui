@@ -1,7 +1,7 @@
 /**
  * Shared run label formatting.
  *
- * Displays run name + timestamp instead of raw hash IDs.
+ * Displays run name + version (or timestamp) instead of raw hash IDs.
  * Falls back to short hash when no metadata is available.
  *
  * The cache is a module-global Map. Components that depend on label output
@@ -93,13 +93,17 @@ export function shortRunId(runId: string): string {
  * (per group of runs sharing a name):
  *
  *   1. Just the name        — when the name is unique across the input.
- *   2. `name HH:MM:SS`      — when ≥2 runs share a name, all on the same day.
- *   3. `name MMM dd HH:MM:SS` — when ≥2 runs share a name across days.
- *   4. `name HH:MM:SS (abc123)` — when even the timestamp collides.
- *   5. `abc123` (6-char hash) — when no metadata is available.
+ *   2. `name v<version>`    — when ≥2 runs share a name: the run's
+ *                             server-assigned number in its series.
+ *   3. `name v<n> · <group>` — when `name v<n>` still collides (the same
+ *                             name and number in different groups).
+ *   4. Runs lacking a version (unnamed, or no metadata) fall back to the
+ *      time: `name HH:MM:SS` (all on one day), `name MMM dd HH:MM:SS`
+ *      (across days), `name … (abc123)` when even that collides, and
+ *      `abc123` (6-char hash) when no metadata is available.
  *
  * Each name-group is independent: singleton groups always get the bare name,
- * even if other groups need timestamps.
+ * even if other groups need versions.
  */
 export function disambiguateRunLabels(runIds: string[]): Record<string, string> {
   const result: Record<string, string> = {};
@@ -110,18 +114,26 @@ export function disambiguateRunLabels(runIds: string[]): Record<string, string> 
     runId: string;
     name: string;
     date: Date | null;
+    version: number | null;
+    group: string | null;
   };
   const resolved: Resolved[] = runIds.map((runId) => {
     const run = runMetadataCache.get(runId);
     if (!run) {
-      return { runId, name: shortRunId(runId), date: null };
+      return { runId, name: shortRunId(runId), date: null, version: null, group: null };
     }
     let date: Date | null = null;
     try {
       const d = new Date(run.created_at);
       if (!Number.isNaN(d.getTime())) date = d;
     } catch { /* keep null */ }
-    return { runId, name: run.display_name ?? shortRunId(runId), date };
+    return {
+      runId,
+      name: run.display_name ?? shortRunId(runId),
+      date,
+      version: run.version ?? null,
+      group: run.group ?? null,
+    };
   });
 
   // Group by name.
@@ -137,53 +149,81 @@ export function disambiguateRunLabels(runIds: string[]): Record<string, string> 
       result[group[0]!.runId] = name;
       continue;
     }
-
-    // Determine if the group spans multiple days (need date prefix).
-    const dayKeys = new Set(
-      group.map((r) => (r.date ? r.date.toDateString() : "")),
+    Object.assign(
+      result,
+      versionLabels(name, group.filter((r) => r.version != null)),
+      timeLabels(name, group.filter((r) => r.version == null)),
     );
-    const spansDays = dayKeys.size > 1;
-
-    // First pass: name + (date?) + time
-    const tentative: Record<string, string> = {};
-    const seen = new Set<string>();
-    let hasCollision = false;
-    for (const r of group) {
-      let label: string;
-      if (r.date) {
-        const ts = r.date.toLocaleTimeString(undefined, {
-          hour: "2-digit", minute: "2-digit", second: "2-digit",
-        });
-        if (spansDays) {
-          const date = r.date.toLocaleDateString(undefined, {
-            month: "short", day: "numeric",
-          });
-          label = `${name} ${date} ${ts}`;
-        } else {
-          label = `${name} ${ts}`;
-        }
-      } else {
-        // No date metadata at all — fall back to hash suffix.
-        label = `${name} (${shortRunId(r.runId)})`;
-      }
-      if (seen.has(label)) hasCollision = true;
-      seen.add(label);
-      tentative[r.runId] = label;
-    }
-
-    if (!hasCollision) {
-      Object.assign(result, tentative);
-      continue;
-    }
-
-    // Second pass: append a hash suffix to break ties.
-    for (const r of group) {
-      const base = tentative[r.runId]!;
-      result[r.runId] = `${base} (${shortRunId(r.runId)})`;
-    }
   }
 
   return result;
+}
+
+/** Rules 2–3: `name v<n>`, then `name v<n> · <group>` where that collides. */
+function versionLabels(
+  name: string,
+  runs: Array<{ runId: string; version: number | null; group: string | null }>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const count = new Map<string, number>();
+  for (const r of runs) {
+    const label = `${name} v${r.version}`;
+    out[r.runId] = label;
+    count.set(label, (count.get(label) ?? 0) + 1);
+  }
+  for (const r of runs) {
+    if (count.get(out[r.runId]!)! > 1 && r.group != null) {
+      out[r.runId] = `${out[r.runId]} · ${r.group}`;
+    }
+  }
+  return withHashOnCollision(runs, out);
+}
+
+/** Rule 4: the run's time, with the date when the runs span days. */
+function timeLabels(
+  name: string,
+  runs: Array<{ runId: string; date: Date | null }>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  // Determine if the runs span multiple days (need date prefix).
+  const dayKeys = new Set(runs.map((r) => (r.date ? r.date.toDateString() : "")));
+  const spansDays = dayKeys.size > 1;
+  for (const r of runs) {
+    if (r.date) {
+      const ts = r.date.toLocaleTimeString(undefined, {
+        hour: "2-digit", minute: "2-digit", second: "2-digit",
+      });
+      if (spansDays) {
+        const date = r.date.toLocaleDateString(undefined, {
+          month: "short", day: "numeric",
+        });
+        out[r.runId] = `${name} ${date} ${ts}`;
+      } else {
+        out[r.runId] = `${name} ${ts}`;
+      }
+    } else {
+      // No date metadata at all — fall back to hash suffix.
+      out[r.runId] = `${name} (${shortRunId(r.runId)})`;
+    }
+  }
+  return withHashOnCollision(runs, out);
+}
+
+/** Labels that still collide get the run's short id appended. */
+function withHashOnCollision(
+  runs: Array<{ runId: string }>,
+  labels: Record<string, string>,
+): Record<string, string> {
+  const seen = new Set<string>();
+  let hasCollision = false;
+  for (const r of runs) {
+    if (seen.has(labels[r.runId]!)) hasCollision = true;
+    seen.add(labels[r.runId]!);
+  }
+  if (!hasCollision) return labels;
+  const out: Record<string, string> = {};
+  for (const r of runs) out[r.runId] = `${labels[r.runId]} (${shortRunId(r.runId)})`;
+  return out;
 }
 
 /**

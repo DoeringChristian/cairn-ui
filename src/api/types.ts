@@ -61,6 +61,11 @@ export interface Run {
   data_epoch: number;
   /** Free-form grouping label (e.g. one per ablation arm). */
   group: string | null;
+  /**
+   * The run's number in its series (project, group, name), assigned by the
+   * server and never reused; null for an unnamed run.
+   */
+  version: number | null;
   job_type: string | null;
   sweep_id: string | null;
   /** When a stop was requested from the UI; null when none is pending. */
