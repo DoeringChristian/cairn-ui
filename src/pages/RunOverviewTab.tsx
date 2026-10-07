@@ -10,6 +10,8 @@ import { formatValue } from "../lib/plot-utils/format";
 import { useProjectTags } from "../lib/use-project-tags";
 import TagInput from "../components/TagInput";
 import ConfigTree from "../components/viewers/ConfigTree";
+import SummaryTree from "../components/viewers/SummaryTree";
+import { summaryLeafCount } from "../lib/media/summary-media";
 import { explorerPath } from "../lib/artifacts/refs";
 import Markdown from "../lib/markdown";
 
@@ -18,11 +20,13 @@ interface Ctx {
   params: Param[];
   config: Record<string, unknown>;
   summary: Param[];
+  /** The summary as logged (nested), media values as `$media` markers. */
+  summaryDoc: Record<string, unknown>;
   metricDefs: MetricDef[];
 }
 
 export default function RunOverviewTab() {
-  const { run, params, config, summary, metricDefs } = useOutletContext<Ctx>();
+  const { run, params, config, summary, summaryDoc, metricDefs } = useOutletContext<Ctx>();
   const env = safeJsonParse<Record<string, unknown>>(run.env_snapshot);
   const tags = safeJsonParse<string[]>(run.tags) ?? [];
   const cliArgs = safeJsonParse<string[]>(run.cli_args) ?? [];
@@ -66,6 +70,11 @@ export default function RunOverviewTab() {
         <TagsEditor run={run} tags={tags} />
         <NotesEditor runId={run.id} notes={run.notes ?? ""} />
       </Section>
+      {Object.keys(summaryDoc).length > 0 && (
+        <Section title={`Summary (${summaryLeafCount(summaryDoc)})`} className="lg:col-span-2">
+          <SummaryTree runId={run.id} summary={summaryDoc} />
+        </Section>
+      )}
       <Section title={`Config (${params.length})`} className="lg:col-span-2">
         <ConfigTree config={config} />
       </Section>

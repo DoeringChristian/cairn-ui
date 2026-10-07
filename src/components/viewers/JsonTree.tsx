@@ -5,17 +5,21 @@ import FoldedText from "../FoldedText";
  * The one collapsible JSON tree: an artifact's metadata, a run's config, a
  * JSON file. Objects and arrays fold (open to `openDepth`); leaves render
  * typed (strings quoted, numbers tabular). `renderKeyActions` adds controls
- * after a top-level key (the Metadata tab's edit button).
+ * after a top-level key (the Metadata tab's edit button). `renderLeaf` shows a
+ * value its own way as a leaf (a run summary's media, as a thumbnail) when it
+ * returns something other than `undefined`; `path` is the value's dotted key.
  */
 export default function JsonTree({
   value,
   openDepth = 2,
   renderKeyActions,
+  renderLeaf,
   emptyText = "Empty.",
 }: {
   value: unknown;
   openDepth?: number;
   renderKeyActions?: (key: string) => ReactNode;
+  renderLeaf?: RenderLeaf;
   /** Shown for an empty object or list. */
   emptyText?: string;
 }) {
@@ -31,27 +35,37 @@ export default function JsonTree({
   return (
     <ul className="mono text-[12.5px] leading-6" role="tree" data-viewer="json">
       {entries.map(([k, v]) => (
-        <Node key={k} name={k} value={v} depth={0} openDepth={openDepth} actions={renderKeyActions?.(k)} />
+        <Node
+          key={k} name={k} path={k} value={v} depth={0} openDepth={openDepth}
+          actions={renderKeyActions?.(k)} renderLeaf={renderLeaf}
+        />
       ))}
     </ul>
   );
 }
 
+export type RenderLeaf = (value: unknown, path: string) => ReactNode | undefined;
+
 function Node({
   name,
+  path,
   value,
   depth,
   openDepth,
   actions,
+  renderLeaf,
 }: {
   name: string;
+  path: string;
   value: unknown;
   depth: number;
   openDepth: number;
   actions?: ReactNode;
+  renderLeaf?: RenderLeaf;
 }) {
   const [open, setOpen] = useState(depth < openDepth);
-  const isObj = typeof value === "object" && value !== null;
+  const custom = renderLeaf?.(value, path);
+  const isObj = typeof value === "object" && value !== null && custom === undefined;
   const entries = isObj ? Object.entries(value as Record<string, unknown>) : [];
   const pad = { paddingLeft: `${depth * 16}px` };
   if (!isObj || entries.length === 0) {
@@ -59,7 +73,7 @@ function Node({
       <li role="treeitem" className="group flex items-baseline gap-2 rounded hover:bg-bg-hover" style={pad}>
         <span className="w-3 shrink-0" />
         <span className="text-fg-muted">{name}:</span>
-        <Leaf value={value} />
+        {custom !== undefined ? custom : <Leaf value={value} />}
         {actions}
       </li>
     );
@@ -85,7 +99,10 @@ function Node({
       {open && (
         <ul role="group">
           {entries.map(([k, v]) => (
-            <Node key={k} name={k} value={v} depth={depth + 1} openDepth={openDepth} />
+            <Node
+              key={k} name={k} path={`${path}.${k}`} value={v} depth={depth + 1}
+              openDepth={openDepth} renderLeaf={renderLeaf}
+            />
           ))}
         </ul>
       )}
