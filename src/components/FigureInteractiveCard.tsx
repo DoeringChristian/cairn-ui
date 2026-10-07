@@ -407,8 +407,9 @@ export default function FigureInteractiveCard({ runId, metric, extraSeries, cont
   // Re-render when run metadata cache is populated so labels update.
   const runMetaVersion = useRunMetadataVersion();
 
-  const subtitle =
-    sliderValues.length > 0
+  const subtitle = slider.summary
+    ? "summary"
+    : sliderValues.length > 0
       ? `${slider.keyName === "step" ? "step" : slider.keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${sliderValues.length})`
       : `${metric.count} pts`;
 

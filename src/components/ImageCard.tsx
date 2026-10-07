@@ -313,7 +313,9 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     </div>
   );
 
-  const subtitle = values.length === 0
+  const subtitle = slider.summary
+    ? "summary"
+    : values.length === 0
     ? undefined
     : keyName === STEP_KEY ? `step ${currentStep}` : `${keyName} ${formatNum(currentValue)}`;
 

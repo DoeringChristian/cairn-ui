@@ -85,7 +85,7 @@ export default function TensorCard({
 
   const subtitle =
     points.length > 0
-      ? `${gallery ? `${galleryItems.data?.length ?? "…"} × ` : ""}${shapeLabel} · ${meta?.dtype ?? "?"} · step ${current?.step ?? "—"} (${safeIdx + 1}/${slider.values.length})`
+      ? `${gallery ? `${galleryItems.data?.length ?? "…"} × ` : ""}${shapeLabel} · ${meta?.dtype ?? "?"} · ${slider.summary ? "summary" : `step ${current?.step ?? "—"} (${safeIdx + 1}/${slider.values.length})`}`
       : `${metric.count} pts`;
 
   const cardRef = useRef<HTMLDivElement>(null);

@@ -231,8 +231,9 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
 
-  const subtitle =
-    values.length > 0
+  const subtitle = slider.summary
+    ? "summary"
+    : values.length > 0
       ? `${keyName === STEP_KEY ? "step" : keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})`
       : `${metric.count} pts`;
 

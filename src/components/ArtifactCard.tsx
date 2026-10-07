@@ -169,7 +169,9 @@ export default function ArtifactCard({ runId, metric, settingsKeyOverride, onRem
   );
   const kind = source ? viewerKind({ path: source.name, mime: source.mime, object_type: source.objectType }) : "binary";
 
-  const subtitle = points.length > 0
+  const subtitle = summary
+    ? `${current?.version ? `${current.version.ref} · ` : ""}summary`
+    : points.length > 0
     ? `${current?.version ? `${current.version.ref} · ` : ""}step ${current?.step ?? 0} (${safeIdx + 1}/${points.length})`
     : `${metric.count} pts`;
 

@@ -273,11 +273,12 @@ export default function TableCard({
 
   const subtitle = useMemo(() => {
     const dims = first ? `${first.table.data.length}×${first.table.columns.length}` : `${metric.count} pts`;
+    if (summary) return `${dims} · summary`;
     if (globalSteps.length > 0) {
       return `${dims} · step ${currentStep} (${safeIdx + 1}/${globalSteps.length})`;
     }
     return dims;
-  }, [first, metric.count, globalSteps.length, currentStep, safeIdx]);
+  }, [first, metric.count, globalSteps.length, currentStep, safeIdx, summary]);
 
   const downloadCurrentCsv = () => {
     if (!first) return;

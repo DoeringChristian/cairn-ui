@@ -47,8 +47,9 @@ export default function TextViewerCard({ runId, metric, settingsKeyOverride, onR
 
 
 
-  const subtitle =
-    points.length > 0
+  const subtitle = summary
+    ? "summary"
+    : points.length > 0
       ? `step ${current?.step ?? "\u2014"}`
       : `${metric.count} pts`;
 

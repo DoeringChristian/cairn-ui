@@ -199,9 +199,11 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
   const paneKeys = panes.keys;
   const paneLabels = panes.labels;
 
-  const subtitle = values.length > 0
-    ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})`
-    : `${metric.count} pts`;
+  const subtitle = slider.summary
+    ? "summary"
+    : values.length > 0
+      ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})`
+      : `${metric.count} pts`;
 
 
   return (

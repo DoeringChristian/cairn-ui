@@ -176,7 +176,7 @@ export default function PresetCard({
 
   const subtitle = [
     kind ? PRESET_KIND_LABELS[kind] : null,
-    values.length > 0 ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})` : null,
+    slider.summary ? "summary" : values.length > 0 ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})` : null,
   ].filter(Boolean).join(" · ");
 
   const paneKeys = panes.keys;

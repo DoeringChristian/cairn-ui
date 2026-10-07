@@ -150,7 +150,7 @@ export default function VolumeCard({
       settings={settings}
       updateSettings={ctl.set}
       title={metric.name}
-      subtitle={values.length > 0 ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})` : `${metric.count} pts`}
+      subtitle={slider.summary ? "summary" : values.length > 0 ? `${keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})` : `${metric.count} pts`}
       subtitleCollapsedOnly={values.length > 1}
       defaultHeight={plotCardPolicy("volume").defaultHeight}
       onRemove={onRemove}

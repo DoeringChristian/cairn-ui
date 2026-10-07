@@ -152,7 +152,9 @@ export default function HistogramCard({
   const qc = useQueryClient();
 
 
-  const subtitle = heatmapActive
+  const subtitle = summary
+    ? "summary"
+    : heatmapActive
     ? `${points.length} steps`
     : points.length > 0
       ? `step ${current?.step ?? "—"} (${safeIdx + 1}/${points.length})`
