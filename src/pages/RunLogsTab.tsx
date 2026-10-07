@@ -11,11 +11,16 @@ function formatTime(wall: string): string {
 }
 
 const LINE_HEIGHT_PX = 16;
+/** The process filter's value for an unlabelled process's lines. */
+const NO_LABEL = "\u0000";
 
 export default function RunLogsTab() {
   const { runId } = useParams<{ runId: string }>();
   const [search, setSearch] = useState("");
   const [stream, setStream] = useState<string>("");
+  // The process filter (shared runs): "" = all processes, NO_LABEL = the
+  // unlabelled one, else a label.
+  const [process, setProcess] = useState<string>("");
   const [jumpTs, setJumpTs] = useState<string>("");
   const [isFollowing, setIsFollowing] = useState(true);
 
@@ -23,12 +28,17 @@ export default function RunLogsTab() {
     limit: 2000,
     search: search || undefined,
     stream: stream || undefined,
+    label: process === "" ? undefined : process === NO_LABEL ? null : process,
   });
   const runQ = useRun(runId!);
   const runIsRunning = runQ.data?.run.status === "running";
 
   const preRef = useRef<HTMLPreElement>(null);
   const lines = q.data?.lines ?? [];
+  const labels = q.data?.labels ?? [];
+  // Only runs with labelled processes get the filter and the label column.
+  const labelled = labels.some((l) => l != null);
+  const labelWidth = Math.max(0, ...labels.map((l) => (l ?? "").length));
 
   // Auto-follow: scroll to bottom when new lines arrive and we're in follow mode.
   useEffect(() => {
@@ -83,6 +93,21 @@ export default function RunLogsTab() {
           <option value="stdout">stdout</option>
           <option value="stderr">stderr</option>
         </select>
+        {labelled && (
+          <select
+            className="input max-w-[10rem]"
+            value={process}
+            onChange={(e) => setProcess(e.target.value)}
+            aria-label="Process"
+          >
+            <option value="">all processes</option>
+            {labels.map((l) => (
+              <option key={l ?? NO_LABEL} value={l ?? NO_LABEL}>
+                {l ?? "(unlabelled)"}
+              </option>
+            ))}
+          </select>
+        )}
         <form onSubmit={onJumpSubmit} className="flex items-center gap-1">
           <input
             type="datetime-local"
@@ -129,6 +154,11 @@ export default function RunLogsTab() {
                   {l.line_no.toString().padStart(5)}
                 </span>{" "}
                 <span className="text-fg-subtle">{formatTime(l.wall_time)}</span>{" "}
+                {labelled && (
+                  <>
+                    <span className="text-fg-subtle">{(l.label ?? "").padEnd(labelWidth)}</span>{" "}
+                  </>
+                )}
                 <span>{l.content}</span>
               </div>
             ))

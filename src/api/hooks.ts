@@ -207,7 +207,7 @@ export function useSequencesForRuns(
 
 export function useLogs(
   runId: string,
-  opts: { offset?: number; limit?: number; stream?: string; search?: string },
+  opts: { offset?: number; limit?: number; stream?: string; search?: string; label?: string | null },
 ) {
   const runQ = useQuery({
     queryKey: qk.run(runId),

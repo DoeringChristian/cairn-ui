@@ -232,8 +232,11 @@ export interface Alert {
 export interface LogLine {
   stream: "stdout" | "stderr";
   wall_time: string;
+  /** Counts per process (`label`). */
   line_no: number;
   content: string;
+  /** The process that printed it (shared runs); null for an unlabelled process. */
+  label: string | null;
 }
 
 export interface LogsResponse {
@@ -241,6 +244,8 @@ export interface LogsResponse {
   total: number;
   offset: number;
   limit: number;
+  /** The run's distinct process labels, null first when it has unlabelled lines. */
+  labels: Array<string | null>;
 }
 
 export interface SourceTreeFile {

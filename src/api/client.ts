@@ -189,13 +189,15 @@ export const api = {
     `/api/artifacts/${hash}/html${maxBytes != null ? `?max_bytes=${maxBytes}` : ""}`,
   logs: (
     runId: string,
-    opts: { offset?: number; limit?: number; stream?: string; search?: string } = {},
+    opts: { offset?: number; limit?: number; stream?: string; search?: string; label?: string | null } = {},
   ) => {
     const q = new URLSearchParams();
     if (opts.offset != null) q.set("offset", String(opts.offset));
     if (opts.limit != null) q.set("limit", String(opts.limit));
     if (opts.stream) q.set("stream", opts.stream);
     if (opts.search) q.set("search", opts.search);
+    // A label keeps that process's lines; null keeps the unlabelled one's.
+    if (opts.label !== undefined) q.set("label", opts.label ?? "");
     const qs = q.toString();
     return get<import("./types").LogsResponse>(
       `/api/runs/${runId}/logs${qs ? `?${qs}` : ""}`,
