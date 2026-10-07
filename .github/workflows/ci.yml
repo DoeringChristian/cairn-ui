@@ -37,3 +37,10 @@ jobs:
             echo "::error::cairn_ui/_dist is stale: run 'npm run build' and commit the result"
             exit 1
           fi
+      # The bundle CI built, to compare with the committed one when they differ.
+      - name: upload the bundle CI built
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-dist
+          path: cairn_ui/_dist
