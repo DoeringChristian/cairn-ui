@@ -442,6 +442,30 @@ export interface RunArtifactInput extends ArtifactVersionInfo {
   used_at: string;
 }
 
+/** A run in a run's Inputs / Used by (`GET /api/runs/{id}/relations`). */
+export interface RelatedRun {
+  id: string;
+  display_name: string | null;
+  version: number | null;
+  project_id: string;
+}
+
+/** An artifact version a run used (`GET /api/runs/{id}/relations`). */
+export interface RelatedArtifact {
+  id: string;
+  project_id: string;
+  name: string;
+  version: number;
+  /** `name:vN`. */
+  ref: string;
+}
+
+/** The run page Overview's Inputs / Used by. */
+export interface RunRelations {
+  inputs: { runs: RelatedRun[]; artifacts: RelatedArtifact[] };
+  used_by: { runs: RelatedRun[] };
+}
+
 // ---- Sweeps ------------------------------------------------------------------
 
 export type SweepStatus = "running" | "paused" | "stopped" | "cancelled" | "finished";

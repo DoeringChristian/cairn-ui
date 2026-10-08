@@ -485,6 +485,8 @@ export const api = {
     ),
   runInputArtifacts: (runId: string) =>
     get<{ inputs: import("./types").RunArtifactInput[] }>(`/api/runs/${runId}/inputs`),
+  /** The runs and artifact versions a run used, and the runs that used it. */
+  runRelations: (runId: string) => get<import("./types").RunRelations>(`/api/runs/${runId}/relations`),
   runOutputArtifacts: (runId: string) =>
     get<{ outputs: import("./types").ArtifactVersionInfo[] }>(
       `/api/runs/${runId}/outputs?include=files`,

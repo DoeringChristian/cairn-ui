@@ -6,7 +6,9 @@
  */
 
 import type { RuleOf } from "./metric-rules.ts";
-import type { Param } from "../api/types.ts";
+import type { Param, RelatedArtifact, RelatedRun } from "../api/types.ts";
+import { explorerPath } from "./artifacts/refs.ts";
+import { shortRunId } from "./run-label.ts";
 import { isSystemMetric, metricValueSource } from "./metric-defs.ts";
 import { summaryMediaOf, type SummaryMedia } from "./media/summary-media.ts";
 
@@ -83,4 +85,52 @@ export function commandLine(argv: readonly string[]): string {
   if (argv.length === 0) return "";
   const quoted = argv.map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`));
   return argv[0]!.endsWith(".py") ? `python ${quoted.join(" ")}` : quoted.join(" ");
+}
+
+// ---------------------------------------------------------------------------
+// The Run block's Inputs / Used by
+// ---------------------------------------------------------------------------
+
+/** One linked item of an Inputs / Used by row. */
+export interface RelationItem {
+  key: string;
+  /** Runs: the name (6-char id when unnamed) and `v<N>`; artifacts: `name:vN`, `project/name:vN` from another project. */
+  label: string;
+  href: string;
+  /** An artifact of another project ("(other project)"). */
+  otherProject: boolean;
+}
+
+/** How many items a row shows before "+N more". */
+export const RELATIONS_SHOWN = 6;
+
+/** The items of one row: its runs, then its artifact versions. */
+export function relationItems(
+  projectId: string,
+  runs: readonly RelatedRun[],
+  artifacts: readonly RelatedArtifact[] = [],
+): RelationItem[] {
+  const runItems = runs.map((r) => ({
+    key: `r:${r.id}`,
+    label: `${r.display_name ?? shortRunId(r.id)}${r.version != null ? ` v${r.version}` : ""}`,
+    href: `/p/${encodeURIComponent(r.project_id)}/r/${r.id}`,
+    otherProject: false,
+  }));
+  const artifactItems = artifacts.map((a) => {
+    const other = a.project_id !== projectId;
+    return {
+      key: `a:${a.id}`,
+      label: other ? `${a.project_id}/${a.ref}` : a.ref,
+      href: explorerPath(a.project_id, a.name, a.version),
+      otherProject: other,
+    };
+  });
+  return [...runItems, ...artifactItems];
+}
+
+/** The items a row shows (all when `expanded`) and how many "+N more" hides. */
+export function collapseRelations<T>(items: readonly T[], expanded: boolean, shown = RELATIONS_SHOWN): { items: T[]; more: number } {
+  // "+1 more" would take the place of the one item it hides.
+  if (expanded || items.length <= shown + 1) return { items: [...items], more: 0 };
+  return { items: items.slice(0, shown), more: items.length - shown };
 }

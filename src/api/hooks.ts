@@ -315,6 +315,16 @@ export function useRunInputArtifacts(runId: string) {
   });
 }
 
+/** A run's Inputs / Used by (the run page Overview); polls with the run while it runs. */
+export function useRunRelations(runId: string, live = false) {
+  return useQuery({
+    queryKey: qk.runRelations(runId),
+    queryFn: () => api.runRelations(runId),
+    enabled: !!runId,
+    refetchInterval: live ? 5_000 : false,
+  });
+}
+
 export function useRunOutputArtifacts(runId: string) {
   return useQuery({
     queryKey: qk.runOutputArtifacts(runId),

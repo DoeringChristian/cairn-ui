@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useOutletContext, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { useMetricRules, useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArtifacts, useSourceTree } from "../api/hooks";
+import { useMetricRules, useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArtifacts, useRunRelations, useSourceTree } from "../api/hooks";
 import type { ArtifactVersionInfo, Param, Run } from "../api/types";
 import { groupWorkspacePath } from "../components/runs-table/RunsTableParts";
 import TagInput from "../components/TagInput";
@@ -12,7 +12,7 @@ import { remoteHref } from "../lib/git-remote";
 import { galleryQuery } from "../lib/media/gallery-query";
 import { isGalleryMedia, summaryMediaLabel, type SummaryMedia } from "../lib/media/summary-media";
 import { formatValue } from "../lib/plot-utils/format";
-import { commandLine, configRows, filterRows, summaryRows, type SummaryRow } from "../lib/run-overview";
+import { collapseRelations, commandLine, configRows, filterRows, relationItems, summaryRows, type RelationItem, type SummaryRow } from "../lib/run-overview";
 import { useProjectTags } from "../lib/use-project-tags";
 import { explorerPath } from "../lib/artifacts/refs";
 import Markdown from "../lib/markdown";
@@ -130,8 +130,55 @@ function RunBlock({ run }: { run: Run }) {
             <CopyButton text={runPath} />
           </span>
         </Field>
+        <RelationsRows run={run} />
       </dl>
     </Section>
+  );
+}
+
+/** `Inputs ← …` and `Used by → …`, each left out when empty. */
+function RelationsRows({ run }: { run: Run }) {
+  const q = useRunRelations(run.id, run.status === "running");
+  if (!q.data) return null;
+  const inputs = relationItems(run.project_id, q.data.inputs.runs, q.data.inputs.artifacts);
+  const usedBy = relationItems(run.project_id, q.data.used_by.runs);
+  return (
+    <>
+      {inputs.length > 0 && (
+        <Field label="Inputs">
+          <RelationList arrow="←" items={inputs} testId="run-inputs" />
+        </Field>
+      )}
+      {usedBy.length > 0 && (
+        <Field label="Used by">
+          <RelationList arrow="→" items={usedBy} testId="run-used-by" />
+        </Field>
+      )}
+    </>
+  );
+}
+
+function RelationList({ arrow, items, testId }: { arrow: string; items: RelationItem[]; testId: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const { items: shown, more } = collapseRelations(items, expanded);
+  return (
+    <span className="inline-flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1" data-testid={testId}>
+      <span className="text-fg-subtle" aria-hidden>{arrow}</span>
+      {shown.map((it, i) => (
+        <span key={it.key} className="inline-flex items-baseline gap-1.5">
+          {i > 0 && <span className="text-fg-subtle">·</span>}
+          <Link to={it.href} className="mono break-all text-accent hover:underline">
+            {it.label}
+          </Link>
+          {it.otherProject && <span className="text-xs text-fg-subtle">(other project)</span>}
+        </span>
+      ))}
+      {more > 0 && (
+        <button type="button" className="text-xs text-fg-muted hover:text-accent" onClick={() => setExpanded(true)}>
+          +{more} more
+        </button>
+      )}
+    </span>
   );
 }
 

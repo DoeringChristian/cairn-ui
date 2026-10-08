@@ -39,6 +39,7 @@ export const qk = {
   artifactVersionFiles: (versionId: string) => ["artifact-version-files", versionId] as const,
   artifactVersionConsumers: (versionId: string) => ["artifact-version-consumers", versionId] as const,
   runInputArtifacts: (runId: string) => ["run-input-artifacts", runId] as const,
+  runRelations: (runId: string) => ["run-relations", runId] as const,
   runOutputArtifacts: (runId: string) => ["run-output-artifacts", runId] as const,
   lineage: (projectId: string, familyId?: string | null) => ["lineage", projectId, familyId ?? null] as const,
   lineageAround: (kind: string, id: string, depth: number | null, direction: string) =>
