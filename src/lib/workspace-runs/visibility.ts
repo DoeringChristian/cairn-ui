@@ -147,20 +147,16 @@ export function cardRuns(sorted: readonly Run[], groups: readonly RunGroupNode[]
 }
 
 /**
- * "Show in workspace" (the Runs page): only the ticked runs' groups visible
- * (grouped; runs without a group value only where ticked), or only the
- * ticked runs (not grouped); every other eye off. The status, search,
- * filter and latest only are cleared so they are listed. `runs`: the
- * project's runs.
+ * "Show in workspace" (the Runs page): exactly the ticked runs visible and
+ * nothing else, grouped or not. Grouped, every top-level group's eye is off
+ * and the ticked runs' own eyes on, so a group shows ◐ when it has other
+ * runs and its aggregate line is over the ticked runs only. The status,
+ * search, filter and latest only are cleared so every ticked run is
+ * listed. `runs`: the runs the page lists from.
  */
 export function showOnly(s: RunState, runs: readonly Run[], ticked: ReadonlySet<string>): RunState {
   const eyes: Record<string, boolean> = {};
-  const groups = groupRunsNested(runs, s.groupBy);
-  if (!groups) for (const r of runs) eyes[runKey(r.id)] = ticked.has(r.id);
-  for (const g of groups ?? []) {
-    const any = g.runs.some((r) => ticked.has(r.id));
-    eyes[groupKey(g)] = any;
-    if (g.label == null) for (const r of g.runs) eyes[runKey(r.id)] = ticked.has(r.id);
-  }
+  for (const r of runs) eyes[runKey(r.id)] = ticked.has(r.id);
+  for (const g of groupRunsNested(runs, s.groupBy) ?? []) eyes[groupKey(g)] = false;
   return { ...s, status: "all", search: "", filter: EMPTY_FILTER, latestOnly: false, eyes };
 }

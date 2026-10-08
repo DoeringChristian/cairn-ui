@@ -109,17 +109,29 @@ test("cardRuns: visible runs in table order; grouped, each with its top-level gr
   assert.equal(flat.groupOf.size, 0);
 });
 
-test("showOnly: grouped, the ticked runs' groups (no-value runs only where ticked); not grouped, the ticked runs", () => {
+test("showOnly: exactly the ticked runs, grouped or not; a partly ticked group shows ◐ and aggregates the ticked runs", () => {
   const { sorted, groups } = fixture(3);
   const extra = makeRun("loose2", { display_name: "other", created_at: at(58) });
-  const all = [...sorted, extra];
+  const all = sortNewest([...sorted, extra]);
   const base = { ...DEFAULT_RUN_STATE, search: "x", status: "failed" as const, latestOnly: true };
   const s = showOnly(base, all, new Set(["g1-a", "loose"]));
   assert.deepEqual([s.search, s.status, s.latestOnly], ["", "all", false]);
-  const allGroups = groupRunsNested(sortNewest(all), BY_GROUP)!;
-  const vis = resolveVisibility(sortNewest(all), allGroups, s.eyes).runs;
-  assert.deepEqual([...vis].sort(), ["g1-a", "g1-b", "loose"]);
+  const allGroups = groupRunsNested(all, BY_GROUP)!;
+  const vis = resolveVisibility(all, allGroups, s.eyes).runs;
+  assert.deepEqual([...vis].sort(), ["g1-a", "loose"]);
   assert.equal(groups.length, 4);
+  const g1 = allGroups.find((g) => g.label === "exp-1")!;
+  assert.equal(groupEye(g1, vis), "mixed");
+  assert.equal(groupEye(allGroups.find((g) => g.label === "exp-0")!, vis), "off");
+  // The cards get only the ticked runs: exp-1's line is over g1-a alone.
+  const cards = cardRuns(all, allGroups, vis);
+  assert.deepEqual(cards.runIds.sort(), ["g1-a", "loose"]);
+  assert.equal(cards.groupOf.get("g1-a"), "exp-1");
+  // Even a group among the newest DEFAULT_VISIBLE stays hidden.
+  const many = fixture(3);
+  const s2 = showOnly(DEFAULT_RUN_STATE, many.sorted, new Set(["g2-b"]));
+  assert.deepEqual([...resolveVisibility(many.sorted, many.groups, s2.eyes).runs], ["g2-b"]);
+  // Not grouped: the ticked runs.
   const flat = showOnly({ ...base, groupBy: [] }, all, new Set(["g1-a"]));
   assert.deepEqual([...resolveVisibility(all, null, flat.eyes).runs], ["g1-a"]);
 });
