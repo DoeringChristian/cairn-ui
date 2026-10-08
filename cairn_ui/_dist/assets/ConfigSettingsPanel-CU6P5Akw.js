@@ -1,0 +1,1 @@
+import{j as s,x as n,B as i,Z as a,y as o}from"./index-CBJVhNq-.js";function l({ctl:e}){const t=s.jsx(n,{name:"Compare",children:s.jsx(i,{label:"Only diffs",description:"Hide the keys that are the same in every column",...a(e,"onlyDiffs")})});return s.jsx(o,{tabs:{display:t}})}export{l as default};
