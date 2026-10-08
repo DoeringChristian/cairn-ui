@@ -1,5 +1,5 @@
 /**
- * Shared card renderer used by both the Metrics & Media tab (CardGrid)
+ * Shared card renderer used by both the run page's Workspace tab (CardGrid)
  * and the Comparison view (ComparePage). One code path for all card types.
  */
 
