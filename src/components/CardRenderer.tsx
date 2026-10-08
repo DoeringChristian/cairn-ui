@@ -44,6 +44,8 @@ const BarChartCard = lazy(() => import("./BarChartCard"));
 const ImportanceCard = lazy(() => import("./ImportanceCard"));
 const RunCompareCard = lazy(() => import("./RunCompareCard"));
 const CodeDiffCard = lazy(() => import("./CodeDiffCard"));
+const ScalarsCard = lazy(() => import("./ScalarsCard"));
+const ConfigCard = lazy(() => import("./ConfigCard"));
 const ScalarTileCard = lazy(() => import("./ScalarTileCard"));
 const ScalarValueCard = lazy(() => import("./ScalarValueCard"));
 const PointCloudCard = lazy(() => import("./PointCloudCard"));
@@ -193,6 +195,20 @@ function CardRendererInner(props: CardDescriptor) {
       return (
         <Suspense fallback={<LazyCardFallback label="loading code diff…" />}>
           <CodeDiffCard runIds={runIds} settingsKey={settingsKey} onRemove={onRemove} autoOpenSettings={autoOpenSettings} />
+        </Suspense>
+      );
+    }
+    if (cardType === "scalars") {
+      return (
+        <Suspense fallback={<LazyCardFallback label="loading scalars…" />}>
+          <ScalarsCard runIds={runIds} settingsKey={settingsKey} onRemove={onRemove} autoOpenSettings={autoOpenSettings} />
+        </Suspense>
+      );
+    }
+    if (cardType === "config") {
+      return (
+        <Suspense fallback={<LazyCardFallback label="loading config…" />}>
+          <ConfigCard runIds={runIds} settingsKey={settingsKey} onRemove={onRemove} autoOpenSettings={autoOpenSettings} />
         </Suspense>
       );
     }

@@ -39,10 +39,12 @@ import { isMultiRunCardType, type ComparisonCard } from "../../lib/comparisons/t
 import { CardNavProvider } from "../../lib/card-nav";
 import { ChartSyncProvider } from "../../lib/chart-sync";
 import { WorkspaceDefaultsProvider } from "../../lib/settings-scope";
-import { claimedMetric, findPanel, newLayoutId, ops, type Panel, type WorkspaceOp } from "../../lib/workspace/doc";
+import { findPanel, newLayoutId, ops, type Panel, type WorkspaceOp } from "../../lib/workspace/doc";
+import { isSingleStepScalar, summaryMetrics } from "../../lib/workspace/summary-cards";
 import {
   addToSectionOp,
   autoPanelsOp,
+  claimedName,
   deriveLayout,
   uniqueSectionName,
   materializeOp as materializePanelOp,
@@ -113,13 +115,18 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
     () => (metricFilter ? runMetrics.metrics.filter((m) => metricFilter(m.name)) : runMetrics.metrics),
     [runMetrics.metrics, metricFilter],
   );
+  // What the layout derives from: the metrics plus the Summary cards' pseudo-series (lib/workspace/summary-cards.ts).
+  const layoutMetrics = useMemo(() => {
+    const pseudo = summaryMetrics(metrics, runMetrics.presence);
+    return [...metrics, ...(metricFilter ? pseudo.filter((m) => metricFilter(m.name)) : pseudo)];
+  }, [metrics, runMetrics.presence, metricFilter]);
   const [query, setQuery] = useState("");
 
   // Unfiltered (edits resolve against it) and as shown (search applied).
   const derived = useMemo(() => {
-    const secs = deriveLayout(doc, metrics);
+    const secs = deriveLayout(doc, layoutMetrics);
     return hideEmpty ? withoutEmptyPanels(secs) : secs;
-  }, [doc, metrics, hideEmpty]);
+  }, [doc, layoutMetrics, hideEmpty]);
   // An empty workspace still shows one section, with its ghost card (written on the first add).
   const all = useMemo<RenderedSection[]>(
     () =>
@@ -130,9 +137,9 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
   );
   const shown = useMemo(() => {
     if (!query.trim()) return all;
-    const secs = deriveLayout(doc, metrics, { query });
+    const secs = deriveLayout(doc, layoutMetrics, { query });
     return hideEmpty ? withoutEmptyPanels(secs) : secs;
-  }, [doc, metrics, query, all, hideEmpty]);
+  }, [doc, layoutMetrics, query, all, hideEmpty]);
 
   // `?card=<series>` (the Overview summary's "show in Workspace"): mount the
   // first card showing that series, scroll to it and highlight it briefly,
@@ -142,8 +149,11 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
   const focusId = useMemo(() => {
     if (!focusName) return null;
     for (const s of shown) for (const rp of s.panels) if (rp.metrics.some((m) => m.name === focusName)) return rp.panel.id;
+    // A single-step metric is a column of the Scalars card.
+    const m = metrics.find((x) => x.name === focusName);
+    if (m && isSingleStepScalar(m)) for (const s of shown) for (const rp of s.panels) if (rp.panel.type === "scalars") return rp.panel.id;
     return null;
-  }, [focusName, shown]);
+  }, [focusName, shown, metrics]);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   useEffect(() => {
     if (!focusId) return;
@@ -187,8 +197,8 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
   }, [highlighted]);
   const allRef = useRef(all);
   allRef.current = all;
-  const metricsRef = useRef(metrics);
-  metricsRef.current = metrics;
+  const metricsRef = useRef(layoutMetrics);
+  metricsRef.current = layoutMetrics;
 
   /** Write an automatic panel — only it — so it can be edited. Computed now: deterministic on replay. */
   const materializeOp = useCallback((id: string): WorkspaceOp => materializePanelOp(allRef.current, id), []);
@@ -213,7 +223,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
   // --- panel edits ----------------------------------------------------------
   const removePanel = useCallback(
     (rp: RenderedPanel) => {
-      const claimed = rp.auto ? rp.panel.id.slice("auto:".length) : claimedMetric(rp.panel);
+      const claimed = rp.auto ? rp.panel.id.slice("auto:".length) : claimedName(rp.panel);
       update(ops.removePanel(rp.panel.id, claimed), { label: `Remove ${rp.label}` });
     },
     [update],
@@ -331,13 +341,13 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
         const id = e.panel.id;
         if (e.status === "listed") update(ops.setPanelHidden(id, true), { label: `Hide ${e.label}` });
         else if (e.status === "hidden") update(ops.setPanelHidden(id, false), { label: `Show ${e.label}` });
-        else if (e.status === "auto") update(ops.removePanel(id, claimedMetric(e.panel)), { label: `Hide ${e.label}` });
-        else if (e.status === "removed") update(ops.restoreRemoved([claimedMetric(e.panel) ?? ""]), { label: `Show ${e.label}` });
+        else if (e.status === "auto") update(ops.removePanel(id, claimedName(e.panel)), { label: `Hide ${e.label}` });
+        else if (e.status === "removed") update(ops.restoreRemoved([claimedName(e.panel) ?? ""]), { label: `Show ${e.label}` });
         else update(sectionOp(ops.addPanels(autoSectionOfPanel(e.panel, metricsRef.current), [e.panel])), { label: `Show ${e.label}` });
       },
       duplicate: (e: CatalogueEntry) => duplicate(e.panel.id),
       remove: (e: CatalogueEntry) =>
-        update(ops.removePanel(e.panel.id, claimedMetric(e.panel)), { label: `Delete ${e.label}` }),
+        update(ops.removePanel(e.panel.id, claimedName(e.panel)), { label: `Delete ${e.label}` }),
       edit: (e: CatalogueEntry) => {
         setManageOpen(false);
         if (e.status === "hidden") update(ops.setPanelHidden(e.panel.id, false), { label: `Show ${e.label}` });
@@ -348,7 +358,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
     }),
     [update, sectionOp, duplicate, openEditor, moveCard, moveSection],
   );
-  const catalogue = useMemo(() => (manageOpen ? cardCatalogue(doc, metrics) : []), [manageOpen, doc, metrics]);
+  const catalogue = useMemo(() => (manageOpen ? cardCatalogue(doc, layoutMetrics) : []), [manageOpen, doc, layoutMetrics]);
 
   // --- toolbar ---------------------------------------------------------------
   const matchCount = useMemo(() => {
@@ -386,11 +396,11 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
     () =>
       doc.autoPanels
         ? 0
-        : deriveLayout({ ...doc, autoPanels: true }, metrics, { hidePatterns: false }).reduce(
+        : deriveLayout({ ...doc, autoPanels: true }, layoutMetrics, { hidePatterns: false }).reduce(
             (n, s) => n + s.panels.filter((p) => p.auto).length,
             0,
           ),
-    [doc, metrics],
+    [doc, layoutMetrics],
   );
 
   return (

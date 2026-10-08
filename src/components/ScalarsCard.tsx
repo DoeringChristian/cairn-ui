@@ -1,0 +1,153 @@
+/**
+ * Scalars card (the Summary section): one table of every metric logged at a
+ * single step, the runs' `summary` values (headers in italics) and run info
+ * (status, duration, created, user, host; "show run info"). One row per
+ * shown run, or per group when the workspace is grouped (a group's mean;
+ * lib/summary-tables.ts). Click a header to sort by it.
+ */
+
+import { useMemo, useRef, useState } from "react";
+import type { RunStatus } from "../api/types";
+import { useCardSettings } from "../lib/card-settings";
+import { downloadCsv, safeName } from "../lib/download";
+import { isSystemMetric } from "../lib/metric-defs";
+import { formatValue } from "../lib/plot-utils/format";
+import { MIXED, nextSort, scalarsTable, sortRows, type Cell, type Column, type ScalarsRow } from "../lib/summary-tables";
+import { isSingleStepScalar } from "../lib/workspace/summary-cards";
+import CardShell from "./CardShell";
+import RunStatusBadge from "./RunStatusBadge";
+import type { ScalarsSettings } from "./cards-settings/scalars";
+import ScalarsSettingsPanel from "./settings-panels/ScalarsSettingsPanel";
+import { EmptyCell, UnitLabel, useSummaryRuns } from "./summary/use-summary-runs";
+import { useWorkspaceMetrics } from "./workspace/use-workspace-metrics";
+
+interface Props {
+  runIds: string[];
+  settingsKey: { runId: string; metricName: string };
+  onRemove?: () => void;
+  autoOpenSettings?: boolean;
+}
+
+const STATUSES = new Set<string>(["running", "completed", "failed", "crashed", "killed", "stopped"]);
+
+function seconds(s: number): string {
+  const t = Math.round(s);
+  if (t < 60) return `${t}s`;
+  const m = Math.floor(t / 60);
+  if (m < 60) return `${m}m ${t % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function cellText(col: Column, v: Cell): string {
+  if (v == null) return "";
+  if (v === MIXED) return "mixed";
+  if (col.key === "info:duration" && typeof v === "number") return seconds(v);
+  if (col.key === "info:created" && typeof v === "number") {
+    return new Date(v).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  return formatValue(v);
+}
+
+function CellView({ col, v }: { col: Column; v: Cell }) {
+  if (v == null || v === MIXED) return <EmptyCell mixed={v === MIXED} />;
+  if (col.key === "info:status" && typeof v === "string" && STATUSES.has(v)) return <RunStatusBadge status={v as RunStatus} />;
+  return <>{cellText(col, v)}</>;
+}
+
+export default function ScalarsCard({ runIds: allRunIds, settingsKey, onRemove, autoOpenSettings }: Props) {
+  const ctl = useCardSettings<ScalarsSettings>(settingsKey, "scalars");
+  const s = ctl.value;
+  const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
+  const { runIds, runs, loading, groupOf, labelOf, colorOf } = useSummaryRuns(allRunIds);
+  const { metrics } = useWorkspaceMetrics(runIds);
+  const singleStep = useMemo(
+    () => metrics.filter((m) => isSingleStepScalar(m) && !isSystemMetric(m.name)).map((m) => m.name),
+    [metrics],
+  );
+  const table = useMemo(
+    () => scalarsTable(runs, { singleStep, groupOf, showRunInfo: s.showRunInfo, now: Date.now() }),
+    [runs, singleStep, groupOf, s.showRunInfo],
+  );
+  const sort = s.sort && (s.sort.key === "label" || table.columns.some((c) => c.key === s.sort!.key)) ? s.sort : null;
+  const rows = useMemo(() => sortRows(table.rows, sort, (r) => labelOf(r.unit)), [table.rows, sort, labelOf]);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const header = (key: string, label: string, title?: string, italic = false) => {
+    const on = sort?.key === key;
+    return (
+      <th key={key} className="sticky top-0 z-10 bg-bg pb-1 pr-4 font-medium whitespace-nowrap" aria-sort={on ? (sort!.desc ? "descending" : "ascending") : "none"}>
+        <button
+          type="button"
+          onClick={() => ctl.set({ sort: nextSort(sort, key) })}
+          disabled={ctl.locked}
+          className={`inline-flex items-center gap-1 hover:text-fg ${italic ? "italic" : ""} ${on ? "text-fg" : ""}`}
+          title={title}
+        >
+          {label}
+          <i
+            className={`fa-solid ${on ? (sort!.desc ? "fa-sort-down" : "fa-sort-up") : "fa-sort opacity-30"} text-[10px]`}
+            aria-hidden="true"
+          />
+        </button>
+      </th>
+    );
+  };
+
+  const body = (className: string) => {
+    if (runIds.length === 0) return <p className={`text-sm text-fg-muted ${className}`}>No runs.</p>;
+    if (loading && runs.length === 0) return <p className={`text-sm text-fg-muted ${className}`}>Loading…</p>;
+    return (
+      <div className={`overflow-auto ${className}`}>
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs text-fg-muted">
+            <tr>
+              {header("label", "", "Sort by name")}
+              {table.columns.map((c) =>
+                header(c.key, c.label, c.kind === "summary" ? `${c.label}: a summary value (run.summary)` : undefined, c.kind === "summary"),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r: ScalarsRow) => (
+              <tr key={r.unit.key} className="border-t border-border-subtle">
+                <td className="sticky left-0 bg-bg py-1 pr-4">
+                  <UnitLabel label={labelOf(r.unit)} color={colorOf(r.unit)} />
+                </td>
+                {table.columns.map((c) => (
+                  <td key={c.key} className={`py-1 pr-4 whitespace-nowrap ${c.kind === "info" ? "text-fg-muted" : "mono tabular-nums"}`}>
+                    <CellView col={c} v={r.cells[c.key] ?? null} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  return (
+    <CardShell
+      cardKind="scalars"
+      cardRef={cardRef}
+      settings={s}
+      updateSettings={ctl.set}
+      title={s.title ?? "Scalars"}
+      defaultHeight={260}
+      onSettings={() => setExpanded(true)}
+      onRemove={onRemove}
+      onDownload={() => {
+        const headers = ["run", ...table.columns.map((c) => c.label)];
+        const out = rows.map((r) => [labelOf(r.unit), ...table.columns.map((c) => cellText(c, r.cells[c.key] ?? null))]);
+        downloadCsv(headers, out, safeName(s.title ?? "scalars") + ".csv");
+      }}
+      settingsPanel={<ScalarsSettingsPanel ctl={ctl} mode="card" />}
+      modalOpen={expanded}
+      onModalClose={() => setExpanded(false)}
+      scrollIntoViewOnMount={autoOpenSettings}
+      modalContent={<div className="flex h-[calc(100vh-12rem)] flex-col">{body("flex-1 min-h-0")}</div>}
+    >
+      {body("flex-1 min-h-0")}
+    </CardShell>
+  );
+}
