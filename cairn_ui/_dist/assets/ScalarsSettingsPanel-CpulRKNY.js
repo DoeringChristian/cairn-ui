@@ -1,0 +1,1 @@
+import{j as s,B as n,H as e,a3 as i,D as o}from"./index-zqLQkKY4.js";function u({ctl:t}){const a=s.jsx(n,{name:"Layout",children:s.jsx(e,{label:"Show run info",description:"Status, duration, created, user and host first",...i(t,"showRunInfo")})});return s.jsx(o,{tabs:{display:a}})}export{u as default};

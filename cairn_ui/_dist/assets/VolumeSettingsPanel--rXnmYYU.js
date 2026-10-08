@@ -1,1 +1,0 @@
-import{j as s,D as i,G as n,Q as o}from"./index-7hc7MxdZ.js";function u({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{values:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{u as default};
