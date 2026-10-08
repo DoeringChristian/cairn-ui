@@ -90,22 +90,22 @@ export function shortRunId(runId: string): string {
  *
  * Returns a map of `runId → label` where each label is the shortest form
  * that uniquely identifies the run within the input set. The strategy
- * (per group of runs sharing a name):
+ * (per series: runs sharing a group and a name; a group is a namespace):
  *
- *   1. Just the name        — when the name is unique across the input.
- *   2. `name v<version>`    — when ≥2 runs share a name: the run's
- *                             server-assigned number in its series.
+ *   1. Just the name        — when the series has one run.
+ *   2. `name v<version>`    — when ≥2 runs share a series: the run's
+ *                             server-assigned number in it.
  *   3. `<group> · name v<n>` — every grouped run with a version, when
  *                             the input spans several groups
  *                             (`exp-43 · eval v2`, the workspace's grouped
  *                             runs); the other runs follow rules 1–2, 4.
  *   4. Runs lacking a version (unnamed, or no metadata) fall back to the
- *      time: `name HH:MM:SS` (all on one day), `name MMM dd HH:MM:SS`
+ *      time (after `<group> · name` when the input spans groups): `name HH:MM:SS` (all on one day), `name MMM dd HH:MM:SS`
  *      (across days), `name … (abc123)` when even that collides, and
  *      `abc123` (6-char hash) when no metadata is available.
  *
- * Each name-group is independent: singleton groups always get the bare name,
- * even if other groups need versions.
+ * Each series is independent: a one-run series gets the bare name (spanning
+ * groups: `<group> · name v<n>`), even if other series need versions.
  */
 export function disambiguateRunLabels(runIds: string[]): Record<string, string> {
   const result: Record<string, string> = {};
@@ -138,29 +138,33 @@ export function disambiguateRunLabels(runIds: string[]): Record<string, string> 
     };
   });
 
-  // Group by name.
-  const byName = new Map<string, Resolved[]>();
+  // Group by series (group, name): a group is a namespace, so collisions
+  // are per series. Spanning groups, a grouped run's base is `group · name`.
+  const spansGroups = new Set(resolved.map((r) => r.group)).size > 1;
+  const bySeries = new Map<string, Resolved[]>();
   for (const r of resolved) {
-    const arr = byName.get(r.name) ?? [];
+    const key = JSON.stringify([r.group, r.name]);
+    const arr = bySeries.get(key) ?? [];
     arr.push(r);
-    byName.set(r.name, arr);
+    bySeries.set(key, arr);
   }
 
-  const spansGroups = new Set(resolved.map((r) => r.group)).size > 1;
-  for (const [name, runs] of byName) {
-    const grouped = spansGroups ? runs.filter((r) => r.group != null && r.version != null) : [];
+  for (const runs of bySeries.values()) {
+    const { name, group } = runs[0]!;
+    const base = spansGroups && group != null ? `${group} · ${name}` : name;
+    const grouped = spansGroups && group != null ? runs.filter((r) => r.version != null) : [];
     const rest = runs.filter((r) => !grouped.includes(r));
     const withGroup: Record<string, string> = {};
-    for (const r of grouped) withGroup[r.runId] = `${r.group} · ${name} v${r.version}`;
+    for (const r of grouped) withGroup[r.runId] = `${base} v${r.version}`;
     Object.assign(result, withHashOnCollision(grouped, withGroup));
-    if (rest.length === 1) {
-      result[rest[0]!.runId] = name;
+    if (rest.length === 1 && grouped.length === 0) {
+      result[rest[0]!.runId] = base;
       continue;
     }
     Object.assign(
       result,
-      versionLabels(name, rest.filter((r) => r.version != null)),
-      timeLabels(name, rest.filter((r) => r.version == null)),
+      versionLabels(base, rest.filter((r) => r.version != null)),
+      timeLabels(base, rest.filter((r) => r.version == null)),
     );
   }
 

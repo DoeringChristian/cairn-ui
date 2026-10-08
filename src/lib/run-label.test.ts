@@ -64,3 +64,14 @@ test("unnamed runs and runs without metadata use the short id", () => {
   assert.equal(labels[a.id], a.id.slice(0, 6));
   assert.equal(labels[unknown], "ffffff");
 });
+
+test("collisions are per series: the same name in two groups never collides", () => {
+  // Spanning groups, unversioned grouped runs read `group · name` instead of colliding on the name.
+  const a = run({ display_name: "train", version: null, group: "exp-1" });
+  const b = run({ display_name: "train", version: null, group: "exp-2" });
+  assert.deepEqual(disambiguateRunLabels([a.id, b.id]), { [a.id]: "exp-1 · train", [b.id]: "exp-2 · train" });
+  // An ungrouped `train` is its own series next to a grouped one.
+  const u = run({ display_name: "train", version: 1, group: null });
+  const g = run({ display_name: "train", version: 1, group: "exp-1" });
+  assert.deepEqual(disambiguateRunLabels([u.id, g.id]), { [u.id]: "train", [g.id]: "exp-1 · train v1" });
+});

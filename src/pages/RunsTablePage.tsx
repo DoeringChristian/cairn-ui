@@ -36,6 +36,7 @@ import { GroupHeader, groupWorkspacePath } from "../components/runs-table/RunsTa
 import RunsTable from "../components/runs-table/RunsTable";
 import { useRunsTable } from "../components/runs-table/use-runs-table";
 import { runRowName, sameGroup, toggleGroupSelection, type StatusFilter } from "../lib/runs-table/model.ts";
+import { olderInSeries } from "../lib/run-series.ts";
 import RunControls, { RunSwatch } from "../components/RunViewControls";
 import {
   availableColumns,
@@ -198,40 +199,16 @@ export default function RunsTablePage() {
   }, [selected, bulkArchive]);
 
   const onArchiveOldVersions = useCallback(async () => {
-    const groups = new Map<string, Run[]>();
-    for (const r of runs) {
-      if (r.archived) continue;
-      const name = r.display_name ?? r.id;
-      const arr = groups.get(name) ?? [];
-      arr.push(r);
-      groups.set(name, arr);
-    }
-    const toArchive: string[] = [];
-    for (const [, group] of groups) {
-      if (group.length <= 1) continue;
-      group.sort((a, b) => b.created_at.localeCompare(a.created_at));
-      for (let i = 1; i < group.length; i++) toArchive.push(group[i]!.id);
-    }
+    // Every run but the newest of its series (group, name): a group is a namespace.
+    const toArchive = olderInSeries(runs.filter((r) => !r.archived)).map((r) => r.id);
     if (toArchive.length === 0) { alert("No old versions to archive."); return; }
     if (!confirm(`Archive ${toArchive.length} old run(s)?`)) return;
     await bulkArchive(toArchive, true);
   }, [runs, bulkArchive]);
 
   const onDeleteOldVersions = useCallback(async () => {
-    const groups = new Map<string, Run[]>();
-    for (const r of runs) {
-      if (r.archived) continue;
-      const name = r.display_name ?? r.id;
-      const arr = groups.get(name) ?? [];
-      arr.push(r);
-      groups.set(name, arr);
-    }
-    const toDelete: string[] = [];
-    for (const [, group] of groups) {
-      if (group.length <= 1) continue;
-      group.sort((a, b) => b.created_at.localeCompare(a.created_at));
-      for (let i = 1; i < group.length; i++) toDelete.push(group[i]!.id);
-    }
+    // Every run but the newest of its series (group, name): a group is a namespace.
+    const toDelete = olderInSeries(runs.filter((r) => !r.archived)).map((r) => r.id);
     if (toDelete.length === 0) { alert("No old versions to delete."); return; }
     if (!confirm(`Delete ${toDelete.length} old run(s)? This cannot be undone.`)) return;
     await bulkDelete(toDelete);

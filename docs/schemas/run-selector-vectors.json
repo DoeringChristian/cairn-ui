@@ -72,6 +72,27 @@
       "display_name": "sweep(1)+x",
       "tags": "[]",
       "created_at": "2026-01-01T00:00:08+00:00"
+    },
+    {
+      "id": "r13",
+      "display_name": "nsx",
+      "group": "g1",
+      "tags": "[]",
+      "created_at": "2026-01-01T00:00:00+00:00"
+    },
+    {
+      "id": "r14",
+      "display_name": "nsx",
+      "group": "g2",
+      "tags": "[]",
+      "created_at": "2026-01-01T00:00:00+00:00"
+    },
+    {
+      "id": "r15",
+      "display_name": "nsx",
+      "group": "g1",
+      "tags": "[]",
+      "created_at": "2025-12-31T23:59:59+00:00"
     }
   ],
   "cases": [
@@ -153,7 +174,10 @@
         "r04",
         "r03",
         "r02",
-        "r01"
+        "r01",
+        "r13",
+        "r14",
+        "r15"
       ]
     },
     {
@@ -185,7 +209,10 @@
         "r06",
         "r05",
         "r04",
-        "r03"
+        "r03",
+        "r02",
+        "r01",
+        "r13"
       ]
     },
     {
@@ -333,7 +360,10 @@
         "r04",
         "r03",
         "r02",
-        "r01"
+        "r01",
+        "r13",
+        "r14",
+        "r15"
       ]
     },
     {
@@ -429,7 +459,9 @@
         "r06",
         "r05",
         "r04",
-        "r03"
+        "r03",
+        "r13",
+        "r14"
       ]
     },
     {
@@ -505,6 +537,18 @@
         "r10",
         "r07",
         "r01"
+      ]
+    },
+    {
+      "name": "newest per name is per (group, name): a group is a namespace",
+      "selector": {
+        "kind": "query",
+        "mode": "newest-per-name",
+        "namePattern": "nsx"
+      },
+      "expected": [
+        "r13",
+        "r14"
       ]
     }
   ]

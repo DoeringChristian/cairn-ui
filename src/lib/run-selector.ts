@@ -22,6 +22,7 @@
  */
 
 import type { Run } from "../api/types";
+import { runSeriesKey } from "./run-series.ts";
 
 export interface StaticRunSelector {
   kind: "static";
@@ -110,13 +111,13 @@ export function resolveRunSelectorFromRuns(sel: RunSelector, runs: Run[]): strin
     return candidates.slice(0, n).map((r) => r.id);
   }
 
-  // newest-per-name: first occurrence per display name (sorted desc, so the
-  // first occurrence is the newest). Runs without a display name are each
-  // treated as their own "name" (keyed by id) rather than collapsed together.
+  // newest-per-name: the first occurrence per series (group, name) (sorted
+  // desc, so the first occurrence is the newest): a group is a namespace.
+  // Runs without a display name are each their own series (keyed by id).
   const seen = new Set<string>();
   const out: string[] = [];
   for (const r of candidates) {
-    const key = r.display_name || r.id;
+    const key = runSeriesKey(r);
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(r.id);

@@ -9,6 +9,7 @@ import type { Run, RunStatus } from "../../api/types.ts";
 import { matchesFilter, type GroupNode } from "../run-filter.ts";
 import type { RunGroupNode } from "./group.ts";
 import { matchesRunSearch, type RunSearch } from "./search.ts";
+import { bySeries, newerInSeries } from "../run-series.ts";
 
 /** The status filter: a status, every non-archived run ("all"), or the archived runs. */
 export type StatusFilter = "all" | "archived" | RunStatus;
@@ -35,31 +36,18 @@ export interface LatestRuns {
   latestByName: Set<string>;
 }
 
-/** Whether `a` is newer than `b` in one series: the higher version when both have one, else created_at. */
-function newer(a: Run, b: Run): boolean {
-  if (a.version != null && b.version != null && a.version !== b.version) return a.version > b.version;
-  return a.created_at > b.created_at;
-}
-
 /**
  * The newest run per series ("Latest only", and the highlight). A series is
- * (group, display name): versions are numbered per (project, group, name),
- * so `train` in two groups are two series.
+ * (group, display name) (lib/run-series.ts): versions are numbered per
+ * (project, group, name), so `train` in two groups are two series.
  */
 export function latestRuns(runs: readonly Run[]): LatestRuns {
-  const bySeries = new Map<string, Run>();
-  const counts = new Map<string, number>();
-  for (const r of runs) {
-    const key = JSON.stringify([r.group ?? null, r.display_name ?? r.id]);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-    const existing = bySeries.get(key);
-    if (!existing || newer(r, existing)) bySeries.set(key, r);
-  }
   const latestByName = new Set<string>();
   const latestIds = new Set<string>();
-  for (const [key, best] of bySeries) {
+  for (const list of bySeries(runs).values()) {
+    const best = list.reduce((b, r) => (newerInSeries(r, b) ? r : b));
     latestIds.add(best.id);
-    if ((counts.get(key) ?? 0) > 1) latestByName.add(best.id);
+    if (list.length > 1) latestByName.add(best.id);
   }
   return { latestIds, latestByName };
 }
