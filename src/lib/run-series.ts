@@ -3,7 +3,7 @@
  * versions in. `exp-44 · train` and `exp-43 · train` are different series,
  * and so is the same name under two job types; a missing group or job type
  * is part of the key. A run without a name is its own series (keyed by its
- * id). Mirrored by cairn/server/run_groups.py `run_series_key`.
+ * id). Mirrored by cairn/server/run_series.py `run_series_key`.
  */
 import type { Run } from "../api/types.ts";
 
