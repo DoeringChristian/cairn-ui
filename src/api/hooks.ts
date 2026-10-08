@@ -14,7 +14,7 @@ import { qk } from "./query-keys";
 import { MAX_LIVE_IDS, mergeLiveRuns, runningIds } from "./runs-live-core";
 import { addRunMetadata, setRunMetadata } from "../lib/run-label";
 import { RUN_SET_POOL } from "../lib/run-sets";
-import { rulesOf, type RuleOf } from "../lib/metric-rules";
+import { rulesOf, type MetricOverride, type MetricRulesDoc, type RuleOf } from "../lib/metric-rules";
 
 export function useHealth() {
   return useQuery({ queryKey: qk.health(), queryFn: api.health, refetchInterval: 5_000 });
@@ -459,11 +459,41 @@ export function useSweepAction(sweepId: string, projectId: string) {
  * rules.
  */
 export function useMetricRules(projectId: string | null | undefined): RuleOf {
+  const doc = useMetricRulesDoc(projectId);
+  return useMemo(() => rulesOf(doc), [doc]);
+}
+
+/** A project's metric rules document (logged, overrides, effective); undefined until loaded. */
+export function useMetricRulesDoc(projectId: string | null | undefined): MetricRulesDoc | undefined {
   const q = useQuery({
     queryKey: qk.metricRules(projectId ?? ""),
     queryFn: () => api.metricRules(projectId!),
     enabled: !!projectId,
     staleTime: 10_000,
   });
-  return useMemo(() => rulesOf(q.data), [q.data]);
+  return q.data;
+}
+
+/**
+ * Set (an override) or reset (`null`: back to the logged rule) one metric's
+ * rule in the project. The rule changes the values the runs show
+ * (`run.values`), so the rules, the runs lists and the run details are
+ * re-read.
+ */
+export function useSetMetricRule(projectId: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ metric, override }: { metric: string; override: MetricOverride | null }) =>
+      override ? api.setMetricRule(projectId!, metric, override) : api.resetMetricRule(projectId!, metric),
+    onSuccess: (doc) => {
+      if (projectId) qc.setQueryData(qk.metricRules(projectId), doc);
+    },
+    onSettled: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: qk.metricRules(projectId ?? "") }),
+        qc.invalidateQueries({ queryKey: qk.runs() }),
+        qc.invalidateQueries({ queryKey: qk.runsInfinite() }),
+        qc.invalidateQueries({ queryKey: ["run"] }),
+      ]),
+  });
 }

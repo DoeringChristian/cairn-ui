@@ -21,6 +21,8 @@ import { isSystemMetric } from "./metric-defs.ts";
 import { decodeConfigValue } from "./plot-utils/format.ts";
 import { parseTags } from "./runs-table/context.ts";
 import type { RunSummaryPresence } from "./workspace/summary-cards.ts";
+import type { Goal } from "./metric-rules.ts";
+import { computeCellStatuses } from "./table-diff.ts";
 
 export type Scalar = string | number | boolean | null;
 
@@ -236,6 +238,24 @@ export function scalarsTable(runs: readonly TableRun[], opts: ScalarsOptions): S
     return { unit, cells };
   });
   return { columns, rows };
+}
+
+/** A cell's mark in a metric column with a goal: the best (green) or worst (red) row. */
+export type Mark = "best" | "worst" | null;
+
+/**
+ * Best and worst rows of one metric column (the run comparer's rule,
+ * lib/table-diff.ts): with a goal and at least two numeric values, every
+ * row at the best value is `best`, every row at the worst `worst`; all equal,
+ * no goal, or fewer than two values: none. Missing, mixed and non-numeric
+ * cells are never marked.
+ */
+export function bestWorst(cells: readonly Cell[], goal: Goal): Mark[] {
+  if (goal === "none") return cells.map(() => null);
+  const nums = cells.map((c) => (typeof c === "number" && Number.isFinite(c) ? c : null));
+  return computeCellStatuses(nums).map((st) =>
+    st === "higher" ? (goal === "higher" ? "best" : "worst") : st === "lower" ? (goal === "lower" ? "best" : "worst") : null,
+  );
 }
 
 /** A column sort: `"label"` (the row label) or a column key. */

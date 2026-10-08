@@ -69,3 +69,40 @@ export function rulesOf(doc: MetricRulesDoc | null | undefined): RuleOf {
 export function goalDirection(goal: Goal): "min" | "max" | null {
   return goal === "lower" ? "min" : goal === "higher" ? "max" : null;
 }
+
+export const SUMMARIES: readonly Summary[] = ["min", "max", "mean", "last"];
+export const GOALS: readonly Goal[] = ["lower", "higher", "none"];
+export const GOAL_LABEL: Record<Goal, string> = { lower: "lower is better", higher: "higher is better", none: "none" };
+
+/** What a metric column's header menu shows: the effective rule, the logged one, and whether the project overrides it. */
+export interface MetricRuleMenuState {
+  /** The effective summary (no rule: `last`, the last point). */
+  summary: Summary;
+  goal: Goal;
+  logged: Summary | null;
+  override: MetricOverride | null;
+  /** `logged: summary=min · project overrides`. */
+  note: string;
+}
+
+export function metricRuleMenuState(doc: MetricRulesDoc | null | undefined, metric: string): MetricRuleMenuState {
+  const has = (o: object | undefined) => !!o && Object.prototype.hasOwnProperty.call(o, metric);
+  const logged = has(doc?.logged) ? doc!.logged[metric]! : null;
+  const override = has(doc?.overrides) ? doc!.overrides[metric]! : null;
+  const rule = effectiveRule(override, logged);
+  return {
+    summary: rule.summary ?? "last",
+    goal: rule.goal,
+    logged,
+    override,
+    note: `logged: summary=${logged ?? "none"}${override ? " · project overrides" : ""}`,
+  };
+}
+
+/**
+ * The override after picking a summary or goal in the menu: the other field
+ * keeps its override (unset stays unset).
+ */
+export function withPick(override: MetricOverride | null, pick: { summary: Summary } | { goal: Goal }): MetricOverride {
+  return { summary: override?.summary ?? null, goal: override?.goal ?? null, ...pick };
+}

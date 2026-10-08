@@ -11,6 +11,7 @@ import { showInWorkspace } from "../lib/workspace-runs/show-in-workspace";
 import { downloadBlob } from "../lib/download";
 import { api } from "../api/client";
 import Popover from "../components/ui/Popover";
+import MetricColumnMenu, { MENU_ITEM } from "../components/MetricColumnMenu";
 import BulkTagEditor from "../components/BulkTagEditor";
 import ImportRunsDialog from "../components/ImportRunsDialog";
 import CopyId from "../components/CopyId";
@@ -795,7 +796,16 @@ export default function RunsTablePage() {
         role="menu"
         bodyClassName="p-1"
       >
-        {menuColumn && (
+        {menuColumn && columnKind(menuColumn).kind === "value" && (
+          <MetricColumnMenu
+            projectId={projectId}
+            metric={columnKind(menuColumn).key}
+            onSort={(direction) => setSort([{ column: menuColumn, direction }])}
+            onHide={() => setColumns(setHidden(columns, menuColumn, true))}
+            onClose={() => setMenuColumn(null)}
+          />
+        )}
+        {menuColumn && columnKind(menuColumn).kind !== "value" && (
           <ColumnMenu
             column={menuColumn}
             columns={columns}
@@ -1067,7 +1077,7 @@ function ColumnTh({
             onMenu(e.currentTarget);
           }}
         >
-          <i className="fa-solid fa-ellipsis-vertical text-[10px]" aria-hidden="true" />
+          <i className={`fa-solid ${columnKind(column).kind === "value" ? "fa-caret-down" : "fa-ellipsis-vertical"} text-[10px]`} aria-hidden="true" />
         </button>
       </span>
       {/* Resize handle on the right edge; double-click resets the width. */}
@@ -1092,9 +1102,6 @@ function ColumnTh({
     </th>
   );
 }
-
-const MENU_ITEM =
-  "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-fg hover:bg-bg-hover disabled:opacity-40 touch:min-h-10";
 
 function ColumnMenu({
   column,

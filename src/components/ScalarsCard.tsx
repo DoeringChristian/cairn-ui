@@ -2,8 +2,11 @@
  * Scalars card (the Summary section): one table of every metric logged at a
  * single step, the runs' `summary` values (headers in italics) and run info
  * (status, duration, created, user, host; "show run info"). One row per
- * shown run, or per group when the workspace is grouped (a group's mean;
- * lib/summary-tables.ts). Click a header to sort by it.
+ * shown run, or per innermost group when the workspace is grouped (a
+ * group's mean; lib/summary-tables.ts). Click a header to sort by it. A
+ * metric column's ▾ menu sorts, sets the project's rule for the metric
+ * (summary, goal; components/MetricColumnMenu.tsx) and hides the column;
+ * with a goal, the best row is green and the worst red.
  */
 
 import { useMemo, useRef, useState } from "react";
@@ -12,7 +15,11 @@ import { useCardSettings } from "../lib/card-settings";
 import { downloadCsv, safeName } from "../lib/download";
 import { isSystemMetric } from "../lib/metric-defs";
 import { formatValue } from "../lib/plot-utils/format";
-import { MIXED, nextSort, scalarsTable, sortRows, type Cell, type Column, type ScalarsRow } from "../lib/summary-tables";
+import { bestWorst, MIXED, nextSort, scalarsTable, sortRows, type Cell, type Column, type Mark, type ScalarsRow } from "../lib/summary-tables";
+import { useMetricRules } from "../api/hooks";
+import { useProjectId } from "../lib/project-context";
+import MetricColumnMenu from "./MetricColumnMenu";
+import Popover from "./ui/Popover";
 import { isSingleStepScalar } from "../lib/workspace/summary-cards";
 import CardShell from "./CardShell";
 import RunStatusBadge from "./RunStatusBadge";
@@ -27,6 +34,9 @@ interface Props {
   onRemove?: () => void;
   autoOpenSettings?: boolean;
 }
+
+/** Best / worst cells: the run comparer's tints (lib/table-diff.ts `diffCellClassName`). */
+const MARK_CLASS: Record<NonNullable<Mark> | "none", string> = { best: "bg-green-900/30", worst: "bg-red-900/30", none: "" };
 
 const STATUSES = new Set<string>(["running", "completed", "failed", "crashed", "killed", "stopped"]);
 
@@ -68,11 +78,28 @@ export default function ScalarsCard({ runIds: allRunIds, settingsKey, onRemove, 
     () => scalarsTable(runs, { singleStep, groupOf, showRunInfo: s.showRunInfo, now: Date.now() }),
     [runs, singleStep, groupOf, s.showRunInfo],
   );
-  const sort = s.sort && (s.sort.key === "label" || table.columns.some((c) => c.key === s.sort!.key)) ? s.sort : null;
+  const hidden = useMemo(() => new Set(s.hidden ?? []), [s.hidden]);
+  const columns = useMemo(() => table.columns.filter((c) => !hidden.has(c.key)), [table.columns, hidden]);
+  const sort = s.sort && (s.sort.key === "label" || columns.some((c) => c.key === s.sort!.key)) ? s.sort : null;
   const rows = useMemo(() => sortRows(table.rows, sort, (r) => labelOf(r.unit)), [table.rows, sort, labelOf]);
   const cardRef = useRef<HTMLDivElement>(null);
+  const projectId = useProjectId();
+  const ruleOf = useMetricRules(projectId);
+  // Metric columns with a goal: the best row green, the worst red (as the run comparer).
+  const marks = useMemo(() => {
+    const out = new Map<string, Mark[]>();
+    for (const c of columns) {
+      if (c.kind !== "metric") continue;
+      const m = bestWorst(rows.map((r) => r.cells[c.key] ?? null), ruleOf(c.label).goal);
+      if (m.some((x) => x !== null)) out.set(c.key, m);
+    }
+    return out;
+  }, [columns, rows, ruleOf]);
+  const [menu, setMenu] = useState<string | null>(null);
+  const menuAnchor = useRef<HTMLElement | null>(null);
+  const menuColumn = columns.find((c) => c.key === menu) ?? null;
 
-  const header = (key: string, label: string, title?: string, italic = false) => {
+  const header = (key: string, label: string, title?: string, italic = false, metric = false) => {
     const on = sort?.key === key;
     return (
       <th key={key} className="sticky top-0 z-10 bg-bg pb-1 pr-4 font-medium whitespace-nowrap" aria-sort={on ? (sort!.desc ? "descending" : "ascending") : "none"}>
@@ -89,6 +116,19 @@ export default function ScalarsCard({ runIds: allRunIds, settingsKey, onRemove, 
             aria-hidden="true"
           />
         </button>
+        {metric && (
+          <button
+            type="button"
+            className="ml-0.5 rounded px-1 text-fg-subtle hover:bg-bg-hover hover:text-fg"
+            aria-label={`Column options for ${label}`}
+            onClick={(e) => {
+              menuAnchor.current = e.currentTarget;
+              setMenu((m) => (m === key ? null : key));
+            }}
+          >
+            <i className="fa-solid fa-caret-down text-[10px]" aria-hidden="true" />
+          </button>
+        )}
       </th>
     );
   };
@@ -102,19 +142,29 @@ export default function ScalarsCard({ runIds: allRunIds, settingsKey, onRemove, 
           <thead className="text-left text-xs text-fg-muted">
             <tr>
               {header("label", "", "Sort by name")}
-              {table.columns.map((c) =>
-                header(c.key, c.label, c.kind === "summary" ? `${c.label}: a summary value (run.summary)` : undefined, c.kind === "summary"),
+              {columns.map((c) =>
+                header(
+                  c.key,
+                  c.label,
+                  c.kind === "summary" ? `${c.label}: a summary value (run.summary)` : undefined,
+                  c.kind === "summary",
+                  c.kind === "metric",
+                ),
               )}
             </tr>
           </thead>
           <tbody>
-            {rows.map((r: ScalarsRow) => (
+            {rows.map((r: ScalarsRow, ri) => (
               <tr key={r.unit.key} className="border-t border-border-subtle">
                 <td className="sticky left-0 bg-bg py-1 pr-4">
                   <UnitLabel label={labelOf(r.unit)} color={colorOf(r.unit)} />
                 </td>
-                {table.columns.map((c) => (
-                  <td key={c.key} className={`py-1 pr-4 whitespace-nowrap ${c.kind === "info" ? "text-fg-muted" : "mono tabular-nums"}`}>
+                {columns.map((c) => (
+                  <td
+                    key={c.key}
+                    className={`py-1 pr-4 whitespace-nowrap ${c.kind === "info" ? "text-fg-muted" : "mono tabular-nums"} ${MARK_CLASS[marks.get(c.key)?.[ri] ?? "none"]}`}
+                    data-mark={marks.get(c.key)?.[ri] ?? undefined}
+                  >
                     <CellView col={c} v={r.cells[c.key] ?? null} />
                   </td>
                 ))}
@@ -122,6 +172,27 @@ export default function ScalarsCard({ runIds: allRunIds, settingsKey, onRemove, 
             ))}
           </tbody>
         </table>
+        <Popover
+          open={menuColumn !== null}
+          onClose={() => setMenu(null)}
+          anchorRef={menuAnchor}
+          title={menuColumn?.label ?? ""}
+          titleAnchored
+          width={280}
+          align="start"
+          role="menu"
+          bodyClassName="p-1"
+        >
+          {menuColumn && (
+            <MetricColumnMenu
+              projectId={projectId}
+              metric={menuColumn.label}
+              onSort={(direction) => !ctl.locked && ctl.set({ sort: { key: menuColumn.key, desc: direction === "desc" } })}
+              onHide={() => !ctl.locked && ctl.set({ hidden: [...(s.hidden ?? []), menuColumn.key] })}
+              onClose={() => setMenu(null)}
+            />
+          )}
+        </Popover>
       </div>
     );
   };
@@ -137,8 +208,8 @@ export default function ScalarsCard({ runIds: allRunIds, settingsKey, onRemove, 
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
       onDownload={() => {
-        const headers = ["run", ...table.columns.map((c) => c.label)];
-        const out = rows.map((r) => [labelOf(r.unit), ...table.columns.map((c) => cellText(c, r.cells[c.key] ?? null))]);
+        const headers = ["run", ...columns.map((c) => c.label)];
+        const out = rows.map((r) => [labelOf(r.unit), ...columns.map((c) => cellText(c, r.cells[c.key] ?? null))]);
         downloadCsv(headers, out, safeName(s.title ?? "scalars") + ".csv");
       }}
       settingsPanel={<ScalarsSettingsPanel ctl={ctl} mode="card" />}

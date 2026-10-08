@@ -3,7 +3,8 @@
  * (dotted, as the runs table), tags and notes first, one column per run —
  * or per group when the workspace is grouped (its value when all its runs
  * agree, else `mixed`; lib/summary-tables.ts). "Only diffs" hides the keys
- * that are the same in every column.
+ * that are the same in every column; the rows that differ are tinted (the
+ * run comparer's tint).
  */
 
 import { useMemo, useRef, useState } from "react";
@@ -23,6 +24,9 @@ interface Props {
   onRemove?: () => void;
   autoOpenSettings?: boolean;
 }
+
+/** A differing row's tint over the opaque sticky key cell (the run comparer's, CompareRowsTable). */
+const DIFF_TINT = "linear-gradient(rgb(var(--color-accent-rgb) / 0.05), rgb(var(--color-accent-rgb) / 0.05))";
 
 const text = (v: Cell) => (v == null ? "" : v === MIXED ? "mixed" : formatValue(v, { exact: true }));
 
@@ -52,8 +56,13 @@ export default function ConfigCard({ runIds: allRunIds, settingsKey, onRemove, a
           </thead>
           <tbody>
             {table.rows.map((r) => (
-              <tr key={`${r.kind}:${r.key}`} className="border-t border-border-subtle">
-                <td className={`sticky left-0 bg-bg py-1 pr-4 whitespace-nowrap ${r.kind === "config" ? "mono" : "text-fg-muted"}`}>{r.key}</td>
+              <tr key={`${r.kind}:${r.key}`} className={`border-t border-border-subtle ${r.differs ? "bg-accent/5" : ""}`} data-differs={r.differs || undefined}>
+                <td
+                  className={`sticky left-0 bg-bg py-1 pr-4 whitespace-nowrap ${r.kind === "config" ? "mono" : "text-fg-muted"} ${r.differs ? "border-l-2 border-accent" : ""}`}
+                  style={r.differs ? { backgroundImage: DIFF_TINT } : undefined}
+                >
+                  {r.key}
+                </td>
                 {r.cells.map((v, i) => (
                   <td key={table.units[i]!.key} className={`py-1 pr-4 ${r.kind === "config" ? "mono tabular-nums" : ""}`}>
                     {v == null || v === MIXED ? (

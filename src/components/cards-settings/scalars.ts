@@ -6,12 +6,15 @@ export interface ScalarsSettings extends BaseCardSettings {
   showRunInfo: boolean;
   /** The column the rows are sorted by (`label`: the row label, else a column key); null: as listed. */
   sort: { key: string; desc: boolean } | null;
+  /** Column keys hidden from the header menu ("Hide column"). */
+  hidden: string[];
 }
 
 export const builtin: ScalarsSettings = {
   version: 1,
   showRunInfo: true,
   sort: null,
+  hidden: [],
   colSpan: 6,
 };
 

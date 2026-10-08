@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { RunDetailResponse } from "../api/types.ts";
 import {
+  bestWorst,
   aggregate,
   agreement,
   configTable,
@@ -143,4 +144,18 @@ test("a run detail as a table run; what it has for the Summary cards", () => {
   assert.deepEqual(t.tags, ["t"]);
   assert.equal(t.notes, "n");
   assert.deepEqual(summaryPresenceOf(rd), { runId: "r", summaryKeys: 1, configKeys: 2, tags: 1, notes: true });
+});
+
+test("bestWorst: per goal, ties share a mark, missing / mixed / non-numeric never marked", () => {
+  assert.deepEqual(bestWorst([0.3, 0.1, 0.2], "lower"), ["worst", "best", null]);
+  assert.deepEqual(bestWorst([0.3, 0.1, 0.2], "higher"), ["best", "worst", null]);
+  assert.deepEqual(bestWorst([0.1, 0.3, 0.1, 0.2], "lower"), ["best", "worst", "best", null]);
+  assert.deepEqual(bestWorst([0.1, null, MIXED, "x", 0.5], "lower"), ["best", null, null, null, "worst"]);
+  assert.deepEqual(bestWorst([0.3, 0.1], "none"), [null, null]);
+});
+
+test("bestWorst: fewer than two values, or all equal: nothing marked", () => {
+  assert.deepEqual(bestWorst([0.3], "lower"), [null]);
+  assert.deepEqual(bestWorst([0.3, null], "lower"), [null, null]);
+  assert.deepEqual(bestWorst([0.2, 0.2], "higher"), [null, null]);
 });
