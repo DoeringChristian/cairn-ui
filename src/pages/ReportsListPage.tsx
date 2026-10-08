@@ -2,8 +2,7 @@
  * Reports list page — /p/:projectId/reports
  *
  * Create/rename/delete reports; click through to the editor/viewer; apply a
- * saved report template to a picked run set (mirrors ComparePage's
- * TemplateSidebar "New from template" picker).
+ * saved report template to a picked run set.
  */
 
 import { RUN_SET_POOL } from "../lib/run-sets";

@@ -141,8 +141,7 @@ export default function ReportEditorPage() {
   const rawCairnSourceRef = useRef<Record<string, string>>({});
 
   // Transient "restored N of M cards" feedback handed over from
-  // ReportsListPage's "New from template" apply (mirrors ComparePage's
-  // templateApplyFeedback router-state handling).
+  // ReportsListPage's "New from template" apply (router state).
   const location = useLocation();
   const [applyBanner, setApplyBanner] = useState<string | null>(
     (location.state as { templateApplyFeedback?: string } | null)?.templateApplyFeedback ?? null,

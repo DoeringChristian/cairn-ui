@@ -28,7 +28,7 @@ export interface ComparisonCard {
  * `kind: "multi-run"` union and key their settings on `card.type` (see
  * `cardSettingsKeyFor`), unlike per-metric cards which key on `card.id`.
  *
- * Centralized here so every dispatch site (CardRenderer, ComparePage,
+ * Centralized here so every dispatch site (CardRenderer,
  * AddCardModal, sync.cardSettingsKeyFor) agrees on the same list.
  */
 export const MULTI_RUN_CARD_TYPES = ["parallel", "scatter", "bar", "tile", "importance", "run-compare", "code-diff", "scalars", "config"] as const;

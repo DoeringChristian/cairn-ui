@@ -1,6 +1,6 @@
 /**
- * Shared card renderer used by both the run page's Workspace tab (CardGrid)
- * and the Comparison view (ComparePage). One code path for all card types.
+ * Shared card renderer used by the run page's Workspace tab, the project
+ * workspace and report cells. One code path for all card types.
  */
 
 import CardErrorBoundary from "./card-kit/CardErrorBoundary";
