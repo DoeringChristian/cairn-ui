@@ -24,7 +24,7 @@ import { WorkspaceGroupingContext, type WorkspaceGrouping } from "../lib/workspa
 import { cardRuns, resolveVisibility } from "../lib/workspace-runs/visibility";
 import { filterFieldsOf } from "../lib/run-filter";
 import type { RunGroupNode } from "../lib/runs-table/group";
-import { DEFAULT_SORT } from "../lib/runs-table/sort";
+import { editProject, projectRunState } from "../lib/workspace-runs/state";
 import { useRunColors } from "../lib/run-view";
 import { ops } from "../lib/workspace/doc";
 import { refKey, viewRef, type WorkspaceRef } from "../lib/workspace/ref";
@@ -50,7 +50,7 @@ export default function WorkspacePage() {
 function Workspace({ wsRef }: { wsRef: WorkspaceRef }) {
   const projectId = wsRef.projectId;
   const { doc, update } = useWorkspace(wsRef);
-  const state = doc.runState;
+  const state = useMemo(() => projectRunState(doc.runState), [doc.runState]);
   // Archived too (Status › archived); params and stats: the filter and group-by read them (as in the runs table).
   const runsQ = useRuns({ project: projectId, limit: RUNS_LIMIT, include: ["params", "stats"] });
   const runs = useMemo(() => runsQ.data?.runs ?? [], [runsQ.data]);
@@ -68,7 +68,7 @@ function Workspace({ wsRef }: { wsRef: WorkspaceRef }) {
     filter: state.filter,
     latestOnly: state.latestOnly,
     groupBy: state.groupBy,
-    sort: DEFAULT_SORT,
+    sort: state.sort,
     computed: NO_COMPUTED,
     pinned: NO_PINNED,
     defaultCollapsed: firstGroupOpen,
@@ -81,7 +81,7 @@ function Workspace({ wsRef }: { wsRef: WorkspaceRef }) {
   const colors = useRunColors(cards.runIds);
 
   const edit = useCallback<RunStateEdit>(
-    (fn, label, mergeKey) => update(ops.updateRunState(fn), { label, mergeKey }),
+    (fn, label, mergeKey) => update(ops.updateRunState(editProject(fn)), { label, mergeKey }),
     [update],
   );
 

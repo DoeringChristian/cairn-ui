@@ -8,6 +8,7 @@ import { api } from "../../api/client";
 import { ops } from "../workspace/doc";
 import { viewRef } from "../workspace/ref";
 import { fetchWorkspace, flushWorkspace, updateWorkspace } from "../workspace/sync";
+import { editProject } from "./state";
 import { showOnly } from "./visibility";
 
 export async function showInWorkspace(projectId: string, ticked: ReadonlySet<string>): Promise<void> {
@@ -17,6 +18,6 @@ export async function showInWorkspace(projectId: string, ticked: ReadonlySet<str
   ]);
   const ref = viewRef(projectId, current);
   await fetchWorkspace(ref, { force: true });
-  updateWorkspace(ref, ops.updateRunState((s) => showOnly(s, runs, ticked)));
+  updateWorkspace(ref, ops.updateRunState(editProject((s) => showOnly(s, runs, ticked))));
   await flushWorkspace(ref);
 }
