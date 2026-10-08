@@ -5,8 +5,9 @@
  * (lib/run-sets.ts), resolved live against the project's runs (or fixed by
  * the caller: a share link's server-resolved sets). The cards draw the union
  * of the sets' runs; with several sets each set has its own colour family.
- * The sets are shown in a "Runs" dialog opened from the cell toolbar
- * (RunSetsPanel), so the report itself shows only its cards.
+ * The sets are listed and edited in a "Runs" dialog opened from the cell
+ * toolbar (RunSetsPanel: add, edit, remove, insert from the workspace), so
+ * the report itself shows only its cards.
  *
  * Report cards resolve against built-in defaults only (no workspace or
  * section defaults), so a report looks the same to everyone. `readOnly`
@@ -23,6 +24,7 @@ import { CELL_TOOLBAR_BTN } from "./cell-toolbar";
 import { CardCommentsContext, ReportCommentsContext } from "./comments-context";
 import RunSetsPanel from "./RunSetsPanel";
 import { shouldAutoRebind } from "../../lib/reports/run-set-rebind";
+import { insertFromWorkspace } from "../../lib/reports/insert-from-workspace";
 import { CardMutationContext, CardSettingsChangeContext, loadCardOverrides, saveCardOverrides } from "../../lib/card-settings";
 import { PanelActionsContext } from "../../lib/workspace/panel-actions";
 import { CascadeScopeContext } from "../../lib/settings-scope";
@@ -128,6 +130,12 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
     } finally {
       setResetting(false);
     }
+  };
+
+  // "⤓ Insert from workspace": a set copying the workspace's run state; a cell without cards also gets its layout's cards.
+  const handleInsertFromWorkspace = async () => {
+    const r = await insertFromWorkspace({ projectId, reportId, sets: block.runSets, copyCards: block.cards.length === 0, pool: pool ?? [] });
+    onChange({ ...block, runSets: r.runSets, ...(r.cards ? { cards: r.cards } : {}), notice: undefined });
   };
 
   // Auto-rebind: when the resolved runs change, rebind the existing cards to
@@ -261,10 +269,12 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
       <Dialog open={runsOpen} onClose={() => setRunsOpen(false)} title="Runs in this cell">
         <DialogBody>
           <RunSetsPanel
+            projectId={projectId}
             sets={block.runSets}
             resolved={resolvedSets}
             pool={pool ?? []}
             onChange={readOnly ? undefined : setRunSets}
+            onInsertFromWorkspace={readOnly || fixed || !pool ? undefined : handleInsertFromWorkspace}
             actions={
               !readOnly && (
                 <button

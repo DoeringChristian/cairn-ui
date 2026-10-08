@@ -35,7 +35,6 @@ import { useWorkspaceMetrics } from "./use-workspace-metrics";
 import { useSession } from "../../api/hooks";
 import { CardMutationContext, CardSettingsStoreContext, type CardOverrides, type CardSettingsKey, type CardSettingsStore } from "../../lib/card-settings";
 import type { CardType } from "../../lib/cards/card-spec";
-import { isMultiRunCardType, type ComparisonCard } from "../../lib/comparisons/types";
 import { CardNavProvider } from "../../lib/card-nav";
 import { ChartSyncProvider } from "../../lib/chart-sync";
 import { WorkspaceDefaultsProvider } from "../../lib/settings-scope";
@@ -58,6 +57,7 @@ import { moveCardOp, moveSectionOp, reorderBeforeId, type CardSpot } from "../..
 import { PanelActionsContext } from "../../lib/workspace/panel-actions";
 import { refKey, WorkspaceRefContext, type WorkspaceRef } from "../../lib/workspace/ref";
 import { sendCardsToReport } from "../../lib/workspace/send-to-report";
+import { layoutCards } from "../../lib/workspace/layout-cards";
 import { getWorkspace, subscribeWorkspace } from "../../lib/workspace/store";
 import { useWorkspace } from "../../lib/workspace/use-workspace";
 
@@ -370,14 +370,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
   const sendSection = useCallback(
     async (section: RenderedSection) => {
       const projectId = wsRef.projectId;
-      const cards = section.panels.flatMap((rp): Array<{ card: ComparisonCard; settings: Record<string, unknown> }> => {
-        const settings = findPanel(getWorkspace(key), rp.panel.id)?.panel.settings ?? {};
-        if (isMultiRunCardType(rp.panel.type)) {
-          return [{ card: { id: rp.panel.id, type: rp.panel.type, series: runIds.map((runId) => ({ runId, name: rp.label })) }, settings }];
-        }
-        const series = rp.metrics.flatMap((m) => runIds.filter((r) => m.runIds.includes(r)).map((runId) => ({ runId, name: m.name })));
-        return series.length ? [{ card: { id: rp.panel.id, type: rp.panel.type, series }, settings }] : [];
-      });
+      const cards = layoutCards(section.panels, runIds, (id) => findPanel(getWorkspace(key), id)?.panel.settings ?? {});
       const reportId = await sendCardsToReport({
         projectId,
         name: `${section.name} · ${reportLabel}`,

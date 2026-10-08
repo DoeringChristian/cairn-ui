@@ -27,7 +27,8 @@ import { RunHoverContext, RunHoverStore } from "../../lib/workspace-runs/hover";
 import { cardRuns, resolveVisibility } from "../../lib/workspace-runs/visibility";
 import { filterFieldsOf } from "../../lib/run-filter";
 import { availableColumns } from "../../lib/runs-table/columns";
-import { innermostLineOf, type RunGroupNode } from "../../lib/runs-table/group";
+import { innermostLineOf } from "../../lib/runs-table/group";
+import { firstGroupOpen } from "../../lib/runs-table/model";
 import { useRunColors } from "../../lib/run-view";
 import { groupLineColors } from "../../lib/run-color";
 import { useProjectRunView } from "../../lib/run-view-store";
@@ -39,8 +40,6 @@ import { useWorkspace } from "../../lib/workspace/use-workspace";
 /** The runs the sidebar lists from (the runs route's cap). */
 const RUNS_LIMIT = 1000;
 const NO_COMPUTED: never[] = [];
-/** The first top-level group and the no-value group start open, the other top-level groups collapsed. */
-const firstGroupOpen = (n: RunGroupNode, i: number) => n.depth === 0 && i > 0 && n.label != null;
 
 export default function RunsWorkspace({ wsRef }: { wsRef: WorkspaceRef }) {
   const projectId = wsRef.projectId;

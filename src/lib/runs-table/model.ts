@@ -118,6 +118,9 @@ export function collapsedGroups(
   return out;
 }
 
+/** The workspace sidebar's default: the first top-level group and the no-value group open, the other top-level groups collapsed. */
+export const firstGroupOpen = (n: RunGroupNode, i: number) => n.depth === 0 && i > 0 && n.label != null;
+
 /** Every run in the same (non-null) group: the group needs no saying on each row (e.g. filtered to one group). */
 export function sameGroup(runs: readonly Pick<Run, "group">[]): boolean {
   const g = runs[0]?.group;

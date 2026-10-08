@@ -111,6 +111,57 @@ export function runSetOfIds(ids: readonly string[], name = "Run set 1"): RunSet 
   };
 }
 
+// --- editing (the Runs dialog's run set list) --------------------------------
+
+/** `base`, or `base 2`, `base 3`, … : the first name no set has. */
+export function uniqueRunSetName(sets: readonly RunSet[], base: string): string {
+  const taken = new Set(sets.map((s) => s.name));
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;
+}
+
+/** "+ Add run set": a default set (every run, newest 10 visible), `Run set <n>`. */
+export function addRunSet(sets: readonly RunSet[]): RunSet[] {
+  return [...sets, defaultRunSet(uniqueRunSetName(sets, `Run set ${sets.length + 1}`))];
+}
+
+/** The last set cannot be removed. */
+export const canRemoveRunSet = (sets: readonly RunSet[]) => sets.length > 1;
+
+/** ✕: the set gone, unless it is the last one. */
+export function removeRunSet(sets: readonly RunSet[], index: number): RunSet[] {
+  if (!canRemoveRunSet(sets) || index < 0 || index >= sets.length) return [...sets];
+  return sets.filter((_, i) => i !== index);
+}
+
+/** One set changed (its name, or its frozen runs table state). */
+export function updateRunSet(sets: readonly RunSet[], index: number, fn: (s: RunSet) => RunSet): RunSet[] {
+  return sets.map((s, i) => (i === index ? fn(s) : s));
+}
+
+export const renameRunSet = (sets: readonly RunSet[], index: number, name: string): RunSet[] =>
+  updateRunSet(sets, index, (s) => ({ ...s, name }));
+
+/** The runs table state a set freezes (the workspace's run state minus its status and search). */
+export type FrozenRunsState = Pick<RunSet, "filter" | "groupBy" | "latestOnly" | "sort" | "eyes">;
+
+/** A set frozen from a runs table state (the workspace view's `runState`): a copy, so later edits there do not reach it. */
+export function runSetFromState(state: FrozenRunsState, name: string): RunSet {
+  return structuredClone({
+    name,
+    filter: state.filter,
+    groupBy: state.groupBy,
+    latestOnly: state.latestOnly,
+    sort: state.sort,
+    eyes: state.eyes,
+  });
+}
+
+/** "⤓ Insert from workspace": a set copying the workspace view's run state, named after the view. */
+export function insertRunSetFromWorkspace(sets: readonly RunSet[], state: FrozenRunsState, viewName: string): RunSet[] {
+  return [...sets, runSetFromState(state, uniqueRunSetName(sets, viewName || "Workspace"))];
+}
+
 // --- colour families ---------------------------------------------------------
 
 /** `#rrggbb` of an HSL colour (h in degrees, s and l in [0, 1]). */
@@ -126,6 +177,11 @@ export function hslHex(h: number, s: number, l: number): string {
 
 /** Each set's hue (degrees): blue, red, green, orange, purple, teal, brown, pink. */
 const FAMILY_HUES = [212, 0, 128, 30, 275, 180, 20, 320];
+
+/** A set's colour family, as its dot in the run set list: the family's middle shade. */
+export function runSetFamilyColor(index: number): string {
+  return hslHex(FAMILY_HUES[index % FAMILY_HUES.length]!, 0.7, 0.49);
+}
 
 /**
  * Colours of a cell with several run sets: each set its own colour family
