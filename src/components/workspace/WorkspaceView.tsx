@@ -45,7 +45,8 @@ import {
   autoPanelsOp,
   deriveLayout,
   uniqueSectionName,
-  panelsToMaterialize,
+  materializeOp as materializePanelOp,
+  withoutEmptyPanels,
   type RenderedPanel,
   type RenderedSection,
 } from "../../lib/workspace/layout";
@@ -64,7 +65,6 @@ const NEW_SECTION_NAME = "New section";
 const FIRST_SECTION_NAME = "Charts";
 
 const EMPTY_SETTINGS: CardOverrides = Object.freeze({}) as CardOverrides;
-const identity: WorkspaceOp = (d) => d;
 
 interface Props {
   wsRef: WorkspaceRef;
@@ -72,6 +72,15 @@ interface Props {
   runIds: readonly string[];
   /** Names the reports "send section to report" creates: `<section> · <reportLabel>`. */
   reportLabel: string;
+  /** Only these of the runs' metrics (a module-level function: it is a memo dependency). */
+  metricFilter?: (name: string) => boolean;
+  /**
+   * The run page: cards showing nothing the run logs, and sections left
+   * without cards, are not rendered (lib/workspace/layout.ts `withoutEmptyPanels`).
+   */
+  hideEmpty?: boolean;
+  /** Shown when the runs log none of the metrics (default "No metrics logged yet."). */
+  emptyText?: string;
 }
 
 /**
@@ -92,23 +101,38 @@ export default function WorkspaceView(props: Props) {
   );
 }
 
-function WorkspaceViewInner({ wsRef, runIds, reportLabel }: Props) {
+function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpty = false, emptyText = "No metrics logged yet." }: Props) {
   const navigate = useNavigate();
   const key = refKey(wsRef);
   const scope = `ws:${key}`;
   const { doc, readOnly, update } = useWorkspace(wsRef);
   const mutable = !readOnly;
-  const { metrics, loading, error } = useWorkspaceMetrics(runIds);
+  const runMetrics = useWorkspaceMetrics(runIds);
+  const { loading, error } = runMetrics;
+  const metrics = useMemo(
+    () => (metricFilter ? runMetrics.metrics.filter((m) => metricFilter(m.name)) : runMetrics.metrics),
+    [runMetrics.metrics, metricFilter],
+  );
   const [query, setQuery] = useState("");
 
   // Unfiltered (edits resolve against it) and as shown (search applied).
-  const derived = useMemo(() => deriveLayout(doc, metrics), [doc, metrics]);
+  const derived = useMemo(() => {
+    const secs = deriveLayout(doc, metrics);
+    return hideEmpty ? withoutEmptyPanels(secs) : secs;
+  }, [doc, metrics, hideEmpty]);
   // An empty workspace still shows one section, with its ghost card (written on the first add).
   const all = useMemo<RenderedSection[]>(
-    () => (derived.length === 0 && mutable ? [{ name: FIRST_SECTION_NAME, inDoc: false, collapsed: false, sort: false, panels: [] }] : derived),
-    [derived, mutable],
+    () =>
+      derived.length === 0 && mutable && !hideEmpty
+        ? [{ name: FIRST_SECTION_NAME, inDoc: false, collapsed: false, sort: false, panels: [] }]
+        : derived,
+    [derived, mutable, hideEmpty],
   );
-  const shown = useMemo(() => (query.trim() ? deriveLayout(doc, metrics, { query }) : all), [doc, metrics, query, all]);
+  const shown = useMemo(() => {
+    if (!query.trim()) return all;
+    const secs = deriveLayout(doc, metrics, { query });
+    return hideEmpty ? withoutEmptyPanels(secs) : secs;
+  }, [doc, metrics, query, all, hideEmpty]);
 
   // `?card=<series>` (the Overview's "show in Metrics & Media"): mount the
   // first card showing that series, scroll to it and highlight it briefly,
@@ -166,13 +190,8 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel }: Props) {
   const metricsRef = useRef(metrics);
   metricsRef.current = metrics;
 
-  /** Write an automatic panel (and those before it) so it can be edited. Computed now: deterministic on replay. */
-  const materializeOp = useCallback((id: string): WorkspaceOp => {
-    const secs = allRef.current;
-    const m = panelsToMaterialize(secs, id);
-    if (!m || m.panels.length === 0) return identity;
-    return ops.seq(ops.ensureSections(secs.map((s) => s.name)), ops.addPanels(m.section, m.panels));
-  }, []);
+  /** Write an automatic panel — only it — so it can be edited. Computed now: deterministic on replay. */
+  const materializeOp = useCallback((id: string): WorkspaceOp => materializePanelOp(allRef.current, id), []);
   /** A section edit: every rendered section gets its place in the document first. */
   const sectionOp = useCallback(
     (op: WorkspaceOp): WorkspaceOp => ops.seq(ops.ensureSections(allRef.current.map((s) => s.name)), op),
@@ -285,21 +304,21 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel }: Props) {
       const cur = panelOf(id);
       if (!cur) return;
       const next = changedPanel(cur, change);
-      update(sectionOp(ops.seq(materializeOp(id), ops.replacePanel(id, next))), {
+      update(ops.seq(materializeOp(id), ops.replacePanel(id, next)), {
         label: change.option ? "Change card type" : change.data ? "Change card data" : "Rename card",
         mergeKey: change.title !== undefined ? `title:${id}` : undefined,
       });
       // Another card component remounts under the open editor, which reopens it (CardEditorHost `reopen`).
     },
-    [panelOf, update, sectionOp, materializeOp],
+    [panelOf, update, materializeOp],
   );
   /** Copy a card (an automatic one is written first) right after itself. */
   const duplicate = useCallback(
     (id: string) => {
       const copy = newLayoutId("p_");
-      update(sectionOp(ops.seq(materializeOp(id), ops.duplicatePanel(id, copy))), { label: "Duplicate card" });
+      update(ops.seq(materializeOp(id), ops.duplicatePanel(id, copy)), { label: "Duplicate card" });
     },
-    [update, sectionOp, materializeOp],
+    [update, materializeOp],
   );
   const toggleAutoPanels = useCallback(() => {
     const on = !getWorkspace(key).autoPanels;
@@ -417,7 +436,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel }: Props) {
         )}
         {error != null && <p className="text-sm text-status-failed">Error: {String(error)}</p>}
         {!loading && metrics.length === 0 && derived.length === 0 && (
-          <p className="text-fg-muted">{runIds.length === 0 ? "No runs yet." : "No metrics logged yet."}</p>
+          <p className="text-fg-muted">{runIds.length === 0 ? "No runs yet." : emptyText}</p>
         )}
         {query.trim() && shown.every((s) => s.panels.length === 0) && <p className="text-sm text-fg-muted">No panels match.</p>}
         {shown.map((section, i) => {

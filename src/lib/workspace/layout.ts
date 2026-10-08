@@ -14,6 +14,9 @@
  *   in an automatic section after the doc's sections. Off: none.
  * - A hidden panel (`panel.hidden`) still claims its metric but renders
  *   nowhere.
+ * - Automatic panels of a document section keep their A–Z place among its
+ *   materialized automatic panels (`auto:` ids): touching one writes only
+ *   that one (`materializeOp`) and the page does not move.
  * - Hide patterns and the search query filter the rendered panels by label.
  */
 
@@ -134,10 +137,21 @@ export function deriveLayout(doc: WorkspaceDoc, metrics: readonly MetricInfo[], 
 
   const out: RenderedSection[] = [];
   for (const s of doc.sections) {
-    const own = s.panels.filter((p) => !p.hidden).map((p) => render(p, false, s.name));
-    const autos = (autoBuckets.get(s.name) ?? []).map((m) => render(autoPanel(m), true, s.name));
+    // Automatic panels keep their A–Z place among the section's materialized
+    // ones: each goes right before the first `auto:` panel named after it.
+    const autos = autoBuckets.get(s.name) ?? [];
     autoBuckets.delete(s.name);
-    out.push({ name: s.name, inDoc: true, collapsed: s.collapsed, sort: s.sort, panels: finish([...own, ...autos], s.sort) });
+    const panels: RenderedPanel[] = [];
+    let next = 0;
+    for (const p of s.panels) {
+      if (isAutoPanelId(p.id)) {
+        const name = p.id.slice(AUTO_PREFIX.length);
+        while (next < autos.length && autos[next]!.name.localeCompare(name) < 0) panels.push(render(autoPanel(autos[next++]!), true, s.name));
+      }
+      if (!p.hidden) panels.push(render(p, false, s.name));
+    }
+    for (const m of autos.slice(next)) panels.push(render(autoPanel(m), true, s.name));
+    out.push({ name: s.name, inDoc: true, collapsed: s.collapsed, sort: s.sort, panels: finish(panels, s.sort) });
   }
   for (const name of [...autoBuckets.keys()].sort(compareAutoSections)) {
     const autos = autoBuckets.get(name)!.map((m) => render(autoPanel(m), true, name));
@@ -148,18 +162,25 @@ export function deriveLayout(doc: WorkspaceDoc, metrics: readonly MetricInfo[], 
 }
 
 /**
- * The panels to write when an automatic panel of section `section` is
- * touched: every automatic panel rendered before it in that section, and
- * itself, so materializing never changes the order on screen.
+ * The op that writes automatic panel `panelId` (as rendered in `sections`, a
+ * `deriveLayout` result) into the document so it can be edited — that panel
+ * only: it goes before the first materialized `auto:` panel named after it,
+ * where `deriveLayout` already shows it, so nothing on screen moves. The
+ * sections rendered up to its own get their place in the document first.
+ * Identity for a panel already in the document (or not rendered).
  */
-export function panelsToMaterialize(sections: readonly RenderedSection[], panelId: string): { section: string; panels: Panel[] } | null {
-  for (const s of sections) {
-    const at = s.panels.findIndex((p) => p.panel.id === panelId);
-    if (at < 0) continue;
-    if (!s.panels[at]!.auto) return { section: s.name, panels: [] };
-    return { section: s.name, panels: s.panels.slice(0, at + 1).filter((p) => p.auto).map((p) => p.panel) };
-  }
-  return null;
+export function materializeOp(sections: readonly RenderedSection[], panelId: string): WorkspaceOp {
+  const at = sections.findIndex((s) => s.panels.some((p) => p.panel.id === panelId && p.auto));
+  if (at < 0) return (d) => d;
+  const section = sections[at]!.name;
+  const panel = sections[at]!.panels.find((p) => p.panel.id === panelId)!.panel;
+  const name = panelId.slice(AUTO_PREFIX.length);
+  return ops.seq(ops.ensureSections(sections.slice(0, at + 1).map((s) => s.name)), (d) => {
+    const s = d.sections.find((x) => x.name === section);
+    const before = s?.panels.find((p) => isAutoPanelId(p.id) && p.id.slice(AUTO_PREFIX.length).localeCompare(name) > 0);
+    const index = before ? s!.panels.indexOf(before) : null;
+    return ops.addPanels(section, [panel], index)(d);
+  });
 }
 
 /** Every automatic panel of a section, in rendered order (materializing a whole section). */
@@ -179,6 +200,17 @@ export function addToSectionOp(sections: readonly RenderedSection[], name: strin
     ops.addPanels(name, sectionAutoPanels(sections, name)),
     ops.addPanels(name, panels),
   );
+}
+
+/**
+ * The run page's layout (as wandb's run page): a panel that shows no metric
+ * the run logs renders nowhere, and a section left without panels neither.
+ * Multi-run cards select no metric and stay. The order is untouched.
+ */
+export function withoutEmptyPanels(sections: readonly RenderedSection[]): RenderedSection[] {
+  return sections
+    .map((s) => ({ ...s, panels: s.panels.filter((p) => p.metrics.length > 0 || isMultiRunCardType(p.panel.type)) }))
+    .filter((s) => s.panels.length > 0);
 }
 
 /** `base`, else `base 2`, `base 3`, … — the first not in `taken`. */

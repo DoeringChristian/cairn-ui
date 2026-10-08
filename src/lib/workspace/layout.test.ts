@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EMPTY_WORKSPACE, ops, type Panel } from "./doc.ts";
-import { addToSectionOp, autoPanelsOp, deriveLayout, panelsToMaterialize, uniqueSectionName, type MetricInfo } from "./layout.ts";
+import { addToSectionOp, autoPanelsOp, deriveLayout, materializeOp, uniqueSectionName, withoutEmptyPanels, type MetricInfo } from "./layout.ts";
 
 const M = (name: string, object_type = "scalar", runIds = ["r1"]): MetricInfo => ({ name, object_type, count: 5, runIds });
 const P = (id: string, sel: Panel["selector"], type: Panel["type"] = "scalar", settings = {}): Panel => ({ id, type, selector: sel, settings });
@@ -50,14 +50,48 @@ test("hide patterns and the search query filter by label; sorted sections sort b
   assert.deepEqual(shape(deriveLayout(doc, METRICS, { query: "val" })), ["train:", "val*:auto:val.loss"]);
 });
 
-test("materializing writes the autos up to the touched one, keeping the order", () => {
-  const secs = deriveLayout(EMPTY_WORKSPACE, [M("a.1"), M("a.2"), M("a.3")]);
-  const m = panelsToMaterialize(secs, "auto:a.2")!;
-  assert.equal(m.section, "a");
-  assert.deepEqual(m.panels.map((p) => p.id), ["auto:a.1", "auto:a.2"]);
-  const doc = ops.seq(ops.ensureSections(secs.map((s) => s.name)), ops.addPanels(m.section, m.panels))(EMPTY_WORKSPACE);
-  assert.deepEqual(shape(deriveLayout(doc, [M("a.1"), M("a.2"), M("a.3")])), ["a:auto:a.1,auto:a.2,auto:a.3"]);
-  assert.equal(deriveLayout(doc, [M("a.1"), M("a.2"), M("a.3")])[0]!.panels[2]!.auto, true);
+test("editing one automatic card materializes only that card; the page does not move", () => {
+  const ms = [M("a.1"), M("a.2"), M("a.3"), M("b.1"), M("loss"), M("img", "image")];
+  const secs = deriveLayout(EMPTY_WORKSPACE, ms);
+  const before = shape(secs).map((s) => s.replace("*", ""));
+  const doc = ops.seq(materializeOp(secs, "auto:a.2"), ops.setPanelSettings("auto:a.2", { title: "two" }))(EMPTY_WORKSPACE);
+  // Only a.2 is written; the sections before it get their place, nothing after.
+  assert.deepEqual(doc.sections.map((s) => [s.name, s.panels.map((p) => p.id)]), [["Charts", []], ["a", ["auto:a.2"]]]);
+  const after = deriveLayout(doc, ms);
+  assert.deepEqual(shape(after).map((s) => s.replace("*", "")), before);
+  assert.deepEqual(after.find((s) => s.name === "a")!.panels.map((p) => p.auto), [true, false, true]);
+  // A second one lands in its A–Z place among the written ones.
+  const doc2 = materializeOp(after, "auto:a.3")(doc);
+  assert.deepEqual(doc2.sections.find((s) => s.name === "a")!.panels.map((p) => p.id), ["auto:a.2", "auto:a.3"]);
+  const doc3 = materializeOp(deriveLayout(doc2, ms), "auto:a.1")(doc2);
+  assert.deepEqual(doc3.sections.find((s) => s.name === "a")!.panels.map((p) => p.id), ["auto:a.1", "auto:a.2", "auto:a.3"]);
+  assert.deepEqual(shape(deriveLayout(doc3, ms)).map((s) => s.replace("*", "")), before);
+  // A card already in the document is not written again.
+  assert.equal(materializeOp(deriveLayout(doc3, ms), "auto:a.2")(doc3), doc3);
+});
+
+test("duplicating a materialized card keeps the automatic cards around it in place", () => {
+  const ms = [M("a.1"), M("a.2"), M("a.3")];
+  const secs = deriveLayout(EMPTY_WORKSPACE, ms);
+  const doc = ops.seq(materializeOp(secs, "auto:a.2"), ops.duplicatePanel("auto:a.2", "copy"))(EMPTY_WORKSPACE);
+  assert.deepEqual(shape(deriveLayout(doc, ms)), ["a:auto:a.1,auto:a.2,copy,auto:a.3"]);
+});
+
+test("the run page hides cards showing nothing the run logs, and sections left empty", () => {
+  const doc = ops.seq(
+    ops.addPanels("mine", [P("gone", { names: ["nope"] }), P("re", { regex: "zz.*" })]),
+    ops.addPanels("val", [P("v", { names: ["val.loss"] }), P("x", { names: ["other.run.only"] }), P("bar", { names: [] }, "bar")]),
+  )(EMPTY_WORKSPACE);
+  const secs = deriveLayout(doc, METRICS);
+  assert.deepEqual(shape(withoutEmptyPanels(secs)), [
+    "val:v,bar",
+    "Charts*:auto:loss",
+    "train*:auto:train.acc,auto:train.loss",
+    "Media*:auto:samples",
+    "system*:auto:system.cpu",
+  ]);
+  // The same view on a run logging the other metric: the card is back at its place.
+  assert.deepEqual(shape(withoutEmptyPanels(deriveLayout(doc, [...METRICS, M("other.run.only")])))[0], "val:v,x,bar");
 });
 
 test("multi-run panels are labelled by type", () => {
