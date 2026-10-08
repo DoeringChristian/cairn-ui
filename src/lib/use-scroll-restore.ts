@@ -96,7 +96,8 @@ export function useElementScrollRestore(
     return () => {
       el.removeEventListener("scroll", onScroll);
       if (raf) cancelAnimationFrame(raf);
-      write(key, el.scrollTop);
+      // On unmount the element is already detached (its scrollTop reads 0): keep what the scrolling wrote.
+      if (el.isConnected) write(key, el.scrollTop);
     };
   }, [ref, key]);
 }
