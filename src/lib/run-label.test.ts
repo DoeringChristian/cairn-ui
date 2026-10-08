@@ -30,17 +30,22 @@ test("a shared name gets the version instead of the time", () => {
   });
 });
 
-test("the same name and version in different groups adds the group", () => {
+test("runs spanning groups: grouped runs read group · name v<n>", () => {
   const g1 = run({ display_name: "train", version: 1, group: "exp-1" });
   const g2 = run({ display_name: "train", version: 2, group: "exp-1" });
   const u1 = run({ display_name: "train", version: 1, group: null });
   const h1 = run({ display_name: "train", version: 1, group: "exp-2" });
   assert.deepEqual(disambiguateRunLabels([g1.id, g2.id, u1.id, h1.id]), {
-    [g1.id]: "train v1 · exp-1",
-    [g2.id]: "train v2",
-    [u1.id]: "train v1",
-    [h1.id]: "train v1 · exp-2",
+    [g1.id]: "exp-1 · train v1",
+    [g2.id]: "exp-1 · train v2",
+    [u1.id]: "train",
+    [h1.id]: "exp-2 · train v1",
   });
+  const e = run({ display_name: "eval", version: 2, group: "exp-2" });
+  const b = run({ display_name: "baseline", version: 1, group: null });
+  assert.deepEqual(disambiguateRunLabels([e.id, b.id]), { [e.id]: "exp-2 · eval v2", [b.id]: "baseline" });
+  // One group only: the plain rules.
+  assert.deepEqual(disambiguateRunLabels([g1.id, g2.id]), { [g1.id]: "train v1", [g2.id]: "train v2" });
 });
 
 test("runs without a version fall back to the time", () => {

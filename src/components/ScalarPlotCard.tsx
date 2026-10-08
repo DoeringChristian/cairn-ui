@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useSequences, useSequencesForRuns } from "../api/hooks";
@@ -40,7 +40,8 @@ import { xMetricFor } from "../lib/metric-defs";
 import { SERIES_COLORS, type Series } from "../lib/plot-utils/types";
 import { SMOOTHING_KINDS, formatSmoothing } from "../lib/plot-utils/smooth";
 import { groupSeries } from "../lib/plot-utils/aggregate";
-import { RUN_PALETTE } from "../lib/run-color";
+import { groupColor, RUN_PALETTE } from "../lib/run-color";
+import { WorkspaceGroupingContext } from "../lib/workspace-runs/grouping-context";
 import { useRunColors, useRunView, useVisibleRuns } from "../lib/run-view";
 import { cursorSyncKey, useChartSyncEnabled, useSyncedView } from "../lib/chart-sync";
 import type { RunContext, SeriesData } from "../lib/expr";
@@ -140,17 +141,20 @@ export default function ScalarPlotCard({
     return [...keys].sort();
   }, [paramsByRunId]);
 
+  // The workspace page groups runs itself (and picks their versions): its
+  // grouping replaces the card's (lib/workspace-runs/grouping-context.ts).
+  const wsGrouping = useContext(WorkspaceGroupingContext);
   const visibleRuns = useVisibleRuns(allRunIds);
   const drawnRuns = useMemo(() => {
     const by = settings.groupBy;
     return limitRuns(visibleRuns, {
-      latestPerGroup: settings.latestPerGroup,
+      latestPerGroup: wsGrouping === undefined && settings.latestPerGroup,
       maxRuns: settings.maxRuns,
       groupOf: (id) =>
         by ? groupValue(by, runById.get(id), paramsByRunId.get(id)) : (runById.get(id)?.group ?? null),
       createdAt: (id) => runCreatedAtByRunId.get(id),
     });
-  }, [visibleRuns, settings.latestPerGroup, settings.maxRuns, settings.groupBy, runById, paramsByRunId, runCreatedAtByRunId]);
+  }, [visibleRuns, wsGrouping, settings.latestPerGroup, settings.maxRuns, settings.groupBy, runById, paramsByRunId, runCreatedAtByRunId]);
   const drawnSet = useMemo(() => new Set(drawnRuns), [drawnRuns]);
   const drawnMetrics = useMemo(
     () => effectiveMetrics.filter((m) => drawnSet.has(m.runId ?? runId)),
@@ -276,7 +280,12 @@ export default function ScalarPlotCard({
     // Grouping needs several runs; a run without a value for it stays its own line.
     let groups = 0;
     const by = settings.groupBy;
-    if (by && multipleRuns) {
+    const groupOf: ((rid: string) => string | null) | null = wsGrouping
+      ? (rid) => wsGrouping.groupOf.get(rid) ?? null
+      : wsGrouping === undefined && by
+        ? (rid) => groupValue(by, runById.get(rid), paramsByRunId.get(rid))
+        : null;
+    if (groupOf && multipleRuns) {
       const metricOf = (s: Series): { key: string; name: string } => {
         if (s.key.startsWith("expr:")) {
           const i = Number(s.key.slice(5, s.key.indexOf("::")));
@@ -294,18 +303,24 @@ export default function ScalarPlotCard({
           series: s,
           metricKey: mk.key,
           metricName: mk.name,
-          group: groupValue(by, runById.get(s.runId!), paramsByRunId.get(s.runId!)),
+          group: groupOf(s.runId!),
         };
       });
       // Groups take palette slots in sorted order (distinct, stable for a set of groups).
       const groupValues = [...new Set(items.map((i) => i.group).filter((g): g is string => g != null))].sort();
-      const grouped = groupSeries(items, {
-        band: settings.band,
-        hideMembers: settings.hideMembers,
-        labelMetric: metricKeys.size > 1,
-        agg: settings.agg,
-        groupColor: (g) => RUN_PALETTE[groupValues.indexOf(g) % RUN_PALETTE.length]!,
-      });
+      const grouped = groupSeries(
+        items,
+        wsGrouping
+          ? // The workspace: one line per group — the mean, a min–max band, the group's colour and name.
+            { band: "minmax", hideMembers: true, labelMetric: metricKeys.size > 1, agg: "mean", groupColor, countInLabel: false }
+          : {
+              band: settings.band,
+              hideMembers: settings.hideMembers,
+              labelMetric: metricKeys.size > 1,
+              agg: settings.agg,
+              groupColor: (g) => RUN_PALETTE[groupValues.indexOf(g) % RUN_PALETTE.length]!,
+            },
+      );
       if (grouped.groups > 0) {
         lines = grouped.series;
         groups = grouped.groups;
@@ -334,6 +349,7 @@ export default function ScalarPlotCard({
     settings.styles,
     settings.derived,
     settings.groupBy,
+    wsGrouping,
     settings.band,
     settings.agg,
     settings.hideMembers,

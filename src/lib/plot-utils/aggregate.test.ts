@@ -86,6 +86,16 @@ test("groupSeries draws members, band and mean per (metric, group)", () => {
   const hidden = groupSeries([item("r1", [1], "A"), item("r2", [3], "A")], { band: "minmax", hideMembers: true, labelMetric: true });
   assert.deepEqual(hidden.series.map((x) => x.role), ["bandHi", "bandLo", "line"]);
   assert.equal(hidden.series[2]!.label, "loss · A (n=2)");
+
+  // The workspace's group lines: the group's name alone, its own colour.
+  const ws = groupSeries([item("r1", [1], "A"), item("r2", [3], "A"), item("r3", [2], "B")], {
+    band: "minmax",
+    hideMembers: true,
+    labelMetric: false,
+    countInLabel: false,
+    groupColor: (g) => (g === "A" ? "#111111" : "#222222"),
+  });
+  assert.deepEqual(ws.series.filter((x) => x.role === "line").map((x) => [x.label, x.color]), [["A", "#111111"], ["B", "#222222"]]);
 });
 
 test("centre: mean, median (odd and even), min, max", () => {

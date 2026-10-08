@@ -154,7 +154,9 @@ export interface GroupableSeries {
  * unless `hideMembers`), the band edges, and the centre line (`agg`).
  * Everything a group draws takes the group's colour (`groupColor`, default a
  * palette slot per group in first-seen order); a one-run group is just that
- * run's line. Ungrouped series pass through with their own colour.
+ * run's line. Ungrouped series pass through with their own colour. Group
+ * lines are labelled `<group> (n=<runs>)`, or just the group without
+ * `countInLabel`.
  */
 export function groupSeries(
   items: GroupableSeries[],
@@ -164,6 +166,7 @@ export function groupSeries(
     labelMetric: boolean;
     agg?: AggKind;
     groupColor?: (group: string) => string;
+    countInLabel?: boolean;
   },
 ): { series: Series[]; groups: number } {
   const { groups, ungrouped } = groupBy(items, (i) => (i.group == null ? null : `${i.metricKey}\u0000${i.group}`));
@@ -178,7 +181,8 @@ export function groupSeries(
   for (const g of aggregated) {
     const first = g.members[0]!;
     const color = colorOf(first.group!);
-    const label = `${opts.labelMetric ? `${first.metricName} · ` : ""}${first.group} (n=${g.members.length})`;
+    const count = opts.countInLabel === false ? "" : ` (n=${g.members.length})`;
+    const label = `${opts.labelMetric ? `${first.metricName} · ` : ""}${first.group}${count}`;
     if (g.members.length === 1) {
       out.push({ ...first.series, key: g.key, label, color, role: "line" });
       continue;

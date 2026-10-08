@@ -8,6 +8,9 @@
  *
  * The cards get the picked, eye-on runs of visible groups plus visible
  * ungrouped runs (Group by group), or every visible run (Group by none).
+ * With Group by group the page also provides the grouping
+ * (lib/workspace-runs/grouping-context.ts): scalar cards draw one line per
+ * group, ungrouped runs stay their own lines.
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -20,6 +23,7 @@ import WorkspaceView from "../components/workspace/WorkspaceView";
 import { useProjectId } from "../lib/project-context";
 import { useElementScrollRestore } from "../lib/use-scroll-restore";
 import type { GroupGraph } from "../lib/workspace-runs/graph";
+import { WorkspaceGroupingContext, type WorkspaceGrouping } from "../lib/workspace-runs/grouping-context";
 import { buildList, matchesSearch, runsForCards } from "../lib/workspace-runs/list";
 import { ops } from "../lib/workspace/doc";
 import { refKey, viewRef, type WorkspaceRef } from "../lib/workspace/ref";
@@ -70,6 +74,11 @@ function Workspace({ wsRef }: { wsRef: WorkspaceRef }) {
   }, [fetchedKey]);
   const list = useMemo(() => buildList(runs, state, graphs), [runs, state, graphs]);
   const cards = useMemo(() => runsForCards(list), [list]);
+  // Group by group: scalar cards draw one line per group; Group by none: one per run.
+  const grouping = useMemo<WorkspaceGrouping | null>(
+    () => (state.groupBy === "group" ? { groupOf: cards.groupOf } : null),
+    [state.groupBy, cards.groupOf],
+  );
 
   const edit = useCallback<RunStateEdit>(
     (fn, label, mergeKey) => update(ops.updateRunState(fn), { label, mergeKey }),
@@ -96,7 +105,9 @@ function Workspace({ wsRef }: { wsRef: WorkspaceRef }) {
           <RunsSidebar list={list} search={state.search} groupBy={state.groupBy} onEdit={edit} />
         </aside>
         <main className="min-w-0">
-          <WorkspaceView wsRef={wsRef} runIds={cards.runIds} reportLabel="workspace" />
+          <WorkspaceGroupingContext.Provider value={grouping}>
+            <WorkspaceView wsRef={wsRef} runIds={cards.runIds} reportLabel="workspace" />
+          </WorkspaceGroupingContext.Provider>
         </main>
       </div>
     </div>

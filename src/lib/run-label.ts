@@ -95,8 +95,10 @@ export function shortRunId(runId: string): string {
  *   1. Just the name        — when the name is unique across the input.
  *   2. `name v<version>`    — when ≥2 runs share a name: the run's
  *                             server-assigned number in its series.
- *   3. `name v<n> · <group>` — when `name v<n>` still collides (the same
- *                             name and number in different groups).
+ *   3. `<group> · name v<n>` — every grouped run with a version, when
+ *                             the input spans several groups
+ *                             (`exp-43 · eval v2`, the workspace's grouped
+ *                             runs); the other runs follow rules 1–2, 4.
  *   4. Runs lacking a version (unnamed, or no metadata) fall back to the
  *      time: `name HH:MM:SS` (all on one day), `name MMM dd HH:MM:SS`
  *      (across days), `name … (abc123)` when even that collides, and
@@ -144,38 +146,31 @@ export function disambiguateRunLabels(runIds: string[]): Record<string, string> 
     byName.set(r.name, arr);
   }
 
-  for (const [name, group] of byName) {
-    if (group.length === 1) {
-      result[group[0]!.runId] = name;
+  const spansGroups = new Set(resolved.map((r) => r.group)).size > 1;
+  for (const [name, runs] of byName) {
+    const grouped = spansGroups ? runs.filter((r) => r.group != null && r.version != null) : [];
+    const rest = runs.filter((r) => !grouped.includes(r));
+    const withGroup: Record<string, string> = {};
+    for (const r of grouped) withGroup[r.runId] = `${r.group} · ${name} v${r.version}`;
+    Object.assign(result, withHashOnCollision(grouped, withGroup));
+    if (rest.length === 1) {
+      result[rest[0]!.runId] = name;
       continue;
     }
     Object.assign(
       result,
-      versionLabels(name, group.filter((r) => r.version != null)),
-      timeLabels(name, group.filter((r) => r.version == null)),
+      versionLabels(name, rest.filter((r) => r.version != null)),
+      timeLabels(name, rest.filter((r) => r.version == null)),
     );
   }
 
   return result;
 }
 
-/** Rules 2–3: `name v<n>`, then `name v<n> · <group>` where that collides. */
-function versionLabels(
-  name: string,
-  runs: Array<{ runId: string; version: number | null; group: string | null }>,
-): Record<string, string> {
+/** Rule 2: `name v<n>`. */
+function versionLabels(name: string, runs: Array<{ runId: string; version: number | null }>): Record<string, string> {
   const out: Record<string, string> = {};
-  const count = new Map<string, number>();
-  for (const r of runs) {
-    const label = `${name} v${r.version}`;
-    out[r.runId] = label;
-    count.set(label, (count.get(label) ?? 0) + 1);
-  }
-  for (const r of runs) {
-    if (count.get(out[r.runId]!)! > 1 && r.group != null) {
-      out[r.runId] = `${out[r.runId]} · ${r.group}`;
-    }
-  }
+  for (const r of runs) out[r.runId] = `${name} v${r.version}`;
   return withHashOnCollision(runs, out);
 }
 
