@@ -159,7 +159,7 @@ export function RunGroupControl({
   paramKeys,
   levels,
   onChange,
-  className = "",
+  className = "max-w-[20rem]",
 }: {
   /** Param keys offered as group-by sources. */
   paramKeys: string[];
@@ -174,7 +174,7 @@ export function RunGroupControl({
       <button
         ref={btnRef}
         type="button"
-        className={`btn max-w-[20rem] truncate px-2 py-1 text-xs ${className}`}
+        className={`btn truncate px-2 py-1 text-xs ${className}`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         title={levels.map(groupByLabel).join(" › ") || "Group rows"}

@@ -79,7 +79,7 @@ const MENU_ITEM =
   "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-bg-hover touch:min-h-10";
 /** A small dropdown trigger inside a row: `v2 ▾`, `latest ▾`. */
 const MENU_BTN =
-  "inline-flex shrink-0 items-center gap-0.5 rounded px-0.5 text-xs text-fg-muted hover:bg-bg-hover hover:text-fg";
+  "inline-flex shrink-0 items-center gap-1 rounded px-0.5 text-xs text-fg-muted hover:bg-bg-hover hover:text-fg";
 
 function EyeButton({ eye, label, onClick }: { eye: Eye; label: string; onClick: () => void }) {
   return (
@@ -126,9 +126,7 @@ function Menu({
         aria-label={label}
       >
         {trigger}
-        <span className="text-[10px]" aria-hidden="true">
-          ▾
-        </span>
+        <i className="fa-solid fa-caret-down text-[10px]" aria-hidden="true" />
       </button>
       <Popover open={open} onClose={() => setOpen(false)} anchorRef={ref} title={title} width={220} align="start" role="menu" bodyClassName="p-1">
         {children(() => setOpen(false))}
@@ -257,14 +255,14 @@ export default function RunsSidebar({ projectId, list, state, fields, paramKeys,
         <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Runs</h2>
         <div className="flex items-center gap-1.5">
           <RunSearchInput
-            className="min-w-0 flex-1"
+            className="w-0 min-w-[5rem] flex-1"
             value={state.search}
             error={search.error}
             onChange={(v) => onEdit((s) => setSearch(s, v), "Search runs", "search")}
           />
           <RunFilterControl compact fields={fields} filter={state.filter} onChange={(f) => onEdit((s) => setFilter(s, f), "Filter runs")} />
           <RunGroupControl
-            className="max-w-[9rem] shrink-0"
+            className="min-w-0 max-w-[9rem] shrink"
             paramKeys={paramKeys}
             levels={state.groupBy}
             onChange={(levels) => onEdit((s) => setGroupBy(s, levels), "Group runs")}
@@ -277,7 +275,7 @@ export default function RunsSidebar({ projectId, list, state, fields, paramKeys,
       {list.listed === 0 ? (
         <p className="px-3 pb-3 text-xs text-fg-subtle">No runs match the filters.</p>
       ) : (
-        <table className={`runs-table ${RUNS_TABLE_CLASS} table-fixed`}>
+        <table className={`runs-table ${RUNS_TABLE_CLASS} table-fixed bg-bg`}>
           <thead className={RUNS_THEAD_CLASS}>
             <tr>
               <th className={`${RUNS_TH_CLASS} sticky top-0 z-10 border-y border-border bg-bg-elevated`} style={{ width: CHECK_W }}>
