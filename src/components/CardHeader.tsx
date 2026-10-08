@@ -123,7 +123,8 @@ export default function CardHeader({
   return (
     <div data-cairn-card-header className="group mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
       {/* Left section: collapse chevron, drag grip, title, edit, subtitle */}
-      <div className="flex flex-1 basis-32 items-baseline gap-1.5 min-w-0">
+      {/* With a title addon the title stays whole: the actions wrap under it first. */}
+      <div className={`flex flex-1 basis-32 items-baseline gap-1.5 ${titleAddon ? "min-w-fit max-w-full" : "min-w-0"}`}>
         {onToggleCollapse && (
           <button
             type="button"
