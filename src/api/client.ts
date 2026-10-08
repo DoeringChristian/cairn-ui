@@ -264,12 +264,6 @@ export const api = {
     post<{ name: string; role: string }>("/api/auth/otp", { otp }),
   logout: () => post<{ ok: boolean }>("/api/auth/logout", {}),
 
-  // One group's lineage graph: its runs and the edges between them (lib/workspace-runs).
-  groupGraph: (projectId: string, group: string) =>
-    get<import("../lib/workspace-runs/graph").GroupGraph>(
-      `/api/projects/${projectId}/groups/${encodeURIComponent(group)}/graph`,
-    ),
-
   // Reports (server-persisted)
   reports: (projectId: string, params: { limit?: number; offset?: number } = {}) => {
     const q = new URLSearchParams();

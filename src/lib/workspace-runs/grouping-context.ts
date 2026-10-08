@@ -1,10 +1,10 @@
 /**
  * The workspace page's grouping, for cards that aggregate runs (the scalar
- * card): with Group by group each grouped run's group, so a card draws one
- * line per group (mean over its runs, min–max band, the group's colour).
+ * card): grouped, each run's top-level group, so a card draws one line per
+ * group (mean over its runs, min–max band, the group's colour).
  *
  * `undefined` (no provider: the run page, reports): the card's own grouping
- * settings apply. `null` (the workspace with Group by none): no grouping,
+ * settings apply. `null` (the workspace, not grouped): no grouping,
  * one line per run.
  */
 

@@ -1,32 +1,30 @@
 /**
  * /p/:projectId/workspace — the project workspace: a runs sidebar
- * (components/workspace-runs/RunsSidebar.tsx) next to the same
- * `WorkspaceView` the run page renders, both bound to the project's current
- * view. The sidebar's run state (search, grouping, eyes, version picks) is
- * part of that view's document, so it saves like layout edits and switching
- * views switches it too.
+ * (components/workspace-runs/RunsSidebar.tsx, the Runs page's table with
+ * the Name column and eyes) next to the same `WorkspaceView` the run page
+ * renders, both bound to the project's current view. The sidebar's run
+ * state (status, search, filter, grouping, latest only, eyes) is part of
+ * that view's document, so it saves like layout edits and switching views
+ * switches it too.
  *
- * The cards get the picked, eye-on runs of visible groups plus visible
- * ungrouped runs (Group by group), or every visible run (other group-by
- * levels, or none). When grouped the page also provides the grouping
+ * The cards get the visible runs (lib/workspace-runs/visibility.ts). When
+ * grouped the page also provides the grouping
  * (lib/workspace-runs/grouping-context.ts): scalar cards draw one line per
- * (top-level) group, runs without a group stay their own lines.
+ * top-level group, runs without a group value stay their own lines.
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { qk } from "../api/query-keys";
 import { useRuns } from "../api/hooks";
 import RunsSidebar, { type RunStateEdit } from "../components/workspace-runs/RunsSidebar";
+import { useRunsTable } from "../components/runs-table/use-runs-table";
 import WorkspaceView from "../components/workspace/WorkspaceView";
 import { useProjectId } from "../lib/project-context";
 import { useElementScrollRestore } from "../lib/use-scroll-restore";
-import type { GroupGraph } from "../lib/workspace-runs/graph";
 import { WorkspaceGroupingContext, type WorkspaceGrouping } from "../lib/workspace-runs/grouping-context";
-import { buildList, listedRuns, runsForCards } from "../lib/workspace-runs/list";
-import { listMode } from "../lib/workspace-runs/state";
+import { cardRuns, resolveVisibility } from "../lib/workspace-runs/visibility";
 import { filterFieldsOf } from "../lib/run-filter";
+import type { RunGroupNode } from "../lib/runs-table/group";
+import { DEFAULT_SORT } from "../lib/runs-table/sort";
 import { useRunColors } from "../lib/run-view";
 import { ops } from "../lib/workspace/doc";
 import { refKey, viewRef, type WorkspaceRef } from "../lib/workspace/ref";
@@ -35,6 +33,10 @@ import { useWorkspace } from "../lib/workspace/use-workspace";
 
 /** The project's runs the sidebar lists from (the runs route's cap). */
 const RUNS_LIMIT = 1000;
+const NO_COMPUTED: never[] = [];
+const NO_PINNED: string[] = [];
+/** The first top-level group and the no-value group start open, the other top-level groups collapsed. */
+const firstGroupOpen = (n: RunGroupNode, i: number) => n.depth === 0 && i > 0 && n.label != null;
 
 export default function WorkspacePage() {
   const projectId = useProjectId();
@@ -49,46 +51,33 @@ function Workspace({ wsRef }: { wsRef: WorkspaceRef }) {
   const projectId = wsRef.projectId;
   const { doc, update } = useWorkspace(wsRef);
   const state = doc.runState;
-  // Params and stats: the filter and group-by read them (as in the runs table).
-  const runsQ = useRuns({ project: projectId, archived: "false", limit: RUNS_LIMIT, include: ["params", "stats"] });
+  // Archived too (Status › archived); params and stats: the filter and group-by read them (as in the runs table).
+  const runsQ = useRuns({ project: projectId, limit: RUNS_LIMIT, include: ["params", "stats"] });
   const runs = useMemo(() => runsQ.data?.runs ?? [], [runsQ.data]);
 
-  const mode = listMode(state.groupBy);
   const filterFields = useMemo(() => filterFieldsOf(runs), [runs]);
   const paramKeys = useMemo(
     () => filterFields.filter((f) => f.startsWith("params.")).map((f) => f.slice("params.".length)),
     [filterFields],
   );
 
-  // Grouped by group: every listed group's lineage graph (until it loads, the group has no edges).
-  const wanted = useMemo(() => {
-    if (mode !== "group") return [];
-    const count = new Map<string, number>();
-    for (const r of listedRuns(runs, state)) if (r.group != null) count.set(r.group, (count.get(r.group) ?? 0) + 1);
-    return [...count];
-  }, [runs, state, mode]);
-  const graphQs = useQueries({
-    queries: wanted.map(([group, n]) => ({
-      // The listed run count in the key: a new run in the group refetches its graph.
-      queryKey: [...qk.groupGraph(projectId, group), n],
-      queryFn: () => api.groupGraph(projectId, group),
-      staleTime: 30_000,
-    })),
+  const table = useRunsTable({
+    runs,
+    status: state.status,
+    search: state.search,
+    filter: state.filter,
+    latestOnly: state.latestOnly,
+    groupBy: state.groupBy,
+    sort: DEFAULT_SORT,
+    computed: NO_COMPUTED,
+    pinned: NO_PINNED,
+    defaultCollapsed: firstGroupOpen,
   });
-  const fetchedKey = graphQs.map((q) => q.dataUpdatedAt).join("|");
-  const graphs = useMemo(() => {
-    const m = new Map<string, GroupGraph>();
-    graphQs.forEach((q) => q.data && m.set(q.data.group, q.data));
-    return m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchedKey]);
-  const list = useMemo(() => buildList(runs, state, graphs), [runs, state, graphs]);
-  const cards = useMemo(() => runsForCards(list), [list]);
+  const visibility = useMemo(() => resolveVisibility(table.sorted, table.groups, state.eyes), [table.sorted, table.groups, state.eyes]);
+  const cards = useMemo(() => cardRuns(table.sorted, table.groups, visibility.runs), [table.sorted, table.groups, visibility.runs]);
   // Grouped: scalar cards draw one line per (top-level) group; not grouped: one per run.
-  const grouping = useMemo<WorkspaceGrouping | null>(
-    () => (mode !== "flat" ? { groupOf: cards.groupOf } : null),
-    [mode, cards.groupOf],
-  );
+  const grouped = state.groupBy.length > 0;
+  const grouping = useMemo<WorkspaceGrouping | null>(() => (grouped ? { groupOf: cards.groupOf } : null), [grouped, cards.groupOf]);
   const colors = useRunColors(cards.runIds);
 
   const edit = useCallback<RunStateEdit>(
@@ -105,7 +94,7 @@ function Workspace({ wsRef }: { wsRef: WorkspaceRef }) {
     <div>
       <div className="mb-3 md:hidden">
         <button type="button" onClick={() => setSidebarOpen((v) => !v)} className="btn text-xs" aria-expanded={sidebarOpen}>
-          Runs ({list.visible} of {list.listed} {list.unit} shown) {sidebarOpen ? "▲" : "▼"}
+          Runs ({visibility.shown} of {visibility.listed} {visibility.unit} shown) {sidebarOpen ? "▲" : "▼"}
         </button>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[320px_1fr]">
@@ -115,8 +104,9 @@ function Workspace({ wsRef }: { wsRef: WorkspaceRef }) {
         >
           <RunsSidebar
             projectId={projectId}
-            list={list}
             state={state}
+            table={table}
+            visibility={visibility}
             fields={filterFields}
             paramKeys={paramKeys}
             colors={colors}

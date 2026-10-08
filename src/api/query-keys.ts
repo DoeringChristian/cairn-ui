@@ -52,8 +52,6 @@ export const qk = {
   sweep: (sweepId: string) => ["sweep", sweepId] as const,
   // The project's workspace views and its current one (lib/workspace/use-views.ts).
   views: (projectId: string) => ["views", projectId] as const,
-  /** One group's lineage graph (runs + edges inside the group). */
-  groupGraph: (projectId: string, group: string) => ["group-graph", projectId, group] as const,
   // Report share links (wave 3 / I).
   reportShares: (projectId: string, reportId: string) => ["report-shares", projectId, reportId] as const,
   shareContext: () => ["share-context"] as const,

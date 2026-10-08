@@ -93,8 +93,8 @@ function EyeButton({ eye, label, onClick }: { eye: Eye; label: string; onClick: 
       }`}
       onClick={onClick}
       aria-pressed={eye !== "off"}
-      aria-label={`${eye === "off" ? "Show" : "Hide"} ${label}`}
-      title={eye === "off" ? "Show" : "Hide"}
+      aria-label={`${eye === "on" ? "Hide" : "Show"} ${label}`}
+      title={eye === "on" ? "Hide" : "Show"}
     >
       {EYE_GLYPH[eye]}
     </button>
@@ -232,7 +232,8 @@ export default function RunsTable({
   };
 
   return (
-    <table className={RUNS_TABLE_CLASS}>
+    // Name only: fixed layout, so long names truncate instead of widening the table.
+    <table className={`${RUNS_TABLE_CLASS} ${columns ? "" : "table-fixed"}`}>
       <thead className={RUNS_THEAD_CLASS}>
         <tr>
           <th className={`frozen ${RUNS_TH_CLASS}`} style={leadStyle()}>

@@ -141,7 +141,7 @@ export default function ScalarPlotCard({
     return [...keys].sort();
   }, [paramsByRunId]);
 
-  // The workspace page groups runs itself (and picks their versions): its
+  // The workspace page groups runs itself (and picks which are drawn): its
   // grouping replaces the card's (lib/workspace-runs/grouping-context.ts).
   const wsGrouping = useContext(WorkspaceGroupingContext);
   const visibleRuns = useVisibleRuns(allRunIds);
