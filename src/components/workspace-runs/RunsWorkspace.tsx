@@ -1,0 +1,135 @@
+/**
+ * A runs workspace: the runs sidebar (RunsSidebar.tsx, the Runs page's
+ * table with the Name column and eyes) next to the same `WorkspaceView`
+ * the run page renders, both bound to the project's current view. The
+ * project workspace lists the project's runs; a group page (`group`) the
+ * group's, with its own run state (lib/workspace-runs/state.ts
+ * `groups[<group>]`), not grouped by default. The run state is part of the
+ * view's document, so it saves like layout edits and switching views
+ * switches it too.
+ *
+ * The cards get the visible runs (lib/workspace-runs/visibility.ts). When
+ * grouped the page also provides the grouping
+ * (lib/workspace-runs/grouping-context.ts): scalar cards draw one line per
+ * top-level group, runs without a group value stay their own lines. A run
+ * hover store (lib/workspace-runs/hover.ts) links sidebar rows and chart
+ * lines.
+ */
+
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useRuns } from "../../api/hooks";
+import RunsSidebar, { type RunStateEdit } from "./RunsSidebar";
+import { useRunsTable } from "../runs-table/use-runs-table";
+import WorkspaceView from "../workspace/WorkspaceView";
+import { useElementScrollRestore } from "../../lib/use-scroll-restore";
+import { WorkspaceGroupingContext, type WorkspaceGrouping } from "../../lib/workspace-runs/grouping-context";
+import { RunHoverContext, RunHoverStore } from "../../lib/workspace-runs/hover";
+import { cardRuns, resolveVisibility } from "../../lib/workspace-runs/visibility";
+import { editGroup, editProject, groupRunState, projectRunState } from "../../lib/workspace-runs/state";
+import { filterFieldsOf } from "../../lib/run-filter";
+import { availableColumns } from "../../lib/runs-table/columns";
+import type { RunGroupNode } from "../../lib/runs-table/group";
+import { useRunColors } from "../../lib/run-view";
+import { useProjectRunView } from "../../lib/run-view-store";
+import { ops } from "../../lib/workspace/doc";
+import type { WorkspaceRef } from "../../lib/workspace/ref";
+import { useWorkspace } from "../../lib/workspace/use-workspace";
+
+/** The runs the sidebar lists from (the runs route's cap). */
+const RUNS_LIMIT = 1000;
+const NO_COMPUTED: never[] = [];
+/** The first top-level group and the no-value group start open, the other top-level groups collapsed. */
+const firstGroupOpen = (n: RunGroupNode, i: number) => n.depth === 0 && i > 0 && n.label != null;
+
+export default function RunsWorkspace({ wsRef, group }: { wsRef: WorkspaceRef; group?: string }) {
+  const projectId = wsRef.projectId;
+  const { doc, update } = useWorkspace(wsRef);
+  const state = useMemo(
+    () => (group != null ? groupRunState(doc.runState, group) : projectRunState(doc.runState)),
+    [doc.runState, group],
+  );
+  // Archived too (Status › archived); params and stats: the filter and group-by read them (as in the runs table).
+  const runsQ = useRuns({
+    project: projectId,
+    ...(group != null ? { group } : {}),
+    limit: RUNS_LIMIT,
+    include: ["params", "stats"],
+  });
+  const runs = useMemo(() => runsQ.data?.runs ?? [], [runsQ.data]);
+  const runView = useProjectRunView(projectId);
+
+  const filterFields = useMemo(() => filterFieldsOf(runs), [runs]);
+  const paramKeys = useMemo(
+    () => filterFields.filter((f) => f.startsWith("params.")).map((f) => f.slice("params.".length)),
+    [filterFields],
+  );
+  const sortColumns = useMemo(() => availableColumns(runs, NO_COMPUTED).filter((c) => c !== "tags"), [runs]);
+
+  const table = useRunsTable({
+    runs,
+    status: state.status,
+    search: state.search,
+    filter: state.filter,
+    latestOnly: state.latestOnly,
+    groupBy: state.groupBy,
+    sort: state.sort,
+    computed: NO_COMPUTED,
+    pinned: runView.view.pinned,
+    pinnedAlwaysListed: true,
+    defaultCollapsed: firstGroupOpen,
+  });
+  const visibility = useMemo(() => resolveVisibility(table.sorted, table.groups, state.eyes), [table.sorted, table.groups, state.eyes]);
+  const cards = useMemo(() => cardRuns(table.sorted, table.groups, visibility.runs), [table.sorted, table.groups, visibility.runs]);
+  // Grouped: scalar cards draw one line per (top-level) group; not grouped: one per run.
+  const grouped = state.groupBy.length > 0;
+  const grouping = useMemo<WorkspaceGrouping | null>(() => (grouped ? { groupOf: cards.groupOf } : null), [grouped, cards.groupOf]);
+  const colors = useRunColors(cards.runIds);
+  const [hover] = useState(() => new RunHoverStore());
+
+  const edit = useCallback<RunStateEdit>(
+    (fn, label, mergeKey) => update(ops.updateRunState(group != null ? editGroup(group, fn) : editProject(fn)), { label, mergeKey }),
+    [update, group],
+  );
+
+  // Only phones toggle the sidebar (it is always shown from md up).
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  useElementScrollRestore(sidebarRef, `workspace-sidebar:${projectId}${group != null ? `:g:${group}` : ""}`, runs.length > 0);
+
+  return (
+    <RunHoverContext.Provider value={hover}>
+      <div>
+        <div className="mb-3 md:hidden">
+          <button type="button" onClick={() => setSidebarOpen((v) => !v)} className="btn text-xs" aria-expanded={sidebarOpen}>
+            Runs ({visibility.shown} of {visibility.listed} {visibility.unit} shown) {sidebarOpen ? "▲" : "▼"}
+          </button>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[320px_1fr]">
+          <aside
+            ref={sidebarRef}
+            className={`card overflow-hidden md:sticky md:top-[var(--header-h)] md:max-h-[calc(100vh-var(--header-h))] md:overflow-y-auto ${sidebarOpen ? "" : "hidden md:block"}`}
+          >
+            <RunsSidebar
+              projectId={projectId}
+              state={state}
+              table={table}
+              visibility={visibility}
+              fields={filterFields}
+              paramKeys={paramKeys}
+              sortColumns={sortColumns}
+              colors={colors}
+              groupOf={grouping ? cards.groupOf : null}
+              runView={runView}
+              onEdit={edit}
+            />
+          </aside>
+          <main className="min-w-0">
+            <WorkspaceGroupingContext.Provider value={grouping}>
+              <WorkspaceView wsRef={wsRef} runIds={cards.runIds} reportLabel={group != null ? `group ${group}` : "workspace"} />
+            </WorkspaceGroupingContext.Provider>
+          </main>
+        </div>
+      </div>
+    </RunHoverContext.Provider>
+  );
+}

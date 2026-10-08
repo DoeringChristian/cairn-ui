@@ -14,8 +14,10 @@ import type { RunGroupNode, TableRow } from "../../lib/runs-table/group";
 import { runRowName } from "../../lib/runs-table/model";
 import {
   CHECK_W,
+  DEPTH_INDENT,
   GROUP_CELL_CLASS,
   GroupHeader,
+  groupPagePath,
   RUN_CELL_CLASS,
   RUN_ROW_CLASS,
   RUNS_TABLE_CLASS,
@@ -43,7 +45,18 @@ export type RunsTableLead =
       groupEye: (node: RunGroupNode) => Eye;
       onRun: (run: Run) => void;
       onGroup: (node: RunGroupNode) => void;
+      /** The header eye: every listed run. */
+      all: Eye;
+      onAll: () => void;
     };
+
+/** The workspace's hover highlight: which rows are lit, and the row hovered. */
+export interface RunsTableHover {
+  runHot: (run: Run) => boolean;
+  groupHot: (node: RunGroupNode) => boolean;
+  onRun: (run: Run | null) => void;
+  onGroup: (node: RunGroupNode | null) => void;
+}
 
 export interface FrozenProps {
   className: string;
@@ -60,8 +73,6 @@ export interface RunsTableColumns {
   header: (col: string, frozen: FrozenProps | null, style: CSSProperties | undefined) => ReactNode;
   /** A cell's content, Name excepted. */
   cell: (run: Run, col: string) => ReactNode;
-  /** After the Name cell's version. */
-  nameExtras: (run: Run) => ReactNode;
 }
 
 interface Props {
@@ -69,7 +80,7 @@ interface Props {
   rows: TableRow[];
   collapsed: ReadonlySet<string>;
   onToggleGroup: (id: string) => void;
-  /** Grouped: a run's name is not prefixed with its group (`runRowName`). */
+  /** A run's name is not prefixed with its group (`runRowName`): grouped, or every listed run in one group. */
   grouped: boolean;
   /** The newest run of a name with several runs: highlighted. */
   latestByName: ReadonlySet<string>;
@@ -80,6 +91,9 @@ interface Props {
   lead: RunsTableLead;
   /** Omitted: the Name column only. */
   columns?: RunsTableColumns;
+  /** After the Name cell's version. */
+  nameExtras?: (run: Run) => ReactNode;
+  hover?: RunsTableHover;
 }
 
 const EYE_GLYPH: Record<Eye, string> = { on: "◉", off: "○", mixed: "◐" };
@@ -101,7 +115,9 @@ function EyeButton({ eye, label, onClick }: { eye: Eye; label: string; onClick: 
   );
 }
 
-const leadStyle = (extra?: CSSProperties): CSSProperties => ({ left: 0, width: CHECK_W, minWidth: CHECK_W, maxWidth: CHECK_W, ...extra });
+/** An eye indented by its row's depth (a group's runs one step right of its header, as in the Name cell). */
+const indent = (depth: number, eye: ReactNode) =>
+  depth > 0 ? <span className="inline-flex" style={{ paddingLeft: depth * DEPTH_INDENT }}>{eye}</span> : eye;
 
 export default function RunsTable({
   projectId,
@@ -114,12 +130,18 @@ export default function RunsTable({
   hidden,
   lead,
   columns,
+  nameExtras,
+  hover,
 }: Props) {
+  // Eyes: the lead column widens by the deepest row's indent.
+  const maxDepth = lead.kind === "eye" ? rows.reduce((m, row) => Math.max(m, row.kind === "run" ? row.depth : row.node.depth), 0) : 0;
+  const leadW = CHECK_W + maxDepth * DEPTH_INDENT;
+  const leadStyle = (extra?: CSSProperties): CSSProperties => ({ left: 0, width: leadW, minWidth: leadW, maxWidth: leadW, ...extra });
   const frozen = columns?.frozen ?? ["name"];
   const scroll = columns?.scroll ?? [];
   const widthOf = (col: string) => columns?.widthOf(col);
   const frozenLeft = (i: number) => {
-    let left = CHECK_W;
+    let left = leadW;
     for (let j = 0; j < i; j++) left += widthOf(frozen[j]!) ?? 0;
     return left;
   };
@@ -148,13 +170,13 @@ export default function RunsTable({
       depth={depth}
       version={r.version != null ? <RunVersion version={r.version} /> : null}
     >
-      {columns?.nameExtras(r)}
+      {nameExtras?.(r)}
     </RunNameCell>
   );
 
   const runLabel = (r: Run) => r.display_name ?? r.id;
 
-  const leadCell = (r: Run) => {
+  const leadCell = (r: Run, depth: number) => {
     const highlight = latestByName.has(r.id) ? { boxShadow: "inset 2px 0 0 rgb(var(--color-accent-rgb))" } : undefined;
     return (
       <td className={`frozen ${RUN_CELL_CLASS}`} style={leadStyle(highlight)}>
@@ -166,7 +188,7 @@ export default function RunsTable({
             onChange={(e) => lead.onToggle(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
           />
         ) : (
-          <EyeButton eye={lead.runEye(r) ? "on" : "off"} label={runLabel(r)} onClick={() => lead.onRun(r)} />
+          indent(depth, <EyeButton eye={lead.runEye(r) ? "on" : "off"} label={runLabel(r)} onClick={() => lead.onRun(r)} />)
         )}
       </td>
     );
@@ -174,10 +196,21 @@ export default function RunsTable({
 
   const runRow = (r: Run, key: string, depth: number) => {
     const isSelected = lead.kind === "check" && lead.selected.has(r.id);
-    const rowClass = [RUN_ROW_CLASS, isSelected ? "is-selected bg-accent/5" : "", hidden(r) ? "is-hidden-run" : ""].join(" ");
+    const rowClass = [
+      RUN_ROW_CLASS,
+      isSelected ? "is-selected bg-accent/5" : "",
+      hidden(r) ? "is-hidden-run" : "",
+      hover?.runHot(r) ? "is-hot" : "",
+    ].join(" ");
     return (
-      <tr key={key} className={rowClass}>
-        {leadCell(r)}
+      <tr
+        key={key}
+        className={rowClass}
+        data-run-id={r.id}
+        onMouseEnter={hover ? () => hover.onRun(r) : undefined}
+        onMouseLeave={hover ? () => hover.onRun(null) : undefined}
+      >
+        {leadCell(r, depth)}
         {frozen.map((col, i) => (
           <td key={col} {...frozenProps(i, `px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`)}>
             {col === "name" ? nameCell(r, depth) : <div className="truncate">{columns!.cell(r, col)}</div>}
@@ -202,11 +235,18 @@ export default function RunsTable({
           count={node.runs.length}
           collapsed={collapsed.has(node.id)}
           onToggle={() => onToggleGroup(node.id)}
+          to={node.by.source === "group" && node.label != null ? groupPagePath(projectId, node.label) : null}
         />
       </div>
     );
     return (
-      <tr key={node.id} className="is-group" data-group={node.label ?? ""}>
+      <tr
+        key={node.id}
+        className={`is-group ${hover?.groupHot(node) ? "is-hot" : ""}`}
+        data-group={node.label ?? ""}
+        onMouseEnter={hover ? () => hover.onGroup(node) : undefined}
+        onMouseLeave={hover ? () => hover.onGroup(null) : undefined}
+      >
         {lead.kind === "check" ? (
           <td
             colSpan={1 + frozen.length}
@@ -218,9 +258,9 @@ export default function RunsTable({
         ) : (
           <>
             <td className={`frozen ${GROUP_CELL_CLASS}`} style={leadStyle()}>
-              <EyeButton eye={lead.groupEye(node)} label={node.label ?? "(none)"} onClick={() => lead.onGroup(node)} />
+              {indent(node.depth, <EyeButton eye={lead.groupEye(node)} label={node.label ?? "(none)"} onClick={() => lead.onGroup(node)} />)}
             </td>
-            <td colSpan={frozen.length} className={`frozen ${columns ? "frozen-edge" : ""} ${GROUP_CELL_CLASS}`} style={{ left: CHECK_W }}>
+            <td colSpan={frozen.length} className={`frozen ${columns ? "frozen-edge" : ""} ${GROUP_CELL_CLASS}`} style={{ left: leadW }}>
               {header}
             </td>
           </>
@@ -248,7 +288,7 @@ export default function RunsTable({
                 onChange={lead.onToggleAll}
               />
             ) : (
-              <i className="fa-solid fa-eye text-[10px]" aria-label="Shown" />
+              <EyeButton eye={lead.all} label="every listed run" onClick={lead.onAll} />
             )}
           </th>
           {columns ? (

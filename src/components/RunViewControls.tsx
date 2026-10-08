@@ -18,6 +18,9 @@ export function RunSwatch({ color }: { color: string | undefined }) {
   );
 }
 
+export type RunViewToggle = "hide" | "pin" | "baseline";
+const ALL_TOGGLES: readonly RunViewToggle[] = ["hide", "pin", "baseline"];
+
 const CONTROL_BTN =
   "inline-flex h-5 w-5 items-center justify-center rounded text-[10px] hover:bg-bg-hover touch:h-9 touch:w-9";
 
@@ -27,16 +30,19 @@ export default function RunViewControls({
   view,
   onChange,
   show = "hover",
+  toggles = ALL_TOGGLES,
 }: {
   runId: string;
   view: RunView;
   onChange?: (next: RunView) => void;
   /** "hover": inactive toggles appear on row/chip hover; "all": always; "active": only the set ones. */
   show?: "hover" | "all" | "active";
+  /** Which toggles (default all three; the workspace sidebar: the pin only). */
+  toggles?: readonly RunViewToggle[];
 }) {
-  const hidden = view.hidden.includes(runId);
-  const pinned = view.pinned.includes(runId);
-  const baseline = view.baseline === runId;
+  const hidden = toggles.includes("hide") && view.hidden.includes(runId);
+  const pinned = toggles.includes("pin") && view.pinned.includes(runId);
+  const baseline = toggles.includes("baseline") && view.baseline === runId;
   const idle =
     show === "all"
       ? "text-fg-subtle hover:text-fg"
@@ -45,7 +51,7 @@ export default function RunViewControls({
   if (show === "active" && !hidden && !pinned && !baseline) return null;
   return (
     <span className="run-controls inline-flex items-center">
-      {(show !== "active" || hidden) && <button
+      {toggles.includes("hide") && (show !== "active" || hidden) && <button
         type="button"
         className={`${CONTROL_BTN} ${hidden ? "text-status-failed" : idle}`}
         onClick={() => onChange(toggleRunHidden(view, runId))}
@@ -55,7 +61,7 @@ export default function RunViewControls({
       >
         <i className={`fa-solid ${hidden ? "fa-eye-slash" : "fa-eye"}`} aria-hidden="true" />
       </button>}
-      {(show !== "active" || pinned) && <button
+      {toggles.includes("pin") && (show !== "active" || pinned) && <button
         type="button"
         className={`${CONTROL_BTN} ${pinned ? "text-accent" : idle}`}
         onClick={() => onChange(toggleRunPinned(view, runId))}
@@ -65,7 +71,7 @@ export default function RunViewControls({
       >
         <i className="fa-solid fa-thumbtack" aria-hidden="true" />
       </button>}
-      {(show !== "active" || baseline) && <button
+      {toggles.includes("baseline") && (show !== "active" || baseline) && <button
         type="button"
         className={`${CONTROL_BTN} ${baseline ? "text-accent" : idle}`}
         onClick={() => onChange(toggleRunBaseline(view, runId))}

@@ -23,13 +23,20 @@ export const GROUP_CELL_CLASS = "border-t border-border-subtle px-3 py-1.5";
 /** Indent per group depth, px. */
 export const DEPTH_INDENT = 12;
 
-/** A group header's content: ▾/▸, `group: exp-44`, the count chip. Toggles collapse. */
+/** The group page of a run group (`run.group`): `/p/<project>/g/<group>`. */
+export const groupPagePath = (projectId: string, group: string) => `/p/${projectId}/g/${encodeURIComponent(group)}`;
+
+/**
+ * A group header's content: ▾/▸, `group: exp-44`, the count chip. Toggles
+ * collapse; with `to` (a run group) the group's name links to its page.
+ */
 export function GroupHeader({
   by,
   label,
   count,
   collapsed,
   onToggle,
+  to,
 }: {
   by: GroupBy;
   /** The group's value; null: no value, shown `(none)`. */
@@ -37,7 +44,37 @@ export function GroupHeader({
   count: number;
   collapsed: boolean;
   onToggle: () => void;
+  /** The group page the name links to. */
+  to?: string | null;
 }) {
+  const chevron = <i className={`fa-solid ${collapsed ? "fa-chevron-right" : "fa-chevron-down"} w-3 text-[10px]`} aria-hidden="true" />;
+  const byLabel = <span className="mono shrink truncate text-fg-subtle">{groupByLabel(by)}:</span>;
+  const name = (
+    <span className={`mono truncate font-semibold ${label == null ? "italic text-fg-subtle" : "text-fg"}`}>{label ?? "(none)"}</span>
+  );
+  const chip = <span className="shrink-0 rounded bg-bg-hover px-1.5 py-0.5 text-[10px]">{count}</span>;
+  if (to && label != null) {
+    return (
+      <div className="flex w-full min-w-0 items-center gap-2 text-xs text-fg-muted touch:min-h-[40px]">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? "Expand" : "Collapse"} ${label}`}
+          className="flex shrink-0 items-center gap-2 hover:text-fg"
+        >
+          {chevron}
+          {byLabel}
+        </button>
+        <Link to={to} className="mono min-w-0 truncate font-semibold text-fg hover:text-accent hover:underline" title={`Open the group ${label}`}>
+          {label}
+        </Link>
+        <button type="button" onClick={onToggle} tabIndex={-1} aria-hidden="true" className="flex min-w-0 flex-1 items-center self-stretch">
+          {chip}
+        </button>
+      </div>
+    );
+  }
   return (
     <button
       type="button"
@@ -45,10 +82,10 @@ export function GroupHeader({
       aria-expanded={!collapsed}
       className="flex w-full min-w-0 items-center gap-2 text-left text-xs text-fg-muted hover:text-fg touch:min-h-[40px]"
     >
-      <i className={`fa-solid ${collapsed ? "fa-chevron-right" : "fa-chevron-down"} w-3 text-[10px]`} aria-hidden="true" />
-      <span className="mono shrink truncate text-fg-subtle">{groupByLabel(by)}:</span>
-      <span className={`mono truncate font-semibold ${label == null ? "italic text-fg-subtle" : "text-fg"}`}>{label ?? "(none)"}</span>
-      <span className="shrink-0 rounded bg-bg-hover px-1.5 py-0.5 text-[10px]">{count}</span>
+      {chevron}
+      {byLabel}
+      {name}
+      {chip}
     </button>
   );
 }

@@ -55,3 +55,10 @@
 .runs-table tr.is-hidden-run > td > .run-controls {
   opacity: 1;
 }
+
+/* The workspace's hover highlight (a row hovered here or its line in a chart). */
+.runs-table tbody tr.is-hot > .frozen {
+  background:
+    linear-gradient(rgb(var(--color-accent-rgb) / 0.12), rgb(var(--color-accent-rgb) / 0.12)),
+    rgb(var(--color-bg-elevated-rgb));
+}
