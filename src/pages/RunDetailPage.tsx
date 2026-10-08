@@ -10,16 +10,8 @@ import { formatDuration, formatRelative } from "../lib/format";
 import { RunViewContext } from "../lib/run-view";
 import { useProjectRunView } from "../lib/run-view-store";
 import { cameFromWorkspace, workspacePath } from "../lib/run-nav";
+import { RUN_TABS } from "../lib/embed";
 
-/** The tabs as wandb's: Workspace is the default (the bare run path). */
-const TABS = [
-  { id: ".", label: "Workspace" },
-  { id: "overview", label: "Overview" },
-  { id: "system", label: "System" },
-  { id: "logs", label: "Logs" },
-  { id: "files", label: "Files" },
-  { id: "artifacts", label: "Artifacts" },
-];
 
 export default function RunDetailPage() {
   const { projectId, runId } = useParams<{ projectId: string; runId: string }>();
@@ -84,7 +76,7 @@ export default function RunDetailPage() {
       <RunProgressHeader status={run.status} progress={run.progress} />
       <RunAlertBanners projectId={projectId} runId={run.id} />
       <nav className="mb-6 flex gap-1 overflow-x-auto whitespace-nowrap border-b border-border">
-        {TABS.map((t) => (
+        {RUN_TABS.map((t) => (
           <NavLink
             key={t.id}
             to={t.id}

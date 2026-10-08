@@ -24,6 +24,7 @@ import SweepDetailPage from "./pages/SweepDetailPage";
 import LoginPage from "./pages/LoginPage";
 import ReportViewPage, { ShareRedeemPage } from "./pages/ReportViewPage";
 import RouteError from "./components/RouteError";
+import { EmbedReportPage, EmbedRunPage, EmbedWorkspacePage } from "./pages/EmbedPages";
 import { installStaleBuildReload } from "./lib/stale-build";
 import "./index.css";
 
@@ -51,6 +52,22 @@ const router = createBrowserRouter([
   // with no app chrome, and can read nothing but that report's runs.
   { path: "/share/:secret", element: <ShareRedeemPage /> },
   { path: "/s/:reportId", element: <ReportViewPage /> },
+  // Notebook embeds (pages/EmbedPages.tsx): outside <App>, no app navigation.
+  {
+    path: "/embed/run/:runId",
+    element: <EmbedRunPage />,
+    errorElement: <RouteError />,
+    children: [
+      { index: true, element: <RunWorkspaceTab /> },
+      { path: "overview", element: <RunOverviewTab /> },
+      { path: "system", element: <RunSystemTab /> },
+      { path: "logs", element: <RunLogsTab /> },
+      { path: "files", element: <RunFilesTab /> },
+      { path: "artifacts", lazy: () => import("./pages/RunArtifactsTab").then((m) => ({ Component: m.default })) },
+    ],
+  },
+  { path: "/embed/workspace/:projectId", element: <EmbedWorkspacePage />, errorElement: <RouteError /> },
+  { path: "/embed/report/:projectId/:reportId", element: <EmbedReportPage />, errorElement: <RouteError /> },
   {
     path: "/",
     element: <App />,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useOutletContext, useParams } from "react-router-dom";
+import { Link, useLocation, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useMetricRules, useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArtifacts, useRunRelations, useSourceTree } from "../api/hooks";
@@ -66,7 +66,7 @@ function startTime(iso: string): string {
 }
 
 function RunBlock({ run }: { run: Run }) {
-  const { projectId } = useParams<{ projectId: string }>();
+  const projectId = run.project_id;
   const env = safeJsonParse<Record<string, unknown>>(run.env_snapshot);
   const tags = safeJsonParse<string[]>(run.tags) ?? [];
   const argv = safeJsonParse<string[]>(run.cli_args) ?? [];
@@ -335,7 +335,7 @@ function SummaryTable({ run, summary, summaryDoc }: { run: Run; summary: Param[]
         empty={all.length === 0 ? "No metrics logged." : "No key matches."}
         rows={rows.map((r: SummaryRow) => ({
           key: r.key,
-          value: r.media ? <SummaryMediaValue runId={run.id} name={r.key} media={r.media} /> : formatValue(r.value),
+          value: r.media ? <SummaryMediaValue name={r.key} media={r.media} /> : formatValue(r.value),
           note: r.media ? undefined : `(${r.source})`,
         }))}
       />
@@ -344,8 +344,7 @@ function SummaryTable({ run, summary, summaryDoc }: { run: Run; summary: Param[]
 }
 
 /** A media value of the summary: its kind ("figure", "6 images"), linking to its card in the Workspace tab. */
-function SummaryMediaValue({ runId, name, media }: { runId: string; name: string; media: SummaryMedia }) {
-  const { projectId } = useParams<{ projectId: string }>();
+function SummaryMediaValue({ name, media }: { name: string; media: SummaryMedia }) {
   // The run page's history state (opened from the workspace: its back link) goes along.
   const location = useLocation();
   const gallery = useQuery({ ...galleryQuery(media.hash), enabled: isGalleryMedia(media) });
@@ -354,7 +353,9 @@ function SummaryMediaValue({ runId, name, media }: { runId: string; name: string
       <span>{summaryMediaLabel(media, gallery.data)}</span>
       <span aria-hidden="true">·</span>
       <Link
-        to={`/p/${projectId}/r/${runId}?card=${encodeURIComponent(name)}`}
+        // The run's Workspace tab, relative: the same under the app and an embed (/embed/run/<id>).
+        to={{ pathname: "..", search: `?card=${encodeURIComponent(name)}` }}
+        relative="path"
         state={location.state}
         className="text-xs text-fg-subtle hover:text-accent hover:underline"
       >

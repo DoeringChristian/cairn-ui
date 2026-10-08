@@ -25,7 +25,7 @@ import { useElementScrollRestore } from "../../lib/use-scroll-restore";
 import { WorkspaceGroupingContext, type WorkspaceGrouping } from "../../lib/workspace-runs/grouping-context";
 import { RunHoverContext, RunHoverStore } from "../../lib/workspace-runs/hover";
 import { cardRuns, resolveVisibility } from "../../lib/workspace-runs/visibility";
-import { filterFieldsOf } from "../../lib/run-filter";
+import { filterFieldsOf, type GroupNode } from "../../lib/run-filter";
 import { availableColumns } from "../../lib/runs-table/columns";
 import { innermostLineOf } from "../../lib/runs-table/group";
 import { firstGroupOpen } from "../../lib/runs-table/model";
@@ -41,10 +41,16 @@ import { useWorkspace } from "../../lib/workspace/use-workspace";
 const RUNS_LIMIT = 1000;
 const NO_COMPUTED: never[] = [];
 
-export default function RunsWorkspace({ wsRef }: { wsRef: WorkspaceRef }) {
+export default function RunsWorkspace({ wsRef, initialFilter = null }: { wsRef: WorkspaceRef; initialFilter?: GroupNode | null }) {
   const projectId = wsRef.projectId;
   const { doc, update } = useWorkspace(wsRef);
-  const state = doc.runState;
+  // An embed's filter (`/embed/workspace/<project>?filter=`): the run state's
+  // filter while it is shown, edited here, never saved into the view.
+  const [filterOverride, setFilterOverride] = useState<GroupNode | null>(initialFilter);
+  const state = useMemo(
+    () => (filterOverride ? { ...doc.runState, filter: filterOverride } : doc.runState),
+    [doc.runState, filterOverride],
+  );
   // Archived too (Status › archived); params and stats: the filter and group-by read them (as in the runs table).
   const runsQ = useRuns({
     project: projectId,
@@ -91,8 +97,15 @@ export default function RunsWorkspace({ wsRef }: { wsRef: WorkspaceRef }) {
   const [hover] = useState(() => new RunHoverStore());
 
   const edit = useCallback<RunStateEdit>(
-    (fn, label, mergeKey) => update(ops.updateRunState(fn), { label, mergeKey }),
-    [update],
+    (fn, label, mergeKey) => {
+      if (!filterOverride) return update(ops.updateRunState(fn), { label, mergeKey });
+      // The overridden filter takes the edit here; the rest of it goes to the view.
+      const next = fn({ ...doc.runState, filter: filterOverride });
+      setFilterOverride(next.filter);
+      if (next.filter !== filterOverride && JSON.stringify({ ...next, filter: null }) === JSON.stringify({ ...doc.runState, filter: null })) return;
+      update(ops.updateRunState((s) => ({ ...fn({ ...s, filter: filterOverride }), filter: s.filter })), { label, mergeKey });
+    },
+    [update, filterOverride, doc.runState],
   );
 
   // Only phones toggle the sidebar (it is always shown from md up).
