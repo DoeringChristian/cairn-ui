@@ -36,7 +36,7 @@ interface Props {
 const ROW = "flex min-h-7 items-center gap-1.5 rounded px-1 text-sm hover:bg-bg-hover touch:min-h-10";
 const ICON_BTN =
   "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-muted hover:text-fg touch:h-10 touch:w-10";
-const PICKER = "input min-w-0 max-w-[7rem] py-0 text-xs";
+const PICKER = "input !w-auto max-w-[9rem] shrink-0 px-1 py-0 text-xs md:text-xs";
 
 const EYE_GLYPH: Record<Eye, string> = { on: "◉", off: "○", mixed: "◐" };
 
@@ -123,10 +123,10 @@ export default function RunsSidebar({ list, search, groupBy, onEdit }: Props) {
         aria-label="Search runs"
       />
       <div className="flex items-center gap-2 text-xs text-fg-muted">
-        <label className="inline-flex items-center gap-1">
+        <label className="inline-flex items-center gap-1 whitespace-nowrap">
           Group by:
           <select
-            className="input py-0 text-xs"
+            className="input !w-auto px-1 py-0 text-xs md:text-xs"
             value={groupBy}
             onChange={(e) => {
               const v = e.target.value as GroupBy;
@@ -217,7 +217,7 @@ function GroupBlock({
                 label={row.label}
                 onClick={() => onEdit((s) => toggleNameEye(s, group, row.key, entry.visible), `Toggle ${row.label} in ${group}`)}
               />
-              <span className="mono min-w-0 shrink truncate" title={row.label}>
+              <span className="mono min-w-[2rem] max-w-[8rem] truncate" title={row.label}>
                 {row.label}
               </span>
               <VersionPicker versions={row.versions} pick={row.pick} label={row.label} onPick={(id) => pick(row, id)} />
@@ -269,7 +269,7 @@ function UngroupedBlock({
                 label={e.label}
                 onClick={() => onEdit((s) => setEye(s, ungroupedKey(e.name), !e.visible), `Toggle ${e.label}`)}
               />
-              <span className="mono min-w-0 shrink truncate" title={e.label}>
+              <span className="mono min-w-[2rem] max-w-[8rem] truncate" title={e.label}>
                 {e.label}
               </span>
               <VersionPicker
