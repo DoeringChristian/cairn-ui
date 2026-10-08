@@ -4,6 +4,7 @@ import type { AxisScale } from "../../lib/plot-utils/types";
 import type { SmoothingKind } from "../../lib/plot-utils/smooth";
 import type { AggKind, BandKind } from "../../lib/plot-utils/aggregate";
 import type { StackMode } from "../../lib/plot-utils/stack";
+import type { ScalarGroupMode } from "../../lib/plot-utils/scalar-grouping";
 import { plotCardPolicy } from "../card-kit/plot-card-policy.ts";
 import type { CardSettingsMeta } from "./meta";
 
@@ -49,8 +50,14 @@ export interface ScalarSettings extends BaseCardSettings {
   outlierPct: [number, number];
   /** Draw at most this many runs (after hidden runs and `latestPerGroup`); null is all. */
   maxRuns: number | null;
+  /**
+   * Whose grouping draws (lib/plot-utils/scalar-grouping.ts): `workspace`
+   * follows the workspace sidebar (outside a workspace the card's `groupBy`
+   * applies), `off` is a line per run, `key` is always the card's `groupBy`.
+   */
+  groupMode: ScalarGroupMode;
   /** Collapse runs sharing a group / job type / param value into a centre line and band. */
-  groupBy: ScalarGroupBy | null;
+  groupBy: ScalarGroupBy;
   /** The group's centre line. */
   agg: AggKind;
   band: BandKind;
@@ -95,6 +102,7 @@ export const builtin: ScalarSettings = {
   smoothingKind: "ema",
   outlierPct: [0, 100],
   maxRuns: null,
+  groupMode: "workspace",
   groupBy: { source: "group", key: "" },
   agg: "mean",
   band: "std",
@@ -120,7 +128,7 @@ export const meta: CardSettingsMeta<ScalarSettings> = {
   builtin,
   cascadeKeys: [
     "x", "xScale", "yScale", "smoothing", "smoothingKind", "outlierPct", "maxRuns",
-    "groupBy", "agg", "band", "hideMembers", "latestPerGroup",
+    "groupMode", "groupBy", "agg", "band", "hideMembers", "latestPerGroup",
     "lineType", "legend", "tooltip", "showOriginal", "stack", "fullFidelity",
   ],
   tabs: ["values", "grouping", "display", "expressions"],

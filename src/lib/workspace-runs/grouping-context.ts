@@ -5,7 +5,8 @@
  *
  * `undefined` (no provider: the run page, reports): the card's own grouping
  * settings apply. `null` (the workspace, not grouped): no grouping,
- * one line per run.
+ * one line per run. A card's explicit `groupMode` (off / by key) wins over
+ * either (lib/plot-utils/scalar-grouping.ts).
  */
 
 import { createContext } from "react";

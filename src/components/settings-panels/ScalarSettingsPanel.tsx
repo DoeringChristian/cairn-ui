@@ -27,6 +27,7 @@ import type {
 import { SMOOTHING_KINDS, formatSmoothing, type SmoothingKind } from "../../lib/plot-utils/smooth";
 import type { AggKind, BandKind } from "../../lib/plot-utils/aggregate";
 import type { StackMode } from "../../lib/plot-utils/stack";
+import type { ScalarGroupMode } from "../../lib/plot-utils/scalar-grouping";
 import { compileSeriesExpr, compileTemplate, metricRef, type Compiled } from "../../charts/scalar-data";
 
 /** What the card knows at runtime; absent in the defaults editor. */
@@ -42,6 +43,8 @@ export interface ScalarPanelCtx {
   onChosenChange?: (names: string[]) => void;
   paramKeys: string[];
   multipleRuns: boolean;
+  /** In a workspace: whether its sidebar is grouped; undefined outside one. */
+  workspaceGrouped?: boolean;
   /** The drawn lines, for per-series styles. */
   lines: Array<{ key: string; label: string; color: string }>;
 }
@@ -401,36 +404,56 @@ export default function ScalarSettingsPanel({ ctl, ctx, mode }: Props) {
 
   const showGrouping = !card || ctx?.multipleRuns;
   const paramKeys = ctx?.paramKeys ?? [];
+  const inWorkspace = ctx?.workspaceGrouped !== undefined;
+  // The card's own grouping draws in `key` mode, and in `workspace` mode outside a workspace.
+  const ownGrouping = s.groupMode === "key" || (s.groupMode === "workspace" && !inWorkspace);
+  const modeHelp: Record<ScalarGroupMode, string> = {
+    workspace: !card
+      ? "Follow the workspace's grouping; elsewhere group by the key below."
+      : !inWorkspace
+        ? "Not in a workspace: runs group by the key below."
+        : ctx?.workspaceGrouped
+          ? "Follows the workspace's grouping: one line per sidebar group."
+          : "Follows the workspace, which is not grouped: one line per run.",
+    off: "One line per run, even when the workspace is grouped.",
+    key: "The card's own grouping, also in a grouped workspace.",
+  };
+  const by = s.groupBy ?? { source: "group" as const, key: "" };
   const grouping = showGrouping && (
     <>
-      <Select<"none" | "group" | "job_type" | "param">
-        {...bind(ctl, "groupBy")}
-        value={s.groupBy?.source ?? "none"}
-        onChange={(v) =>
-          ctl.set({
-            groupBy: v === "none" ? null : { source: v, key: s.groupBy?.key || (paramKeys[0] ?? "") },
-          })
-        }
-        label="Group runs by"
+      <Segmented<ScalarGroupMode>
+        {...bind(ctl, "groupMode")}
+        label="Group runs"
         options={[
-          { value: "none", label: "None" },
-          { value: "group", label: "Group" },
-          { value: "job_type", label: "Job type" },
-          { value: "param", label: "Param", disabled: card && paramKeys.length === 0 },
+          { value: "workspace", label: "Workspace" },
+          { value: "off", label: "Off" },
+          { value: "key", label: "By key" },
         ]}
-        description="Runs sharing a value draw as one line with a band; runs without one stay single lines."
+        description={modeHelp[s.groupMode]}
       />
-      {s.groupBy?.source === "param" && (
-        <FieldPicker
-          {...bind(ctl, "groupBy")}
-          value={s.groupBy.key || null}
-          onChange={(key) => ctl.set({ groupBy: { source: "param", key: key ?? "" } })}
-          label="Param"
-          options={paramKeys.map((k) => ({ key: k, kind: "param" as const, label: k }))}
-        />
-      )}
-      {s.groupBy && (
+      {(ownGrouping || !card) && s.groupMode !== "off" && (
         <>
+          <Select<"group" | "job_type" | "param">
+            {...bind(ctl, "groupBy")}
+            value={by.source}
+            onChange={(v) => ctl.set({ groupBy: { source: v, key: by.key || (paramKeys[0] ?? "") } })}
+            label="Group runs by"
+            options={[
+              { value: "group", label: "Group" },
+              { value: "job_type", label: "Job type" },
+              { value: "param", label: "Param", disabled: card && paramKeys.length === 0 },
+            ]}
+            description="Runs sharing a value draw as one line with a band; runs without one stay single lines."
+          />
+          {by.source === "param" && (
+            <FieldPicker
+              {...bind(ctl, "groupBy")}
+              value={by.key || null}
+              onChange={(key) => ctl.set({ groupBy: { source: "param", key: key ?? "" } })}
+              label="Param"
+              options={paramKeys.map((k) => ({ key: k, kind: "param" as const, label: k }))}
+            />
+          )}
           <Segmented<AggKind>
             {...bind(ctl, "agg")}
             label="Line"
@@ -453,11 +476,13 @@ export default function ScalarSettingsPanel({ ctl, ctx, mode }: Props) {
           <Switch {...bind(ctl, "hideMembers")} label="Hide member runs" />
         </>
       )}
-      <Switch
-        {...bind(ctl, "latestPerGroup")}
-        label="Latest run per group"
-        description="Keep only the newest run of each group."
-      />
+      {!(card && inWorkspace && s.groupMode === "workspace") && (
+        <Switch
+          {...bind(ctl, "latestPerGroup")}
+          label="Latest run per group"
+          description="Keep only the newest run of each group."
+        />
+      )}
     </>
   );
 
