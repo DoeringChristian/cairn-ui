@@ -80,7 +80,7 @@ export function RunStatusSelect({ value, onChange }: { value: StatusFilter; onCh
   );
 }
 
-/** `[ ] Latest only`: the newest run of every name. */
+/** `[ ] Latest only`: the newest run of every series (group, name). */
 export function RunLatestOnlyToggle({ value, onChange }: { value: boolean; onChange: (next: boolean) => void }) {
   return (
     <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-fg-muted">

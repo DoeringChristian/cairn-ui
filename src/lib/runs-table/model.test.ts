@@ -30,6 +30,43 @@ test("latestRuns: newest run per name; highlighted only when the name has severa
   assert.deepEqual([...latestByName], ["a2"]);
 });
 
+test("latestRuns: the same name in different groups is a separate series", () => {
+  const rs = [
+    run("t42", { display_name: "train", group: "exp-42", created_at: "2026-01-03" }),
+    run("t43", { display_name: "train", group: "exp-43", created_at: "2026-01-02" }),
+    run("t44a", { display_name: "train", group: "exp-44", version: 1, created_at: "2026-01-01" }),
+    run("t44b", { display_name: "train", group: "exp-44", version: 2, created_at: "2026-01-04" }),
+  ];
+  const { latestIds, latestByName } = latestRuns(rs);
+  assert.deepEqual([...latestIds].sort(), ["t42", "t43", "t44b"]);
+  assert.deepEqual([...latestByName], ["t44b"]);
+});
+
+test("latestRuns: the higher version wins over a later created_at", () => {
+  const rs = [
+    run("v2", { display_name: "train", group: "g", version: 2, created_at: "2026-01-01" }),
+    run("v1", { display_name: "train", group: "g", version: 1, created_at: "2026-01-09" }),
+  ];
+  assert.deepEqual([...latestRuns(rs).latestIds], ["v2"]);
+  // Without a version on both, created_at decides.
+  const mixed = [
+    run("old", { display_name: "train", group: "g", version: 3, created_at: "2026-01-01" }),
+    run("new", { display_name: "train", group: "g", version: null, created_at: "2026-01-02" }),
+  ];
+  assert.deepEqual([...latestRuns(mixed).latestIds], ["new"]);
+});
+
+test("latestRuns: ungrouped runs form their own series per name", () => {
+  const rs = [
+    run("u1", { display_name: "train", created_at: "2026-01-01" }),
+    run("u2", { display_name: "train", created_at: "2026-01-02" }),
+    run("g1", { display_name: "train", group: "g", created_at: "2026-01-01" }),
+  ];
+  const { latestIds, latestByName } = latestRuns(rs);
+  assert.deepEqual([...latestIds].sort(), ["g1", "u2"]);
+  assert.deepEqual([...latestByName], ["u2"]);
+});
+
 test("filterRuns: archived only under 'archived', status, latest only, search", () => {
   const rs = [
     run("1", { status: "completed" }),

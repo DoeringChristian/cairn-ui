@@ -29,27 +29,37 @@ export function isStatusFilter(v: unknown): v is StatusFilter {
 }
 
 export interface LatestRuns {
-  /** The newest run of every display name. */
+  /** The newest run of every series (group, display name). */
   latestIds: Set<string>;
-  /** The newest run of names with several runs (highlighted). */
+  /** The newest run of series with several runs (highlighted). */
   latestByName: Set<string>;
 }
 
-/** The newest run per display name ("Latest only", and the highlight). */
+/** Whether `a` is newer than `b` in one series: the higher version when both have one, else created_at. */
+function newer(a: Run, b: Run): boolean {
+  if (a.version != null && b.version != null && a.version !== b.version) return a.version > b.version;
+  return a.created_at > b.created_at;
+}
+
+/**
+ * The newest run per series ("Latest only", and the highlight). A series is
+ * (group, display name): versions are numbered per (project, group, name),
+ * so `train` in two groups are two series.
+ */
 export function latestRuns(runs: readonly Run[]): LatestRuns {
-  const byName = new Map<string, { id: string; created_at: string }>();
+  const bySeries = new Map<string, Run>();
   const counts = new Map<string, number>();
   for (const r of runs) {
-    const name = r.display_name ?? r.id;
-    counts.set(name, (counts.get(name) ?? 0) + 1);
-    const existing = byName.get(name);
-    if (!existing || r.created_at > existing.created_at) byName.set(name, { id: r.id, created_at: r.created_at });
+    const key = JSON.stringify([r.group ?? null, r.display_name ?? r.id]);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    const existing = bySeries.get(key);
+    if (!existing || newer(r, existing)) bySeries.set(key, r);
   }
   const latestByName = new Set<string>();
   const latestIds = new Set<string>();
-  for (const [name, best] of byName) {
+  for (const [key, best] of bySeries) {
     latestIds.add(best.id);
-    if ((counts.get(name) ?? 0) > 1) latestByName.add(best.id);
+    if ((counts.get(key) ?? 0) > 1) latestByName.add(best.id);
   }
   return { latestIds, latestByName };
 }
