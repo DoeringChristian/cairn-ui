@@ -35,7 +35,7 @@ import {
 import { GroupHeader, groupPagePath } from "../components/runs-table/RunsTableParts";
 import RunsTable from "../components/runs-table/RunsTable";
 import { useRunsTable } from "../components/runs-table/use-runs-table";
-import { runRowName, sameGroup, type StatusFilter } from "../lib/runs-table/model.ts";
+import { runRowName, sameGroup, toggleGroupSelection, type StatusFilter } from "../lib/runs-table/model.ts";
 import RunControls, { RunSwatch } from "../components/RunViewControls";
 import {
   availableColumns,
@@ -753,6 +753,7 @@ export default function RunsTablePage({ group }: { group?: string } = {}) {
                 onToggle: toggleRow,
                 all: allVisibleSelected ? "all" : someVisibleSelected ? "some" : "none",
                 onToggleAll: onHeaderCheckbox,
+                onToggleGroup: (node) => setSelected((prev) => toggleGroupSelection(node.runs, prev)),
               }}
               nameExtras={nameExtras}
               columns={{

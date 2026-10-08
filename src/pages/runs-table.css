@@ -47,8 +47,9 @@
   background: rgb(var(--color-border-rgb));
 }
 
-/* Hidden runs: dim the contents, never the (opaque) cells. */
-.runs-table tr.is-hidden-run > td > * {
+/* Hidden runs: dim the contents, never the (opaque) cells, nor the eye in the Name cell. */
+.runs-table tr.is-hidden-run > td > *:not(.run-name),
+.runs-table tr.is-hidden-run > td > .run-name > *:not(.run-eye) {
   opacity: 0.45;
 }
 

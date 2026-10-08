@@ -145,3 +145,18 @@ export function runRowName(run: Pick<Run, "id" | "display_name" | "group">, grou
   const name = run.display_name ?? run.id;
   return !grouped && run.group != null ? `${run.group} · ${name}` : name;
 }
+
+/** A group header's checkbox: every, some or none of its runs (nested groups included) selected. */
+export function groupSelection(runs: readonly Run[], selected: ReadonlySet<string>): "all" | "some" | "none" {
+  let n = 0;
+  for (const r of runs) if (selected.has(r.id)) n++;
+  return n === 0 ? "none" : n === runs.length ? "all" : "some";
+}
+
+/** Clicking a group header's checkbox: select all its runs, or clear them when all are selected. */
+export function toggleGroupSelection(runs: readonly Run[], selected: ReadonlySet<string>): Set<string> {
+  const next = new Set(selected);
+  if (runs.length > 0 && groupSelection(runs, selected) === "all") for (const r of runs) next.delete(r.id);
+  else for (const r of runs) next.add(r.id);
+  return next;
+}

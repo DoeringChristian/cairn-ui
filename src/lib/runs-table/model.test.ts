@@ -8,6 +8,8 @@ import {
   filterRunsKeeping,
   isStatusFilter,
   latestRuns,
+  groupSelection,
+  toggleGroupSelection,
   pinnedFirst,
   runRowName,
   sameGroup,
@@ -139,4 +141,22 @@ test("sidebar order: the sort, pinned runs first and listed whatever the filters
   assert.deepEqual(byName.map((r) => r.id), ["b", "a", "c"]);
   const byCreated = sortBy(listed, [{ column: "created_at", direction: "desc" }], (r, col) => cellValue(r, col), (r) => r.id);
   assert.deepEqual(pinnedFirst(byCreated, ["c"]).map((r) => r.id), ["c", "b", "a"]);
+});
+
+test("group header checkbox: all / some / none of its runs, nested runs included", () => {
+  const rs = [run("a"), run("b"), run("c")];
+  assert.equal(groupSelection(rs, new Set()), "none");
+  assert.equal(groupSelection(rs, new Set(["b", "x"])), "some");
+  assert.equal(groupSelection(rs, new Set(["a", "b", "c"])), "all");
+  assert.equal(groupSelection([], new Set(["a"])), "none");
+});
+
+test("group header click: selects all its runs, keeps other selections; clears them when all were selected", () => {
+  const rs = [run("a"), run("b")];
+  assert.deepEqual([...toggleGroupSelection(rs, new Set(["x"]))].sort(), ["a", "b", "x"]);
+  assert.deepEqual([...toggleGroupSelection(rs, new Set(["a", "x"]))].sort(), ["a", "b", "x"]);
+  assert.deepEqual([...toggleGroupSelection(rs, new Set(["a", "b", "x"]))], ["x"]);
+  // Two headers ticked: the union of their runs.
+  const other = [run("c")];
+  assert.deepEqual([...toggleGroupSelection(other, toggleGroupSelection(rs, new Set()))].sort(), ["a", "b", "c"]);
 });

@@ -100,6 +100,7 @@ export function RunVersion({ version }: { version: number }) {
  * version (`v2`, or a control in its place), then `children`.
  */
 export function RunNameCell({
+  before,
   name,
   to,
   color,
@@ -108,6 +109,8 @@ export function RunNameCell({
   muted = false,
   children,
 }: {
+  /** Before the dot (the workspace sidebar's eye), indented with it. */
+  before?: ReactNode;
   name: string;
   /** The run page; null: plain text (no run to open). */
   to: string | null;
@@ -119,7 +122,8 @@ export function RunNameCell({
   children?: ReactNode;
 }) {
   return (
-    <div className="relative flex min-w-0 items-center gap-1.5" style={{ paddingLeft: depth * DEPTH_INDENT }}>
+    <div className="run-name relative flex min-w-0 items-center gap-1.5" style={{ paddingLeft: depth * DEPTH_INDENT }}>
+      {before}
       {color === null ? (
         <span aria-hidden="true" className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-fg-subtle" />
       ) : (

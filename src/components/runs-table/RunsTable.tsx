@@ -11,7 +11,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { Run } from "../../api/types";
 import { isNumericColumn } from "../../lib/runs-table/columns";
 import type { RunGroupNode, TableRow } from "../../lib/runs-table/group";
-import { runRowName } from "../../lib/runs-table/model";
+import { groupSelection, runRowName } from "../../lib/runs-table/model";
 import {
   CHECK_W,
   DEPTH_INDENT,
@@ -38,6 +38,8 @@ export type RunsTableLead =
       /** The header checkbox. */
       all: "all" | "some" | "none";
       onToggleAll: () => void;
+      /** A group header's checkbox: selects (or clears) every run beneath it. */
+      onToggleGroup: (node: RunGroupNode) => void;
     }
   | {
       kind: "eye";
@@ -102,7 +104,7 @@ function EyeButton({ eye, label, onClick }: { eye: Eye; label: string; onClick: 
   return (
     <button
       type="button"
-      className={`run-controls inline-flex h-5 w-5 items-center justify-center rounded text-sm leading-none hover:bg-bg-hover touch:h-9 touch:w-9 ${
+      className={`run-controls run-eye inline-flex h-5 w-4 items-center justify-center rounded text-sm leading-none hover:bg-bg-hover touch:h-9 touch:w-9 ${
         eye === "off" ? "text-fg-subtle" : "text-fg"
       }`}
       onClick={onClick}
@@ -115,9 +117,19 @@ function EyeButton({ eye, label, onClick }: { eye: Eye; label: string; onClick: 
   );
 }
 
-/** An eye indented by its row's depth (a group's runs one step right of its header, as in the Name cell). */
-const indent = (depth: number, eye: ReactNode) =>
-  depth > 0 ? <span className="inline-flex" style={{ paddingLeft: depth * DEPTH_INDENT }}>{eye}</span> : eye;
+function GroupCheckbox({ state, label, onChange }: { state: "all" | "some" | "none"; label: string; onChange: () => void }) {
+  return (
+    <input
+      type="checkbox"
+      aria-label={`select every run of ${label}`}
+      checked={state === "all"}
+      ref={(el) => {
+        if (el) el.indeterminate = state === "some";
+      }}
+      onChange={onChange}
+    />
+  );
+}
 
 export default function RunsTable({
   projectId,
@@ -133,9 +145,10 @@ export default function RunsTable({
   nameExtras,
   hover,
 }: Props) {
-  // Eyes: the lead column widens by the deepest row's indent.
-  const maxDepth = lead.kind === "eye" ? rows.reduce((m, row) => Math.max(m, row.kind === "run" ? row.depth : row.node.depth), 0) : 0;
-  const leadW = CHECK_W + maxDepth * DEPTH_INDENT;
+  // Checkboxes have their own column; eyes sit in the Name cell, before the dot (or the group's caret),
+  // so they indent with the name. Only the header's eye-all stays left of "Name".
+  const leadCol = lead.kind === "check";
+  const leadW = leadCol ? CHECK_W : 0;
   const leadStyle = (extra?: CSSProperties): CSSProperties => ({ left: 0, width: leadW, minWidth: leadW, maxWidth: leadW, ...extra });
   const frozen = columns?.frozen ?? ["name"];
   const scroll = columns?.scroll ?? [];
@@ -164,6 +177,9 @@ export default function RunsTable({
 
   const nameCell = (r: Run, depth: number) => (
     <RunNameCell
+      before={
+        lead.kind === "eye" ? <EyeButton eye={lead.runEye(r) ? "on" : "off"} label={runLabel(r)} onClick={() => lead.onRun(r)} /> : null
+      }
       name={runRowName(r, grouped)}
       to={`/p/${projectId}/r/${r.id}`}
       color={colorOf(r)}
@@ -176,23 +192,21 @@ export default function RunsTable({
 
   const runLabel = (r: Run) => r.display_name ?? r.id;
 
-  const leadCell = (r: Run, depth: number) => {
-    const highlight = latestByName.has(r.id) ? { boxShadow: "inset 2px 0 0 rgb(var(--color-accent-rgb))" } : undefined;
-    return (
-      <td className={`frozen ${RUN_CELL_CLASS}`} style={leadStyle(highlight)}>
-        {lead.kind === "check" ? (
-          <input
-            type="checkbox"
-            aria-label={`select run ${runLabel(r)}`}
-            checked={lead.selected.has(r.id)}
-            onChange={(e) => lead.onToggle(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
-          />
-        ) : (
-          indent(depth, <EyeButton eye={lead.runEye(r) ? "on" : "off"} label={runLabel(r)} onClick={() => lead.onRun(r)} />)
-        )}
+  /** The newest run of a series with several runs: an accent edge on the row's first cell. */
+  const highlightOf = (r: Run): CSSProperties | undefined =>
+    latestByName.has(r.id) ? { boxShadow: "inset 2px 0 0 rgb(var(--color-accent-rgb))" } : undefined;
+
+  const leadCell = (r: Run) =>
+    lead.kind === "check" ? (
+      <td className={`frozen ${RUN_CELL_CLASS}`} style={leadStyle(highlightOf(r))}>
+        <input
+          type="checkbox"
+          aria-label={`select run ${runLabel(r)}`}
+          checked={lead.selected.has(r.id)}
+          onChange={(e) => lead.onToggle(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
+        />
       </td>
-    );
-  };
+    ) : null;
 
   const runRow = (r: Run, key: string, depth: number) => {
     const isSelected = lead.kind === "check" && lead.selected.has(r.id);
@@ -210,12 +224,16 @@ export default function RunsTable({
         onMouseEnter={hover ? () => hover.onRun(r) : undefined}
         onMouseLeave={hover ? () => hover.onRun(null) : undefined}
       >
-        {leadCell(r, depth)}
-        {frozen.map((col, i) => (
-          <td key={col} {...frozenProps(i, `px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`)}>
-            {col === "name" ? nameCell(r, depth) : <div className="truncate">{columns!.cell(r, col)}</div>}
-          </td>
-        ))}
+        {leadCell(r)}
+        {frozen.map((col, i) => {
+          const fp = frozenProps(i, `px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`);
+          const style = !leadCol && i === 0 ? { ...fp.style, ...highlightOf(r) } : fp.style;
+          return (
+            <td key={col} className={fp.className} style={style}>
+              {col === "name" ? nameCell(r, depth) : <div className="truncate">{columns!.cell(r, col)}</div>}
+            </td>
+          );
+        })}
         {scroll.map((col) => (
           <td key={col} className={`px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`} style={scrollCellStyle(col)}>
             {columns!.cell(r, col)}
@@ -227,8 +245,11 @@ export default function RunsTable({
   };
 
   const groupRow = (node: RunGroupNode) => {
+    const eye =
+      lead.kind === "eye" ? <EyeButton eye={lead.groupEye(node)} label={node.label ?? "(none)"} onClick={() => lead.onGroup(node)} /> : null;
     const header = (
-      <div style={{ paddingLeft: node.depth * 12 }}>
+      <div className={eye ? "flex min-w-0 items-center gap-1.5" : undefined} style={{ paddingLeft: node.depth * DEPTH_INDENT }}>
+        {eye}
         <GroupHeader
           by={node.by}
           label={node.label}
@@ -247,24 +268,22 @@ export default function RunsTable({
         onMouseEnter={hover ? () => hover.onGroup(node) : undefined}
         onMouseLeave={hover ? () => hover.onGroup(null) : undefined}
       >
-        {lead.kind === "check" ? (
-          <td
-            colSpan={1 + frozen.length}
-            className={`frozen ${columns ? "frozen-edge" : ""} ${GROUP_CELL_CLASS}`}
-            style={{ left: 0, ...(columns ? { width: frozenTotal, minWidth: frozenTotal, maxWidth: frozenTotal } : {}) }}
-          >
-            {header}
+        {lead.kind === "check" && (
+          <td className={`frozen ${GROUP_CELL_CLASS}`} style={leadStyle()}>
+            <GroupCheckbox
+              state={groupSelection(node.runs, lead.selected)}
+              label={node.label ?? "(none)"}
+              onChange={() => lead.onToggleGroup(node)}
+            />
           </td>
-        ) : (
-          <>
-            <td className={`frozen ${GROUP_CELL_CLASS}`} style={leadStyle()}>
-              {indent(node.depth, <EyeButton eye={lead.groupEye(node)} label={node.label ?? "(none)"} onClick={() => lead.onGroup(node)} />)}
-            </td>
-            <td colSpan={frozen.length} className={`frozen ${columns ? "frozen-edge" : ""} ${GROUP_CELL_CLASS}`} style={{ left: leadW }}>
-              {header}
-            </td>
-          </>
         )}
+        <td
+          colSpan={frozen.length}
+          className={`frozen ${columns ? "frozen-edge" : ""} ${GROUP_CELL_CLASS}`}
+          style={{ left: leadW, ...(columns ? { width: frozenTotal - leadW, minWidth: frozenTotal - leadW, maxWidth: frozenTotal - leadW } : {}) }}
+        >
+          {header}
+        </td>
         {scroll.length > 0 && <td colSpan={scroll.length} className="border-t border-border-subtle bg-bg-elevated" />}
         {columns && <td className="border-t border-border-subtle bg-bg-elevated" aria-hidden="true" />}
       </tr>
@@ -276,8 +295,8 @@ export default function RunsTable({
     <table className={`${RUNS_TABLE_CLASS} ${columns ? "" : "table-fixed"}`}>
       <thead className={RUNS_THEAD_CLASS}>
         <tr>
-          <th className={`frozen ${RUNS_TH_CLASS}`} style={leadStyle()}>
-            {lead.kind === "check" ? (
+          {lead.kind === "check" && (
+            <th className={`frozen ${RUNS_TH_CLASS}`} style={leadStyle()}>
               <input
                 type="checkbox"
                 aria-label="select all visible rows"
@@ -287,10 +306,8 @@ export default function RunsTable({
                 }}
                 onChange={lead.onToggleAll}
               />
-            ) : (
-              <EyeButton eye={lead.all} label="every listed run" onClick={lead.onAll} />
-            )}
-          </th>
+            </th>
+          )}
           {columns ? (
             [...frozen, ...scroll].map((col) => {
               const fi = frozen.indexOf(col);
@@ -298,7 +315,14 @@ export default function RunsTable({
             })
           ) : (
             <th className={`${frozenProps(0).className} ${RUNS_TH_CLASS}`} style={frozenProps(0).style}>
-              Name
+              {lead.kind === "eye" ? (
+                <span className="flex items-center gap-1.5">
+                  <EyeButton eye={lead.all} label="every listed run" onClick={lead.onAll} />
+                  Name
+                </span>
+              ) : (
+                "Name"
+              )}
             </th>
           )}
           {/* Filler: takes the table's spare width, so sized columns keep their widths. */}
