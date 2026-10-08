@@ -129,7 +129,7 @@ export function collapsedGroups(
   return out;
 }
 
-/** Every run in the same (non-null) group: the group needs no saying on each row (a group page). */
+/** Every run in the same (non-null) group: the group needs no saying on each row (e.g. filtered to one group). */
 export function sameGroup(runs: readonly Pick<Run, "group">[]): boolean {
   const g = runs[0]?.group;
   return g != null && runs.every((r) => r.group === g);

@@ -20,7 +20,7 @@
  */
 
 import { CARD_TYPES, type CardType } from "../cards/card-spec.ts";
-import { DEFAULT_VIEW_RUN_STATE, parseViewRunState, type ViewRunState } from "../workspace-runs/state.ts";
+import { DEFAULT_RUN_STATE, parseRunState, type RunState } from "../workspace-runs/state.ts";
 
 /** Per-card-type default values (the same shape as `settings-scope`'s `CardDefaults`). */
 export type CardDefaults = Partial<Record<CardType, Record<string, unknown>>>;
@@ -95,8 +95,8 @@ export interface WorkspaceDoc {
    */
   autoPanels: boolean;
   prefs: WorkspacePrefs;
-  /** The workspace and group pages' runs (toolbar, sort, eyes); the run page ignores it. */
-  runState: ViewRunState;
+  /** The workspace's runs (toolbar, sort, eyes); the run page ignores it. */
+  runState: RunState;
 }
 
 export type WorkspaceOp = (doc: WorkspaceDoc) => WorkspaceDoc;
@@ -110,7 +110,7 @@ export const EMPTY_WORKSPACE: WorkspaceDoc = Object.freeze({
   removed: [],
   autoPanels: true,
   prefs: { syncZoom: false, syncCursor: true, colorBy: null },
-  runState: DEFAULT_VIEW_RUN_STATE,
+  runState: DEFAULT_RUN_STATE,
 }) as WorkspaceDoc;
 
 export const AUTO_PREFIX = "auto:";
@@ -209,7 +209,7 @@ export function normalizeWorkspace(raw: unknown): WorkspaceDoc {
       syncCursor: typeof prefs.syncCursor === "boolean" ? prefs.syncCursor : EMPTY_WORKSPACE.prefs.syncCursor,
       colorBy: colorByOf(prefs.colorBy),
     },
-    runState: parseViewRunState(raw.runState),
+    runState: parseRunState(raw.runState),
   };
 }
 
@@ -495,7 +495,7 @@ export const ops = {
 
   // --- the workspace page's runs -------------------------------------------
   /** Edit the run state (lib/workspace-runs/state.ts edits); an unchanged state is a no-op. */
-  updateRunState: (fn: (s: ViewRunState) => ViewRunState): WorkspaceOp => (d) => {
+  updateRunState: (fn: (s: RunState) => RunState): WorkspaceOp => (d) => {
     const runState = fn(d.runState);
     return JSON.stringify(runState) === JSON.stringify(d.runState) ? d : { ...d, runState };
   },

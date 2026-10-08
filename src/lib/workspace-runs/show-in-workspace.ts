@@ -1,25 +1,34 @@
 /**
  * The runs table's "Show in workspace": write `showOnly` (visibility.ts)
  * into the project's current view, so the workspace opens with exactly the
- * ticked runs visible. On a group page's Runs tab (`group`) it is that
- * group page's run state.
+ * ticked runs visible. `focusGroupInWorkspace`: the workspace filtered to
+ * a group (visibility.ts `filterToGroup`), for a group's name outside it.
  */
 
 import { api } from "../../api/client";
+import type { Run } from "../../api/types";
 import { ops } from "../workspace/doc";
 import { viewRef } from "../workspace/ref";
 import { fetchWorkspace, flushWorkspace, updateWorkspace } from "../workspace/sync";
-import { editGroup, editProject } from "./state";
-import { showOnly } from "./visibility";
+import type { RunState } from "./state";
+import { filterToGroup, showOnly } from "./visibility";
 
-export async function showInWorkspace(projectId: string, ticked: ReadonlySet<string>, group?: string): Promise<void> {
+/** Edit the project's current view's run state, given the project's runs (archived too). */
+async function editWorkspaceRuns(projectId: string, fn: (s: RunState, runs: Run[]) => RunState): Promise<void> {
   const [{ current }, { runs }] = await Promise.all([
     api.views(projectId),
-    api.runs({ project: projectId, ...(group != null ? { group } : {}), archived: "false", limit: 1000, include: ["params", "stats"] }),
+    api.runs({ project: projectId, limit: 1000, include: ["params", "stats"] }),
   ]);
   const ref = viewRef(projectId, current);
   await fetchWorkspace(ref, { force: true });
-  const fn = (s: Parameters<typeof showOnly>[0]) => showOnly(s, runs, ticked);
-  updateWorkspace(ref, ops.updateRunState(group != null ? editGroup(group, fn) : editProject(fn)));
+  updateWorkspace(ref, ops.updateRunState((s) => fn(s, runs)));
   await flushWorkspace(ref);
+}
+
+export function showInWorkspace(projectId: string, ticked: ReadonlySet<string>): Promise<void> {
+  return editWorkspaceRuns(projectId, (s, runs) => showOnly(s, runs.filter((r) => !r.archived), ticked));
+}
+
+export function focusGroupInWorkspace(projectId: string, group: string): Promise<void> {
+  return editWorkspaceRuns(projectId, (s, runs) => filterToGroup(s, group, runs));
 }

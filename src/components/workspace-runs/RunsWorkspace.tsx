@@ -1,12 +1,10 @@
 /**
  * A runs workspace: the runs sidebar (RunsSidebar.tsx, the Runs page's
  * table with the Name column and eyes) next to the same `WorkspaceView`
- * the run page renders, both bound to the project's current view. The
- * project workspace lists the project's runs; a group page (`group`) the
- * group's, with its own run state (lib/workspace-runs/state.ts
- * `groups[<group>]`), not grouped by default. The run state is part of the
- * view's document, so it saves like layout edits and switching views
- * switches it too.
+ * the run page renders, both bound to the project's current view, over
+ * the project's runs. The run state is part of the view's document, so it
+ * saves like layout edits and switching views switches it too. A group's
+ * name filters the workspace to it (visibility.ts `filterToGroup`).
  *
  * The cards get the visible runs (lib/workspace-runs/visibility.ts). When
  * grouped the page also provides the grouping
@@ -25,7 +23,6 @@ import { useElementScrollRestore } from "../../lib/use-scroll-restore";
 import { WorkspaceGroupingContext, type WorkspaceGrouping } from "../../lib/workspace-runs/grouping-context";
 import { RunHoverContext, RunHoverStore } from "../../lib/workspace-runs/hover";
 import { cardRuns, resolveVisibility } from "../../lib/workspace-runs/visibility";
-import { editGroup, editProject, groupRunState, projectRunState } from "../../lib/workspace-runs/state";
 import { filterFieldsOf } from "../../lib/run-filter";
 import { availableColumns } from "../../lib/runs-table/columns";
 import type { RunGroupNode } from "../../lib/runs-table/group";
@@ -41,17 +38,13 @@ const NO_COMPUTED: never[] = [];
 /** The first top-level group and the no-value group start open, the other top-level groups collapsed. */
 const firstGroupOpen = (n: RunGroupNode, i: number) => n.depth === 0 && i > 0 && n.label != null;
 
-export default function RunsWorkspace({ wsRef, group }: { wsRef: WorkspaceRef; group?: string }) {
+export default function RunsWorkspace({ wsRef }: { wsRef: WorkspaceRef }) {
   const projectId = wsRef.projectId;
   const { doc, update } = useWorkspace(wsRef);
-  const state = useMemo(
-    () => (group != null ? groupRunState(doc.runState, group) : projectRunState(doc.runState)),
-    [doc.runState, group],
-  );
+  const state = doc.runState;
   // Archived too (Status › archived); params and stats: the filter and group-by read them (as in the runs table).
   const runsQ = useRuns({
     project: projectId,
-    ...(group != null ? { group } : {}),
     limit: RUNS_LIMIT,
     include: ["params", "stats"],
   });
@@ -87,14 +80,14 @@ export default function RunsWorkspace({ wsRef, group }: { wsRef: WorkspaceRef; g
   const [hover] = useState(() => new RunHoverStore());
 
   const edit = useCallback<RunStateEdit>(
-    (fn, label, mergeKey) => update(ops.updateRunState(group != null ? editGroup(group, fn) : editProject(fn)), { label, mergeKey }),
-    [update, group],
+    (fn, label, mergeKey) => update(ops.updateRunState(fn), { label, mergeKey }),
+    [update],
   );
 
   // Only phones toggle the sidebar (it is always shown from md up).
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  useElementScrollRestore(sidebarRef, `workspace-sidebar:${projectId}${group != null ? `:g:${group}` : ""}`, runs.length > 0);
+  useElementScrollRestore(sidebarRef, `workspace-sidebar:${projectId}`, runs.length > 0);
 
   return (
     <RunHoverContext.Provider value={hover}>
@@ -120,12 +113,13 @@ export default function RunsWorkspace({ wsRef, group }: { wsRef: WorkspaceRef; g
               colors={colors}
               groupOf={grouping ? cards.groupOf : null}
               runView={runView}
+              runs={runs}
               onEdit={edit}
             />
           </aside>
           <main className="min-w-0">
             <WorkspaceGroupingContext.Provider value={grouping}>
-              <WorkspaceView wsRef={wsRef} runIds={cards.runIds} reportLabel={group != null ? `group ${group}` : "workspace"} />
+              <WorkspaceView wsRef={wsRef} runIds={cards.runIds} reportLabel="workspace" />
             </WorkspaceGroupingContext.Provider>
           </main>
         </div>

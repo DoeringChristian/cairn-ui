@@ -114,7 +114,7 @@ test("runRowName: not grouped, a grouped run reads 'group · name'; grouped or w
   assert.equal(runRowName(run("abc", { display_name: null }), false), "abc");
 });
 
-test("sameGroup: every run in one non-null group drops the `group ·` prefix (a group page)", () => {
+test("sameGroup: every run in one non-null group drops the `group ·` prefix (e.g. filtered to one group)", () => {
   const a = run("a", { group: "exp-44", display_name: "train", version: 2 });
   const b = run("b", { group: "exp-44", display_name: "eval" });
   const c = run("c", { group: "exp-43", display_name: "eval" });

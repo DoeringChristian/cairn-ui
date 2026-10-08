@@ -11,7 +11,7 @@
  */
 
 import type { Run } from "../../api/types.ts";
-import { EMPTY_FILTER } from "../run-filter.ts";
+import { EMPTY_FILTER, type ChipNode, type FilterNode, type GroupNode } from "../run-filter.ts";
 import { groupByLabel, groupRunsNested, type RunGroupNode } from "../runs-table/group.ts";
 import { setEyes, type RunState } from "./state.ts";
 
@@ -159,4 +159,45 @@ export function showOnly(s: RunState, runs: readonly Run[], ticked: ReadonlySet<
   for (const r of runs) eyes[runKey(r.id)] = ticked.has(r.id);
   for (const g of groupRunsNested(runs, s.groupBy) ?? []) eyes[groupKey(g)] = false;
   return { ...s, status: "all", search: "", filter: EMPTY_FILTER, latestOnly: false, eyes };
+}
+
+const isGroupCondition = (n: FilterNode): boolean => n.kind === "chip" && n.field === "group" && n.op === "exact";
+
+/**
+ * The filter with the condition `group = <group>`: it replaces the root's
+ * existing `group =` condition (a click picks one group), else it is added
+ * (an OR root is kept whole, AND-ed with it).
+ */
+export function withGroupCondition(filter: GroupNode, group: string): GroupNode {
+  const chip: ChipNode = { kind: "chip", field: "group", op: "exact", arg: group };
+  if (filter.op === "or" && filter.children.length > 0) return { kind: "group", op: "and", children: [filter, chip] };
+  const children: FilterNode[] = [];
+  let placed = false;
+  for (const n of filter.children) {
+    if (!isGroupCondition(n)) children.push(n);
+    else if (!placed) {
+      children.push(chip);
+      placed = true;
+    }
+  }
+  if (!placed) children.push(chip);
+  return { kind: "group", op: "and", children };
+}
+
+/**
+ * A group's name clicked (the sidebar, a runs table group header, the run
+ * page's group badge): the workspace filtered to the group, as the filter's
+ * `group = <group>` condition. The eyes stay, except that the group's runs
+ * hidden by them or by the newest-`DEFAULT_VISIBLE` default are shown: a
+ * top-level group's off eye goes back to its default, then every still
+ * hidden run gets its own eye on. `runs`: the runs the workspace lists from.
+ */
+export function filterToGroup(s: RunState, group: string, runs: readonly Run[]): RunState {
+  const mine = runs.filter((r) => r.group === group && (s.status === "archived" ? r.archived : !r.archived));
+  const groups = groupRunsNested(mine, s.groupBy);
+  const offGroups = (groups ?? []).map(groupKey).filter((k) => s.eyes[k] === false);
+  const eyes = setEyes(s, offGroups, null).eyes;
+  const vis = resolveVisibility(mine, groups, eyes);
+  const hidden = mine.filter((r) => !vis.runs.has(r.id)).map((r) => runKey(r.id));
+  return setEyes({ ...s, filter: withGroupCondition(s.filter, group), eyes }, hidden, true);
 }

@@ -4,17 +4,20 @@ import type { Run } from "../../api/types.ts";
 import { groupRunsNested, type GroupBy } from "../runs-table/group.ts";
 import { makeRun } from "../runs-table/test-run.ts";
 import { DEFAULT_RUN_STATE, type RunState } from "./state.ts";
+import { EMPTY_FILTER, matchesFilter, type GroupNode } from "../run-filter.ts";
 import {
   DEFAULT_VISIBLE,
   allEye,
   toggleAllEyes,
   cardRuns,
+  filterToGroup,
   groupEye,
   groupKey,
   resolveVisibility,
   showOnly,
   toggleGroupEye,
   toggleRunEye,
+  withGroupCondition,
 } from "./visibility.ts";
 
 const at = (i: number) => `2026-01-01T00:${String(i).padStart(2, "0")}:00Z`;
@@ -158,4 +161,48 @@ test("header eye: on / off / mixed over the listed runs; a click shows all, or h
   assert.equal(Object.keys(s4.eyes).length, sorted.length);
   assert.equal(resolveVisibility(sorted, null, s4.eyes).runs.size, 0);
   assert.equal(allEye([], new Set()), "off");
+});
+
+const chip = (field: string, arg: string, op: "exact" | "gt" = "exact") => ({ kind: "chip" as const, field, op, arg });
+
+test("withGroupCondition: adds `group = g`, replaces an earlier one, keeps the other conditions", () => {
+  const one = withGroupCondition(EMPTY_FILTER, "exp-44");
+  assert.deepEqual(one, { kind: "group", op: "and", children: [chip("group", "exp-44")] });
+  const withOther: GroupNode = { kind: "group", op: "and", children: [chip("status", "completed"), chip("group", "exp-44")] };
+  assert.deepEqual(withGroupCondition(withOther, "exp-43").children, [chip("status", "completed"), chip("group", "exp-43")]);
+  // An OR root stays whole, AND-ed with the group.
+  const or: GroupNode = { kind: "group", op: "or", children: [chip("status", "failed"), chip("status", "crashed")] };
+  assert.deepEqual(withGroupCondition(or, "g"), { kind: "group", op: "and", children: [or, chip("group", "g")] });
+  // The condition really filters to the group.
+  assert.equal(matchesFilter(makeRun("a", { group: "exp-44" }), one), true);
+  assert.equal(matchesFilter(makeRun("b", { group: "exp-43" }), one), false);
+});
+
+test("filterToGroup: filters, keeps the eyes, shows the group's runs hidden by a group eye", () => {
+  const { sorted, groups } = fixture(3);
+  const exp1 = groups.find((g) => g.label === "exp-1")!;
+  const s0: RunState = { ...DEFAULT_RUN_STATE, eyes: { [groupKey(exp1)]: false, "r:g2-a": false } };
+  const s = filterToGroup(s0, "exp-1", sorted);
+  assert.deepEqual(s.filter.children, [chip("group", "exp-1")]);
+  // exp-1's off eye goes back to its default (visible); the other group's eyes stay.
+  assert.deepEqual(s.eyes, { "r:g2-a": false });
+  const listed = sorted.filter((r) => matchesFilter(r, s.filter));
+  const v = resolveVisibility(listed, groupRunsNested(listed, BY_GROUP), s.eyes);
+  assert.deepEqual([...v.runs].sort(), ["g1-a", "g1-b"]);
+});
+
+test("filterToGroup: a run eye off and the newest-10 cap (not grouped) are overridden for the group's runs", () => {
+  const runs = sortNewest(Array.from({ length: 12 }, (_, i) => makeRun(`r${i}`, { group: "big", created_at: at(i) })));
+  const s0: RunState = { ...DEFAULT_RUN_STATE, groupBy: [], eyes: { "r:r11": false } };
+  const s = filterToGroup(s0, "big", runs);
+  const v = resolveVisibility(runs, null, s.eyes);
+  assert.equal(v.runs.size, 12);
+  // Already visible runs get no eye of their own.
+  assert.equal(s.eyes["r:r5"], undefined);
+});
+
+test("filterToGroup: archived runs only count under the archived status", () => {
+  const runs = [makeRun("a", { group: "g" }), makeRun("old", { group: "g", archived: true })];
+  const s = filterToGroup({ ...DEFAULT_RUN_STATE, groupBy: [], eyes: { "r:old": false } }, "g", runs);
+  assert.equal(s.eyes["r:old"], false);
 });

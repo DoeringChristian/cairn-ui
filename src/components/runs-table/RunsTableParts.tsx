@@ -23,12 +23,20 @@ export const GROUP_CELL_CLASS = "border-t border-border-subtle px-3 py-1.5";
 /** Indent per group depth, px. */
 export const DEPTH_INDENT = 12;
 
-/** The group page of a run group (`run.group`): `/p/<project>/g/<group>`. */
-export const groupPagePath = (projectId: string, group: string) => `/p/${projectId}/g/${encodeURIComponent(group)}`;
+/**
+ * The project workspace filtered to a run group (`run.group`):
+ * `/p/<project>/workspace?group=<group>` (WorkspacePage applies it).
+ */
+export const groupWorkspacePath = (projectId: string, group: string) =>
+  `/p/${projectId}/workspace?group=${encodeURIComponent(group)}`;
+
+/** What a group header's name does: a link, or an action (the workspace sidebar filters in place). */
+export type GroupNameAction = { to: string } | { onClick: () => void };
 
 /**
  * A group header's content: ▾/▸, `group: exp-44`, the count chip. Toggles
- * collapse; with `to` (a run group) the group's name links to its page.
+ * collapse; with `name` (a run group) the group's name filters the
+ * workspace to it.
  */
 export function GroupHeader({
   by,
@@ -36,7 +44,7 @@ export function GroupHeader({
   count,
   collapsed,
   onToggle,
-  to,
+  name: nameAction,
 }: {
   by: GroupBy;
   /** The group's value; null: no value, shown `(none)`. */
@@ -44,8 +52,8 @@ export function GroupHeader({
   count: number;
   collapsed: boolean;
   onToggle: () => void;
-  /** The group page the name links to. */
-  to?: string | null;
+  /** What the group's name does (a link or an action); none: it toggles like the rest. */
+  name?: GroupNameAction | null;
 }) {
   const chevron = <i className={`fa-solid ${collapsed ? "fa-chevron-right" : "fa-chevron-down"} w-3 text-[10px]`} aria-hidden="true" />;
   const byLabel = <span className="mono shrink truncate text-fg-subtle">{groupByLabel(by)}:</span>;
@@ -53,7 +61,9 @@ export function GroupHeader({
     <span className={`mono truncate font-semibold ${label == null ? "italic text-fg-subtle" : "text-fg"}`}>{label ?? "(none)"}</span>
   );
   const chip = <span className="shrink-0 rounded bg-bg-hover px-1.5 py-0.5 text-[10px]">{count}</span>;
-  if (to && label != null) {
+  if (nameAction && label != null) {
+    const nameClass = "mono min-w-0 truncate font-semibold text-fg hover:text-accent hover:underline";
+    const title = `Show only ${label} in the workspace`;
     return (
       <div className="flex w-full min-w-0 items-center gap-2 text-xs text-fg-muted touch:min-h-[40px]">
         <button
@@ -66,9 +76,15 @@ export function GroupHeader({
           {chevron}
           {byLabel}
         </button>
-        <Link to={to} className="mono min-w-0 truncate font-semibold text-fg hover:text-accent hover:underline" title={`Open the group ${label}`}>
-          {label}
-        </Link>
+        {"to" in nameAction ? (
+          <Link to={nameAction.to} className={nameClass} title={title}>
+            {label}
+          </Link>
+        ) : (
+          <button type="button" onClick={nameAction.onClick} className={nameClass} title={title}>
+            {label}
+          </button>
+        )}
         <button type="button" onClick={onToggle} tabIndex={-1} aria-hidden="true" className="flex min-w-0 flex-1 items-center self-stretch">
           {chip}
         </button>

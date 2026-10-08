@@ -5,8 +5,8 @@
  * group's aggregate: hovering a group header, or a run inside it, targets
  * the group's line, and hovering that line highlights the group header.
  *
- * One small store per page (`RunHoverContext`, provided by the workspace
- * and group pages); without a provider (the run page, reports) charts
+ * One small store per page (`RunHoverContext`, provided by the
+ * workspace); without a provider (the run page, reports) charts
  * keep only their own legend highlight.
  */
 

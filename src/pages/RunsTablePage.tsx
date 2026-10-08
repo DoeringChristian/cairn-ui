@@ -32,7 +32,7 @@ import {
   RunSearchInput,
   RunStatusSelect,
 } from "../components/RunFilterBar";
-import { GroupHeader, groupPagePath } from "../components/runs-table/RunsTableParts";
+import { GroupHeader, groupWorkspacePath } from "../components/runs-table/RunsTableParts";
 import RunsTable from "../components/runs-table/RunsTable";
 import { useRunsTable } from "../components/runs-table/use-runs-table";
 import { runRowName, sameGroup, toggleGroupSelection, type StatusFilter } from "../lib/runs-table/model.ts";
@@ -95,15 +95,11 @@ function formatCreated(iso: string): string {
   }
 }
 
-/**
- * The Runs page (`/p/:projectId`), and a group page's Runs tab
- * (`group`: only that group's runs; "Show in workspace" opens the group's
- * workspace).
- */
-export default function RunsTablePage({ group }: { group?: string } = {}) {
+/** The Runs page (`/p/:projectId`). */
+export default function RunsTablePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const q = useInfiniteRuns({ project: projectId, ...(group != null ? { group } : {}), include: ["params", "stats"] });
+  const q = useInfiniteRuns({ project: projectId, include: ["params", "stats"] });
   const { bulkDelete, bulkArchive, bulkStop } = useBulkRunMutation();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -351,7 +347,7 @@ export default function RunsTablePage({ group }: { group?: string } = {}) {
     sorted.length > 0 && sorted.every((r) => selected.has(r.id));
   const someVisibleSelected = sorted.some((r) => selected.has(r.id));
   const grouped = groupBy.length > 0;
-  // Names drop the `group ·` prefix when grouped or every listed run is in one group (a group page).
+  // Names drop the `group ·` prefix when grouped or every listed run is in one group (e.g. filtered to one group).
   const plainNames = grouped || sameGroup(sorted);
 
   const onHeaderCheckbox = () => {
@@ -375,13 +371,13 @@ export default function RunsTablePage({ group }: { group?: string } = {}) {
   }, [selected]);
 
   const onShowInWorkspace = async () => {
-    // Exactly the ticked runs visible in the current view (the project's workspace, or the group page's).
-    await showInWorkspace(projectId!, new Set(selected), group);
-    navigate(group != null ? groupPagePath(projectId!, group) : `/p/${projectId}/workspace`);
+    // Exactly the ticked runs visible in the project workspace (the current view).
+    await showInWorkspace(projectId!, new Set(selected));
+    navigate(`/p/${projectId}/workspace`);
   };
 
   useWindowScrollRestore(
-    `runs:${projectId ?? ""}${group != null ? `:g:${group}` : ""}`,
+    `runs:${projectId ?? ""}`,
     !q.isLoading && !!q.data,
   );
 
@@ -548,7 +544,7 @@ export default function RunsTablePage({ group }: { group?: string } = {}) {
     <RunViewContext.Provider value={runViewCtl}>
     <div>
       <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        {group == null && <h1 className="mono min-w-0 break-all text-xl font-semibold">{projectId} / runs</h1>}
+        <h1 className="mono min-w-0 break-all text-xl font-semibold">{projectId} / runs</h1>
         <p className="text-sm text-fg-muted">
           {sorted.length} of {serverTotal} run{serverTotal === 1 ? "" : "s"}
         </p>
@@ -726,7 +722,7 @@ export default function RunsTablePage({ group }: { group?: string } = {}) {
                     count={row.node.runs.length}
                     collapsed={collapsed.has(row.node.id)}
                     onToggle={() => toggleGroup(row.node.id)}
-                    to={row.node.by.source === "group" && row.node.label != null ? groupPagePath(projectId, row.node.label) : null}
+                    name={row.node.by.source === "group" && row.node.label != null ? { to: groupWorkspacePath(projectId, row.node.label) } : null}
                   />
                 </li>
               ) : (

@@ -17,7 +17,8 @@ import {
   DEPTH_INDENT,
   GROUP_CELL_CLASS,
   GroupHeader,
-  groupPagePath,
+  groupWorkspacePath,
+  type GroupNameAction,
   RUN_CELL_CLASS,
   RUN_ROW_CLASS,
   RUNS_TABLE_CLASS,
@@ -96,6 +97,8 @@ interface Props {
   /** After the Name cell's version. */
   nameExtras?: (run: Run) => ReactNode;
   hover?: RunsTableHover;
+  /** A run group's name in a group header (`group` levels); default: a link to the workspace filtered to it. */
+  groupName?: (group: string) => GroupNameAction;
 }
 
 const EYE_GLYPH: Record<Eye, string> = { on: "◉", off: "○", mixed: "◐" };
@@ -144,6 +147,7 @@ export default function RunsTable({
   columns,
   nameExtras,
   hover,
+  groupName = (g) => ({ to: groupWorkspacePath(projectId, g) }),
 }: Props) {
   // Checkboxes have their own column; eyes sit in the Name cell, before the dot (or the group's caret),
   // so they indent with the name. Only the header's eye-all stays left of "Name".
@@ -256,7 +260,7 @@ export default function RunsTable({
           count={node.runs.length}
           collapsed={collapsed.has(node.id)}
           onToggle={() => onToggleGroup(node.id)}
-          to={node.by.source === "group" && node.label != null ? groupPagePath(projectId, node.label) : null}
+          name={node.by.source === "group" && node.label != null ? groupName(node.label) : null}
         />
       </div>
     );

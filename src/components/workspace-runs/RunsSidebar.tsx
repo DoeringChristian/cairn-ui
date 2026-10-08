@@ -1,7 +1,6 @@
 /**
- * The workspace's runs sidebar (the project workspace and a group page):
- * the Runs page's table with the Name column only and an eye column in
- * place of the checkboxes. Above it the runs table's toolbar minus Columns
+ * The workspace's runs sidebar: the Runs page's table with the Name
+ * column only and an eye in place of each checkbox (in the Name cell). Above it the runs table's toolbar minus Columns
  * (Status, Search, Filter, Group, Latest only) plus the sort, then
  * `3 of 4 groups shown`.
  *
@@ -12,7 +11,8 @@
  * project run view's) are listed first whatever the filters, with a pin
  * toggle on row hover. Hovering a row or a group header highlights its
  * line(s) in the charts, and a hovered line lights its row
- * (lib/workspace-runs/hover.ts).
+ * (lib/workspace-runs/hover.ts). A group's name filters the workspace to
+ * the group (visibility.ts `filterToGroup`).
  */
 
 import type { Run } from "../../api/types";
@@ -32,7 +32,7 @@ import { DEFAULT_SORT, initialDirection, type SortKey } from "../../lib/runs-tab
 import type { RunViewContextValue } from "../../lib/run-view";
 import { targetOfRun, useRunHover } from "../../lib/workspace-runs/hover";
 import { setFilter, setGroupBy, setLatestOnly, setSearch, setSort, setStatus, type RunState } from "../../lib/workspace-runs/state";
-import { allEye, groupEye, toggleAllEyes, toggleGroupEye, toggleRunEye, type Visibility } from "../../lib/workspace-runs/visibility";
+import { allEye, filterToGroup, groupEye, toggleAllEyes, toggleGroupEye, toggleRunEye, type Visibility } from "../../lib/workspace-runs/visibility";
 import "../../pages/runs-table.css";
 
 export type RunStateEdit = (fn: (s: RunState) => RunState, label: string, mergeKey?: string) => void;
@@ -53,6 +53,8 @@ interface Props {
   groupOf: ReadonlyMap<string, string> | null;
   /** The project run view: its pinned runs. */
   runView: RunViewContextValue;
+  /** Every run the sidebar lists from (a group's name filters to its runs). */
+  runs: readonly Run[];
   onEdit: RunStateEdit;
 }
 
@@ -107,6 +109,7 @@ export default function RunsSidebar({
   colors,
   groupOf,
   runView,
+  runs,
   onEdit,
 }: Props) {
   const visible = visibility.runs;
@@ -169,6 +172,7 @@ export default function RunsSidebar({
               all: allEye(table.sorted, visible),
               onAll: () => onEdit((s) => toggleAllEyes(s, table.sorted, table.groups, visible), "Toggle every run"),
             }}
+            groupName={(g) => ({ onClick: () => onEdit((s) => filterToGroup(s, g, runs), `Filter to ${g}`) })}
             nameExtras={(r) => (
               <span className="ml-auto shrink-0">
                 <RunViewControls runId={r.id} view={runView.view} onChange={runView.set} toggles={["pin"]} />
