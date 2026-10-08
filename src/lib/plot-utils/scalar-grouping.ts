@@ -2,8 +2,9 @@
  * Which grouping a scalar card draws. The card's `groupMode`:
  *
  * - `workspace` (default): follow the workspace sidebar's grouping (the
- *   `WorkspaceGroupingContext`): grouped, one line per sidebar group (mean, a
- *   min–max band, the group's colour and name); not grouped, one line per run.
+ *   `WorkspaceGroupingContext`): grouped, one line per innermost sidebar group
+ *   (mean, a min–max band, the group's colour, its `group: exp-44, jobType:
+ *   train` label); not grouped, one line per run.
  *   Outside a workspace (no context: the run page, reports) there is no
  *   workspace grouping and the card's own grouping settings apply.
  * - `off`: one line per run, even in a grouped workspace.
@@ -40,7 +41,7 @@ export interface ScalarGroupingPlan {
   agg: AggKind;
   band: BandKind;
   hideMembers: boolean;
-  /** Group colours: the workspace's (`groupColor`) or a palette slot per sorted group. */
+  /** Group colours: the workspace's (`WorkspaceGrouping.colorOf`) or a palette slot per sorted group. */
   palette: "workspace" | "card";
   countInLabel: boolean;
 }

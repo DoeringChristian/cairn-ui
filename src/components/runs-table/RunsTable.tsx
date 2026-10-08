@@ -10,7 +10,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { Run } from "../../api/types";
 import { isNumericColumn } from "../../lib/runs-table/columns";
-import type { RunGroupNode, TableRow } from "../../lib/runs-table/group";
+import { groupLineLabel, type RunGroupNode, type TableRow } from "../../lib/runs-table/group";
 import { groupSelection, runRowName } from "../../lib/runs-table/model";
 import {
   CHECK_W,
@@ -87,8 +87,14 @@ interface Props {
   grouped: boolean;
   /** The newest run of a series with several runs: highlighted. */
   latestByName: ReadonlySet<string>;
-  /** A run's dot; null: hollow. */
+  /** A run's dot (not grouped; runs inside groups have none); null: hollow. */
   colorOf: (run: Run) => string | null | undefined;
+  /** The innermost groups' dots: their chart lines' colours (lib/run-color.ts `groupLineColors`). */
+  groupColors: ReadonlyMap<string, string>;
+  /** An innermost group drawn in no chart (its dot hollow). */
+  groupHidden?: (node: RunGroupNode) => boolean;
+  /** The eye header's `15 listed`. */
+  listed?: number;
   /** Dimmed. */
   hidden: (run: Run) => boolean;
   lead: RunsTableLead;
@@ -148,6 +154,9 @@ export default function RunsTable({
   nameExtras,
   hover,
   groupName = (g) => ({ to: groupWorkspacePath(projectId, g) }),
+  groupColors,
+  groupHidden,
+  listed,
 }: Props) {
   // Checkboxes have their own column; eyes sit in the Name cell, before the dot (or the group's caret),
   // so they indent with the name. Only the header's eye-all stays left of "Name".
@@ -186,7 +195,7 @@ export default function RunsTable({
       }
       name={runRowName(r, grouped)}
       to={`/p/${projectId}/r/${r.id}`}
-      color={colorOf(r)}
+      color={depth > 0 ? false : colorOf(r)}
       depth={depth}
       version={r.version != null ? <RunVersion version={r.version} /> : null}
     >
@@ -255,9 +264,8 @@ export default function RunsTable({
       <div className={eye ? "flex min-w-0 items-center gap-1.5" : undefined} style={{ paddingLeft: node.depth * DEPTH_INDENT }}>
         {eye}
         <GroupHeader
-          by={node.by}
-          label={node.label}
-          count={node.runs.length}
+          node={node}
+          color={node.children === null && !groupHidden?.(node) ? (groupColors.get(groupLineLabel(node.path)) ?? null) : null}
           collapsed={collapsed.has(node.id)}
           onToggle={() => onToggleGroup(node.id)}
           name={node.by.source === "group" && node.label != null ? groupName(node.label) : null}
@@ -323,6 +331,7 @@ export default function RunsTable({
                 <span className="flex items-center gap-1.5">
                   <EyeButton eye={lead.all} label="every listed run" onClick={lead.onAll} />
                   Name
+                  {listed !== undefined && <span className="ml-1 normal-case tracking-normal text-fg-subtle">{listed} listed</span>}
                 </span>
               ) : (
                 "Name"

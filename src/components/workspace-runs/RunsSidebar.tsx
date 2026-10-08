@@ -10,7 +10,7 @@
  * saved into the current view; collapsing is page-local. Pinned runs (the
  * project run view's) are listed first whatever the filters, with a pin
  * toggle on row hover. Hovering a row or a group header highlights its
- * line(s) in the charts, and a hovered line lights its row
+ * line(s) in the charts (grouped: the innermost group's line), and a hovered line lights its row
  * (lib/workspace-runs/hover.ts). A group's name filters the workspace to
  * the group (visibility.ts `filterToGroup`).
  */
@@ -27,6 +27,7 @@ import RunViewControls from "../RunViewControls";
 import RunsTable from "../runs-table/RunsTable";
 import type { useRunsTable } from "../runs-table/use-runs-table";
 import { columnKind, columnLabel } from "../../lib/runs-table/columns";
+import { groupLineLabel, type RunGroupNode } from "../../lib/runs-table/group";
 import { sameGroup } from "../../lib/runs-table/model";
 import { DEFAULT_SORT, initialDirection, type SortKey } from "../../lib/runs-table/sort";
 import type { RunViewContextValue } from "../../lib/run-view";
@@ -49,8 +50,10 @@ interface Props {
   sortColumns: string[];
   /** The colours the cards draw the visible runs in. */
   colors: ReadonlyMap<string, string>;
-  /** Grouped: each drawn run's top-level group (its line is the group's); null: one line per run. */
+  /** Grouped: each drawn run's innermost group line (its line is the group's); null: one line per run. */
   groupOf: ReadonlyMap<string, string> | null;
+  /** The innermost groups' colours (lib/run-color.ts `groupLineColors`). */
+  groupColors: ReadonlyMap<string, string>;
   /** The project run view: its pinned runs. */
   runView: RunViewContextValue;
   /** Every run the sidebar lists from (a group's name filters to its runs). */
@@ -108,6 +111,7 @@ export default function RunsSidebar({
   sortColumns,
   colors,
   groupOf,
+  groupColors,
   runView,
   runs,
   onEdit,
@@ -116,9 +120,8 @@ export default function RunsSidebar({
   const hover = useRunHover();
   const target = hover.target;
   const grouped = state.groupBy.length > 0;
-  /** A group header's line: the top-level group's (a nested group's runs share it). */
-  const groupLine = (n: { depth: number; label: string | null; runs: Run[] }) =>
-    n.depth === 0 ? n.label : (n.runs.map((r) => groupOf?.get(r.id)).find((g) => g != null) ?? null);
+  /** An innermost group header's line (outer groups have none). */
+  const groupLine = (n: RunGroupNode) => (n.children === null ? groupLineLabel(n.path) : null);
   return (
     <div className="flex flex-col" data-testid="runs-sidebar">
       <div className="flex flex-col gap-1.5 px-3 pb-2 pt-3">
@@ -162,6 +165,9 @@ export default function RunsSidebar({
             grouped={grouped || sameGroup(table.sorted)}
             latestByName={table.latestByName}
             colorOf={(r) => (visible.has(r.id) ? colors.get(r.id) : null)}
+            groupColors={groupColors}
+            groupHidden={(n) => groupEye(n, visible) === "off"}
+            listed={table.sorted.length}
             hidden={(r) => !visible.has(r.id)}
             lead={{
               kind: "eye",
@@ -182,7 +188,7 @@ export default function RunsSidebar({
               hover.active
                 ? {
                     runHot: (r) => target?.runId === r.id,
-                    groupHot: (n) => grouped && target?.group != null && n.depth === 0 && n.label === target.group,
+                    groupHot: (n) => grouped && target?.group != null && groupLine(n) === target.group,
                     onRun: (r) => hover.set(r ? targetOfRun(r.id, groupOf) : null),
                     onGroup: (n) => {
                       const g = n ? groupLine(n) : null;

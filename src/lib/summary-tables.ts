@@ -5,7 +5,7 @@
  * **Config** table (config keys as rows, tags and notes first; one column
  * per run or group).
  *
- * Rows/columns of a grouped workspace: each top-level group is one unit
+ * Rows/columns of a grouped workspace: each innermost group is one unit
  * (its runs in the order shown), a run outside every group stays its own.
  * A group's value: numbers → the mean over its runs that have one; a
  * created time → its first; anything else → the value when its runs agree,
@@ -104,7 +104,7 @@ export type Unit =
 
 /**
  * The table's units in the order shown: each run, or (grouped: `groupOf`)
- * each top-level group at its first run's place; a run without a group
+ * each innermost group at its first run's place; a run without a group
  * stays its own unit.
  */
 export function unitsOf(runs: readonly TableRun[], groupOf: ReadonlyMap<string, string> | null): Unit[] {

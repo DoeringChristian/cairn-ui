@@ -59,6 +59,8 @@ import { removeSortKey, toggleSort, type SortKey } from "../lib/runs-table/sort.
 import { deltaOf, formatDelta, goalFor, relativeDelta, toneOf, type Tone } from "../lib/runs-table/delta.ts";
 import type { Goal } from "../lib/metric-rules.ts";
 import { RunViewContext, useRunColors, type RunView } from "../lib/run-view";
+import { groupLineColors } from "../lib/run-color";
+import { groupLineLabel, innermostLineOf } from "../lib/runs-table/group.ts";
 import { useProjectRunView } from "../lib/run-view-store";
 import { newId } from "../lib/reports/ids";
 import "./runs-table.css";
@@ -229,7 +231,7 @@ export default function RunsTablePage() {
     [runs, runView.baseline],
   );
 
-  const { runSearch, latestByName, filtered, computedValues, sorted, collapsed, toggleGroup, rows } = useRunsTable({
+  const { runSearch, latestByName, filtered, computedValues, sorted, groups, collapsed, toggleGroup, rows } = useRunsTable({
     runs,
     status: statusFilter,
     search,
@@ -250,6 +252,7 @@ export default function RunsTablePage() {
   const shownColumns = useMemo(() => [...layout.frozen, ...layout.scroll], [layout]);
 
   const colors = useRunColors(useMemo(() => sorted.map((r) => r.id), [sorted]));
+  const groupColors = useMemo(() => groupLineColors(groups ? [...new Set(innermostLineOf(groups).values())] : []), [groups]);
 
   // Which way is better per column: the project's metric rules (deltas).
   const ruleOf = useMetricRules(projectId);
@@ -400,7 +403,7 @@ export default function RunsTablePage() {
               onChange={(e) => toggleRow(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
             />
           </div>
-          <RunSwatch color={colors.get(r.id)} />
+          {depth === 0 && <RunSwatch color={colors.get(r.id)} />}
           <Link
             to={`/p/${projectId}/r/${r.id}`}
             className={`mono flex min-h-[44px] min-w-0 flex-1 items-center py-2 leading-snug text-accent [overflow-wrap:anywhere] hover:underline ${hidden ? "opacity-50" : ""}`}
@@ -467,6 +470,11 @@ export default function RunsTablePage() {
               <RunProgressLine status={r.status} progress={r.progress} />
             </span>
           );
+        case "group":
+        case "job_type": {
+          const v = key === "group" ? r.group : r.job_type;
+          return <span className="dim mono whitespace-nowrap text-fg-muted">{v ?? ""}</span>;
+        }
         case "created_at":
           return <span className="dim whitespace-nowrap text-fg-muted">{formatCreated(r.created_at)}</span>;
         case "duration":
@@ -695,9 +703,8 @@ export default function RunsTablePage() {
               row.kind === "group" ? (
                 <li key={row.node.id} style={{ marginLeft: row.node.depth * 12 }}>
                   <GroupHeader
-                    by={row.node.by}
-                    label={row.node.label}
-                    count={row.node.runs.length}
+                    node={row.node}
+                    color={row.node.children === null ? (groupColors.get(groupLineLabel(row.node.path)) ?? null) : null}
                     collapsed={collapsed.has(row.node.id)}
                     onToggle={() => toggleGroup(row.node.id)}
                     name={row.node.by.source === "group" && row.node.label != null ? { to: groupWorkspacePath(projectId, row.node.label) } : null}
@@ -720,6 +727,7 @@ export default function RunsTablePage() {
               grouped={plainNames}
               latestByName={latestByName}
               colorOf={(r) => colors.get(r.id)}
+              groupColors={groupColors}
               hidden={(r) => runView.hidden.includes(r.id)}
               lead={{
                 kind: "check",

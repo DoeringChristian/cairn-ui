@@ -101,12 +101,17 @@ test("a nested group eye sets its runs' eyes", () => {
   assert.deepEqual(s.eyes, { "r:b": false, "r:a": false });
 });
 
-test("cardRuns: visible runs in table order; grouped, each with its top-level group (no value: none)", () => {
+test("cardRuns: visible runs in table order; grouped, each with its innermost group line ((none) included)", () => {
   const { sorted, groups } = fixture(2);
   const vis = resolveVisibility(sorted, groups, { "r:g1-a": false }).runs;
   const c = cardRuns(sorted, groups, vis);
   assert.deepEqual(c.runIds, ["g1-b", "g0-b", "g0-a", "loose"]);
-  assert.deepEqual([...c.groupOf], [["g1-b", "exp-1"], ["g0-b", "exp-0"], ["g0-a", "exp-0"]]);
+  assert.deepEqual([...c.groupOf], [
+    ["g1-b", "group: exp-1"],
+    ["g0-b", "group: exp-0"],
+    ["g0-a", "group: exp-0"],
+    ["loose", "group: (none)"],
+  ]);
   const flat = cardRuns(sorted, null, resolveVisibility(sorted, null, {}).runs);
   assert.deepEqual(flat.runIds, sorted.map((r) => r.id));
   assert.equal(flat.groupOf.size, 0);
@@ -129,7 +134,7 @@ test("showOnly: exactly the ticked runs, grouped or not; a partly ticked group s
   // The cards get only the ticked runs: exp-1's line is over g1-a alone.
   const cards = cardRuns(all, allGroups, vis);
   assert.deepEqual(cards.runIds.sort(), ["g1-a", "loose"]);
-  assert.equal(cards.groupOf.get("g1-a"), "exp-1");
+  assert.equal(cards.groupOf.get("g1-a"), "group: exp-1");
   // Even a group among the newest DEFAULT_VISIBLE stays hidden.
   const many = fixture(3);
   const s2 = showOnly(DEFAULT_RUN_STATE, many.sorted, new Set(["g2-b"]));
@@ -205,4 +210,21 @@ test("filterToGroup: archived runs only count under the archived status", () => 
   const runs = [makeRun("a", { group: "g" }), makeRun("old", { group: "g", archived: true })];
   const s = filterToGroup({ ...DEFAULT_RUN_STATE, groupBy: [], eyes: { "r:old": false } }, "g", runs);
   assert.equal(s.eyes["r:old"], false);
+});
+
+test("cardRuns: nested, each run maps to its innermost group path", () => {
+  const runs = sortNewest([
+    makeRun("t", { group: "exp-44", job_type: "train", created_at: at(3) }),
+    makeRun("e", { group: "exp-44", job_type: "eval", created_at: at(2) }),
+    makeRun("x", { group: "exp-44", created_at: at(1) }),
+    makeRun("b", { created_at: at(0) }),
+  ]);
+  const groups = groupRunsNested(runs, [{ source: "group" }, { source: "job_type" }])!;
+  const c = cardRuns(runs, groups, new Set(runs.map((r) => r.id)));
+  assert.deepEqual(Object.fromEntries(c.groupOf), {
+    t: "group: exp-44, jobType: train",
+    e: "group: exp-44, jobType: eval",
+    x: "group: exp-44, jobType: (none)",
+    b: "group: (none), jobType: (none)",
+  });
 });

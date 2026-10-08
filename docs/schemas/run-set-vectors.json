@@ -1414,6 +1414,43 @@
    ]
   },
   {
+   "name": "sort: Job Type then Group (missing last)",
+   "pool": "main",
+   "set": {
+    "name": "set",
+    "filter": {
+     "kind": "group",
+     "op": "and",
+     "children": []
+    },
+    "groupBy": [],
+    "latestOnly": false,
+    "sort": [
+     {
+      "column": "job_type",
+      "direction": "asc"
+     },
+     {
+      "column": "group",
+      "direction": "desc"
+     }
+    ],
+    "eyes": {}
+   },
+   "expected": [
+    "r07",
+    "r13",
+    "r08",
+    "r09",
+    "r10",
+    "r06",
+    "r11",
+    "r12",
+    "r15",
+    "r16"
+   ]
+  },
+  {
    "name": "many groups: the 10 newest visible",
    "pool": "many",
    "set": {

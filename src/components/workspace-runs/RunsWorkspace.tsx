@@ -9,7 +9,7 @@
  * The cards get the visible runs (lib/workspace-runs/visibility.ts). When
  * grouped the page also provides the grouping
  * (lib/workspace-runs/grouping-context.ts): scalar cards draw one line per
- * top-level group, runs without a group value stay their own lines. A run
+ * innermost group (`group: exp-44, jobType: train`). A run
  * hover store (lib/workspace-runs/hover.ts) links sidebar rows and chart
  * lines.
  */
@@ -25,8 +25,9 @@ import { RunHoverContext, RunHoverStore } from "../../lib/workspace-runs/hover";
 import { cardRuns, resolveVisibility } from "../../lib/workspace-runs/visibility";
 import { filterFieldsOf } from "../../lib/run-filter";
 import { availableColumns } from "../../lib/runs-table/columns";
-import type { RunGroupNode } from "../../lib/runs-table/group";
+import { innermostLineOf, type RunGroupNode } from "../../lib/runs-table/group";
 import { useRunColors } from "../../lib/run-view";
+import { groupLineColors } from "../../lib/run-color";
 import { useProjectRunView } from "../../lib/run-view-store";
 import { ops } from "../../lib/workspace/doc";
 import type { WorkspaceRef } from "../../lib/workspace/ref";
@@ -73,9 +74,16 @@ export default function RunsWorkspace({ wsRef }: { wsRef: WorkspaceRef }) {
   });
   const visibility = useMemo(() => resolveVisibility(table.sorted, table.groups, state.eyes), [table.sorted, table.groups, state.eyes]);
   const cards = useMemo(() => cardRuns(table.sorted, table.groups, visibility.runs), [table.sorted, table.groups, visibility.runs]);
-  // Grouped: scalar cards draw one line per (top-level) group; not grouped: one per run.
+  // Grouped: scalar cards draw one line per innermost group; not grouped: one per run.
   const grouped = state.groupBy.length > 0;
-  const grouping = useMemo<WorkspaceGrouping | null>(() => (grouped ? { groupOf: cards.groupOf } : null), [grouped, cards.groupOf]);
+  const groupColors = useMemo(
+    () => groupLineColors(table.groups ? [...new Set(innermostLineOf(table.groups).values())] : []),
+    [table.groups],
+  );
+  const grouping = useMemo<WorkspaceGrouping | null>(
+    () => (grouped ? { groupOf: cards.groupOf, colorOf: groupColors } : null),
+    [grouped, cards.groupOf, groupColors],
+  );
   const colors = useRunColors(cards.runIds);
   const [hover] = useState(() => new RunHoverStore());
 
@@ -112,6 +120,7 @@ export default function RunsWorkspace({ wsRef }: { wsRef: WorkspaceRef }) {
               sortColumns={sortColumns}
               colors={colors}
               groupOf={grouping ? cards.groupOf : null}
+              groupColors={groupColors}
               runView={runView}
               runs={runs}
               onEdit={edit}

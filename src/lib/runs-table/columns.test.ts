@@ -35,6 +35,22 @@ test("availableColumns: built-ins, metric union, param union, computed", () => {
   ]);
 });
 
+test("availableColumns: Group and Job Type only (so shown by default) when a listed run has one; cells sort by them", () => {
+  const plain = availableColumns(runs, []);
+  assert.ok(!plain.includes("group") && !plain.includes("job_type"));
+  const withGroup = [...runs, makeRun("c", { group: "exp-44" })];
+  assert.deepEqual(availableColumns(withGroup, []).slice(0, 3), ["name", "group", "status"]);
+  const both = [...withGroup, makeRun("d", { job_type: "train" })];
+  const avail = availableColumns(both, []);
+  assert.deepEqual(avail.slice(0, 4), ["name", "group", "job_type", "status"]);
+  assert.deepEqual(layoutColumns(avail, EMPTY_COLUMNS).scroll.slice(0, 2), ["group", "job_type"]);
+  assert.deepEqual(layoutColumns(avail, setHidden(EMPTY_COLUMNS, "group", true)).scroll[0], "job_type");
+  assert.equal(cellValue(both[2]!, "group"), "exp-44");
+  assert.equal(cellValue(both[3]!, "job_type"), "train");
+  assert.equal(cellValue(both[0]!, "group"), null);
+  assert.deepEqual([columnLabel("group", []), columnLabel("job_type", [])], ["Group", "Job Type"]);
+});
+
 test("layoutColumns: name frozen, pinned join in pin order, hidden dropped, order kept", () => {
   const avail = availableColumns(runs, []);
   assert.deepEqual(layoutColumns(avail, EMPTY_COLUMNS), {

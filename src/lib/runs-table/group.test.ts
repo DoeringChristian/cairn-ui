@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { flattenGroups, groupRunsNested } from "./group.ts";
+import { flattenGroups, groupLineLabel, groupRowModel, groupRunsNested, innermostLineOf } from "./group.ts";
+import { groupLineColors } from "../run-color.ts";
 import { sortBy } from "./sort.ts";
 import { makeRun as run, stats } from "./test-run.ts";
 
@@ -91,4 +92,69 @@ test("groupRunsNested: group, then job_type (wandb's nested grouping)", () => {
       [null, [[null, ["u"]]]],
     ],
   );
+});
+
+// wandb's nested grouping (group › job type), as the sidebar and the Runs page read it.
+const nested = () => [
+  run("t2", { group: "exp-44", job_type: "train", display_name: "eager-sun", version: 2 }),
+  run("t1", { group: "exp-44", job_type: "train", display_name: "eager-sun", version: 1 }),
+  run("e1", { group: "exp-44", job_type: "eval" }),
+  run("p1", { group: "exp-44", job_type: "prepare" }),
+  run("p2", { group: "exp-44", job_type: "prepare" }),
+  run("s0", { group: "seeds-lr3e-4", job_type: "train" }),
+  run("b1", { job_type: "eval" }),
+  run("b2"),
+];
+
+test("groupRowModel: outer rows `Field: value`, hollow, sub-group + run counts; innermost filled, run count", () => {
+  const groups = groupRunsNested(nested(), [{ source: "group" }, { source: "job_type" }])!;
+  const outer = groups.map(groupRowModel);
+  assert.deepEqual(
+    outer.map((m) => [m.text, m.dot, m.counts, m.line]),
+    [
+      ["Group: exp-44", "hollow", [3, 5], null],
+      ["Group: seeds-lr3e-4", "hollow", [1, 1], null],
+      ["Group: (none)", "hollow", [2, 2], null],
+    ],
+  );
+  assert.equal(outer[2]!.none, true);
+  const inner = groups[0]!.children!.map(groupRowModel);
+  assert.deepEqual(
+    inner.map((m) => [m.text, m.dot, m.counts, m.line]),
+    [
+      ["Job Type: train", "filled", [2], "group: exp-44, jobType: train"],
+      ["Job Type: eval", "filled", [1], "group: exp-44, jobType: eval"],
+      ["Job Type: prepare", "filled", [2], "group: exp-44, jobType: prepare"],
+    ],
+  );
+  assert.deepEqual(groups[2]!.children!.map((n) => groupRowModel(n).text), ["Job Type: eval", "Job Type: (none)"]);
+});
+
+test("groupRowModel: one level, the group row is innermost (filled dot, run count); tag and param fields", () => {
+  const [g] = groupRunsNested(nested(), [{ source: "group" }])!;
+  const m = groupRowModel(g!);
+  assert.deepEqual([m.text, m.dot, m.counts, m.line], ["Group: exp-44", "filled", [5], "group: exp-44"]);
+  const tag = groupRunsNested([run("a", { tags: JSON.stringify(["x"]) })], [{ source: "tag" }])!;
+  assert.equal(groupRowModel(tag[0]!).text, "Tag: x");
+  const param = groupRunsNested([run("a", { params: { lr: 0.1 } })], [{ source: "param", key: "lr" }])!;
+  assert.deepEqual([groupRowModel(param[0]!).text, groupRowModel(param[0]!).line], ["lr: 0.1", "lr: 0.1"]);
+});
+
+test("flattenGroups: runs inside groups sit one level below their innermost group", () => {
+  const groups = groupRunsNested(nested(), [{ source: "group" }, { source: "job_type" }])!;
+  const rows = flattenGroups(groups, new Set());
+  const t2 = rows.find((r) => r.kind === "run" && r.run.id === "t2")!;
+  assert.equal(t2.kind === "run" && t2.depth, 2);
+});
+
+test("innermostLineOf / groupLineLabel: a run's innermost group path (wandb's legend `key: value` list)", () => {
+  const groups = groupRunsNested(nested(), [{ source: "group" }, { source: "job_type" }])!;
+  const of = innermostLineOf(groups);
+  assert.equal(of.get("t1"), "group: exp-44, jobType: train");
+  assert.equal(of.get("b2"), "group: (none), jobType: (none)");
+  assert.equal(of.size, 8);
+  assert.equal(groupLineLabel([]), "");
+  // Every innermost group a colour, distinct while the palette lasts.
+  const colors = groupLineColors([...new Set(of.values())]);
+  assert.equal(new Set(colors.values()).size, colors.size);
 });

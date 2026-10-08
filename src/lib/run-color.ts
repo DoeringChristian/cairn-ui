@@ -41,9 +41,15 @@ export function runColor(runId: string): string {
   return RUN_PALETTE[runColorSlot(runId)]!;
 }
 
-/** A group's colour (the workspace's ■ and its aggregate line): stable per group name. */
-export function groupColor(group: string): string {
-  return RUN_PALETTE[fnv1a(`group:${group}`) % RUN_PALETTE.length]!;
+/**
+ * The innermost groups' colours (the sidebar's filled dot, the aggregate
+ * line, the Summary cards' dot), per group line label
+ * (lib/runs-table/group.ts `groupLineLabel`): assigned like runs' colours
+ * over every listed group, so groups shown together keep distinct hues and
+ * a group keeps its colour when others are hidden.
+ */
+export function groupLineColors(lines: readonly string[]): Map<string, string> {
+  return assignRunColors(lines, () => undefined);
 }
 
 /**

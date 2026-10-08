@@ -2,8 +2,9 @@
  * The runs table's columns: which exist, which are pinned, hidden or moved,
  * and the computed expression columns.
  *
- * A column id is a built-in (`name`, `status`, `created_at`, `duration`,
- * `tags`), a metric (`value:<key>`, the server's last point or summary
+ * A column id is a built-in (`name`, `group`, `job_type`, `status`,
+ * `created_at`, `duration`, `tags`; Group and Job Type only when a listed
+ * run has one, so they show by default then), a metric (`value:<key>`, the server's last point or summary
  * value), a config param (`param:<key>`) or a computed column
  * (`computed:<id>`). `name` is always frozen on the left and can't be
  * hidden; pinned columns join the frozen block after it, in pin order.
@@ -13,7 +14,9 @@ import type { Run } from "../../api/types.ts";
 import { check, evaluate, ExprError, parse, type Node } from "../expr/index.ts";
 import { runContextOf, parseTags } from "./context.ts";
 
-export const BUILTIN_COLUMNS = ["name", "status", "created_at", "duration", "tags"] as const;
+export const BUILTIN_COLUMNS = ["name", "group", "job_type", "status", "created_at", "duration", "tags"] as const;
+/** Built-ins offered only when a run has a value (wandb's Group and Job Type columns). */
+const RUN_FIELD_COLUMNS = ["group", "job_type"] as const;
 export type BuiltinColumn = (typeof BUILTIN_COLUMNS)[number];
 
 export interface ComputedColumn {
@@ -95,8 +98,9 @@ export function availableColumns(runs: readonly Run[], computed: readonly Comput
     for (const k of Object.keys(r.params ?? {})) params.add(k);
   }
   const sorted = (s: Set<string>) => [...s].sort((a, b) => a.localeCompare(b));
+  const has = (f: (typeof RUN_FIELD_COLUMNS)[number]) => runs.some((r) => r[f] != null && r[f] !== "");
   return [
-    ...BUILTIN_COLUMNS,
+    ...BUILTIN_COLUMNS.filter((c) => !(RUN_FIELD_COLUMNS as readonly string[]).includes(c) || has(c as (typeof RUN_FIELD_COLUMNS)[number])),
     ...sorted(values).map(valueColumn),
     ...sorted(params).map(paramColumn),
     ...computed.map((c) => computedColumn(c.id)),
@@ -263,6 +267,10 @@ export function cellValue(run: Run, col: string, computed?: Map<string, Record<s
   switch (key as BuiltinColumn) {
     case "name":
       return run.display_name ?? run.id;
+    case "group":
+      return run.group ?? null;
+    case "job_type":
+      return run.job_type ?? null;
     case "status":
       return run.status;
     case "created_at": {
@@ -285,7 +293,7 @@ export function columnLabel(col: string, computed: readonly ComputedColumn[]): s
     return c ? (c.name || c.expr) : key;
   }
   if (kind === "builtin") {
-    return { name: "Name", status: "Status", created_at: "Created", duration: "Duration", tags: "Tags" }[key as BuiltinColumn] ?? key;
+    return { name: "Name", group: "Group", job_type: "Job Type", status: "Status", created_at: "Created", duration: "Duration", tags: "Tags" }[key as BuiltinColumn] ?? key;
   }
   return key;
 }

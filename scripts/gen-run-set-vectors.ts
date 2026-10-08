@@ -91,6 +91,7 @@ const cases: Array<{ name: string; pool: "main" | "many"; set: RunSet }> = [
   { name: "sort: acc descending (missing last), then name", pool: "main", set: S({ sort: [{ column: "value:acc", direction: "desc" }, { column: "name", direction: "asc" }], eyes: { "r:r01": true, "r:r02": true, "r:r03": true } }) },
   { name: "sort: param then name, case-insensitive", pool: "main", set: S({ sort: [{ column: "param:opt", direction: "asc" }, { column: "name", direction: "desc" }] }) },
   { name: "sort: status and created ascending", pool: "main", set: S({ sort: [{ column: "status", direction: "asc" }, { column: "created_at", direction: "asc" }] }) },
+  { name: "sort: Job Type then Group (missing last)", pool: "main", set: S({ sort: [{ column: "job_type", direction: "asc" }, { column: "group", direction: "desc" }] }) },
   { name: "many groups: the 10 newest visible", pool: "many", set: S({ groupBy: [{ source: "group" }] }) },
   { name: "many groups: an old group's eye on", pool: "many", set: S({ groupBy: [{ source: "group" }], eyes: { "g:group:g0": true, "g:group:g11": false } }) },
   { name: "many runs: names sort numerically", pool: "many", set: S({ sort: [{ column: "name", direction: "asc" }], eyes: { "r:m00": true, "r:m01": true } }) },

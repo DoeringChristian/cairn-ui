@@ -27,6 +27,14 @@ export interface RunGroupNode {
   runs: Run[];
   /** Sub-groups; null at the deepest level. */
   children: RunGroupNode[] | null;
+  /** The levels from the top down to this group (itself last). */
+  path: GroupStep[];
+}
+
+/** One level of a group's path: the field and the group's value there (null: none). */
+export interface GroupStep {
+  by: GroupBy;
+  label: string | null;
 }
 
 export function groupByLabel(g: GroupBy): string {
@@ -38,6 +46,101 @@ export function groupByLabel(g: GroupBy): string {
     default:
       return g.source;
   }
+}
+
+/** A group row's field, as rows read it (`Group: exp-44`): Group, Job Type, Tag, a param key, an expression. */
+export function groupFieldLabel(g: GroupBy): string {
+  switch (g.source) {
+    case "group":
+      return "Group";
+    case "job_type":
+      return "Job Type";
+    case "tag":
+      return "Tag";
+    case "param":
+      return g.key;
+    case "expr":
+      return g.expr;
+  }
+}
+
+/** A field's key in a chart legend (wandb's): group, jobType, tag, a param key, an expression. */
+export function groupLegendKey(g: GroupBy): string {
+  switch (g.source) {
+    case "job_type":
+      return "jobType";
+    case "param":
+      return g.key;
+    case "expr":
+      return g.expr;
+    default:
+      return g.source;
+  }
+}
+
+export const NO_VALUE = "(none)";
+
+/**
+ * An innermost group's line (its chart line's identity, colour and legend
+ * label): `group: exp-44, jobType: train`.
+ */
+export function groupLineLabel(path: readonly GroupStep[]): string {
+  return path.map((s) => `${groupLegendKey(s.by)}: ${s.label ?? NO_VALUE}`).join(", ");
+}
+
+/**
+ * A group header row: `Field: value`; an outer group (sub-groups below it)
+ * has a hollow circle and two counts (sub-groups, runs); an innermost group
+ * has the filled dot of its chart line (`line`) and its run count.
+ */
+export interface GroupRowModel {
+  field: string;
+  /** The value; `(none)` for no value (`none`). */
+  value: string;
+  none: boolean;
+  text: string;
+  innermost: boolean;
+  dot: "hollow" | "filled";
+  /** Outer: [sub-groups, runs]; innermost: [runs]. */
+  counts: number[];
+  /** Innermost: its chart line's label (groupLineLabel); outer: null. */
+  line: string | null;
+}
+
+export function groupRowModel(node: RunGroupNode): GroupRowModel {
+  const field = groupFieldLabel(node.by);
+  const value = node.label ?? NO_VALUE;
+  const innermost = node.children === null;
+  return {
+    field,
+    value,
+    none: node.label === null,
+    text: `${field}: ${value}`,
+    innermost,
+    dot: innermost ? "filled" : "hollow",
+    counts: innermost ? [node.runs.length] : [node.children!.length, node.runs.length],
+    line: innermost ? groupLineLabel(node.path) : null,
+  };
+}
+
+/**
+ * Each run's innermost group line (groupLineLabel), in table order; a run
+ * under several groups (tags) takes its first.
+ */
+export function innermostLineOf(nodes: readonly RunGroupNode[]): Map<string, string> {
+  const out = new Map<string, string>();
+  const walk = (ns: readonly RunGroupNode[]) => {
+    for (const n of ns) {
+      if (n.children) {
+        walk(n.children);
+        continue;
+      }
+      const line = groupLineLabel(n.path);
+      for (const r of n.runs) if (!out.has(r.id)) out.set(r.id, line);
+    }
+  };
+  walk(nodes);
+  return out;
 }
 
 export function isGroupBy(v: unknown): v is GroupBy {
@@ -101,21 +204,23 @@ function partition(runs: readonly Run[], by: GroupBy): Array<{ label: string | n
  */
 export function groupRunsNested(runs: readonly Run[], levels: readonly GroupBy[]): RunGroupNode[] | null {
   if (levels.length === 0) return null;
-  const build = (rs: readonly Run[], depth: number, parentId: string): RunGroupNode[] => {
+  const build = (rs: readonly Run[], depth: number, parentId: string, parent: GroupStep[]): RunGroupNode[] => {
     const by = levels[depth]!;
     return partition(rs, by).map((g) => {
       const id = `${parentId}${depth}${g.label === null ? "∅" : `=${g.label}`}/`;
+      const path = [...parent, { by, label: g.label }];
       return {
         id,
         label: g.label,
         depth,
         by,
         runs: g.runs,
-        children: depth + 1 < levels.length ? build(g.runs, depth + 1, id) : null,
+        children: depth + 1 < levels.length ? build(g.runs, depth + 1, id, path) : null,
+        path,
       };
     });
   };
-  return build(runs, 0, "");
+  return build(runs, 0, "", []);
 }
 
 export type TableRow =

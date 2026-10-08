@@ -12,7 +12,7 @@
 
 import type { Run } from "../../api/types.ts";
 import { EMPTY_FILTER, type ChipNode, type FilterNode, type GroupNode } from "../run-filter.ts";
-import { groupByLabel, groupRunsNested, type RunGroupNode } from "../runs-table/group.ts";
+import { groupByLabel, groupLineLabel, groupRunsNested, type RunGroupNode } from "../runs-table/group.ts";
 import { setEyes, type RunState } from "./state.ts";
 
 /** How many of the newest groups (runs) are visible by default. */
@@ -117,32 +117,36 @@ export const toggleRunEye = (s: RunState, run: Pick<Run, "id">, visible: Readonl
 export interface CardRuns {
   /** The visible runs, in table order. */
   runIds: string[];
-  /** Grouped: a run's top-level group (runs without a value are left out: their own lines). */
+  /**
+   * Grouped: a run's innermost group line (`group: exp-44, jobType: train`,
+   * lib/runs-table/group.ts `groupLineLabel`); every grouped run has one, a
+   * run without a value in the `(none)` group of its level.
+   */
   groupOf: Map<string, string>;
 }
 
-/** The runs given to the cards and, grouped, the group each one aggregates into. */
+/** The runs given to the cards and, grouped, the innermost group line each one aggregates into. */
 export function cardRuns(sorted: readonly Run[], groups: readonly RunGroupNode[] | null, visible: ReadonlySet<string>): CardRuns {
   const groupOf = new Map<string, string>();
   if (!groups) return { runIds: sorted.filter((r) => visible.has(r.id)).map((r) => r.id), groupOf };
   const runIds: string[] = [];
   const seen = new Set<string>();
-  const walk = (ns: readonly RunGroupNode[], top: string | null) => {
+  const walk = (ns: readonly RunGroupNode[]) => {
     for (const n of ns) {
-      const label = n.depth === 0 ? n.label : top;
       if (n.children) {
-        walk(n.children, label);
+        walk(n.children);
         continue;
       }
+      const line = groupLineLabel(n.path);
       for (const r of n.runs) {
         if (!visible.has(r.id) || seen.has(r.id)) continue;
         seen.add(r.id);
         runIds.push(r.id);
-        if (label != null) groupOf.set(r.id, label);
+        groupOf.set(r.id, line);
       }
     }
   };
-  walk(groups, null);
+  walk(groups);
   return { runIds, groupOf };
 }
 

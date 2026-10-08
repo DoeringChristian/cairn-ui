@@ -41,7 +41,7 @@ import { xMetricFor } from "../lib/metric-defs";
 import { SERIES_COLORS, type Series } from "../lib/plot-utils/types";
 import { SMOOTHING_KINDS, formatSmoothing } from "../lib/plot-utils/smooth";
 import { groupSeries } from "../lib/plot-utils/aggregate";
-import { groupColor, RUN_PALETTE } from "../lib/run-color";
+import { RUN_PALETTE } from "../lib/run-color";
 import { WorkspaceGroupingContext } from "../lib/workspace-runs/grouping-context";
 import { planScalarGrouping } from "../lib/plot-utils/scalar-grouping";
 import { useRunColors, useRunView, useVisibleRuns } from "../lib/run-view";
@@ -334,7 +334,7 @@ export default function ScalarPlotCard({
         labelMetric: metricKeys.size > 1,
         agg: plan.agg,
         // The workspace's groups keep the sidebar's colours; the card's take palette slots.
-        groupColor: plan.palette === "workspace" ? groupColor : (g) => RUN_PALETTE[groupValues.indexOf(g) % RUN_PALETTE.length]!,
+        groupColor: plan.palette === "workspace" && wsGrouping ? (g) => wsGrouping.colorOf.get(g) ?? RUN_PALETTE[0]! : (g) => RUN_PALETTE[groupValues.indexOf(g) % RUN_PALETTE.length]!,
         countInLabel: plan.countInLabel,
       });
       if (grouped.groups > 0) {

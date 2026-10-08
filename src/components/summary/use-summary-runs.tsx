@@ -7,7 +7,6 @@
 import { useContext, useMemo } from "react";
 import { useRunsDetails } from "../../api/hooks";
 import type { RunDetailResponse } from "../../api/types";
-import { groupColor } from "../../lib/run-color";
 import { disambiguateRunLabels, useRunMetadataVersion } from "../../lib/run-label";
 import { useRunColors, useVisibleRuns } from "../../lib/run-view";
 import { tableRunOf, type TableRun, type Unit } from "../../lib/summary-tables";
@@ -18,7 +17,7 @@ export interface SummaryRuns {
   runIds: string[];
   runs: TableRun[];
   loading: boolean;
-  /** The workspace's grouping (run → top-level group), null when not grouped. */
+  /** The workspace's grouping (run → innermost group line), null when not grouped. */
   groupOf: ReadonlyMap<string, string> | null;
   labelOf: (u: Unit) => string;
   colorOf: (u: Unit) => string | undefined;
@@ -47,7 +46,7 @@ export function useSummaryRuns(allRunIds: readonly string[]): SummaryRuns {
     loading: queries.some((q) => q.isLoading),
     groupOf: grouping?.groupOf ?? null,
     labelOf: (u) => (u.kind === "group" ? u.group : (labels[u.runId] ?? u.runId.slice(0, 6))),
-    colorOf: (u) => (u.kind === "group" ? groupColor(u.group) : colors.get(u.runId)),
+    colorOf: (u) => (u.kind === "group" ? grouping?.colorOf.get(u.group) : colors.get(u.runId)),
   };
 }
 

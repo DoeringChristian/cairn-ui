@@ -2,8 +2,9 @@
  * The workspace's hover highlight: hovering a run row in the sidebar
  * highlights its line(s) in every chart (the others dimmed), hovering a
  * line in a chart highlights its row. Grouped, a run's lines are its
- * group's aggregate: hovering a group header, or a run inside it, targets
- * the group's line, and hovering that line highlights the group header.
+ * innermost group's aggregate: hovering an innermost group header, or a run
+ * inside it, targets the group's line, and hovering that line highlights
+ * the group header.
  *
  * One small store per page (`RunHoverContext`, provided by the
  * workspace); without a provider (the run page, reports) charts
@@ -12,7 +13,7 @@
 
 import { createContext, useCallback, useContext, useSyncExternalStore } from "react";
 
-/** A run's lines (`runId`) or a group's aggregate line (`group`, the top-level group's label). */
+/** A run's lines (`runId`) or a group's aggregate line (`group`, an innermost group's line label). */
 export type HoverTarget = { runId: string; group?: undefined } | { group: string; runId?: undefined };
 
 export const sameTarget = (a: HoverTarget | null, b: HoverTarget | null): boolean =>
