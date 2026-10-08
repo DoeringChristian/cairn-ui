@@ -7,10 +7,10 @@
  * views switches it too.
  *
  * The cards get the picked, eye-on runs of visible groups plus visible
- * ungrouped runs (Group by group), or every visible run (Group by none).
- * With Group by group the page also provides the grouping
+ * ungrouped runs (Group by group), or every visible run (other group-by
+ * levels, or none). When grouped the page also provides the grouping
  * (lib/workspace-runs/grouping-context.ts): scalar cards draw one line per
- * group, ungrouped runs stay their own lines.
+ * (top-level) group, runs without a group stay their own lines.
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -24,7 +24,10 @@ import { useProjectId } from "../lib/project-context";
 import { useElementScrollRestore } from "../lib/use-scroll-restore";
 import type { GroupGraph } from "../lib/workspace-runs/graph";
 import { WorkspaceGroupingContext, type WorkspaceGrouping } from "../lib/workspace-runs/grouping-context";
-import { buildList, matchesSearch, runsForCards } from "../lib/workspace-runs/list";
+import { buildList, listedRuns, runsForCards } from "../lib/workspace-runs/list";
+import { listMode } from "../lib/workspace-runs/state";
+import { filterFieldsOf } from "../lib/run-filter";
+import { useRunColors } from "../lib/run-view";
 import { ops } from "../lib/workspace/doc";
 import { refKey, viewRef, type WorkspaceRef } from "../lib/workspace/ref";
 import { useViews } from "../lib/workspace/use-views";
@@ -46,17 +49,24 @@ function Workspace({ wsRef }: { wsRef: WorkspaceRef }) {
   const projectId = wsRef.projectId;
   const { doc, update } = useWorkspace(wsRef);
   const state = doc.runState;
-  const runsQ = useRuns({ project: projectId, archived: "false", limit: RUNS_LIMIT });
+  // Params and stats: the filter and group-by read them (as in the runs table).
+  const runsQ = useRuns({ project: projectId, archived: "false", limit: RUNS_LIMIT, include: ["params", "stats"] });
   const runs = useMemo(() => runsQ.data?.runs ?? [], [runsQ.data]);
 
-  // Every listed group's lineage graph (until it loads, the group has no edges).
+  const mode = listMode(state.groupBy);
+  const filterFields = useMemo(() => filterFieldsOf(runs), [runs]);
+  const paramKeys = useMemo(
+    () => filterFields.filter((f) => f.startsWith("params.")).map((f) => f.slice("params.".length)),
+    [filterFields],
+  );
+
+  // Grouped by group: every listed group's lineage graph (until it loads, the group has no edges).
   const wanted = useMemo(() => {
+    if (mode !== "group") return [];
     const count = new Map<string, number>();
-    for (const r of runs) {
-      if (r.group != null && !r.archived && matchesSearch(r, state.search)) count.set(r.group, (count.get(r.group) ?? 0) + 1);
-    }
+    for (const r of listedRuns(runs, state)) if (r.group != null) count.set(r.group, (count.get(r.group) ?? 0) + 1);
     return [...count];
-  }, [runs, state.search]);
+  }, [runs, state, mode]);
   const graphQs = useQueries({
     queries: wanted.map(([group, n]) => ({
       // The listed run count in the key: a new run in the group refetches its graph.
@@ -74,11 +84,12 @@ function Workspace({ wsRef }: { wsRef: WorkspaceRef }) {
   }, [fetchedKey]);
   const list = useMemo(() => buildList(runs, state, graphs), [runs, state, graphs]);
   const cards = useMemo(() => runsForCards(list), [list]);
-  // Group by group: scalar cards draw one line per group; Group by none: one per run.
+  // Grouped: scalar cards draw one line per (top-level) group; not grouped: one per run.
   const grouping = useMemo<WorkspaceGrouping | null>(
-    () => (state.groupBy === "group" ? { groupOf: cards.groupOf } : null),
-    [state.groupBy, cards.groupOf],
+    () => (mode !== "flat" ? { groupOf: cards.groupOf } : null),
+    [mode, cards.groupOf],
   );
+  const colors = useRunColors(cards.runIds);
 
   const edit = useCallback<RunStateEdit>(
     (fn, label, mergeKey) => update(ops.updateRunState(fn), { label, mergeKey }),
@@ -94,15 +105,23 @@ function Workspace({ wsRef }: { wsRef: WorkspaceRef }) {
     <div>
       <div className="mb-3 md:hidden">
         <button type="button" onClick={() => setSidebarOpen((v) => !v)} className="btn text-xs" aria-expanded={sidebarOpen}>
-          Runs (showing {list.visible} of {list.listed}) {sidebarOpen ? "▲" : "▼"}
+          Runs ({list.visible} of {list.listed} {list.unit} shown) {sidebarOpen ? "▲" : "▼"}
         </button>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[320px_1fr]">
         <aside
           ref={sidebarRef}
-          className={`card p-3 md:sticky md:top-[var(--header-h)] md:max-h-[calc(100vh-var(--header-h))] md:overflow-y-auto ${sidebarOpen ? "" : "hidden md:block"}`}
+          className={`card overflow-hidden md:sticky md:top-[var(--header-h)] md:max-h-[calc(100vh-var(--header-h))] md:overflow-y-auto ${sidebarOpen ? "" : "hidden md:block"}`}
         >
-          <RunsSidebar list={list} search={state.search} groupBy={state.groupBy} onEdit={edit} />
+          <RunsSidebar
+            projectId={projectId}
+            list={list}
+            state={state}
+            fields={filterFields}
+            paramKeys={paramKeys}
+            colors={colors}
+            onEdit={edit}
+          />
         </aside>
         <main className="min-w-0">
           <WorkspaceGroupingContext.Provider value={grouping}>

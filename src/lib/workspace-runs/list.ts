@@ -1,26 +1,40 @@
 /**
  * The workspace sidebar (pure): the project's non-archived runs matching
- * the search, as entries.
+ * the search and the filter (the runs table's), as entries.
  *
- * Group by group: one entry per group (ordered by its newest run), each with
- * one row per name (upstream → downstream by lineage, ties by first run) and
- * that name's picked version, then one entry per ungrouped name (newest
- * first), last. Group by none: one entry per run, newest first.
+ * Group by group (`listMode` "group"): one entry per group (ordered by its
+ * newest run), each with one row per name (upstream → downstream by
+ * lineage, ties by first run) holding that name's picked run (or "not run
+ * yet"), then one entry per ungrouped name (newest first), last. Other
+ * group-by levels ("nested"): the runs table's nested groups of runs; the
+ * cards aggregate by the top-level group. No levels ("flat"): one entry per
+ * run, newest first.
  *
  * A group's lineage graph (`GET …/groups/{group}/graph`) supplies the edges;
  * until it loads the group has none (every name's newest version).
  */
 
 import type { Run } from "../../api/types.ts";
+import { EMPTY_FILTER, matchesFilter } from "../run-filter.ts";
+import { groupRunsNested, type GroupBy, type RunGroupNode } from "../runs-table/group.ts";
+import { compileRunSearch, matchesRunSearch } from "../runs-table/search.ts";
 import { nameKey, nameLabel, type GroupGraph, type GroupGraphRun } from "./graph.ts";
 import { fits, latestPicks, nameOrder, resolvePicks, usedRuns, versionsOf, type GroupPicks } from "./picks.ts";
-import { groupKey, runKey, ungroupedKey, type GroupBy, type RunState } from "./state.ts";
+import {
+  clearEyes,
+  groupKey,
+  listMode,
+  nodeKey,
+  runKey,
+  setEye,
+  setEyes,
+  ungroupedKey,
+  type ListMode,
+  type RunState,
+} from "./state.ts";
 import { visibleKeys } from "./visibility.ts";
 
-export type ListedRun = Pick<
-  Run,
-  "id" | "display_name" | "group" | "version" | "status" | "created_at" | "ended_at" | "archived"
->;
+export type ListedRun = Run;
 
 export interface VersionOption {
   runId: string;
@@ -40,6 +54,8 @@ export interface NameRow {
   versions: VersionOption[];
   /** The picked run; null: "not run yet". */
   pick: string | null;
+  /** The picked run (its name and version for the row). */
+  run: GroupGraphRun | null;
   /** What the picked run used inside the group: `prepare v2`. */
   used: string[];
   /** The name's eye (off: left out of the group's lines). */
@@ -71,6 +87,8 @@ export interface UngroupedEntry {
   label: string;
   versions: VersionOption[];
   pick: string;
+  /** The picked run. */
+  run: ListedRun;
   newest: string;
   visible: boolean;
 }
@@ -78,26 +96,59 @@ export interface UngroupedEntry {
 export interface RunEntry {
   kind: "run";
   key: string;
+  /** Unique among the listed rows (a run with several tags is listed under each). */
+  rowKey: string;
   run: ListedRun;
   newest: string;
   visible: boolean;
+  /** Nested: the keys of the groups it is listed under, outermost first. */
+  path: string[];
+  /** Nested: its top-level group's label (null: no value). */
+  top: string | null;
+}
+
+/** A group of other group-by levels (lib/runs-table/group.ts `RunGroupNode`). */
+export interface NodeEntry {
+  kind: "node";
+  key: string;
+  /** The node id (unique in the tree): collapse state. */
+  id: string;
+  by: GroupBy;
+  label: string | null;
+  depth: number;
+  count: number;
+  newest: string;
+  visible: boolean;
+  eye: Eye;
+  /** Sub-groups; null at the deepest level. */
+  children: NodeEntry[] | null;
+  /** The deepest level's runs ([] above it). */
+  runs: RunEntry[];
 }
 
 export interface SidebarList {
-  groupBy: GroupBy;
+  mode: ListMode;
+  /** Group by group. */
   groups: GroupEntry[];
   ungrouped: UngroupedEntry[];
+  /** The ungrouped block's eye. */
+  ungroupedEye: Eye;
+  /** Nested. */
+  nodes: NodeEntry[];
+  /** Flat. */
   runs: RunEntry[];
-  /** `showing <visible> of <listed>` entries. */
+  /** `<visible> of <listed> <unit> shown`. */
   listed: number;
   visible: number;
+  unit: "groups" | "runs";
 }
 
-/** Case-insensitive substring of the run's name, id or group. */
-export function matchesSearch(run: Pick<Run, "id" | "display_name" | "group">, search: string): boolean {
-  const q = search.trim().toLowerCase();
-  if (!q) return true;
-  return [run.display_name, run.id, run.group].some((s) => s != null && s.toLowerCase().includes(q));
+/** The runs the sidebar lists: not archived, matching the search and the filter, newest first. */
+export function listedRuns(runs: readonly ListedRun[], state: Pick<RunState, "search" | "filter">): ListedRun[] {
+  const search = compileRunSearch(state.search);
+  return runs
+    .filter((r) => !r.archived && matchesRunSearch(r, search) && matchesFilter(r, state.filter))
+    .sort(byNewest);
 }
 
 const byNewest = (a: ListedRun, b: ListedRun) =>
@@ -155,11 +206,15 @@ function nameRows(graph: GroupGraph, picks: GroupPicks, hidden: readonly string[
         return { runId: v.id, label: versionLabel(v), fits: ok, note };
       }),
       pick,
+      run: pick ? byId.get(pick)! : null,
       used: pick ? usedRuns(graph, pick).map(runLabel) : [],
       eye: !hidden.includes(key),
     };
   });
 }
+
+const eyeOf = (visible: boolean, on: number, total: number): Eye =>
+  !visible || (total > 0 && on === 0) ? "off" : on < total ? "mixed" : "on";
 
 /**
  * Build the sidebar. `graphs` are the fetched group graphs (missing: not
@@ -170,15 +225,96 @@ export function buildList(
   state: RunState,
   graphs: ReadonlyMap<string, GroupGraph>,
 ): SidebarList {
-  const listed = runs.filter((r) => !r.archived && matchesSearch(r, state.search)).sort(byNewest);
-
-  if (state.groupBy === "none") {
-    const entries = listed.map((run) => ({ kind: "run" as const, key: runKey(run.id), run, newest: run.created_at, visible: false }));
+  const listed = listedRuns(runs, state);
+  const mode = listMode(state.groupBy);
+  const empty = { groups: [], ungrouped: [], ungroupedEye: "off" as Eye, nodes: [], runs: [] };
+  if (mode === "flat") {
+    const entries = listed.map((run) => runEntry(run, run.id, [], null));
     const vis = visibleKeys(entries, state.eyes);
     for (const e of entries) e.visible = vis.has(e.key);
-    return { groupBy: "none", groups: [], ungrouped: [], runs: entries, listed: entries.length, visible: vis.size };
+    return { ...empty, mode, runs: entries, listed: entries.length, visible: vis.size, unit: "runs" };
   }
+  if (mode === "nested") {
+    const nodes = nestedEntries(listed, state);
+    return { ...empty, mode, nodes, listed: nodes.length, visible: nodes.filter((n) => n.visible).length, unit: "groups" };
+  }
+  return groupedList(listed, state, graphs);
+}
 
+const runEntry = (run: ListedRun, rowKey: string, path: string[], top: string | null): RunEntry => ({
+  kind: "run",
+  key: runKey(run.id),
+  rowKey,
+  run,
+  newest: run.created_at,
+  visible: false,
+  path,
+  top,
+});
+
+function nestedEntries(listed: readonly ListedRun[], state: RunState): NodeEntry[] {
+  const levels = state.groupBy;
+  const build = (n: RunGroupNode, path: string[], top: string | null): NodeEntry => {
+    const key = nodeKey(levels, n.depth, n.id);
+    const inner = [...path, key];
+    return {
+      kind: "node",
+      key,
+      id: n.id,
+      by: n.by,
+      label: n.label,
+      depth: n.depth,
+      count: n.runs.length,
+      newest: n.runs[0]!.created_at,
+      visible: false,
+      eye: "off",
+      children: n.children ? n.children.map((c) => build(c, inner, top)) : null,
+      runs: n.children ? [] : n.runs.map((r) => runEntry(r, `${n.id}:${r.id}`, inner, top)),
+    };
+  };
+  const nodes = (groupRunsNested(listed, levels) ?? []).map((n) => build(n, [], n.label));
+  const top = visibleKeys(nodes, state.eyes);
+  // Visibility top-down; a group's eye from its runs.
+  const settle = (n: NodeEntry, parentVisible: boolean): RunEntry[] => {
+    n.visible = n.depth === 0 ? top.has(n.key) : parentVisible && (state.eyes[n.key] ?? true);
+    const under = n.children ? n.children.flatMap((c) => settle(c, n.visible)) : n.runs;
+    for (const r of n.runs) r.visible = n.visible && (state.eyes[r.key] ?? true);
+    n.eye = eyeOf(n.visible, under.filter((r) => r.visible).length, under.length);
+    return under;
+  };
+  for (const n of nodes) settle(n, true);
+  return nodes;
+}
+
+/** Every run row under a nested group. */
+export function runsUnder(n: NodeEntry): RunEntry[] {
+  return n.children ? n.children.flatMap(runsUnder) : n.runs;
+}
+
+function nodesUnder(n: NodeEntry): NodeEntry[] {
+  return (n.children ?? []).flatMap((c) => [c, ...nodesUnder(c)]);
+}
+
+/**
+ * A nested group's eye clicked: on → hide it; mixed → every group and run
+ * under it back on; off → show it (and everything under it again when no
+ * run under it would show).
+ */
+export function toggleNodeEye(s: RunState, n: NodeEntry): RunState {
+  if (n.eye === "on") return setEye(s, n.key, false);
+  const inner = [...nodesUnder(n).map((c) => c.key), ...runsUnder(n).map((r) => r.key)];
+  if (n.eye === "mixed") return clearEyes(s, inner);
+  const shown = setEye(s, n.key, true);
+  return n.visible || runsUnder(n).every((r) => s.eyes[r.key] === false) ? clearEyes(shown, inner) : shown;
+}
+
+/** A nested run's eye clicked; turning one on shows the groups it is under. */
+export function toggleRunEye(s: RunState, e: RunEntry): RunState {
+  if (e.visible) return setEye(s, e.key, false);
+  return setEyes(setEye(s, e.key, true), e.path, true);
+}
+
+function groupedList(listed: readonly ListedRun[], state: RunState, graphs: ReadonlyMap<string, GroupGraph>): SidebarList {
   const byGroup = new Map<string, ListedRun[]>();
   const loose: ListedRun[] = [];
   for (const r of listed) {
@@ -219,14 +355,15 @@ export function buildList(
   }
   const ungrouped: UngroupedEntry[] = [...byName].map(([name, versions]) => {
     const stored = state.ungrouped[name];
-    const pick = stored && versions.some((v) => v.id === stored) ? stored : versions[0]!.id;
+    const run = versions.find((v) => v.id === stored) ?? versions[0]!;
     return {
       kind: "ungrouped",
       key: ungroupedKey(name),
       name,
       label: nameLabel(graphRun(versions[0]!)),
       versions: versions.map((v) => ({ runId: v.id, label: versionLabel(v), fits: true, note: null })),
-      pick,
+      pick: run.id,
+      run,
       newest: versions[0]!.created_at,
       visible: false,
     };
@@ -235,37 +372,51 @@ export function buildList(
   const vis = visibleKeys([...groups, ...ungrouped], state.eyes);
   for (const g of groups) {
     g.visible = vis.has(g.key);
-    const off = g.names.filter((n) => !n.eye).length;
-    g.eye = !g.visible || (g.names.length > 0 && off === g.names.length) ? "off" : off > 0 ? "mixed" : "on";
+    g.eye = eyeOf(g.visible, g.names.filter((n) => n.eye).length, g.names.length);
   }
   for (const u of ungrouped) u.visible = vis.has(u.key);
+  const looseOn = ungrouped.filter((u) => u.visible).length;
   return {
-    groupBy: "group",
+    mode: "group",
     groups,
     ungrouped,
+    ungroupedEye: eyeOf(true, looseOn, ungrouped.length),
+    nodes: [],
     runs: [],
-    listed: groups.length + ungrouped.length,
-    visible: vis.size,
+    listed: groups.length + (ungrouped.length > 0 ? 1 : 0),
+    visible: groups.filter((g) => g.visible).length + (looseOn > 0 ? 1 : 0),
+    unit: "groups",
   };
 }
 
 export interface CardRuns {
   /** The runs the cards draw, in sidebar order. */
   runIds: string[];
-  /** Grouped runs' group (Group by group only): scalar cards draw one line per group. */
+  /** Grouped runs' (top-level) group: scalar cards draw one line per group. */
   groupOf: Map<string, string>;
 }
 
 /**
  * The runs given to the cards: with Group by group the picked, eye-on runs
- * of visible groups plus visible ungrouped names' picks; with Group by none
- * every visible run.
+ * of visible groups plus visible ungrouped names' picks; nested, every
+ * visible run, grouped by its top-level group (a run listed under several,
+ * by tags, goes with the first); flat, every visible run.
  */
 export function runsForCards(list: SidebarList): CardRuns {
   const runIds: string[] = [];
   const groupOf = new Map<string, string>();
-  if (list.groupBy === "none") {
+  if (list.mode === "flat") {
     for (const e of list.runs) if (e.visible) runIds.push(e.run.id);
+    return { runIds, groupOf };
+  }
+  if (list.mode === "nested") {
+    const seen = new Set<string>();
+    for (const e of list.nodes.flatMap(runsUnder)) {
+      if (!e.visible || seen.has(e.run.id)) continue;
+      seen.add(e.run.id);
+      runIds.push(e.run.id);
+      if (e.top != null) groupOf.set(e.run.id, e.top);
+    }
     return { runIds, groupOf };
   }
   for (const g of list.groups) {
@@ -283,7 +434,8 @@ export function runsForCards(list: SidebarList): CardRuns {
 /**
  * "Show in workspace" (the runs table): only the ticked runs' groups and
  * ticked ungrouped runs (their name, at the newest ticked version) visible,
- * for both Group by modes; the search is cleared so they are listed.
+ * for every Group by; the search and the filter are cleared so they are
+ * listed.
  * `runs` are the project's runs, so every other entry gets an explicit eye
  * off.
  */
@@ -297,5 +449,5 @@ export function showOnly(s: RunState, runs: readonly ListedRun[], ticked: Readon
     if (on && !eyes[key] && r.group == null) ungrouped[nameKey(graphRun(r))] = r.id;
     eyes[key] = (eyes[key] ?? false) || on;
   }
-  return { ...s, search: "", eyes, ungrouped };
+  return { ...s, search: "", filter: EMPTY_FILTER, eyes, ungrouped };
 }

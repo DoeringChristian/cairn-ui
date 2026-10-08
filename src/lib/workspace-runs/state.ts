@@ -4,22 +4,41 @@
  * `runState`), so it saves like layout edits and switching views switches it
  * too; the run page ignores it.
  *
+ * Search, filter and group-by are the runs table's (lib/runs-table/search.ts,
+ * lib/run-filter.ts, lib/runs-table/group.ts). How the sidebar lists runs
+ * follows the group-by levels (`listMode`): exactly `[group]` lists groups
+ * with version picks, any other levels nest plain runs, none lists runs.
+ *
  * Eyes are keyed by entry: `g:<group>` (a group), `u:<name key>` (an
- * ungrouped name) and `r:<run id>` (a run, Group by none). An entry without
- * an explicit eye is visible when it is among the newest `DEFAULT_VISIBLE`
- * listed entries (visibility.ts).
+ * ungrouped name), `k:<levels>:<node id>` (a group of other group-by
+ * levels) and `r:<run id>` (a run). A group, ungrouped name or flat run
+ * without an explicit eye is visible when it is among the newest
+ * `DEFAULT_VISIBLE` listed entries (visibility.ts); nested groups and runs
+ * inside a visible group are visible unless their eye is off.
  */
 
+import { EMPTY_FILTER, parseFilter, type GroupNode } from "../run-filter.ts";
+import { groupByLabel, isGroupBy, type GroupBy } from "../runs-table/group.ts";
 import type { GroupPicks } from "./picks.ts";
 
-export type GroupBy = "group" | "none";
+/** How the sidebar lists runs: groups with version picks, nested groups of runs, or runs. */
+export type ListMode = "group" | "nested" | "flat";
+
+export function listMode(levels: readonly GroupBy[]): ListMode {
+  if (levels.length === 0) return "flat";
+  return levels.length === 1 && levels[0]!.source === "group" ? "group" : "nested";
+}
 
 /** A group's version picks: the lineage-consistent latest runs, or custom picks. */
 export type GroupMode = "latest" | { picks: GroupPicks };
 
 export interface RunState {
+  /** The runs table's regex search. */
   search: string;
-  groupBy: GroupBy;
+  /** The runs table's filter tree. */
+  filter: GroupNode;
+  /** The runs table's group-by levels. */
+  groupBy: GroupBy[];
   /** Explicit eyes by entry key (`g:` / `u:` / `r:`), overriding the default. */
   eyes: Record<string, boolean>;
   /** Per group, the name keys whose eye is off (left out of the group's lines). */
@@ -32,7 +51,8 @@ export interface RunState {
 
 export const DEFAULT_RUN_STATE: RunState = Object.freeze({
   search: "",
-  groupBy: "group",
+  filter: EMPTY_FILTER,
+  groupBy: [{ source: "group" }],
   eyes: {},
   hiddenNames: {},
   groups: {},
@@ -42,6 +62,9 @@ export const DEFAULT_RUN_STATE: RunState = Object.freeze({
 export const groupKey = (group: string) => `g:${group}`;
 export const ungroupedKey = (name: string) => `u:${name}`;
 export const runKey = (id: string) => `r:${id}`;
+/** A nested group (`listMode` "nested"): its levels down to it and its node id (lib/runs-table/group.ts). */
+export const nodeKey = (levels: readonly GroupBy[], depth: number, nodeId: string) =>
+  `k:${levels.slice(0, depth + 1).map(groupByLabel).join(" › ")}:${nodeId}`;
 
 const isObj = (v: unknown): v is Record<string, unknown> => v != null && typeof v === "object" && !Array.isArray(v);
 
@@ -75,7 +98,8 @@ export function parseRunState(raw: unknown): RunState {
   if (isObj(raw.ungrouped)) for (const [k, v] of Object.entries(raw.ungrouped)) if (typeof v === "string") ungrouped[k] = v;
   return {
     search: typeof raw.search === "string" ? raw.search : "",
-    groupBy: raw.groupBy === "none" ? "none" : "group",
+    filter: parseFilter(raw.filter),
+    groupBy: Array.isArray(raw.groupBy) ? raw.groupBy.filter(isGroupBy) : DEFAULT_RUN_STATE.groupBy,
     eyes,
     hiddenNames,
     groups,
@@ -86,10 +110,23 @@ export function parseRunState(raw: unknown): RunState {
 // --- edits ------------------------------------------------------------------
 
 export const setSearch = (s: RunState, search: string): RunState => ({ ...s, search });
-export const setGroupBy = (s: RunState, groupBy: GroupBy): RunState => ({ ...s, groupBy });
+export const setFilter = (s: RunState, filter: GroupNode): RunState => ({ ...s, filter });
+export const setGroupBy = (s: RunState, groupBy: GroupBy[]): RunState => ({ ...s, groupBy });
 
 /** An explicit eye for an entry. */
 export const setEye = (s: RunState, key: string, on: boolean): RunState => ({ ...s, eyes: { ...s.eyes, [key]: on } });
+
+/** Explicit eyes for several entries. */
+export const setEyes = (s: RunState, keys: readonly string[], on: boolean): RunState =>
+  keys.length === 0 ? s : { ...s, eyes: { ...s.eyes, ...Object.fromEntries(keys.map((k) => [k, on])) } };
+
+/** Entries back to their default eye. */
+export function clearEyes(s: RunState, keys: readonly string[]): RunState {
+  if (!keys.some((k) => k in s.eyes)) return s;
+  const eyes = { ...s.eyes };
+  for (const k of keys) delete eyes[k];
+  return { ...s, eyes };
+}
 
 /** Name rows of `group` hidden (true) or shown again. */
 export function setNamesHidden(s: RunState, group: string, names: readonly string[], hidden: boolean): RunState {

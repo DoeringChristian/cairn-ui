@@ -104,8 +104,8 @@ test("section defaults: empty values remove the type and the section", () => {
 });
 
 test("run state edits: a change replaces it, no change keeps the document", () => {
-  const d = ops.updateRunState((s) => ({ ...s, groupBy: "none" }))(EMPTY_WORKSPACE);
-  assert.equal(d.runState.groupBy, "none");
+  const d = ops.updateRunState((s) => ({ ...s, groupBy: [] }))(EMPTY_WORKSPACE);
+  assert.deepEqual(d.runState.groupBy, []);
   assert.equal(ops.updateRunState((s) => ({ ...s }))(d), d);
 });
 
