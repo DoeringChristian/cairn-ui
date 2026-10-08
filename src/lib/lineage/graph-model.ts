@@ -125,7 +125,9 @@ export function clusterGraph(model: ModelGraph, opts: ClusterOptions): ViewGraph
     const id = groupNodeId(g.group_key);
     for (const m of members) memberOf.set(m, id);
     const first = model.nodes.get(members[0]!)!;
-    const what = first.kind === "artifact_version" ? `${first.name} versions` : "runs";
+    // A run set is one job type (the server's sibling key): "12 finetune runs".
+    const what =
+      first.kind === "artifact_version" ? `${first.name} versions` : first.job_type ? `${first.job_type} runs` : "runs";
     groupNodes.push({
       kind: "group",
       id,

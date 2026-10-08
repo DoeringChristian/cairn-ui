@@ -28,7 +28,8 @@ interface Ctx {
 
 /**
  * The run page's Overview (as wandb's): one "Run" block of what the run is
- * (notes, tags, state, group, times, author, host, git, command, path), the
+ * (notes, tags, state, group, job type, version, times, author, host, git,
+ * command, path), the
  * config and the summary side by side, each with a key search, and the
  * artifacts it logged and used.
  */
@@ -98,6 +99,7 @@ function RunBlock({ run }: { run: Run }) {
                   DASH
                 ),
               ],
+              ["Job type", run.job_type != null ? <span className="mono">{run.job_type}</span> : DASH],
               ["Version", run.version != null ? <span className="mono num">v{run.version}</span> : DASH],
             ]}
           />

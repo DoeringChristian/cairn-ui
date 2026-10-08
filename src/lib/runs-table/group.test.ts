@@ -72,3 +72,23 @@ test("groupRunsNested: nested levels and expression groups", () => {
     ["g:adam", "g:true", "r:1@2", "g:false", "r:3@2", "g:null", "r:4@2", "g:sgd"],
   );
 });
+
+test("groupRunsNested: group, then job_type (wandb's nested grouping)", () => {
+  const rs = [
+    run("p", { group: "exp-44", job_type: "prepare" }),
+    run("t", { group: "exp-44", job_type: "train" }),
+    run("f1", { group: "exp-44", job_type: "finetune" }),
+    run("f2", { group: "exp-44", job_type: "finetune" }),
+    run("s0", { group: "seeds", job_type: "train" }),
+    run("u"),
+  ];
+  const tree = groupRunsNested(rs, [{ source: "group" }, { source: "job_type" }])!;
+  assert.deepEqual(
+    tree.map((g) => [g.label, g.children!.map((c) => [c.label, c.runs.map((r) => r.id)])]),
+    [
+      ["exp-44", [["prepare", ["p"]], ["train", ["t"]], ["finetune", ["f1", "f2"]]]],
+      ["seeds", [["train", ["s0"]]]],
+      [null, [[null, ["u"]]]],
+    ],
+  );
+});

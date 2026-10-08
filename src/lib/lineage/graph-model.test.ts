@@ -157,3 +157,11 @@ test("layoutGraph lays out left to right", () => {
   assert.equal(pos.size, view.nodes.length);
   for (const e of view.edges) assert.ok(pos.get(e.source)!.x < pos.get(e.target)!.x, `${e.source} -> ${e.target}`);
 });
+
+test("clusterGraph: a folded run set is labelled with its job type", () => {
+  const g = bigGraph();
+  g.nodes = g.nodes.map((n) => (n.kind === "run" && /^t\d+$/.test(n.id) ? { ...n, job_type: "finetune" } : n));
+  const view = clusterGraph(mergeGraphs(emptyModel(), g), { threshold: 5, expanded: new Set(), pinned: new Set() });
+  const runs = view.nodes.find((n) => n.kind === "group" && n.member_kind === "run")!;
+  assert.equal(runs.kind === "group" && runs.label, "12 finetune runs");
+});
