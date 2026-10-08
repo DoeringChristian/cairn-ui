@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { flattenGroups, groupLineLabel, groupRowModel, groupRunsNested, innermostLineOf } from "./group.ts";
+import { flattenGroups, groupLineLabel, groupRowModel, groupRunsNested, hasGroupLevel, innermostLineOf, type GroupBy } from "./group.ts";
 import { groupLineColors } from "../run-color.ts";
 import { sortBy } from "./sort.ts";
 import { makeRun as run, stats } from "./test-run.ts";
@@ -157,4 +157,13 @@ test("innermostLineOf / groupLineLabel: a run's innermost group path (wandb's le
   // Every innermost group a colour, distinct while the palette lasts.
   const colors = groupLineColors([...new Set(of.values())]);
   assert.equal(new Set(colors.values()).size, colors.size);
+});
+
+test("hasGroupLevel: the same field is a duplicate level, another field or param key is not", () => {
+  const levels: GroupBy[] = [{ source: "group" }, { source: "param", key: "lr" }];
+  assert.equal(hasGroupLevel(levels, { source: "group" }), true);
+  assert.equal(hasGroupLevel(levels, { source: "job_type" }), false);
+  assert.equal(hasGroupLevel(levels, { source: "param", key: "lr" }), true);
+  assert.equal(hasGroupLevel(levels, { source: "param", key: "seed" }), false);
+  assert.equal(hasGroupLevel(levels, { source: "expr", expr: "group" }), false);
 });

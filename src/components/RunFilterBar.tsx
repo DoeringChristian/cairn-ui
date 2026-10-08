@@ -24,7 +24,7 @@ import {
 } from "../lib/run-filter.ts";
 import { compileScalarExpr } from "../lib/runs-table/columns.ts";
 import { STATUS_OPTIONS, type StatusFilter } from "../lib/runs-table/model.ts";
-import { groupByLabel, type GroupBy } from "../lib/runs-table/group.ts";
+import { groupByLabel, hasGroupLevel, type GroupBy } from "../lib/runs-table/group.ts";
 import Popover from "./ui/Popover";
 
 const OP_LABELS: Record<Operator, string> = {
@@ -425,13 +425,14 @@ function GroupByEditor({ levels, paramKeys, onChange }: { levels: GroupBy[]; par
   const [source, setSource] = useState("group");
   const [expr, setExpr] = useState("");
   const exprError = source === "expr" && expr.trim() ? compileScalarExpr(expr).error : null;
+  let candidate: GroupBy | null = null;
+  if (source === "group" || source === "job_type" || source === "tag") candidate = { source };
+  else if (source.startsWith("param:")) candidate = { source: "param", key: source.slice("param:".length) };
+  else if (source === "expr" && expr.trim() && !exprError) candidate = { source: "expr", expr: expr.trim() };
+  const duplicate = candidate !== null && hasGroupLevel(levels, candidate);
   const add = () => {
-    let level: GroupBy | null = null;
-    if (source === "group" || source === "job_type" || source === "tag") level = { source };
-    else if (source.startsWith("param:")) level = { source: "param", key: source.slice("param:".length) };
-    else if (source === "expr" && expr.trim() && !exprError) level = { source: "expr", expr: expr.trim() };
-    if (!level) return;
-    onChange([...levels, level]);
+    if (!candidate || duplicate) return;
+    onChange([...levels, candidate]);
     setExpr("");
   };
   const move = (i: number, d: -1 | 1) => {
@@ -474,7 +475,12 @@ function GroupByEditor({ levels, paramKeys, onChange }: { levels: GroupBy[]; par
             ))}
             <option value="expr">expression…</option>
           </select>
-          <button type="submit" className={SMALL_BTN} disabled={source === "expr" && (!expr.trim() || !!exprError)}>
+          <button
+            type="submit"
+            className={SMALL_BTN}
+            disabled={candidate === null || duplicate}
+            title={duplicate ? "Already a level" : undefined}
+          >
             + Level
           </button>
         </div>

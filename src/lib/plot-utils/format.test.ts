@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decodeConfigValue, formatNum, formatValue } from "./format.ts";
+import { axisTickLabel, decodeConfigValue, formatNum, formatValue } from "./format.ts";
 
 test("formatNum: integers exact, other numbers to 4 significant digits", () => {
   assert.equal(formatNum(12), "12");
@@ -35,4 +35,12 @@ test("decodeConfigValue", () => {
   assert.equal(decodeConfigValue("[1, 2]"), "[1,2]");
   assert.equal(decodeConfigValue('{"b": 1}'), '{"b":1}');
   assert.equal(decodeConfigValue("adam"), "adam");
+});
+
+test("axisTickLabel: small ticks keep their digits (uPlot's default rounded 0.0001 to 0)", () => {
+  assert.deepEqual([0.0003, 0.0002, 0.0001, 0].map(axisTickLabel), ["0.0003", "0.0002", "0.0001", "0"]);
+  assert.equal(axisTickLabel(0.30000000000000004), "0.3");
+  assert.equal(axisTickLabel(-0), "0");
+  assert.equal(axisTickLabel(1000), "1000");
+  assert.equal(axisTickLabel(null), "");
 });

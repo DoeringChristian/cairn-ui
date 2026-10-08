@@ -593,10 +593,10 @@ export default function RunsTablePage() {
       </div>
 
       <div
-        className={`sticky top-[var(--header-h)] z-20 mb-3 flex items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent/10 backdrop-blur-sm px-3 py-2 text-sm transition-opacity ${selectedCount > 0 ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        className={`sticky top-[var(--header-h)] z-20 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent/10 backdrop-blur-sm px-3 py-2 text-sm transition-opacity ${selectedCount > 0 ? "opacity-100" : "opacity-0 pointer-events-none"}`}
         aria-hidden={selectedCount === 0}
       >
-        <span className="min-w-0 truncate text-fg">
+        <span className="shrink-0 text-fg">
           {selectedCount}
           <span className="hidden md:inline"> run{selectedCount === 1 ? "" : "s"}</span> selected
         </span>

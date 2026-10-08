@@ -27,9 +27,9 @@ export default function DefaultsPage() {
       <div>
         <h1 className="text-lg font-semibold">Card defaults</h1>
         <p className="mt-1 text-sm text-fg-muted">
-          Defaults for every card of a type in this project&rsquo;s current workspace view (the run page). A section&rsquo;s gear
-          sets defaults for that section only, and a card&rsquo;s own settings win over both. Each comparison has its
-          own defaults (its sections&rsquo; gears). Reports and shared links use the built-in defaults.
+          Defaults for every card of a type in this project&rsquo;s current workspace view (the workspace and the run
+          pages). A section&rsquo;s gear sets defaults for that section only, and a card&rsquo;s own settings win over both.
+          Reports and shared links use the built-in defaults.
         </p>
       </div>
 

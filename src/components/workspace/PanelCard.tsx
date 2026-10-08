@@ -78,7 +78,7 @@ function PanelCardBody({ rendered, runIds, settingsKey, onRemove, autoOpenSettin
           title={label}
           settingsKey={settingsKey}
           onRemove={onRemove}
-          message={`Needs ${need}+ runs — this panel compares runs. Open it in a comparison, or add runs.`}
+          message={`Needs ${need}+ runs — this panel compares runs. Show more runs in the workspace.`}
         />
       );
     }

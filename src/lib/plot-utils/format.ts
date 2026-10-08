@@ -14,6 +14,16 @@ export function formatNum(value: number): string {
   return Number(value.toPrecision(4)).toString();
 }
 
+/**
+ * A y-axis tick label: `formatNum`, so ticks of small values keep their
+ * digits (uPlot's default rounds to 3 decimals: 0.0001 read "0"). An empty
+ * label for a missing split; -0 reads "0".
+ */
+export function axisTickLabel(value: number | null): string {
+  if (value == null) return "";
+  return value === 0 ? "0" : formatNum(value);
+}
+
 export interface FormatValueOptions {
   /** Shown for null / undefined (default "—"). */
   empty?: string;

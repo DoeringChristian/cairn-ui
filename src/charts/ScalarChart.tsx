@@ -3,7 +3,7 @@ import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
 import { type AxisScale, type Series, type SeriesPoint } from "../lib/plot-utils/types.ts";
-import { formatNum } from "../lib/plot-utils/format.ts";
+import { axisTickLabel, formatNum } from "../lib/plot-utils/format.ts";
 import { alignSeries, type DrawnSeries } from "./scalar-data.ts";
 import type { SmoothingKind } from "../lib/plot-utils/smooth.ts";
 import type { StackMode } from "../lib/plot-utils/stack.ts";
@@ -349,7 +349,7 @@ export default function ScalarChart(props: ScalarChartProps) {
           },
         },
       },
-      axes: [axis(axisTitles.x), { ...axis(axisTitles.y), size: 56 }],
+      axes: [axis(axisTitles.x), { ...axis(axisTitles.y), size: 56, values: (_u, splits) => splits.map(axisTickLabel) }],
       bands,
       series: [
         {},

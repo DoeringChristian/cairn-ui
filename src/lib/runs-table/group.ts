@@ -48,6 +48,11 @@ export function groupByLabel(g: GroupBy): string {
   }
 }
 
+/** Whether `levels` already groups by `level` (a second level on the same field splits nothing). */
+export function hasGroupLevel(levels: readonly GroupBy[], level: GroupBy): boolean {
+  return levels.some((g) => g.source === level.source && groupByLabel(g) === groupByLabel(level));
+}
+
 /** A group row's field, as rows read it (`Group: exp-44`): Group, Job Type, Tag, a param key, an expression. */
 export function groupFieldLabel(g: GroupBy): string {
   switch (g.source) {
