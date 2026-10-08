@@ -75,3 +75,36 @@ test("collisions are per series: the same name in two groups never collides", ()
   const g = run({ display_name: "train", version: 1, group: "exp-1" });
   assert.deepEqual(disambiguateRunLabels([u.id, g.id]), { [u.id]: "train", [g.id]: "exp-1 · train v1" });
 });
+
+test("the same name under two job types in one group shows the job type", () => {
+  const ft = run({ display_name: "ft", version: 1, group: "exp-44", job_type: "finetune" });
+  const ev = run({ display_name: "ft", version: 1, group: "exp-44", job_type: "eval" });
+  const tr = run({ display_name: "train", version: 1, group: "exp-44", job_type: "train" });
+  assert.deepEqual(disambiguateRunLabels([ft.id, ev.id, tr.id]), {
+    [ft.id]: "finetune · ft",
+    [ev.id]: "eval · ft",
+    [tr.id]: "train",
+  });
+  // A re-run of one of them: the version after the job type.
+  const ft2 = run({ display_name: "ft", version: 2, group: "exp-44", job_type: "finetune" });
+  assert.deepEqual(disambiguateRunLabels([ft.id, ft2.id, ev.id]), {
+    [ft.id]: "finetune · ft v1",
+    [ft2.id]: "finetune · ft v2",
+    [ev.id]: "eval · ft",
+  });
+  // A run without a job type keeps the bare name next to a typed one.
+  const bare = run({ display_name: "ft", version: 1, group: "exp-44" });
+  assert.deepEqual(disambiguateRunLabels([bare.id, ev.id]), { [bare.id]: "ft", [ev.id]: "eval · ft" });
+});
+
+test("the group shows first; the job type only where the name collides within a group", () => {
+  const a = run({ display_name: "ft", version: 1, group: "exp-1", job_type: "finetune" });
+  const b = run({ display_name: "ft", version: 1, group: "exp-2", job_type: "eval" });
+  assert.deepEqual(disambiguateRunLabels([a.id, b.id]), { [a.id]: "exp-1 · ft v1", [b.id]: "exp-2 · ft v1" });
+  const c = run({ display_name: "ft", version: 1, group: "exp-2", job_type: "finetune" });
+  assert.deepEqual(disambiguateRunLabels([a.id, b.id, c.id]), {
+    [a.id]: "exp-1 · ft v1",
+    [b.id]: "exp-2 · eval · ft v1",
+    [c.id]: "exp-2 · finetune · ft v1",
+  });
+});

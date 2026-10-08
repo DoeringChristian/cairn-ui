@@ -30,7 +30,7 @@ export function isStatusFilter(v: unknown): v is StatusFilter {
 }
 
 export interface LatestRuns {
-  /** The newest run of every series (group, display name). */
+  /** The newest run of every series (group, job type, display name). */
   latestIds: Set<string>;
   /** The newest run of series with several runs (highlighted). */
   latestByName: Set<string>;
@@ -38,8 +38,9 @@ export interface LatestRuns {
 
 /**
  * The newest run per series ("Latest only", and the highlight). A series is
- * (group, display name) (lib/run-series.ts): versions are numbered per
- * (project, group, name), so `train` in two groups are two series.
+ * (group, job type, display name) (lib/run-series.ts): versions are numbered
+ * per (project, group, job_type, name), so `train` in two groups, or under
+ * two job types, are two series.
  */
 export function latestRuns(runs: readonly Run[]): LatestRuns {
   const latestByName = new Set<string>();

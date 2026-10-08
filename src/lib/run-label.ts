@@ -90,7 +90,8 @@ export function shortRunId(runId: string): string {
  *
  * Returns a map of `runId → label` where each label is the shortest form
  * that uniquely identifies the run within the input set. The strategy
- * (per series: runs sharing a group and a name; a group is a namespace):
+ * (per series: runs sharing a group, a job type and a name — the key the
+ * server numbers versions in):
  *
  *   1. Just the name        — when the series has one run.
  *   2. `name v<version>`    — when ≥2 runs share a series: the run's
@@ -99,8 +100,13 @@ export function shortRunId(runId: string): string {
  *                             the input spans several groups
  *                             (`exp-43 · eval v2`, the workspace's grouped
  *                             runs); the other runs follow rules 1–2, 4.
- *   4. Runs lacking a version (unnamed, or no metadata) fall back to the
- *      time (after `<group> · name` when the input spans groups): `name HH:MM:SS` (all on one day), `name MMM dd HH:MM:SS`
+ *   4. `<job_type> · name`  — a run with a job type whose name occurs in its
+ *                             group under another job type too (`finetune ·
+ *                             ft` next to `eval · ft`); after the group when
+ *                             that shows (`exp-44 · eval · ft v1`). What
+ *                             differs shows: the group first, then the job type.
+ *   5. Runs lacking a version (unnamed, or no metadata) fall back to the
+ *      time (after the prefix): `name HH:MM:SS` (all on one day), `name MMM dd HH:MM:SS`
  *      (across days), `name … (abc123)` when even that collides, and
  *      `abc123` (6-char hash) when no metadata is available.
  *
@@ -118,11 +124,12 @@ export function disambiguateRunLabels(runIds: string[]): Record<string, string> 
     date: Date | null;
     version: number | null;
     group: string | null;
+    jobType: string | null;
   };
   const resolved: Resolved[] = runIds.map((runId) => {
     const run = runMetadataCache.get(runId);
     if (!run) {
-      return { runId, name: shortRunId(runId), date: null, version: null, group: null };
+      return { runId, name: shortRunId(runId), date: null, version: null, group: null, jobType: null };
     }
     let date: Date | null = null;
     try {
@@ -135,24 +142,37 @@ export function disambiguateRunLabels(runIds: string[]): Record<string, string> 
       date,
       version: run.version ?? null,
       group: run.group ?? null,
+      jobType: run.job_type ?? null,
     };
   });
 
-  // Group by series (group, name): a group is a namespace, so collisions
-  // are per series. Spanning groups, a grouped run's base is `group · name`.
+  // Group by series (group, job type, name): collisions are per series.
+  // Spanning groups, a grouped run's base is `group · name`; a name that
+  // occurs in one group under several job types adds the job type.
   const spansGroups = new Set(resolved.map((r) => r.group)).size > 1;
-  const bySeries = new Map<string, Resolved[]>();
+  const typesPerName = new Map<string, Set<string | null>>();
   for (const r of resolved) {
     const key = JSON.stringify([r.group, r.name]);
+    const types = typesPerName.get(key) ?? new Set<string | null>();
+    types.add(r.jobType);
+    typesPerName.set(key, types);
+  }
+  const bySeries = new Map<string, Resolved[]>();
+  for (const r of resolved) {
+    const key = JSON.stringify([r.group, r.jobType, r.name]);
     const arr = bySeries.get(key) ?? [];
     arr.push(r);
     bySeries.set(key, arr);
   }
 
   for (const runs of bySeries.values()) {
-    const { name, group } = runs[0]!;
-    const base = spansGroups && group != null ? `${group} · ${name}` : name;
-    const grouped = spansGroups && group != null ? runs.filter((r) => r.version != null) : [];
+    const { name, group, jobType } = runs[0]!;
+    const showGroup = spansGroups && group != null;
+    const showType = jobType != null && typesPerName.get(JSON.stringify([group, name]))!.size > 1;
+    const base = [showGroup ? group : null, showType ? jobType : null, name]
+      .filter((p): p is string => p != null)
+      .join(" · ");
+    const grouped = showGroup ? runs.filter((r) => r.version != null) : [];
     const rest = runs.filter((r) => !grouped.includes(r));
     const withGroup: Record<string, string> = {};
     for (const r of grouped) withGroup[r.runId] = `${base} v${r.version}`;
@@ -178,7 +198,7 @@ function versionLabels(name: string, runs: Array<{ runId: string; version: numbe
   return withHashOnCollision(runs, out);
 }
 
-/** Rule 4: the run's time, with the date when the runs span days. */
+/** Rule 5: the run's time, with the date when the runs span days. */
 function timeLabels(
   name: string,
   runs: Array<{ runId: string; date: Date | null }>,

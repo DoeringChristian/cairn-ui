@@ -36,7 +36,7 @@ export interface QueryRunSelector {
   /** Run must carry every one of these tags. */
   tags?: string[];
   /** "latest-n": the N most recently created matching runs.
-   *  "newest-per-name": the single newest matching run per distinct display name. */
+   *  "newest-per-name": the single newest matching run per series (group, job_type, name). */
   mode: "latest-n" | "newest-per-name";
   /** Cap on the result count. Default 5. Applies to both modes. */
   n?: number;
@@ -111,8 +111,8 @@ export function resolveRunSelectorFromRuns(sel: RunSelector, runs: Run[]): strin
     return candidates.slice(0, n).map((r) => r.id);
   }
 
-  // newest-per-name: the first occurrence per series (group, name) (sorted
-  // desc, so the first occurrence is the newest): a group is a namespace.
+  // newest-per-name: the first occurrence per series (group, job_type, name)
+  // (sorted desc, so the first occurrence is the newest).
   // Runs without a display name are each their own series (keyed by id).
   const seen = new Set<string>();
   const out: string[] = [];

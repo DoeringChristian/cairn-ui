@@ -1,16 +1,17 @@
 /**
- * A run's series: its (group, name). A group is a namespace, so
- * `exp-44 · train` and `exp-43 · train` are different series; versions are
- * numbered per series by the server. A run without a name is its own series
- * (keyed by its id). Mirrored by cairn/server/run_groups.py `run_series_key`.
+ * A run's series: its (group, job type, name), the key the server numbers
+ * versions in. `exp-44 · train` and `exp-43 · train` are different series,
+ * and so is the same name under two job types; a missing group or job type
+ * is part of the key. A run without a name is its own series (keyed by its
+ * id). Mirrored by cairn/server/run_groups.py `run_series_key`.
  */
 import type { Run } from "../api/types.ts";
 
-type SeriesRun = Pick<Run, "id" | "group" | "display_name">;
+type SeriesRun = Pick<Run, "id" | "group" | "job_type" | "display_name">;
 
-/** The series key: `["<group>"|null, "<name>"|"<id>"]` as JSON. */
+/** The series key: `["<group>"|null, "<job_type>"|null, "<name>"|"<id>"]` as JSON. */
 export function runSeriesKey(run: SeriesRun): string {
-  return JSON.stringify([run.group ?? null, run.display_name || run.id]);
+  return JSON.stringify([run.group ?? null, run.job_type ?? null, run.display_name || run.id]);
 }
 
 /** Whether `a` is newer than `b` in one series: the higher version when both have one, else the later created_at. */

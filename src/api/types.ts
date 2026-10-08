@@ -62,7 +62,7 @@ export interface Run {
   /** Free-form grouping label (e.g. one per ablation arm). */
   group: string | null;
   /**
-   * The run's number in its series (project, group, name), assigned by the
+   * The run's number in its series (project, group, job_type, name), assigned by the
    * server and never reused; null for an unnamed run.
    */
   version: number | null;

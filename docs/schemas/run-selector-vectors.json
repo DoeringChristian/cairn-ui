@@ -93,6 +93,14 @@
       "group": "g1",
       "tags": "[]",
       "created_at": "2025-12-31T23:59:59+00:00"
+    },
+    {
+      "id": "r16",
+      "display_name": "nsx",
+      "group": "g1",
+      "job_type": "eval",
+      "tags": "[]",
+      "created_at": "2025-12-31T23:59:58+00:00"
     }
   ],
   "cases": [
@@ -177,7 +185,8 @@
         "r01",
         "r13",
         "r14",
-        "r15"
+        "r15",
+        "r16"
       ]
     },
     {
@@ -212,7 +221,8 @@
         "r03",
         "r02",
         "r01",
-        "r13"
+        "r13",
+        "r14"
       ]
     },
     {
@@ -363,7 +373,8 @@
         "r01",
         "r13",
         "r14",
-        "r15"
+        "r15",
+        "r16"
       ]
     },
     {
@@ -461,7 +472,8 @@
         "r04",
         "r03",
         "r13",
-        "r14"
+        "r14",
+        "r16"
       ]
     },
     {
@@ -540,7 +552,7 @@
       ]
     },
     {
-      "name": "newest per name is per (group, name): a group is a namespace",
+      "name": "newest per name is per (group, job_type, name)",
       "selector": {
         "kind": "query",
         "mode": "newest-per-name",
@@ -548,7 +560,8 @@
       },
       "expected": [
         "r13",
-        "r14"
+        "r14",
+        "r16"
       ]
     }
   ]

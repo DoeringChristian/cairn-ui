@@ -199,7 +199,7 @@ export default function RunsTablePage() {
   }, [selected, bulkArchive]);
 
   const onArchiveOldVersions = useCallback(async () => {
-    // Every run but the newest of its series (group, name): a group is a namespace.
+    // Every run but the newest of its series (group, job_type, name).
     const toArchive = olderInSeries(runs.filter((r) => !r.archived)).map((r) => r.id);
     if (toArchive.length === 0) { alert("No old versions to archive."); return; }
     if (!confirm(`Archive ${toArchive.length} old run(s)?`)) return;
@@ -207,7 +207,7 @@ export default function RunsTablePage() {
   }, [runs, bulkArchive]);
 
   const onDeleteOldVersions = useCallback(async () => {
-    // Every run but the newest of its series (group, name): a group is a namespace.
+    // Every run but the newest of its series (group, job_type, name).
     const toDelete = olderInSeries(runs.filter((r) => !r.archived)).map((r) => r.id);
     if (toDelete.length === 0) { alert("No old versions to delete."); return; }
     if (!confirm(`Delete ${toDelete.length} old run(s)? This cannot be undone.`)) return;

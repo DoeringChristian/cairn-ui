@@ -85,7 +85,7 @@ interface Props {
   onToggleGroup: (id: string) => void;
   /** A run's name is not prefixed with its group (`runRowName`): grouped, or every listed run in one group. */
   grouped: boolean;
-  /** The newest run of a name with several runs: highlighted. */
+  /** The newest run of a series with several runs: highlighted. */
   latestByName: ReadonlySet<string>;
   /** A run's dot; null: hollow. */
   colorOf: (run: Run) => string | null | undefined;
