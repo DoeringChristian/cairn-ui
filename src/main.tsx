@@ -14,10 +14,9 @@ import RunsTablePage from "./pages/RunsTablePage";
 import WorkspacePage from "./pages/WorkspacePage";
 import RunDetailPage from "./pages/RunDetailPage";
 import RunOverviewTab from "./pages/RunOverviewTab";
-import RunMetricsTab from "./pages/RunMetricsTab";
+import RunWorkspaceTab, { RunSystemTab } from "./pages/RunWorkspaceTab";
 import RunLogsTab from "./pages/RunLogsTab";
-import RunSourceTab from "./pages/RunSourceTab";
-import RunEnvTab from "./pages/RunEnvTab";
+import RunFilesTab from "./pages/RunFilesTab";
 import ReportsListPage from "./pages/ReportsListPage";
 import ReportEditorPage from "./pages/ReportEditorPage";
 import SweepsListPage from "./pages/SweepsListPage";
@@ -90,10 +89,10 @@ const router = createBrowserRouter([
             children: [
               { index: true, element: <RunOverviewTab /> },
               { path: "overview", element: <RunOverviewTab /> },
-              { path: "metrics", element: <RunMetricsTab /> },
+              { path: "workspace", element: <RunWorkspaceTab /> },
+              { path: "system", element: <RunSystemTab /> },
               { path: "logs", element: <RunLogsTab /> },
-              { path: "source", element: <RunSourceTab /> },
-              { path: "env", element: <RunEnvTab /> },
+              { path: "files", element: <RunFilesTab /> },
               { path: "artifacts", lazy: () => import("./pages/RunArtifactsTab").then((m) => ({ Component: m.default })) },
             ],
           },

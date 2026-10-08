@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet, useParams } from "react-router-dom";
 import { useRun, useStopRun } from "../api/hooks";
 import type { Run } from "../api/types";
+import CopyId from "../components/CopyId";
 import RunStatusBadge from "../components/RunStatusBadge";
 import { groupWorkspacePath } from "../components/runs-table/RunsTableParts";
 import { RunProgressHeader } from "../components/RunProgress";
@@ -11,10 +12,10 @@ import { useProjectRunView } from "../lib/run-view-store";
 
 const TABS = [
   { id: "overview", label: "Overview" },
-  { id: "metrics", label: "Metrics & Media" },
+  { id: "workspace", label: "Workspace" },
+  { id: "system", label: "System" },
   { id: "logs", label: "Logs" },
-  { id: "source", label: "Source" },
-  { id: "env", label: "Environment" },
+  { id: "files", label: "Files" },
   { id: "artifacts", label: "Artifacts" },
 ];
 
@@ -40,6 +41,8 @@ export default function RunDetailPage() {
         {run.version != null ? (
           <span className="mono num text-sm text-fg-muted">v{run.version}</span>
         ) : null}
+        <RunStatusBadge status={run.status} archived={run.archived} />
+        {run.status === "running" && <StopButton run={run} />}
         {run.group != null ? (
           <Link
             to={groupWorkspacePath(projectId, run.group)}
@@ -50,11 +53,7 @@ export default function RunDetailPage() {
             {run.group} ↗
           </Link>
         ) : null}
-        <RunStatusBadge status={run.status} archived={run.archived} />
-        {run.status === "running" && <StopButton run={run} />}
-        {run.display_name ? (
-          <span className="mono break-all text-xs text-fg-subtle">{run.id}</span>
-        ) : null}
+        {run.display_name ? <CopyId id={run.id} /> : null}
         {run.parent_run_id ? (
           <ForkedFrom
             projectId={projectId}

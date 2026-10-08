@@ -134,7 +134,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
     return hideEmpty ? withoutEmptyPanels(secs) : secs;
   }, [doc, metrics, query, all, hideEmpty]);
 
-  // `?card=<series>` (the Overview's "show in Metrics & Media"): mount the
+  // `?card=<series>` (the Overview summary's "show in Workspace"): mount the
   // first card showing that series, scroll to it and highlight it briefly,
   // then drop the parameter.
   const [searchParams, setSearchParams] = useSearchParams();

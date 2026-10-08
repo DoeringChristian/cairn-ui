@@ -160,7 +160,7 @@ button i[class*="fa-"] { font-size: 12px; line-height: 1; }
   }
 }
 
-/* A card jumped to (the Overview's "show in Metrics & Media"), briefly. */
+/* A card jumped to (the Overview summary's "show in Workspace"), briefly. */
 [data-focused] [data-cairn-card] {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
