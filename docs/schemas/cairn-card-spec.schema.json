@@ -20,8 +20,8 @@
         "seriesRef": {
           "$ref": "#/definitions/SeriesRef"
         },
-        "runSelector": {
-          "$ref": "#/definitions/RunSelectorSpec"
+        "runSet": {
+          "$ref": "#/definitions/RunSetSpec"
         }
       },
       "required": [
@@ -30,7 +30,7 @@
         "cardsSpec",
         "reportSpec",
         "seriesRef",
-        "runSelector"
+        "runSet"
       ],
       "additionalProperties": false,
       "description": "Umbrella entry point for schema generation only — `scripts/gen-card-spec-schema.mjs` generates the JSON Schema from THIS type so every card-spec root (`CardsSpec`, `CardSpec`, `ReportSpec`, `CardType`, …) lands under one deterministic `definitions` block with no degenerate wildcard entry. Never constructed at runtime; it exists purely to anchor the generator."
@@ -193,8 +193,15 @@
         "id": {
           "type": "string"
         },
-        "runs": {
-          "$ref": "#/definitions/RunsSpec"
+        "runSets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RunSetSpec"
+          },
+          "description": "The cell's run sets; the cards draw the union of their runs."
+        },
+        "view": {
+          "$ref": "#/definitions/RunViewSpec"
         },
         "title": {
           "type": "string"
@@ -209,18 +216,227 @@
       "additionalProperties": false,
       "description": "The ```cairn dialect's schema root. Mirrors `CairnSpec` (lib/reports/cairn-block.ts), which remains the actual parser's input type — this is its schema-generation counterpart, kept in sync by hand (both are small and rarely change independently of each other)."
     },
-    "RunsSpec": {
+    "RunSetSpec": {
       "type": "object",
       "properties": {
-        "ids": {
+        "name": {
+          "type": "string"
+        },
+        "filter": {
+          "$ref": "#/definitions/FilterGroupSpec"
+        },
+        "groupBy": {
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/definitions/GroupBySpec"
           }
         },
-        "selector": {
-          "$ref": "#/definitions/RunSelectorSpec"
+        "latestOnly": {
+          "type": "boolean"
         },
+        "sort": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SortKeySpec"
+          }
+        },
+        "eyes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "Explicit eyes: `g:<group-by label>:<group>` / `r:<run id>` → shown."
+        }
+      },
+      "additionalProperties": false,
+      "description": "A run set (= `RunSet`, lib/run-sets.ts): the workspace's runs table state, frozen; its runs are resolved live. Every field is optional in a fence (defaults: no filter, no grouping, all runs, newest first, no eyes)."
+    },
+    "FilterGroupSpec": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "group"
+        },
+        "op": {
+          "type": "string",
+          "enum": [
+            "and",
+            "or"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FilterNodeSpec"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "op",
+        "children"
+      ],
+      "additionalProperties": false,
+      "description": "And/or over children; an empty group constrains nothing."
+    },
+    "FilterNodeSpec": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/FilterChipSpec"
+        },
+        {
+          "$ref": "#/definitions/FilterExprSpec"
+        },
+        {
+          "$ref": "#/definitions/FilterGroupSpec"
+        }
+      ]
+    },
+    "FilterChipSpec": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "chip"
+        },
+        "field": {
+          "type": "string",
+          "description": "`display_name`, `status`, `tags`, `group`, `job_type`, `values.<key>` or `params.<key>`."
+        },
+        "op": {
+          "$ref": "#/definitions/FilterOperator"
+        },
+        "arg": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "field",
+        "op",
+        "arg"
+      ],
+      "additionalProperties": false,
+      "description": "A builder chip: `field op arg` (`arg` as typed, coerced on evaluation)."
+    },
+    "FilterOperator": {
+      "type": "string",
+      "enum": [
+        "exact",
+        "iexact",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "in",
+        "contains",
+        "icontains",
+        "startswith",
+        "endswith",
+        "isnull"
+      ],
+      "description": "A filter chip's operator (= `Operator`, lib/run-filter.ts)."
+    },
+    "FilterExprSpec": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "expr"
+        },
+        "expr": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "expr"
+      ],
+      "additionalProperties": false,
+      "description": "A scalar expression a run matches when it is truthy."
+    },
+    "GroupBySpec": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": [
+                "group",
+                "job_type",
+                "tag"
+              ]
+            }
+          },
+          "required": [
+            "source"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "const": "param"
+            },
+            "key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "const": "expr"
+            },
+            "expr": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "expr"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "One group-by level (= `GroupBy`, lib/runs-table/group.ts)."
+    },
+    "SortKeySpec": {
+      "type": "object",
+      "properties": {
+        "column": {
+          "type": "string",
+          "description": "`name`, `status`, `created_at`, `duration`, `value:<key>`, `param:<key>`."
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        }
+      },
+      "required": [
+        "column",
+        "direction"
+      ],
+      "additionalProperties": false,
+      "description": "One sort key (= `SortKey`, lib/runs-table/sort.ts)."
+    },
+    "RunViewSpec": {
+      "type": "object",
+      "properties": {
         "hidden": {
           "type": "array",
           "items": {
@@ -244,78 +460,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "A `runs:` block — static ids or a dynamic selector (mirrors `CairnRunsInput` in lib/reports/cairn-block.ts)."
-    },
-    "RunSelectorSpec": {
-      "$ref": "#/definitions/RunSelector",
-      "description": "= `RunSelector` (lib/run-selector.ts) — a dynamic run-set binding."
-    },
-    "RunSelector": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/StaticRunSelector"
-        },
-        {
-          "$ref": "#/definitions/QueryRunSelector"
-        }
-      ]
-    },
-    "StaticRunSelector": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "static"
-        },
-        "runIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "kind",
-        "runIds"
-      ],
-      "additionalProperties": false
-    },
-    "QueryRunSelector": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "query"
-        },
-        "namePattern": {
-          "type": "string",
-          "description": "Substring match (case-insensitive), or a glob if it contains `*`."
-        },
-        "tags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Run must carry every one of these tags."
-        },
-        "mode": {
-          "type": "string",
-          "enum": [
-            "latest-n",
-            "newest-per-name"
-          ],
-          "description": "\"latest-n\": the N most recently created matching runs. \"newest-per-name\": the single newest matching run per series (group, job_type, name)."
-        },
-        "n": {
-          "type": "number",
-          "description": "Cap on the result count. Default 5. Applies to both modes."
-        }
-      },
-      "required": [
-        "kind",
-        "mode"
-      ],
-      "additionalProperties": false
+      "description": "A cell's run view (mirrors `RunView` in lib/run-view.tsx)."
     },
     "ReportSpec": {
       "type": "object",

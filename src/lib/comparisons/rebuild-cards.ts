@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Grow a card set from a run set's current sequences, or rebind an existing
 // one to a changed run set. Shared by the runs table's "Compare", the Smart
-// Wizard, smart-filter / RunSelector refreshes and report cards blocks.
+// Wizard and report cards blocks (their run sets' runs changing).
 // ---------------------------------------------------------------------------
 
 import { api } from "../../api/client";
@@ -69,7 +69,7 @@ export async function rebuildCardsFromRuns(runIds: string[]): Promise<Comparison
  * (`ComparisonCardView` hands them the distinct `runId` set only), so their
  * series is simply re-pointed at `runIds` while preserving the card's label.
  *
- * A `RunSelector`-bound cards block whose resolved runs changed rebinds its
+ * A report cards block whose run sets' runs changed rebinds its
  * curated cards this way instead of replacing the whole card set.
  */
 export async function rebindCardsToRuns(

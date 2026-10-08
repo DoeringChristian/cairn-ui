@@ -4,7 +4,7 @@
  */
 
 import type { ComparisonCard } from "../comparisons";
-import type { RunSelector } from "../run-selector";
+import type { RunSet } from "../run-sets";
 import type { RunView } from "../run-view";
 
 export interface MarkdownBlock {
@@ -17,11 +17,17 @@ export interface CardsBlock {
   id: string;
   type: "cards";
   title?: string;
-  /** Static run ids this block's cards are bound to (used when `runSelector` is absent). */
-  runIds?: string[];
-  /** Dynamic run selector — when present, resolved live and takes precedence over `runIds`. */
-  runSelector?: RunSelector;
-  /** Runs hidden from this cell's charts, pinned first, and its baseline (```cairn `runs.hidden/pinned/baseline`). */
+  /**
+   * The cell's run sets (lib/run-sets.ts): each a frozen runs-table state,
+   * its runs resolved live; the cards draw the union of their runs.
+   */
+  runSets: RunSet[];
+  /**
+   * In-memory only: each set's runs fixed by the caller instead of resolved
+   * (a share link's sets, resolved by the server).
+   */
+  fixedRuns?: string[][];
+  /** Runs hidden from this cell's charts, pinned first, and its baseline (```cairn `view`). */
   runView?: RunView;
   cards: ComparisonCard[];
   /**
@@ -32,6 +38,12 @@ export interface CardsBlock {
   error?: string;
   /** The failed fence's body, re-compiled once the cell's metric index loads (lib/reports/recompile.ts). */
   errorSource?: string;
+  /**
+   * Set for a fence in the format before run sets (`runs:`): the cell shows
+   * empty with this notice; its fence is kept as written until the cell is
+   * edited (in-memory only).
+   */
+  notice?: string;
 }
 
 export type ReportBlock = MarkdownBlock | CardsBlock;

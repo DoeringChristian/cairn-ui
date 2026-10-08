@@ -4,11 +4,12 @@ import type { CardsBlock } from "./types.ts";
 import { appendCardsFence } from "./append.ts";
 import { parseReportMarkdown } from "./markdown-source.ts";
 import { parseCairnSpec } from "./cairn-block.ts";
+import { runSetOfIds } from "../run-sets.ts";
 
 const block: CardsBlock = {
   id: "blk1",
   type: "cards",
-  runIds: ["r1"],
+  runSets: [runSetOfIds(["r1"])],
   cards: [{ id: "card1", type: "scalar", series: [{ runId: "r1", name: "train/loss" }] }],
 };
 

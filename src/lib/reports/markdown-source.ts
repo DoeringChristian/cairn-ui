@@ -69,11 +69,10 @@ export const CELL_BOUNDARY_MARKER = "\u200B\u2063\u200B";
 /** The exact token `parseReportMarkdown` splits a prose segment on. */
 const CELL_BOUNDARY_TOKEN = `${CELL_BOUNDARY_MARKER}\n\n`;
 
-import type { Run } from "../../api/types";
 import type { MetricIndex } from "./metric-index";
-import { CairnBlockError, compileCairnBlock, parseCairnSpec, resolveRuns, serializeCairnSpec, stringifyCairnSpec } from "./cairn-block.ts";
+import { CairnBlockError, CairnLegacyRunsError, compileCairnBlock, parseCairnSpec, resolveRunSetsSpec, serializeCairnSpec, stringifyCairnSpec } from "./cairn-block.ts";
 import { newId } from "./ids.ts";
-import { resolveRunSelectorFromRuns } from "../run-selector.ts";
+import type { RunSet } from "../run-sets.ts";
 import { isCardsBlock, isMarkdownBlock, type CardsBlock, type ReportBlock } from "./types.ts";
 
 export const CAIRN_FENCE_LANG = "cairn";
@@ -171,6 +170,13 @@ export interface ParsedReportMarkdown {
 }
 
 /**
+ * The runs of a cell's run sets, as the caller resolves them: `sets` are the
+ * cell's run sets, `fence` the cell's index among the report's ```cairn
+ * fences. Returns each set's runs.
+ */
+export type RunSetResolver = (sets: readonly RunSet[], fence: number) => string[][];
+
+/**
  * Parse a report's canonical markdown source into the `blocks[]` view.
  * `metricIndex` (default empty) is only consulted for ```cairn cards that
  * omit `type` and need it inferred from a metric name — irrelevant for
@@ -178,25 +184,26 @@ export interface ParsedReportMarkdown {
  * emits an explicit `type`), so callers on the structural cells⇄markdown
  * toggle path can omit it entirely and stay synchronous.
  *
- * `opts.allProjectRuns`, when given, lets a `runs.selector` block resolve its
- * *live* run set synchronously (via `resolveRunSelectorFromRuns` — the same
- * pure resolution `useRunSelectorResolution` calls) and thread it into
- * `compileCairnBlock` as `resolvedRunIds`. Without it, a selector block
- * compiles with an empty run set and its cards get `series: []` — and since
- * a card's metric *name* only lives inside `series[].name`, no render-time
- * rebind (`rebindCardsToMetricIndex`) could recover it. The function stays
- * synchronous and pure: it uses the already-fetched project run pool.
+ * `opts.resolveRunSets`, when given, resolves each cell's run sets now (over
+ * the already-fetched project runs, `resolveRunSets`, or a share link's
+ * server-resolved sets) so the cards compile over their runs. Without it a
+ * cell compiles over no runs and its `metric:` cards get `series: []` — and
+ * since a card's metric *name* only lives inside `series[].name`, no
+ * render-time rebind (`rebindCardsToMetricIndex`) could recover it. With
+ * `opts.fixRuns` the resolved sets are kept on the block (`fixedRuns`) so it
+ * is not resolved again. The function stays synchronous and pure.
  */
 export function parseReportMarkdown(
   source: string,
   metricIndex: MetricIndex = new Map(),
-  opts?: { allProjectRuns?: Run[] },
+  opts?: { resolveRunSets?: RunSetResolver; fixRuns?: boolean },
 ): ParsedReportMarkdown {
   const segments = splitFences(source);
   const blocks: ReportBlock[] = [];
   const settings: Record<string, unknown> = {};
   const errors: Record<string, string> = {};
   const rawCairnSource: Record<string, string> = {};
+  let fence = -1;
 
   for (const seg of segments) {
     if (seg.kind === "prose") {
@@ -211,30 +218,39 @@ export function parseReportMarkdown(
       continue;
     }
 
+    fence += 1;
     let specId: string | undefined;
-    let runs: Pick<CardsBlock, "runIds" | "runSelector"> = { runIds: [] };
+    let runSets: RunSet[] = [];
+    let fixedRuns: string[][] | undefined;
     try {
       const spec = parseCairnSpec(seg.body);
       specId = spec.id;
       try {
-        const r = resolveRuns(spec);
-        runs = r.runSelector ? { runSelector: r.runSelector } : { runIds: r.runIds ?? [] };
+        runSets = resolveRunSetsSpec(spec);
       } catch {
         // Reported by compileCairnBlock below.
       }
       let resolvedRunIds: string[] | undefined;
-      if (opts?.allProjectRuns) {
-        const { runSelector } = resolveRuns(spec);
-        if (runSelector) resolvedRunIds = resolveRunSelectorFromRuns(runSelector, opts.allProjectRuns);
+      if (opts?.resolveRunSets) {
+        const sets = opts.resolveRunSets(runSets, fence);
+        resolvedRunIds = [...new Set(sets.flat())];
+        if (opts.fixRuns) fixedRuns = sets;
       }
       const compiled = compileCairnBlock(spec, metricIndex, { id: specId, resolvedRunIds });
-      blocks.push(compiled.block);
+      blocks.push(fixedRuns ? { ...compiled.block, fixedRuns } : compiled.block);
       Object.assign(settings, compiled.settings);
       rawCairnSource[compiled.block.id] = seg.raw;
     } catch (e) {
       const id = specId ?? newId();
+      if (e instanceof CairnLegacyRunsError) {
+        // The old format: an empty cell with a notice; its fence is kept
+        // verbatim (rawCairnSource) until the cell is edited.
+        blocks.push({ id, type: "cards", runSets: [], cards: [], notice: e.message, ...(opts?.fixRuns ? { fixedRuns: [] } : {}) });
+        rawCairnSource[id] = seg.raw;
+        continue;
+      }
       const message = e instanceof CairnBlockError ? e.message : `Unexpected error: ${(e as Error).message}`;
-      const errBlock: CardsBlock = { id, type: "cards", ...runs, cards: [], error: message, errorSource: seg.body };
+      const errBlock: CardsBlock = { id, type: "cards", runSets, cards: [], error: message, errorSource: seg.body, ...(fixedRuns ? { fixedRuns } : {}) };
       blocks.push(errBlock);
       errors[id] = message;
       rawCairnSource[id] = seg.raw;

@@ -10,8 +10,8 @@
  *
  * Everything comes from `GET /api/share/context` — the report, its runs and
  * their metric index — never from the project run list, which a share cannot
- * read. Selector cells are resolved against those runs (the server resolved
- * the same selectors against the full project to compute the scope) and
+ * read. Each cell's run sets come resolved by the server (`run_sets`, per
+ * ```cairn fence: the scope it computed, cairn's run_sets.py) and are
  * rendered as fixed run sets.
  */
 
@@ -24,12 +24,10 @@ import type { Run, ShareContext } from "../api/types";
 import ReportNotebook from "../components/reports/ReportNotebook";
 import {
   buildMetricIndex,
-  isCardsBlock,
   parseReportMarkdown,
   restoreReportCardSettings,
   type ReportBlock,
 } from "../lib/reports";
-import { resolveRunSelectorFromRuns } from "../lib/run-selector";
 import { setRunMetadata } from "../lib/run-label";
 import { formatRelative } from "../lib/format";
 
@@ -85,12 +83,11 @@ function blocksFromContext(ctx: ShareContext): { blocks: ReportBlock[]; settings
   const metricIndex = buildMetricIndex(
     Object.entries(ctx.metric_index).map(([runId, sequences]) => ({ runId, sequences })),
   );
-  const parsed = parseReportMarkdown(source, metricIndex, { allProjectRuns: ctx.runs });
-  const blocks = parsed.blocks.map((b): ReportBlock => {
-    if (!isCardsBlock(b) || !b.runSelector) return b;
-    return { ...b, runSelector: undefined, runIds: resolveRunSelectorFromRuns(b.runSelector, ctx.runs) };
+  const parsed = parseReportMarkdown(source, metricIndex, {
+    resolveRunSets: (sets, fence) => sets.map((_, i) => ctx.run_sets[fence]?.[i] ?? []),
+    fixRuns: true,
   });
-  return { blocks, settings: parsed.settings };
+  return { blocks: parsed.blocks, settings: parsed.settings };
 }
 
 /** `/s/:reportId` — the shared report, read-only. */
@@ -143,7 +140,6 @@ export default function ReportViewPage() {
             projectId={ctx.report.project_id}
             reportId={ctx.report.id}
             blocks={view.blocks}
-            allProjectRuns={ctx.runs}
             onUpdateBlock={noop}
             onMoveBlock={noop}
             onDeleteBlock={noop}

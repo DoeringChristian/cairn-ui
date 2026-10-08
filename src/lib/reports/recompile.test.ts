@@ -5,8 +5,8 @@ import { buildMetricIndex } from "./metric-index.ts";
 import { recompileDecision, recompileFailedBlock } from "./recompile.ts";
 import { isCardsBlock, type CardsBlock } from "./types.ts";
 
-const INFER = "```cairn\nid: blk1\nruns:\n  ids: [run_a, run_b]\ncards:\n  - metric: loss\n```";
-const BAD = "```cairn\nid: blk2\nruns: [oops]\n```";
+const INFER = "```cairn\nid: blk1\nrunSets:\n  - name: Main\ncards:\n  - metric: loss\n```";
+const BAD = "```cairn\nid: blk2\nrunSets: oops\n```";
 
 function cardsBlocks(source: string): CardsBlock[] {
   return parseReportMarkdown(source).blocks.filter(isCardsBlock);
@@ -19,12 +19,12 @@ test("a fence that fails to compile carries its error, body and runs", () => {
   const parsed = parseReportMarkdown(`# R\n\n${INFER}\n\n${BAD}`);
   const [inferred, bad] = parsed.blocks.filter(isCardsBlock);
   assert.match(inferred!.error!, /cannot infer `type` for metric "loss"/);
-  assert.equal(inferred!.errorSource, "id: blk1\nruns:\n  ids: [run_a, run_b]\ncards:\n  - metric: loss");
-  assert.deepEqual(inferred!.runIds, ["run_a", "run_b"]);
+  assert.equal(inferred!.errorSource, "id: blk1\nrunSets:\n  - name: Main\ncards:\n  - metric: loss");
+  assert.deepEqual(inferred!.runSets.map((s) => s.name), ["Main"]);
   assert.deepEqual(inferred!.cards, []);
   assert.equal(parsed.errors.blk1, inferred!.error);
-  assert.match(bad!.error!, /`runs` must be a mapping/);
-  assert.deepEqual(bad!.runIds, []);
+  assert.match(bad!.error!, /`runSets` must be a list/);
+  assert.deepEqual(bad!.runSets, []);
 });
 
 test("failed fences round-trip unchanged, with or without cached raw text", () => {
@@ -35,7 +35,7 @@ test("failed fences round-trip unchanged, with or without cached raw text", () =
 });
 
 test("a compiled fence carries no error", () => {
-  const [b] = cardsBlocks("```cairn\nid: b\nruns:\n  ids: [run_a]\ncards:\n  - metric: loss\n    type: scalar\n```");
+  const [b] = cardsBlocks("```cairn\nid: b\nrunSets: [{ name: s }]\ncards:\n  - metric: loss\n    type: scalar\n```");
   assert.equal(b!.error, undefined);
   assert.equal(b!.errorSource, undefined);
 });
@@ -57,7 +57,7 @@ test("recompiling once the metric index is loaded infers the type and keeps the 
     { runId: "run_a", sequences: [seq("loss")] },
     { runId: "run_b", sequences: [seq("loss")] },
   ]);
-  const r = recompileFailedBlock(failed!, index);
+  const r = recompileFailedBlock(failed!, index, ["run_a", "run_b"]);
   assert.ok(r.ok);
   assert.equal(r.block.id, "blk1");
   assert.equal(r.block.error, undefined);
@@ -68,7 +68,7 @@ test("recompiling once the metric index is loaded infers the type and keeps the 
 
 test("a fence that is really broken stays broken on recompile", () => {
   const [failed] = cardsBlocks(INFER);
-  const r = recompileFailedBlock(failed!, buildMetricIndex([{ runId: "run_a", sequences: [seq("acc")] }]));
+  const r = recompileFailedBlock(failed!, buildMetricIndex([{ runId: "run_a", sequences: [seq("acc")] }]), ["run_a"]);
   assert.equal(r.ok, false);
   assert.match((r as { error: string }).error, /cannot infer/);
 });

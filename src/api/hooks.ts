@@ -13,7 +13,7 @@ import { api } from "./client";
 import { qk } from "./query-keys";
 import { MAX_LIVE_IDS, mergeLiveRuns, runningIds } from "./runs-live-core";
 import { addRunMetadata, setRunMetadata } from "../lib/run-label";
-import { resolveRunSelectorFromRuns, type RunSelector } from "../lib/run-selector";
+import { RUN_SET_POOL } from "../lib/run-sets";
 import { rulesOf, type RuleOf } from "../lib/metric-rules";
 
 export function useHealth() {
@@ -30,10 +30,11 @@ export function useProjects() {
   return useQuery({ queryKey: qk.projects(), queryFn: api.projects });
 }
 
-export function useRuns(params: Parameters<typeof api.runs>[0]) {
+export function useRuns(params: Parameters<typeof api.runs>[0], { enabled = true }: { enabled?: boolean } = {}) {
   const q = useQuery({
     queryKey: qk.runs(params),
     queryFn: () => api.runs(params),
+    enabled,
     refetchInterval: (q) => {
       // Poll every 3s if there are any running runs.
       const data = q.state.data;
@@ -406,75 +407,16 @@ export function useDeleteReport(projectId: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Dynamic run selectors (see lib/run-selector.ts) — shared by comparisons'
-// `runSelector` field and reports' cards-block `runSelector` field.
+// Run sets (lib/run-sets.ts): a report cell's runs, resolved live
 // ---------------------------------------------------------------------------
 
 /**
- * Bounded pool size fetched to resolve a "query" run selector against.
- * Exported so any other "all project runs" fetch that a selector's resolved
- * ids need to be looked up against (chips/pickers) uses the *same* bound —
- * with a smaller pool, a resolved run beyond it would have no label to show.
+ * The project's runs a report's run sets resolve against: the newest
+ * `RUN_SET_POOL`, archived included, with params and stats (the workspace's
+ * fetch, so the two share the cache).
  */
-export const RUN_SELECTOR_FETCH_LIMIT = 500;
-/** Short staleTime so a newly logged run shows up on the next focus/refresh
- *  without requiring a full page reload. */
-const RUN_SELECTOR_STALE_MS = 10_000;
-
-/**
- * Resolve a `RunSelector` against the project's runs, live.
- *
- * For `{kind: "static"}` this is a synchronous passthrough (no fetch). For
- * `{kind: "query"}` it fetches a bounded, recency-sorted pool of the
- * project's runs with a short `staleTime` and `refetchOnWindowFocus`, so a
- * freshly logged run naturally re-enters the resolved set — `refresh()` (or
- * simply refocusing the tab) is enough to pick it up. Callers should show
- * the `active` flag as an "auto" badge (see components/RunSelectorBadge.tsx)
- * with `refresh` wired to a manual refresh affordance.
- */
-export function useRunSelectorResolution(
-  projectId: string,
-  selector: RunSelector | undefined,
-): {
-  runIds: string[];
-  active: boolean;
-  isFetching: boolean;
-  /** `runIds` is the real resolution (false while a query selector's runs are loading; `runIds` is [] then). */
-  resolved: boolean;
-  refresh: () => Promise<string[]>;
-} {
-  const enabled = !!projectId && selector?.kind === "query";
-  const q = useQuery({
-    queryKey: qk.runs({ project: projectId, limit: RUN_SELECTOR_FETCH_LIMIT, runSelector: true }),
-    queryFn: () => api.runs({ project: projectId, limit: RUN_SELECTOR_FETCH_LIMIT }),
-    enabled,
-    staleTime: RUN_SELECTOR_STALE_MS,
-    refetchOnWindowFocus: true,
-  });
-
-  const runIds = useMemo(() => {
-    if (!selector) return [];
-    if (selector.kind === "static") return selector.runIds;
-    if (!q.data) return [];
-    return resolveRunSelectorFromRuns(selector, q.data.runs);
-  }, [selector, q.data]);
-
-  return {
-    runIds,
-    active: selector?.kind === "query",
-    isFetching: q.isFetching,
-    resolved: selector?.kind !== "query" || q.data !== undefined,
-    // Re-fetches and returns the freshly-resolved run ids (rather than the
-    // possibly-stale `runIds` from before the call) — callers that rebuild
-    // cards from the resolved set (see rebuildCardsFromRuns) should await
-    // this instead of reading `runIds` right after calling it.
-    refresh: async () => {
-      if (!selector) return [];
-      if (selector.kind === "static") return selector.runIds;
-      const res = await q.refetch();
-      return res.data ? resolveRunSelectorFromRuns(selector, res.data.runs) : [];
-    },
-  };
+export function useRunSetPool(projectId: string | null | undefined, enabled = true) {
+  return useRuns({ project: projectId ?? "", limit: RUN_SET_POOL, include: ["params", "stats"] }, { enabled: enabled && !!projectId });
 }
 
 /** A project's sweeps; polls while any is running (agents report trials live). */

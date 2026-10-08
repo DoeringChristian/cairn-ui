@@ -6,14 +6,14 @@
  *
  * Grammar:
  *
- *   runs:
- *     ids: [run_abc, run_def]                 # → CardsBlock.runIds
- *     # or
- *     selector: { mode: newest-per-name, namePattern: "train-*", tags: [prod], n: 5 }
- *                                              # → CardsBlock.runSelector (query)
- *     hidden: [run_def]                        # optional run view → CardsBlock.runView
- *     pinned: [run_abc]
- *     baseline: run_abc
+ *   runSets:                                  # 1..n run sets (lib/run-sets.ts)
+ *     - name: Baselines
+ *       filter: { kind: group, op: and, children: [{ kind: chip, field: group, op: exact, arg: exp-44 }] }
+ *       groupBy: [{ source: job_type }]
+ *       latestOnly: true
+ *       sort: [{ column: created_at, direction: desc }]
+ *       eyes: { "r:3f9c…": false }
+ *   view: { hidden: [run_def], pinned: [run_abc], baseline: run_abc }   # optional run view
  *   title: "Validation metrics"                # optional
  *   cards:
  *     - metric: train/loss                     # series card
@@ -23,10 +23,15 @@
  *     - type: scalar                             # manual-series (explicit overlay)
  *       series: [{ runId: run_a, name: loss }]
  *
+ * Each run set is the workspace's runs table state, frozen (its filter tree,
+ * group-by, Latest only, sort and eyes); its runs are resolved live
+ * (`resolveRunSets`), and the cards draw the union of the sets' runs. A fence
+ * with the old `runs:` key (static ids or a selector) is not read at all
+ * (`CairnLegacyRunsError`): no migration.
+ *
  * Field → existing-model mapping:
- *   runs.ids            → CardsBlock.runIds
- *   runs.selector        → CardsBlock.runSelector (QueryRunSelector)
- *   runs.hidden/pinned/baseline → CardsBlock.runView (lib/run-view.tsx)
+ *   runSets              → CardsBlock.runSets (parseRunSet; lenient per field)
+ *   view.hidden/pinned/baseline → CardsBlock.runView (lib/run-view.tsx)
  *   cards[].metric+.type → cardFromSpec({kind:"series", ...})
  *   cards[].type (multi-run, no metric/series) → cardFromSpec({kind:"multi-run", ...})
  *   cards[].series       → cardFromSpec({kind:"manual-series", ...})
@@ -43,12 +48,12 @@ import {
   type ComparisonSeriesRef,
   type MultiRunCardType,
 } from "../comparisons/types.ts";
-import type { QueryRunSelector, RunSelector } from "../run-selector";
+import { parseRunSet, type RunSet } from "../run-sets.ts";
 import { cardFromSpec, type AddCardSelection } from "./card-from-spec.ts";
 import { newId } from "./ids.ts";
 import type { MetricIndex } from "./metric-index";
 import type { CardsBlock } from "./types";
-import type { RunView } from "../run-view";
+import type { RunView } from "../run-view.tsx";
 
 export class CairnBlockError extends Error {
   constructor(message: string) {
@@ -57,17 +62,18 @@ export class CairnBlockError extends Error {
   }
 }
 
-/** Raw shape of a `runs.selector` entry before validation. */
-interface CairnRunsSelectorInput {
-  mode?: unknown;
-  namePattern?: unknown;
-  tags?: unknown;
-  n?: unknown;
+/**
+ * A fence in the format before run sets (`runs: {ids | selector}`): not
+ * read, the cell shows it empty with a notice (no migration).
+ */
+export class CairnLegacyRunsError extends CairnBlockError {
+  constructor() {
+    super("This cell uses the old `runs:` format (fixed run ids or a run selector), which is no longer read. Its fence is kept as written until you edit the cell; give it a run set to show runs again.");
+    this.name = "CairnLegacyRunsError";
+  }
 }
 
-interface CairnRunsInput {
-  ids?: unknown;
-  selector?: CairnRunsSelectorInput;
+interface CairnViewInput {
   /** The cell's run view: runs hidden from its charts, pinned first, and the baseline. */
   hidden?: unknown;
   pinned?: unknown;
@@ -103,7 +109,8 @@ export interface CairnSpec {
    * regenerate on parse — see markdown-source.ts's module doc.)
    */
   id?: string;
-  runs?: CairnRunsInput;
+  runSets?: unknown[];
+  view?: CairnViewInput;
   title?: string;
   cards?: CairnCardInput[];
 }
@@ -124,7 +131,7 @@ export function parseCairnSpec(source: string): CairnSpec {
   }
   if (doc == null) return {};
   if (typeof doc !== "object" || Array.isArray(doc)) {
-    throw new CairnBlockError("a ```cairn block must be a YAML mapping with `runs`/`title`/`cards` keys");
+    throw new CairnBlockError("a ```cairn block must be a YAML mapping with `runSets`/`view`/`title`/`cards` keys");
   }
   const d = doc as Record<string, unknown>;
   if (d.id !== undefined && typeof d.id !== "string") {
@@ -136,76 +143,41 @@ export function parseCairnSpec(source: string): CairnSpec {
   if (d.cards !== undefined && !Array.isArray(d.cards)) {
     throw new CairnBlockError("`cards` must be a list");
   }
-  if (d.runs !== undefined && (typeof d.runs !== "object" || d.runs === null || Array.isArray(d.runs))) {
-    throw new CairnBlockError("`runs` must be a mapping (`ids: [...]` or `selector: {...}`)");
+  if (d.runs !== undefined) throw new CairnLegacyRunsError();
+  if (d.runSets !== undefined && !Array.isArray(d.runSets)) {
+    throw new CairnBlockError("`runSets` must be a list of run sets");
+  }
+  if (d.view !== undefined && (typeof d.view !== "object" || d.view === null || Array.isArray(d.view))) {
+    throw new CairnBlockError("`view` must be a mapping (`hidden`, `pinned`, `baseline`)");
   }
   return d as CairnSpec;
 }
 
-function validateRunSelector(sel: CairnRunsSelectorInput): RunSelector {
-  if (sel.mode !== "latest-n" && sel.mode !== "newest-per-name") {
-    throw new CairnBlockError('runs.selector.mode must be "latest-n" or "newest-per-name"');
-  }
-  if (sel.namePattern !== undefined && typeof sel.namePattern !== "string") {
-    throw new CairnBlockError("runs.selector.namePattern must be a string");
-  }
-  if (sel.tags !== undefined && (!Array.isArray(sel.tags) || !sel.tags.every((t) => typeof t === "string"))) {
-    throw new CairnBlockError("runs.selector.tags must be a list of strings");
-  }
-  if (sel.n !== undefined && (typeof sel.n !== "number" || !Number.isFinite(sel.n))) {
-    throw new CairnBlockError("runs.selector.n must be a number");
-  }
-  const out: QueryRunSelector = { kind: "query", mode: sel.mode };
-  if (sel.namePattern !== undefined) out.namePattern = sel.namePattern as string;
-  if (sel.tags !== undefined) out.tags = sel.tags as string[];
-  if (sel.n !== undefined) out.n = sel.n as number;
-  return out;
+/** The cell's run sets (`runSets`); each entry must be a mapping, its fields are read leniently. */
+export function resolveRunSetsSpec(spec: CairnSpec): RunSet[] {
+  return (spec.runSets ?? []).map((raw, i) => {
+    const set = parseRunSet(raw, i);
+    if (!set) throw new CairnBlockError(`runSets[${i}] must be a mapping`);
+    return set;
+  });
 }
 
-/**
- * Exported so `markdown-source.ts`'s `parseReportMarkdown` can synchronously
- * resolve a `runs.selector` block's live run set (against an already-fetched
- * run pool) *before* calling `compileCairnBlock`, so a selector card doesn't
- * compile with an empty series — reusing this validation instead of
- * re-deriving the `RunSelector` shape a second way.
- */
-export function resolveRuns(spec: CairnSpec): { runIds?: string[]; runSelector?: RunSelector } {
-  if (!spec.runs) return {};
-  const { ids, selector } = spec.runs;
-  if (ids !== undefined && selector !== undefined) {
-    throw new CairnBlockError("runs: specify only one of `ids` or `selector`, not both");
-  }
-  if (ids !== undefined) {
-    if (!Array.isArray(ids) || !ids.every((x) => typeof x === "string")) {
-      throw new CairnBlockError("runs.ids must be a list of run-id strings");
-    }
-    return { runIds: ids as string[] };
-  }
-  if (selector !== undefined) {
-    if (typeof selector !== "object" || selector === null) {
-      throw new CairnBlockError("runs.selector must be a mapping");
-    }
-    return { runSelector: validateRunSelector(selector) };
-  }
-  return {};
-}
-
-/** The cell's run view from `runs.hidden`/`pinned`/`baseline`; undefined when none is given. */
+/** The cell's run view from `view.hidden`/`pinned`/`baseline`; undefined when none is given. */
 export function resolveRunView(spec: CairnSpec): RunView | undefined {
-  const runs = spec.runs;
-  if (!runs) return undefined;
-  const { hidden, pinned, baseline } = runs;
+  const view = spec.view;
+  if (!view) return undefined;
+  const { hidden, pinned, baseline } = view;
   const list = (v: unknown, key: string): string[] => {
     if (v === undefined) return [];
     if (!Array.isArray(v) || !v.every((x) => typeof x === "string")) {
-      throw new CairnBlockError(`runs.${key} must be a list of run-id strings`);
+      throw new CairnBlockError(`view.${key} must be a list of run-id strings`);
     }
     return v as string[];
   };
   const h = list(hidden, "hidden");
   const p = list(pinned, "pinned");
   if (baseline !== undefined && baseline !== null && typeof baseline !== "string") {
-    throw new CairnBlockError("runs.baseline must be a run-id string");
+    throw new CairnBlockError("view.baseline must be a run-id string");
   }
   const b = typeof baseline === "string" && baseline ? baseline : null;
   if (h.length === 0 && p.length === 0 && b === null) return undefined;
@@ -307,24 +279,20 @@ function selectionForCard(c: CairnCardInput, index: number, metricIndex: MetricI
 
 /**
  * Compile a validated `CairnSpec` into a `CardsBlock` + inline settings map.
- * `metricIndex` should already be scoped to the block's *resolved* runIds
- * (static `runs.ids`, or the live-resolved ids of `runs.selector` — see the
- * ```cairn render component, which does the resolution before calling this).
- *
- * `opts.resolvedRunIds`, when given, is the live-resolved run id set for a
- * `runs.selector` block (computed by the caller via
- * `useRunSelectorResolution` — this function stays pure and does no
- * resolution itself). It's only consulted when the spec uses `runs.selector`;
- * a static `runs.ids` block always uses its own ids verbatim.
+ * `opts.resolvedRunIds` is the cell's runs right now (the union of its run
+ * sets, resolved by the caller: `resolveRunSets` over the project's runs, or
+ * a share link's server-resolved sets); without it the cards compile over no
+ * runs. `metricIndex` should already be scoped to those runs. This function
+ * stays pure and does no resolution itself.
  */
 export function compileCairnBlock(
   spec: CairnSpec,
   metricIndex: MetricIndex,
   opts?: { id?: string; resolvedRunIds?: string[] },
 ): CompiledCairnBlock {
-  const { runIds, runSelector } = resolveRuns(spec);
+  const runSets = resolveRunSetsSpec(spec);
   const runView = resolveRunView(spec);
-  const effectiveRunIds = runIds ?? (runSelector ? (opts?.resolvedRunIds ?? []) : []);
+  const effectiveRunIds = opts?.resolvedRunIds ?? [];
   // Stabilized the same way the block id already is (opts.id/spec.id) — see
   // stableCardId's doc: card ids below are derived from this + each card's
   // own declared shape, never from resolved run/metric data, so they don't
@@ -364,7 +332,7 @@ export function compileCairnBlock(
     id: blockId,
     type: "cards",
     ...(spec.title !== undefined ? { title: spec.title } : {}),
-    ...(runSelector ? { runSelector } : { runIds: effectiveRunIds }),
+    runSets,
     ...(runView ? { runView } : {}),
     cards,
   };
@@ -380,35 +348,22 @@ function seriesShareOneName(card: ComparisonCard): string | null {
 
 /**
  * Serialize a `CardsBlock` (+ its inline settings map) to a ```cairn spec —
- * the inverse of `parseCairnSpec` + `compileCairnBlock`. Prefers the compact
- * `metric:`/`type:` forms when they round-trip losslessly (single metric
- * name; for a static run set, series covers exactly the block's runIds), and
- * falls back to the fully-explicit `series:` (manual-series) form otherwise
- * — which is *always* lossless, since `cardFromSpec`'s manual-series branch
- * copies `series` verbatim.
+ * the inverse of `parseCairnSpec` + `compileCairnBlock`. A card over one
+ * metric name is written in the compact `metric:`/`type:` form (its runs are
+ * the cell's live runs); any other card in the fully-explicit `series:`
+ * (manual-series) form, which `cardFromSpec` copies verbatim.
  */
 export function serializeCairnSpec(block: CardsBlock, settingsByCardId: Record<string, unknown> = {}): CairnSpec {
   const doc: CairnSpec = { id: block.id };
-
-  if (block.runSelector && block.runSelector.kind === "query") {
-    const sel = block.runSelector;
-    const selectorOut: CairnRunsSelectorInput = { mode: sel.mode };
-    if (sel.namePattern !== undefined) selectorOut.namePattern = sel.namePattern;
-    if (sel.tags !== undefined) selectorOut.tags = sel.tags;
-    if (sel.n !== undefined) selectorOut.n = sel.n;
-    doc.runs = { selector: selectorOut };
-  } else {
-    doc.runs = { ids: block.runIds ?? [] };
-  }
+  doc.runSets = block.runSets.map((s) => ({ ...s }));
   const view = block.runView;
-  if (view) {
-    if (view.hidden.length > 0) doc.runs.hidden = view.hidden;
-    if (view.pinned.length > 0) doc.runs.pinned = view.pinned;
-    if (view.baseline) doc.runs.baseline = view.baseline;
+  if (view && (view.hidden.length > 0 || view.pinned.length > 0 || view.baseline)) {
+    doc.view = {};
+    if (view.hidden.length > 0) doc.view.hidden = view.hidden;
+    if (view.pinned.length > 0) doc.view.pinned = view.pinned;
+    if (view.baseline) doc.view.baseline = view.baseline;
   }
   if (block.title !== undefined) doc.title = block.title;
-
-  const staticRunIdSet = block.runSelector ? null : new Set(block.runIds ?? []);
 
   doc.cards = block.cards.map((card): CairnCardInput => {
     const cardSettings = settingsByCardId[card.id];
@@ -426,11 +381,7 @@ export function serializeCairnSpec(block: CardsBlock, settingsByCardId: Record<s
     }
 
     const name = seriesShareOneName(card);
-    const seriesRunIds = new Set(card.series.map((s) => s.runId));
-    const coversBlockRuns =
-      staticRunIdSet === null || (seriesRunIds.size === staticRunIdSet.size && [...seriesRunIds].every((id) => staticRunIdSet.has(id)));
-
-    if (name !== null && coversBlockRuns) {
+    if (name !== null) {
       return { metric: name, type: card.type, ...idField, ...settingsField };
     }
 

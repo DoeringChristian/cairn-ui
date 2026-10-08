@@ -1,7 +1,7 @@
 /**
  * Per-run run-view controls: a colour swatch, and the eye (hide from
  * charts), pin (listed and drawn first) and baseline toggles. Used by the
- * runs table and `RunSetEditor`; the toggles edit whichever run view the
+ * runs table and a report cell's `RunSetsPanel`; the toggles edit whichever run view the
  * caller passes (project, comparison or report cell).
  */
 

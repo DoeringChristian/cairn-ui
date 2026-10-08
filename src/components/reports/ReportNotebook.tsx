@@ -28,8 +28,8 @@
  * canonical markdown `source` on save.
  */
 
+import { defaultRunSet } from "../../lib/run-sets";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Run } from "../../api/types";
 import { useReportComments } from "../../api/hooks";
 import Markdown, { AssetUrlContext, HeadingControlsContext, type HeadingControls } from "../../lib/markdown";
 import {
@@ -65,7 +65,6 @@ interface Props {
   projectId: string;
   reportId: string;
   blocks: ReportBlock[];
-  allProjectRuns: Run[];
   onUpdateBlock: (id: string, next: ReportBlock) => void;
   onMoveBlock: (id: string, dir: -1 | 1) => void;
   onDeleteBlock: (id: string) => void;
@@ -119,7 +118,6 @@ export default function ReportNotebook({
   projectId,
   reportId,
   blocks,
-  allProjectRuns,
   onUpdateBlock,
   onMoveBlock,
   onDeleteBlock,
@@ -364,7 +362,6 @@ export default function ReportNotebook({
                   projectId={projectId}
                   reportId={reportId}
                   block={block}
-                  allProjectRuns={allProjectRuns}
                   onChange={(next) => onUpdateBlock(block.id, next)}
                   readOnly={readOnly}
                   toolbar={(extra) => toolbar("Cards", extra)}
@@ -697,5 +694,5 @@ function MarkdownCell({
 export function makeEmptyBlock(type: CellType): ReportBlock {
   return type === "markdown"
     ? ({ id: newId(), type: "markdown", text: "" } satisfies MarkdownBlock)
-    : ({ id: newId(), type: "cards", runIds: [], cards: [] } satisfies CardsBlock);
+    : ({ id: newId(), type: "cards", runSets: [defaultRunSet("Run set 1")], cards: [] } satisfies CardsBlock);
 }

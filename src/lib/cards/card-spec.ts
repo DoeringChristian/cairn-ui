@@ -17,7 +17,8 @@
  */
 
 import type { ComparisonCard, ComparisonSeriesRef } from "../comparisons/types";
-import type { RunSelector } from "../run-selector";
+import type { Operator } from "../run-filter";
+import type { RunSet } from "../run-sets";
 
 /**
  * Every card type `CardRenderer` knows how to render. Order: per-metric
@@ -66,8 +67,69 @@ export type CardType = (typeof CARD_TYPES)[number];
 /** = `ComparisonSeriesRef` (lib/comparisons/types.ts) — one (run, metric) binding for a card. */
 export type SeriesRef = ComparisonSeriesRef;
 
-/** = `RunSelector` (lib/run-selector.ts) — a dynamic run-set binding. */
-export type RunSelectorSpec = RunSelector;
+/** A filter chip's operator (= `Operator`, lib/run-filter.ts). */
+export type FilterOperator =
+  | "exact" | "iexact" | "gt" | "gte" | "lt" | "lte" | "in"
+  | "contains" | "icontains" | "startswith" | "endswith" | "isnull";
+
+/** A builder chip: `field op arg` (`arg` as typed, coerced on evaluation). */
+export interface FilterChipSpec {
+  kind: "chip";
+  /** `display_name`, `status`, `tags`, `group`, `job_type`, `values.<key>` or `params.<key>`. */
+  field: string;
+  op: FilterOperator;
+  arg: string;
+}
+
+/** A scalar expression a run matches when it is truthy. */
+export interface FilterExprSpec {
+  kind: "expr";
+  expr: string;
+}
+
+/** And/or over children; an empty group constrains nothing. */
+export interface FilterGroupSpec {
+  kind: "group";
+  op: "and" | "or";
+  children: FilterNodeSpec[];
+}
+
+export type FilterNodeSpec = FilterChipSpec | FilterExprSpec | FilterGroupSpec;
+
+/** One group-by level (= `GroupBy`, lib/runs-table/group.ts). */
+export type GroupBySpec =
+  | { source: "group" | "job_type" | "tag" }
+  | { source: "param"; key: string }
+  | { source: "expr"; expr: string };
+
+/** One sort key (= `SortKey`, lib/runs-table/sort.ts). */
+export interface SortKeySpec {
+  /** `name`, `status`, `created_at`, `duration`, `value:<key>`, `param:<key>`. */
+  column: string;
+  direction: "asc" | "desc";
+}
+
+/**
+ * A run set (= `RunSet`, lib/run-sets.ts): the workspace's runs table state,
+ * frozen; its runs are resolved live. Every field is optional in a fence
+ * (defaults: no filter, no grouping, all runs, newest first, no eyes).
+ */
+export interface RunSetSpec {
+  name?: string;
+  filter?: FilterGroupSpec;
+  groupBy?: GroupBySpec[];
+  latestOnly?: boolean;
+  sort?: SortKeySpec[];
+  /** Explicit eyes: `g:<group-by label>:<group>` / `r:<run id>` → shown. */
+  eyes?: { [key: string]: boolean };
+}
+
+// Compile-time: the spec types accept every value of the runtime types.
+type _AssertOperator = Operator extends FilterOperator ? (FilterOperator extends Operator ? true : never) : never;
+const _operatorCheck: _AssertOperator = true;
+void _operatorCheck;
+const _runSetCheck = (s: RunSet): RunSetSpec => s;
+void _runSetCheck;
 
 /** Any valid JSON value — used to keep per-card `settings` permissive (see `CardSettingsSpec`). */
 export type JSONValue = string | number | boolean | null | JSONValue[] | { [key: string]: JSONValue };
@@ -98,11 +160,8 @@ export interface CardSettingsSpec {
  */
 export type CardSpec = ComparisonCard & { settings?: CardSettingsSpec };
 
-/** A `runs:` block — static ids or a dynamic selector (mirrors `CairnRunsInput` in lib/reports/cairn-block.ts). */
-export interface RunsSpec {
-  ids?: string[];
-  selector?: RunSelectorSpec;
-  // --- run view (wave 2, E): mirrors `RunView` in lib/run-view.tsx ---
+/** A cell's run view (mirrors `RunView` in lib/run-view.tsx). */
+export interface RunViewSpec {
   /** Runs hidden from the cell's charts. */
   hidden?: string[];
   /** Runs drawn first, in this order. */
@@ -119,7 +178,9 @@ export interface RunsSpec {
  */
 export interface CardsSpec {
   id?: string;
-  runs?: RunsSpec;
+  /** The cell's run sets; the cards draw the union of their runs. */
+  runSets?: RunSetSpec[];
+  view?: RunViewSpec;
   title?: string;
   cards?: CardSpec[];
 }
@@ -148,5 +209,5 @@ export interface CardSpecSchema {
   cardsSpec: CardsSpec;
   reportSpec: ReportSpec;
   seriesRef: SeriesRef;
-  runSelector: RunSelectorSpec;
+  runSet: RunSetSpec;
 }

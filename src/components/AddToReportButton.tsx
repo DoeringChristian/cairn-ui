@@ -10,6 +10,7 @@
  * then gives up with an error rather than overwrite someone's edit.
  */
 
+import { runSetOfIds } from "../lib/run-sets";
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -85,7 +86,7 @@ export default function AddToReportButton({ cardType, series, settingsKey }: Pro
       const block: CardsBlock = {
         id: newId(),
         type: "cards",
-        runIds: [...new Set(series.map((s) => s.runId))],
+        runSets: [runSetOfIds(series.map((s) => s.runId))],
         cards: [{ id: cardId, type: cardType, series: series.map((s) => ({ runId: s.runId, name: s.name })) }],
       };
       const overrides = readOverrides(settingsKey);

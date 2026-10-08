@@ -12,6 +12,7 @@
  *    byte-match (it would just carry the marker inside its own text).
  */
 
+import { defaultRunSet, runSetOfIds } from "../run-sets.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ComparisonCard } from "../comparisons/types.ts";
@@ -78,16 +79,16 @@ const BLOCKS_CASES: BlocksCase[] = [
     name: "markdown, cards, markdown — order + cards-block id preserved",
     blocks: [
       { id: "md_1", type: "markdown", text: "# Title\n\nIntro." } satisfies MarkdownBlock,
-      { id: "cards_1", type: "cards", runIds: ["run_a"], cards: [card1] } satisfies CardsBlock,
+      { id: "cards_1", type: "cards", runSets: [runSetOfIds(["run_a"])], cards: [card1] } satisfies CardsBlock,
       { id: "md_2", type: "markdown", text: "Outro." } satisfies MarkdownBlock,
     ],
     settingsByCardId: { card_1: { version: 1, yScale: "log" } },
   },
   {
-    name: "two adjacent cards blocks, one with a runSelector, one static — both ids preserved",
+    name: "two adjacent cards blocks, one with two run sets, one with none — both ids preserved",
     blocks: [
-      { id: "cards_a", type: "cards", runSelector: { kind: "query", mode: "latest-n", n: 3 }, cards: [] } satisfies CardsBlock,
-      { id: "cards_b", type: "cards", runIds: ["run_a"], cards: [card2] } satisfies CardsBlock,
+      { id: "cards_a", type: "cards", runSets: [defaultRunSet("A"), { ...defaultRunSet("B"), latestOnly: true }], cards: [] } satisfies CardsBlock,
+      { id: "cards_b", type: "cards", runSets: [], cards: [card2] } satisfies CardsBlock,
     ],
     settingsByCardId: {},
   },
@@ -126,6 +127,7 @@ for (const c of BLOCKS_CASES) {
         assert.ok(isCardsBlock(got), `block[${i}] should be cards`);
         assert.equal(got.id, orig.id);
         assert.equal(got.cards.length, orig.cards.length);
+        assert.deepEqual(got.runSets, orig.runSets);
       } else {
         assert.ok(isMarkdownBlock(got), `block[${i}] should be markdown`);
         assert.equal(got.text, (orig as MarkdownBlock).text);
@@ -161,4 +163,58 @@ test("prose + card + prose is three blocks", () => {
 test("a single markdown cell emits no boundary marker", () => {
   const blocks: ReportBlock[] = [{ id: "md_1", type: "markdown", text: "Solo cell." } satisfies MarkdownBlock];
   assert.equal(serializeReportToMarkdown(blocks, {}, {}), "Solo cell.");
+});
+
+const RUN_SETS_SOURCE = [
+  "# R",
+  "",
+  "```cairn",
+  "id: blk1",
+  "runSets:",
+  "  - name: A",
+  "  - name: B",
+  "cards:",
+  "  - type: scalar",
+  "    metric: val/loss",
+  "```",
+  "```cairn",
+  "id: old",
+  "runs:",
+  "  ids: [run_a]",
+  "cards:",
+  "  - type: scalar",
+  "    metric: val/loss",
+  "```",
+].join("\n");
+
+test("each fence's run sets are resolved by the caller, the cards bound to their union", () => {
+  const calls: Array<[string[], number]> = [];
+  const parsed = parseReportMarkdown(RUN_SETS_SOURCE, undefined, {
+    resolveRunSets: (sets, fence) => {
+      calls.push([sets.map((s) => s.name), fence]);
+      return [["run_a", "run_b"], ["run_b", "run_c"]];
+    },
+  });
+  // The old-format fence is not read: its sets are never resolved.
+  assert.deepEqual(calls, [[["A", "B"], 0]]);
+  const [cells, old] = parsed.blocks.filter(isCardsBlock);
+  assert.deepEqual(cells!.cards[0]!.series.map((s) => s.runId), ["run_a", "run_b", "run_c"]);
+  assert.equal(cells!.fixedRuns, undefined);
+  // Without a resolver: no runs, no series (the metric name is kept only by the fence).
+  const bare = parseReportMarkdown(RUN_SETS_SOURCE).blocks.filter(isCardsBlock)[0]!;
+  assert.equal(bare.cards[0]!.series.length, 0);
+  // The old format: an empty cell with a notice, its fence kept verbatim.
+  assert.deepEqual([old!.runSets, old!.cards, old!.error], [[], [], undefined]);
+  assert.match(old!.notice!, /old `runs:` format/);
+  assert.equal(serializeReportToMarkdown(parsed.blocks, parsed.settings, parsed.rawCairnSource), RUN_SETS_SOURCE);
+});
+
+test("fixRuns keeps the caller's sets on the block (a share link's)", () => {
+  const parsed = parseReportMarkdown(RUN_SETS_SOURCE, undefined, {
+    resolveRunSets: () => [["run_a"], []],
+    fixRuns: true,
+  });
+  const [cells, old] = parsed.blocks.filter(isCardsBlock);
+  assert.deepEqual(cells!.fixedRuns, [["run_a"], []]);
+  assert.deepEqual(old!.fixedRuns, []);
 });

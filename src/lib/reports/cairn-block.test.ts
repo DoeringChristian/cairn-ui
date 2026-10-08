@@ -10,7 +10,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SequenceMeta } from "../../api/types.ts";
 import type { ComparisonCard } from "../comparisons/types.ts";
-import { compileCairnBlock, parseCairnSpec, serializeCairnSpec, stringifyCairnSpec } from "./cairn-block.ts";
+import { CairnLegacyRunsError, compileCairnBlock, parseCairnSpec, serializeCairnSpec, stringifyCairnSpec } from "./cairn-block.ts";
+import { runSetOfIds } from "../run-sets.ts";
 import { buildMetricIndex } from "./metric-index.ts";
 import type { CardsBlock } from "./types.ts";
 
@@ -86,17 +87,18 @@ const CASES: Case[] = [
     metricIndexRuns: [],
   },
   {
-    name: "scalar card: metric only on a subset of block runs → falls back to explicit series",
+    name: "manual overlay of two metrics stays an explicit series",
     runIds: ["run_a", "run_b"],
     card: {
-      id: "card_scalar_2",
+      id: "card_overlay_1",
       type: "scalar",
-      series: [{ runId: "run_a", name: "val/accuracy" }],
+      series: [
+        { runId: "run_a", name: "val/accuracy" },
+        { runId: "run_b", name: "train/accuracy" },
+      ],
     },
     settings: { version: 1, yScale: "linear" },
-    metricIndexRuns: [
-      { runId: "run_a", sequences: [{ name: "val/accuracy", object_type: "scalar", min_step: 0, max_step: 5, count: 6 }] },
-    ],
+    metricIndexRuns: [],
   },
 ];
 
@@ -106,64 +108,68 @@ function seriesKeys(card: ComparisonCard): string[] {
 
 for (const c of CASES) {
   test(`round trip: ${c.name}`, () => {
-    const block: CardsBlock = { id: "blk_test", type: "cards", runIds: c.runIds, cards: [c.card] };
+    const block: CardsBlock = { id: "blk_test", type: "cards", runSets: [runSetOfIds(c.runIds)], cards: [c.card] };
     const yamlText = stringifyCairnSpec(serializeCairnSpec(block, { [c.card.id]: c.settings }));
-    const compiled = compileCairnBlock(parseCairnSpec(yamlText), buildMetricIndex(c.metricIndexRuns));
+    const compiled = compileCairnBlock(parseCairnSpec(yamlText), buildMetricIndex(c.metricIndexRuns), { resolvedRunIds: c.runIds });
 
     const newCard = compiled.block.cards[0];
     assert.ok(newCard, `no card produced from:\n${yamlText}`);
     assert.equal(newCard.type, c.card.type);
     assert.deepEqual(seriesKeys(newCard), seriesKeys(c.card));
     assert.deepEqual(compiled.settings[newCard.id], c.settings);
-    assert.deepEqual([...(compiled.block.runIds ?? [])].sort(), [...c.runIds].sort());
+    assert.deepEqual(compiled.block.runSets, block.runSets);
   });
 }
 
-// A `runs.selector` block compiles against the run ids its caller resolved
-// (`opts.resolvedRunIds`); a static `runs.ids` block ignores them.
-const SELECTOR_YAML = `
-runs:
-  selector:
-    mode: newest-per-name
+// A cell compiles against the run ids its caller resolved from its run sets
+// (`opts.resolvedRunIds`); without them its cards have no series.
+const RUN_SETS_YAML = `
+runSets:
+  - name: Train runs
+    filter: { kind: group, op: and, children: [{ kind: chip, field: job_type, op: exact, arg: train }] }
+    groupBy: [{ source: group }]
+    latestOnly: true
 cards:
   - metric: train/loss
     type: scalar
 `;
 
-test("runs.selector + resolvedRunIds compiles a series over the resolved runs", () => {
+test("run sets parse leniently, with defaults", () => {
+  const compiled = compileCairnBlock(parseCairnSpec(RUN_SETS_YAML), buildMetricIndex([]));
+  assert.deepEqual(compiled.block.runSets, [
+    {
+      name: "Train runs",
+      filter: { kind: "group", op: "and", children: [{ kind: "chip", field: "job_type", op: "exact", arg: "train" }] },
+      groupBy: [{ source: "group" }],
+      latestOnly: true,
+      sort: [{ column: "created_at", direction: "desc" }],
+      eyes: {},
+    },
+  ]);
+  assert.throws(() => compileCairnBlock(parseCairnSpec("runSets: [3]"), buildMetricIndex([])), /runSets\[0\] must be a mapping/);
+  assert.throws(() => parseCairnSpec("runSets: {}"), /`runSets` must be a list/);
+});
+
+test("resolvedRunIds compiles a series over the resolved runs", () => {
   const metricIndex = buildMetricIndex([seqFixture("run_x", "train/loss"), seqFixture("run_y", "train/loss")]);
-  const compiled = compileCairnBlock(parseCairnSpec(SELECTOR_YAML), metricIndex, { resolvedRunIds: ["run_x", "run_y"] });
+  const compiled = compileCairnBlock(parseCairnSpec(RUN_SETS_YAML), metricIndex, { resolvedRunIds: ["run_x", "run_y"] });
   const card = compiled.block.cards[0];
   assert.ok(card);
-  assert.ok(compiled.block.runSelector);
-  assert.equal(compiled.block.runIds, undefined);
   assert.deepEqual([...new Set(card.series.map((s) => s.runId))].sort(), ["run_x", "run_y"]);
 });
 
-test("runs.selector without resolvedRunIds compiles to an empty series", () => {
-  const compiled = compileCairnBlock(parseCairnSpec(SELECTOR_YAML), buildMetricIndex([]));
-  const card = compiled.block.cards[0];
-  assert.ok(card);
-  assert.equal(card.series.length, 0);
+test("without resolvedRunIds the cards compile to an empty series", () => {
+  const compiled = compileCairnBlock(parseCairnSpec(RUN_SETS_YAML), buildMetricIndex([]));
+  assert.equal(compiled.block.cards[0]!.series.length, 0);
 });
 
-test("static runs.ids ignores resolvedRunIds", () => {
-  const staticYaml = `
-runs:
-  ids: [run_a, run_b]
-cards:
-  - metric: train/loss
-    type: scalar
-`;
-  const metricIndex = buildMetricIndex([seqFixture("run_a", "train/loss"), seqFixture("run_b", "train/loss")]);
-  const compiled = compileCairnBlock(parseCairnSpec(staticYaml), metricIndex, { resolvedRunIds: ["run_x", "run_y"] });
-  const card = compiled.block.cards[0];
-  assert.ok(card);
-  assert.deepEqual([...new Set(card.series.map((s) => s.runId))].sort(), ["run_a", "run_b"]);
+test("the old runs: format is not read", () => {
+  assert.throws(() => parseCairnSpec("runs:\n  ids: [a]\ncards: []\n"), CairnLegacyRunsError);
+  assert.throws(() => parseCairnSpec("runs:\n  selector: { mode: latest-n }\n"), CairnLegacyRunsError);
 });
 
-// The cell's run view (runs.hidden/pinned/baseline) survives the fence.
-test("runs view round trip: hidden, pinned, baseline", () => {
+// The cell's run view (view.hidden/pinned/baseline) survives the fence.
+test("run view round trip: hidden, pinned, baseline", () => {
   const card: ComparisonCard = {
     id: "card_rv",
     type: "scalar",
@@ -176,7 +182,7 @@ test("runs view round trip: hidden, pinned, baseline", () => {
   const block: CardsBlock = {
     id: "blk_rv",
     type: "cards",
-    runIds: ["run_a", "run_b", "run_c"],
+    runSets: [runSetOfIds(["run_a", "run_b", "run_c"])],
     runView: { hidden: ["run_b"], pinned: ["run_c"], baseline: "run_a" },
     cards: [card],
   };
@@ -185,7 +191,7 @@ test("runs view round trip: hidden, pinned, baseline", () => {
   assert.match(yamlText, /baseline: run_a/);
   const compiled = compileCairnBlock(parseCairnSpec(yamlText), buildMetricIndex([]));
   assert.deepEqual(compiled.block.runView, block.runView);
-  assert.deepEqual(compiled.block.runIds, block.runIds);
+  assert.deepEqual(compiled.block.runSets, block.runSets);
 
   // An empty view writes nothing and reads back as absent.
   const plain = stringifyCairnSpec(serializeCairnSpec({ ...block, runView: { hidden: [], pinned: [], baseline: null } }));
@@ -193,19 +199,8 @@ test("runs view round trip: hidden, pinned, baseline", () => {
   assert.equal(compileCairnBlock(parseCairnSpec(plain), buildMetricIndex([])).block.runView, undefined);
 });
 
-test("runs view is validated", () => {
-  assert.throws(
-    () => compileCairnBlock(parseCairnSpec("runs:\n  ids: [a]\n  hidden: a\n"), buildMetricIndex([])),
-    /runs.hidden must be a list/,
-  );
-  assert.throws(
-    () => compileCairnBlock(parseCairnSpec("runs:\n  ids: [a]\n  baseline: [a]\n"), buildMetricIndex([])),
-    /runs.baseline must be a run-id string/,
-  );
-  const sel = compileCairnBlock(
-    parseCairnSpec("runs:\n  selector: { mode: latest-n, n: 2 }\n  pinned: [x]\n"),
-    buildMetricIndex([]),
-    { resolvedRunIds: ["x", "y"] },
-  );
-  assert.deepEqual(sel.block.runView, { hidden: [], pinned: ["x"], baseline: null });
+test("run view is validated", () => {
+  assert.throws(() => compileCairnBlock(parseCairnSpec("view:\n  hidden: a\n"), buildMetricIndex([])), /view.hidden must be a list/);
+  assert.throws(() => compileCairnBlock(parseCairnSpec("view:\n  baseline: [a]\n"), buildMetricIndex([])), /view.baseline must be a run-id string/);
+  assert.throws(() => parseCairnSpec("view: [a]"), /`view` must be a mapping/);
 });

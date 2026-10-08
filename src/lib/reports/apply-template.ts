@@ -10,6 +10,7 @@ import { matchTemplateToRuns } from "../templates/apply";
 import type { ReportTemplate } from "./templates";
 import type { CardsBlock, MarkdownBlock, ReportBlock } from "./types";
 import { newId } from "./ids";
+import { runSetOfIds } from "../run-sets";
 import { cardSettingsKeyForReport } from "./scope";
 import { buildReportPayload } from "./payload";
 
@@ -43,7 +44,7 @@ export async function applyReportTemplateToRuns(
     type: "markdown",
     text: `# ${template.name}\n\nApplied to ${runIds.length} run(s): ${runIds.join(", ")}`,
   };
-  const cardsBlock: CardsBlock = { id: newId(), type: "cards", runIds, cards };
+  const cardsBlock: CardsBlock = { id: newId(), type: "cards", runSets: [runSetOfIds(runIds)], cards };
   const blocks: ReportBlock[] = [headerBlock, cardsBlock];
 
   const created = await api.createReport(projectId, template.name, { source: "" });

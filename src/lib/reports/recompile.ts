@@ -24,7 +24,7 @@ export function recompileDecision(input: {
   block: Pick<CardsBlock, "error" | "errorSource">;
   /** The cell's (resolved) run ids. */
   runIds: string[];
-  /** False while a `runs.selector` is still resolving. */
+  /** False while the cell's run sets are still resolving (the project's runs loading). */
   runsResolved: boolean;
   /** True while any of the runs' sequence lists is still loading. */
   indexLoading: boolean;
@@ -43,7 +43,7 @@ export type RecompileResult =
 /**
  * Compile a failed cell's fence body again against `metricIndex`. The
  * block keeps its id, so the recompiled cell replaces the failed one in
- * place. `resolvedRunIds` is the live run set of a `runs.selector` fence.
+ * place. `resolvedRunIds` is the cell's runs (its run sets, resolved).
  */
 export function recompileFailedBlock(
   block: CardsBlock,

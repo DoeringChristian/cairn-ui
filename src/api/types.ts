@@ -557,6 +557,8 @@ export interface ShareContext {
   metric_index: Record<string, SequenceMeta[]>;
   /** Runs whose source files a code-diff card may show. */
   source_run_ids: string[];
+  /** Each ```cairn fence's run sets, resolved by the server: `[fence][set] → run ids`. */
+  run_sets: string[][][];
 }
 
 // ── Report editing: conflicts, assets, comments (wave 3, agent H) ────────

@@ -6,10 +6,10 @@
  * TemplateSidebar "New from template" picker).
  */
 
+import { RUN_SET_POOL } from "../lib/run-sets";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
-  RUN_SELECTOR_FETCH_LIMIT,
   useCreateReport,
   useDeleteReport,
   useReports,
@@ -41,9 +41,8 @@ export default function ReportsListPage() {
   const q = useReports(projectId ?? "", { limit: PAGE_SIZE, offset });
   const createMut = useCreateReport(projectId ?? "");
   const deleteMut = useDeleteReport(projectId ?? "");
-  // Same pool size a `RunSelector` query resolves against, so every resolved
-  // run has a label here.
-  const runsQ = useRuns({ project: projectId, limit: RUN_SELECTOR_FETCH_LIMIT });
+  // The runs a report's run sets resolve against, so every run has a label here.
+  const runsQ = useRuns({ project: projectId, limit: RUN_SET_POOL });
   const allRuns = runsQ.data?.runs ?? [];
 
   if (!projectId) return null;

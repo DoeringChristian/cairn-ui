@@ -33,10 +33,18 @@ __all__ = [
     "SeriesRef",
     "CardSettingsSpec",
     "CardSpec",
-    "StaticRunSelector",
-    "QueryRunSelector",
-    "RunSelector",
-    "RunsSpec",
+    "FilterOperator",
+    "FilterChipSpec",
+    "FilterExprSpec",
+    "FilterGroupSpec",
+    "FilterNodeSpec",
+    "GroupBySourceSpec",
+    "GroupByParamSpec",
+    "GroupByExprSpec",
+    "GroupBySpec",
+    "SortKeySpec",
+    "RunSetSpec",
+    "RunViewSpec",
     "CardsSpec",
     "ReportSpec",
 ]
@@ -142,36 +150,83 @@ class CardSpec(_Strict):
     settings: Optional[CardSettingsSpec] = None
 
 
-class StaticRunSelector(_Strict):
-    kind: Literal["static"]
-    runIds: list[str]
+FilterOperator = Literal[
+    "exact", "iexact", "gt", "gte", "lt", "lte", "in",
+    "contains", "icontains", "startswith", "endswith", "isnull",
+]
 
 
-class QueryRunSelector(_Strict):
-    kind: Literal["query"]
-    mode: Literal["latest-n", "newest-per-name"]
-    namePattern: Optional[str] = None
-    tags: Optional[list[str]] = None
-    n: Optional[float] = None
+class FilterChipSpec(_Strict):
+    """A runs-table filter chip: ``field op arg``."""
+
+    kind: Literal["chip"]
+    field: str
+    op: FilterOperator
+    arg: str
 
 
-RunSelector = Union[StaticRunSelector, QueryRunSelector]
+class FilterExprSpec(_Strict):
+    kind: Literal["expr"]
+    expr: str
 
 
-class RunsSpec(_Strict):
-    ids: Optional[list[str]] = None
-    selector: Optional[RunSelector] = None
-    # Run view (mirrors `RunView` in lib/run-view.tsx).
+class FilterGroupSpec(_Strict):
+    kind: Literal["group"]
+    op: Literal["and", "or"]
+    children: list["FilterNodeSpec"]
+
+
+FilterNodeSpec = Union[FilterChipSpec, FilterExprSpec, FilterGroupSpec]
+
+
+class GroupBySourceSpec(_Strict):
+    source: Literal["group", "job_type", "tag"]
+
+
+class GroupByParamSpec(_Strict):
+    source: Literal["param"]
+    key: str
+
+
+class GroupByExprSpec(_Strict):
+    source: Literal["expr"]
+    expr: str
+
+
+GroupBySpec = Union[GroupBySourceSpec, GroupByParamSpec, GroupByExprSpec]
+
+
+class SortKeySpec(_Strict):
+    column: str
+    direction: Literal["asc", "desc"]
+
+
+class RunSetSpec(_Strict):
+    """A run set (``RunSet`` in src/lib/run-sets.ts): the runs table state,
+    frozen; its runs are resolved live."""
+
+    name: Optional[str] = None
+    filter: Optional[FilterGroupSpec] = None
+    groupBy: Optional[list[GroupBySpec]] = None
+    latestOnly: Optional[bool] = None
+    sort: Optional[list[SortKeySpec]] = None
+    eyes: Optional[dict[str, bool]] = None
+
+
+class RunViewSpec(_Strict):
+    """A cell's run view (mirrors ``RunView`` in lib/run-view.tsx)."""
+
     hidden: Optional[list[str]] = None
     pinned: Optional[list[str]] = None
     baseline: Optional[str] = None
 
 
 class CardsSpec(_Strict):
-    """The `````cairn`` dialect root — a runs binding + a list of cards."""
+    """The `````cairn`` dialect root — run sets + a list of cards."""
 
     id: Optional[str] = None
-    runs: Optional[RunsSpec] = None
+    runSets: Optional[list[RunSetSpec]] = None
+    view: Optional[RunViewSpec] = None
     title: Optional[str] = None
     cards: Optional[list[CardSpec]] = None
 
@@ -183,3 +238,6 @@ class ReportSpec(_Strict):
     name: str
     source: str
     project: Optional[str] = None
+
+
+FilterGroupSpec.model_rebuild()

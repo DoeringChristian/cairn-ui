@@ -12,10 +12,11 @@
  * available read-only via "View source" — never a second editable copy.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { RUN_SELECTOR_FETCH_LIMIT, useReport, useReportComments, useRuns, useSession } from "../api/hooks";
+import { useReport, useReportComments, useRunSetPool, useSession } from "../api/hooks";
+import { resolveRunSet } from "../lib/run-sets";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
 import { formatRelative } from "../lib/format";
@@ -115,10 +116,9 @@ export default function ReportEditorPage() {
       setExportingLatex(false);
     }
   };
-  // Same pool size a `RunSelector` query resolves against, so every resolved
-  // run has a label here.
-  const runsQ = useRuns({ project: projectId, limit: RUN_SELECTOR_FETCH_LIMIT });
-  const allProjectRuns = runsQ.data?.runs ?? [];
+  // The runs every cell's run sets resolve against (lib/run-sets.ts).
+  const runsQ = useRunSetPool(projectId);
+  const allProjectRuns = useMemo(() => runsQ.data?.runs ?? [], [runsQ.data]);
 
   const [name, setName] = useState("");
   // Inline title rename: click-to-edit, independent of `editMode` — mirrors ReportsListPage's `ReportRow` inline rename so
@@ -168,9 +168,9 @@ export default function ReportEditorPage() {
   }, [reportId]);
 
   // Wait for `runsQ` too (not just the report itself) before hydrating — a
-  // selector-bound ```cairn block needs the live project run pool to resolve
-  // its run set *before* `compileCairnBlock` runs (see parseReportMarkdown's
-  // `opts.allProjectRuns` doc); parsing with an empty pool would compile the
+  // ```cairn block needs the live project run pool to resolve its run sets
+  // *before* `compileCairnBlock` runs (see parseReportMarkdown's
+  // `opts.resolveRunSets` doc); parsing with an empty pool would compile the
   // card with `series: []`, losing its metric name for good. Both queries
   // fire in parallel, so this rarely adds user-visible latency.
   //
@@ -183,7 +183,7 @@ export default function ReportEditorPage() {
     if (hydrated || !q.data || (!runsQ.data && !runsQ.isError)) return;
     setName(q.data.name);
     const payload = q.data.payload as unknown as ReportPayload;
-    const parsed = parseReportMarkdown(payload.source, undefined, { allProjectRuns });
+    const parsed = parseReportMarkdown(payload.source, undefined, { resolveRunSets: (sets) => sets.map((set) => resolveRunSet(set, allProjectRuns)) });
     setBlocks(parsed.blocks);
     rawCairnSourceRef.current = parsed.rawCairnSource;
     if (reportId) restoreReportCardSettings(reportId, parsed.blocks, parsed.settings);
@@ -227,7 +227,7 @@ export default function ReportEditorPage() {
         // in and save again. Anything else is a real conflict.
         const serverSource = String((res.conflict.payload as { source?: unknown }).source ?? "");
         if (serverSource.startsWith(base.source)) {
-          const tail = parseReportMarkdown(serverSource.slice(base.source.length), undefined, { allProjectRuns });
+          const tail = parseReportMarkdown(serverSource.slice(base.source.length), undefined, { resolveRunSets: (sets) => sets.map((set) => resolveRunSet(set, allProjectRuns)) });
           restoreReportCardSettings(reportId, tail.blocks, tail.settings);
           baseRef.current = { source: serverSource, updatedAt: res.conflict.updated_at };
           setBlocks((prev) => [...prev, ...tail.blocks]);
@@ -516,7 +516,6 @@ export default function ReportEditorPage() {
         projectId={projectId}
         reportId={reportId}
         blocks={blocks}
-        allProjectRuns={allProjectRuns}
         onUpdateBlock={updateBlock}
         onMoveBlock={moveBlock}
         onDeleteBlock={deleteBlock}

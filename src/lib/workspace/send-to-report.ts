@@ -1,6 +1,6 @@
 /**
  * Snapshot cards into a new report: a markdown header and one cards block
- * with copies of the cards (new ids), each card's settings overrides copied
+ * with copies of the cards (new ids) over a run set of exactly `runIds`, each card's settings overrides copied
  * into the report's scope. The source (a workspace section) is left
  * untouched. Returns the new report's id.
  */
@@ -9,6 +9,7 @@ import { api } from "../../api/client";
 import { saveCardOverrides } from "../card-settings";
 import type { ComparisonCard } from "../comparisons";
 import { buildReportPayload, cardSettingsKeyForReport, newId } from "../reports";
+import { runSetOfIds } from "../run-sets";
 
 export async function sendCardsToReport(opts: {
   projectId: string;
@@ -23,7 +24,7 @@ export async function sendCardsToReport(opts: {
   const newCards: ComparisonCard[] = cards.map(({ card }) => ({ ...card, id: newId() }));
   const blocks = [
     { id: newId(), type: "markdown" as const, text: `# ${name}\n\n${intro}` },
-    { id: newId(), type: "cards" as const, runIds, cards: newCards },
+    { id: newId(), type: "cards" as const, runSets: [runSetOfIds(runIds)], cards: newCards },
   ];
   const created = await api.createReport(projectId, name, { source: "" });
   cards.forEach(({ settings }, i) => {

@@ -1,10 +1,12 @@
 /**
- * Cards block editor/viewer for a report — bound to either a static set of
- * runIds or a dynamic `RunSelector` (see lib/run-selector.ts), holding a
- * list of ComparisonCard[] rendered by `ComparisonCardView` with settings
- * scoped under `reportRunId(reportId)`. The run set is edited with the same
- * `RunSetEditor` a comparison uses, folded into a "Runs" dialog opened from
- * the cell toolbar, so the report itself shows only its cards.
+ * Cards block editor/viewer for a report: a list of ComparisonCard[]
+ * rendered by `ComparisonCardView` with settings scoped under
+ * `reportRunId(reportId)`, over the runs of the cell's run sets
+ * (lib/run-sets.ts), resolved live against the project's runs (or fixed by
+ * the caller: a share link's server-resolved sets). The cards draw the union
+ * of the sets' runs; with several sets each set has its own colour family.
+ * The sets are shown in a "Runs" dialog opened from the cell toolbar
+ * (RunSetsPanel), so the report itself shows only its cards.
  *
  * Report cards resolve against built-in defaults only (no workspace or
  * section defaults), so a report looks the same to everyone. `readOnly`
@@ -19,22 +21,17 @@ import ReorderableCardGrid from "../ReorderableCardGrid";
 import Dialog, { DialogBody } from "../ui/Dialog";
 import { CELL_TOOLBAR_BTN } from "./cell-toolbar";
 import { CardCommentsContext, ReportCommentsContext } from "./comments-context";
-import { shouldAutoRebind } from "../../lib/reports/selector-rebind";
-import RunSelectorBadge from "../RunSelectorBadge";
-import RunSetEditor, { DEFAULT_QUERY_SELECTOR } from "../comparison/RunSetEditor";
+import RunSetsPanel from "./RunSetsPanel";
+import { shouldAutoRebind } from "../../lib/reports/run-set-rebind";
 import { CardMutationContext, CardSettingsChangeContext, loadCardOverrides, saveCardOverrides } from "../../lib/card-settings";
 import { PanelActionsContext } from "../../lib/workspace/panel-actions";
 import { CascadeScopeContext } from "../../lib/settings-scope";
-import {
-  rebindCardsToMetricIndex,
-  rebindCardsToRuns,
-  rebuildCardsFromRuns,
-} from "../../lib/comparisons";
+import { rebindCardsToMetricIndex, rebindCardsToRuns, rebuildCardsFromRuns } from "../../lib/comparisons";
 import { cardFromSpec, cardSettingsKeyForReport, newId, restoreReportCardSettings, useMetricIndex, type CardsBlock } from "../../lib/reports";
 import { recompileDecision, recompileFailedBlock } from "../../lib/reports/recompile";
-import { describeRunSelector, type QueryRunSelector } from "../../lib/run-selector";
-import { useRunSelectorResolution } from "../../api/hooks";
-import type { Run } from "../../api/types";
+import { resolveRunSet, runSetColors, unionOfSets, type RunSet } from "../../lib/run-sets";
+import { RunColorByContext, type RunColorByValue } from "../../lib/run-color-by-context";
+import { useRunSetPool } from "../../api/hooks";
 import { EMPTY_RUN_VIEW, RunViewContext, type RunView } from "../../lib/run-view";
 import { isEmptyRunView } from "../../lib/run-view-store";
 import { MediaSyncProvider, SectionMediaBar } from "../card-kit/media-sync";
@@ -43,7 +40,6 @@ interface Props {
   projectId: string;
   reportId: string;
   block: CardsBlock;
-  allProjectRuns: Run[];
   onChange: (next: CardsBlock) => void;
   /** Renders the cell toolbar with this cell's own actions (`extra`) in it. */
   toolbar: (extra: ReactNode) => ReactNode;
@@ -51,27 +47,34 @@ interface Props {
   readOnly?: boolean;
 }
 
-export default function ReportCardsBlock({ projectId, reportId, block: parsedBlock, allProjectRuns, onChange, toolbar, readOnly = false }: Props) {
+export default function ReportCardsBlock({ projectId, reportId, block: parsedBlock, onChange, toolbar, readOnly = false }: Props) {
   // Each card's comment count and popover (editable reports only).
   const comments = useContext(ReportCommentsContext);
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
-  const [rebuilding, setRebuilding] = useState(false);
   const [resetting, setResetting] = useState(false);
 
-  const staticRunIds = parsedBlock.runIds ?? [];
-  // A CardsBlock's runSelector, when present, is always a query selector in
-  // this UI (the "static" case is expressed via `runIds` with no
-  // runSelector at all) — narrow so the form below can read/patch
-  // query-only fields without a union check at every access.
-  const selector: QueryRunSelector | undefined =
-    parsedBlock.runSelector?.kind === "query" ? parsedBlock.runSelector : undefined;
+  // The cell's runs: each run set resolved over the project's runs, or fixed.
+  const fixed = parsedBlock.fixedRuns;
+  const poolQ = useRunSetPool(projectId, !fixed);
+  const pool = poolQ.data?.runs;
+  const resolvedSets = useMemo(
+    () => fixed ?? (pool ? parsedBlock.runSets.map((set) => resolveRunSet(set, pool)) : null),
+    [fixed, pool, parsedBlock.runSets],
+  );
+  const resolved = resolvedSets !== null;
+  const runIds = useMemo(() => unionOfSets(resolvedSets ?? []), [resolvedSets]);
+  const runIdsKey = runIds.join("|");
 
-  const resolution = useRunSelectorResolution(projectId, selector);
-  const runIds = selector ? resolution.runIds : staticRunIds;
+  // Several sets: each its own colour family (as a colour-by would).
+  const familyColors = useMemo(() => (resolvedSets ? runSetColors(resolvedSets) : null), [resolvedSets]);
+  const colorCtx = useMemo<RunColorByValue | null>(
+    () => (familyColors ? { runIds, colorBy: null, colors: familyColors, legend: [], error: null, loading: false } : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [familyColors, runIdsKey],
+  );
 
-  const failed = parsedBlock.error !== undefined;
-  const { index: liveMetricIndex, isLoading: indexLoading } = useMetricIndex(selector || failed ? runIds : []);
+  const { index: liveMetricIndex, isLoading: indexLoading } = useMetricIndex(runIds);
 
   // A fence that failed to compile at hydrate time (typically a `metric:`
   // card with no `type:`, parsed before any sequence list was fetched) is
@@ -81,13 +84,13 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
   const decision = recompileDecision({
     block: parsedBlock,
     runIds,
-    runsResolved: !selector || resolution.resolved,
+    runsResolved: resolved,
     indexLoading,
   });
   const restoredRef = useRef<string | null>(null);
   const recompiled = useMemo(() => {
     if (decision !== "recompile") return null;
-    const r = recompileFailedBlock(parsedBlock, liveMetricIndex, selector ? runIds : undefined);
+    const r = recompileFailedBlock(parsedBlock, liveMetricIndex, runIds);
     // The fence's inline settings, once per fence (they'd otherwise clobber
     // a setting changed since).
     const restoreKey = `${parsedBlock.id}\n${parsedBlock.errorSource}`;
@@ -97,62 +100,25 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
     }
     return r;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decision, parsedBlock, liveMetricIndex, selector ? runIds.join("|") : "", reportId]);
-  const block = recompiled?.ok ? recompiled.block : parsedBlock;
+  }, [decision, parsedBlock, liveMetricIndex, runIdsKey, reportId]);
+  const block = recompiled?.ok ? { ...recompiled.block, ...(fixed ? { fixedRuns: fixed } : {}) } : parsedBlock;
   const error = recompiled ? (recompiled.ok ? undefined : recompiled.error) : parsedBlock.error;
-  // Render-only rebind (never persisted/autosaved — see handleRefresh's and
-  // the auto-rebind effect's doc below for the persisting counterpart): a
-  // selector block's *persisted* `cards` can be stale relative to `runIds`
-  // right after this report was hydrated from its markdown `source` (a fresh
-  // parse has no live-resolved runs to compile against) or between edits.
-  // Viewers never trigger a save, but they should still see cards bound
-  // to the currently-resolved runs rather than a frozen/stale snapshot —
-  // this mirrors the ```cairn fence preview's own `opts.resolvedRunIds`
-  // handling (cairn-block.ts), just without ever calling `onChange`.
+  // Render-only rebind (never persisted — see the auto-rebind effect below
+  // for the persisting counterpart): the persisted `cards` can be stale
+  // relative to the live runs right after hydration or between edits.
+  // Viewers never trigger a save, but they still see cards bound to the
+  // runs the sets resolve to now.
   const displayCards = useMemo(
-    () =>
-      selector && resolution.resolved ? rebindCardsToMetricIndex(block.cards, runIds, liveMetricIndex) : block.cards,
-    [selector, resolution.resolved, block.cards, runIds, liveMetricIndex],
+    () => (resolved ? rebindCardsToMetricIndex(block.cards, runIds, liveMetricIndex) : block.cards),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resolved, block.cards, runIdsKey, liveMetricIndex],
   );
 
-  const addRun = (id: string) => {
-    onChange({ ...block, runIds: Array.from(new Set([...staticRunIds, id])) });
-  };
-  const removeRun = (id: string) => {
-    onChange({
-      ...block,
-      runIds: staticRunIds.filter((r) => r !== id),
-      cards: block.cards.map((c) => ({ ...c, series: c.series.filter((s) => s.runId !== id) })),
-    });
-  };
-
-  const toggleAutoMode = () => {
-    if (selector) {
-      // Switch back to static: keep whatever runs are currently resolved.
-      onChange({ ...block, runSelector: undefined, runIds: resolution.runIds });
-    } else {
-      onChange({ ...block, runSelector: { ...DEFAULT_QUERY_SELECTOR } });
-    }
-  };
-
-  // Re-resolve which runs currently match, then REBIND the existing cards to
-  // that run set (keep curated cards/order, re-derive series) rather than
-  // discarding and regrowing one card per metric — see rebindCardsToRuns.
-  const handleRefresh = async () => {
-    setRebuilding(true);
-    try {
-      const freshRunIds = await resolution.refresh();
-      const cards = await rebindCardsToRuns(block.cards, freshRunIds);
-      onChange({ ...block, cards });
-    } finally {
-      setRebuilding(false);
-    }
-  };
+  const setRunSets = (runSets: RunSet[]) => onChange({ ...block, runSets, notice: undefined });
 
   // Explicit, destructive "start over" action — full regrow (one card per
-  // (name, object_type) across the block's runs), discarding curated
-  // cards/order/overlays; the "refresh" above rebinds instead (see
-  // rebindCardsToRuns).
+  // (name, object_type) across the cell's runs), discarding curated
+  // cards/order/overlays.
   const handleResetFromRuns = async () => {
     if (runIds.length === 0) return;
     setResetting(true);
@@ -164,24 +130,20 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
     }
   };
 
-  // Auto-rebind: when a selector block's resolved run set changes, rebind the
-  // existing cards to the new runs so they don't go stale between explicit
-  // refreshes. Never regrows the card set.
-  const resolvedRunIdsKey = selector ? runIds.join("|") : "";
+  // Auto-rebind: when the resolved runs change, rebind the existing cards to
+  // them so they don't go stale. Never regrows the card set.
   const lastReboundKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!selector || readOnly) return;
+    if (readOnly || fixed) return;
     // A fence that failed to compile is never rewritten on its own.
     if (parsedBlock.error !== undefined) return;
-    // Not while the selector is still resolving: its run set reads as empty
-    // then, and rebinding would save every card with `series: []`.
-    if (!shouldAutoRebind({ resolved: resolution.resolved, cards: block.cards, resolvedRunIds: runIds })) return;
+    if (!shouldAutoRebind({ resolved, cards: block.cards, resolvedRunIds: runIds })) return;
     // Guard against re-running for a key we already rebound (e.g. while the
     // async rebind for this exact run set is in flight, or after it landed
     // and block.cards was updated but still doesn't perfectly match, which
     // can happen for curated overlay cards that intentionally don't grow).
-    if (lastReboundKeyRef.current === resolvedRunIdsKey) return;
-    lastReboundKeyRef.current = resolvedRunIdsKey;
+    if (lastReboundKeyRef.current === runIdsKey) return;
+    lastReboundKeyRef.current = runIdsKey;
     let cancelled = false;
     void (async () => {
       const rebound = await rebindCardsToRuns(block.cards, runIds);
@@ -191,7 +153,7 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selector, resolvedRunIdsKey, resolution.resolved]);
+  }, [runIdsKey, resolved]);
 
   // AddCardSelection → ComparisonCard is the shared `cardFromSpec` (see
   // lib/reports/card-from-spec.ts) — also consumed by the ```cairn dialect
@@ -229,7 +191,7 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
   // localStorage, not `block`, so it would never reach ReportEditorPage's
   // blocks[]-keyed autosave. "Touch" this block (new object identity, same
   // content) whenever a settings write lands, reusing that autosave trigger.
-  // The cell's run view (```cairn `runs.hidden/pinned/baseline`). A viewer
+  // The cell's run view (```cairn `view.hidden/pinned/baseline`). A viewer
   // can still toggle it, but only for this session.
   const [sessionView, setSessionView] = useState<RunView | null>(null);
   const runViewCtx = useMemo(
@@ -269,6 +231,7 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
     <CascadeScopeContext.Provider value="builtin-only">
     <CardSettingsChangeContext.Provider value={readOnly ? undefined : handleSettingsTouched}>
     <RunViewContext.Provider value={runViewCtx}>
+    <RunColorByContext.Provider value={colorCtx}>
     <div>
       {!readOnly && toolbar(
         <>
@@ -277,7 +240,7 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
             className={CELL_TOOLBAR_BTN}
             onClick={() => setAddCardOpen(true)}
             disabled={runIds.length === 0}
-            title={runIds.length === 0 ? "Choose runs for this cell first" : "Add card"}
+            title={runIds.length === 0 ? "This cell's run sets show no runs" : "Add card"}
             aria-label="Add card"
           >
             <i className="fa-solid fa-plus" aria-hidden="true" />
@@ -297,26 +260,13 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
 
       <Dialog open={runsOpen} onClose={() => setRunsOpen(false)} title="Runs in this cell">
         <DialogBody>
-          <RunSetEditor
-            title="Runs"
-            runIds={runIds}
-            allProjectRuns={allProjectRuns}
-            selector={selector}
-            editable
-            onToggleMode={toggleAutoMode}
-            onSelectorChange={(runSelector) => onChange({ ...block, runSelector })}
-            onAddRun={addRun}
-            onRemoveRun={removeRun}
+          <RunSetsPanel
+            sets={block.runSets}
+            resolved={resolvedSets}
+            pool={pool ?? []}
+            onChange={readOnly ? undefined : setRunSets}
             actions={
-              <>
-                {selector && (
-                  <RunSelectorBadge
-                    title={describeRunSelector(selector)}
-                    count={resolution.runIds.length}
-                    isRefreshing={rebuilding || resolution.isFetching}
-                    onRefresh={() => void handleRefresh()}
-                  />
-                )}
+              !readOnly && (
                 <button
                   type="button"
                   onClick={() => void handleResetFromRuns()}
@@ -326,7 +276,7 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
                 >
                   {resetting ? "Resetting…" : "Reset cards from runs"}
                 </button>
-              </>
+              )
             }
           />
         </DialogBody>
@@ -336,13 +286,13 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
 
       {displayCards.length === 0 ? (
         <div className="card flex flex-wrap items-center gap-3 p-4 text-sm text-fg-muted print:hidden">
-          {runIds.length === 0 ? "No runs in this cell yet." : "No cards yet."}
+          {block.notice ?? (!resolved ? "Loading runs…" : runIds.length === 0 ? "No runs match this cell's run sets." : "No cards yet.")}
           {!readOnly && <button
             type="button"
             onClick={() => (runIds.length === 0 ? setRunsOpen(true) : setAddCardOpen(true))}
             className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-xs font-medium text-fg-muted hover:border-accent hover:text-fg transition-colors"
           >
-            {runIds.length === 0 ? "Choose runs" : "+ Add card"}
+            {runIds.length === 0 ? "Runs" : "+ Add card"}
           </button>}
         </div>
       ) : (
@@ -379,6 +329,7 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
         </MediaSyncProvider>
       )}
     </div>
+    </RunColorByContext.Provider>
     </RunViewContext.Provider>
     </CardSettingsChangeContext.Provider>
     </CascadeScopeContext.Provider>
