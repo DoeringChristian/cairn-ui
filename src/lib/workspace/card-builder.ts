@@ -106,7 +106,6 @@ function multiRunExprs(type: CardType, settings: Record<string, unknown>): strin
   switch (type) {
     case "tile":
     case "bar":
-    case "importance":
       return src(settings.metric);
     case "scatter":
       return [...src(settings.x), ...src(settings.y)];
@@ -119,6 +118,8 @@ function multiRunExprs(type: CardType, settings: Record<string, unknown>): strin
 
 /** The metric series a multi-run card's settings read (unique, in order). */
 export function multiRunSeries(type: CardType, settings: Record<string, unknown>): string[] {
+  // A metric by name (its final value under the project's rule).
+  if (type === "importance") return typeof settings.metric === "string" ? [settings.metric] : [];
   const out: string[] = [];
   for (const e of multiRunExprs(type, settings)) {
     try {
@@ -501,8 +502,9 @@ export function multiRunSeed(type: CardType, names: readonly string[]): Record<s
   switch (type) {
     case "tile":
     case "bar":
-    case "importance":
       return { metric: lastOf(names[0]!) };
+    case "importance":
+      return { metric: names[0]! };
     case "scatter":
       return names.length >= 2 ? { x: lastOf(names[0]!), y: lastOf(names[1]!) } : { y: lastOf(names[0]!) };
     case "parallel":

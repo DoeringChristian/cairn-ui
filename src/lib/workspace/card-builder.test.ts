@@ -73,6 +73,9 @@ test("seeding: per-metric cards take the selector; multi-run cards read the seri
   assert.deepEqual(seedPanel("scatter", { mode: "series", names: ["a", "b"] }).settings, { x: { src: "last(a)" }, y: { src: "last(b)" } });
   assert.deepEqual(seedPanel("parallel", { mode: "series", names: ["a", "val.b"] }).settings, { columns: [{ src: "last(a)" }, { src: "last(val.b)" }] });
   assert.deepEqual(seedPanel("run-compare", { mode: "runs" }), { selector: { names: [] }, settings: {} });
+  // Importance reads a metric by name (its final value under the project's rule).
+  assert.deepEqual(seedPanel("importance", { mode: "series", names: ["eval/mse"] }).settings, { metric: "eval/mse" });
+  assert.deepEqual(multiRunSeries("importance", { metric: "eval/mse" }), ["eval/mse"]);
   // Settings that already read the data keep their expression; other data re-seeds.
   const own = { metric: { src: "min(loss)" } };
   assert.equal(seedPanel("bar", { mode: "series", names: ["loss"] }, own).settings, own);

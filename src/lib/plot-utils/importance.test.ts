@@ -1,15 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  correlationTone,
   encodeParams,
+  featureImportances,
   fitForest,
+  MIN_RUNS,
   mulberry32,
   parameterImportance,
   pearson,
   predictForest,
-  ranks,
-  spearman,
+  sortImportance,
   type ImportanceRow,
+  type ParamImportance,
 } from "./importance.ts";
 
 const close = (a: number | null, b: number, eps = 1e-9) => {
@@ -23,13 +26,14 @@ test("pearson: perfect, inverse, constant, short", () => {
   assert.equal(pearson([1], [1]), null);
 });
 
-test("ranks average ties", () => {
-  assert.deepEqual(ranks([10, 20, 20, 5]), [2, 3.5, 3.5, 1]);
-});
-
-test("spearman is 1 for any monotone map", () => {
-  close(spearman([1, 2, 3, 4], [1, 8, 27, 1000]), 1);
-  close(spearman([1, 2, 3, 4], [4, 3, 2, 1]), -1);
+test("correlation colour follows the goal: lower wants a negative r, higher a positive one", () => {
+  assert.equal(correlationTone(-0.7, "lower"), "good");
+  assert.equal(correlationTone(0.7, "lower"), "bad");
+  assert.equal(correlationTone(0.7, "higher"), "good");
+  assert.equal(correlationTone(-0.7, "higher"), "bad");
+  assert.equal(correlationTone(0.7, "none"), "neutral");
+  assert.equal(correlationTone(null, "lower"), "neutral");
+  assert.equal(correlationTone(0, "lower"), "neutral");
 });
 
 test("mulberry32 is deterministic per seed", () => {
@@ -72,32 +76,67 @@ test("parameterImportance ranks the driving param first", () => {
     const lr = rand();
     const noise = rand();
     const opt = rand() < 0.5 ? "adam" : "sgd";
-    rows.push({ params: { lr, noise, opt }, target: -5 * lr + (opt === "adam" ? 1 : 0) });
+    rows.push({ params: { lr, noise, opt }, target: -8 * lr + (opt === "adam" ? 3 : 0) });
   }
   const out = parameterImportance(rows);
   assert.equal(out[0]!.key, "lr");
   const byKey = Object.fromEntries(out.map((p) => [p.key, p]));
   assert.ok(byKey.lr!.importance > byKey.noise!.importance);
   assert.ok(byKey.opt!.importance > byKey.noise!.importance);
-  assert.ok(byKey.lr!.pearson! < -0.9);
-  assert.equal(byKey.opt!.pearson, null);
+  assert.ok(byKey.lr!.correlation! < -0.7);
+  assert.equal(byKey.opt!.correlation, null);
   assert.equal(byKey.opt!.kind, "categorical");
+  close(out.reduce((a, p) => a + p.importance, 0), 1, 1e-9);
 });
 
-test("parameterImportance is deterministic", () => {
+test("a sweep where lr drives the metric: lr gets the top importance, noise the least", () => {
+  const rand = mulberry32(11);
+  const rows: ImportanceRow[] = [];
+  for (let i = 0; i < 12; i++) {
+    const lr = [1e-5, 1e-4, 1e-3][i % 3]!;
+    const batch = [32, 64, 128][Math.floor(rand() * 3)]!;
+    const noise = rand() * 0.5;
+    rows.push({ params: { lr, batch_size: batch, noise }, target: 0.5 + 0.1 * Math.log10(lr) + 0.01 * rand() });
+  }
+  const out = parameterImportance(rows);
+  assert.equal(out[0]!.key, "lr");
+  assert.ok(out[0]!.importance > 0.5);
+  close(out.reduce((a, p) => a + p.importance, 0), 1, 1e-9);
+});
+
+test("impurity importances: per tree normalised, then over the forest; no split scores 0", () => {
+  const X = Array.from({ length: 20 }, (_, i) => [i, i % 2]);
+  const y = X.map(([a]) => a!);
+  const imp = featureImportances(fitForest(X, y, { trees: 10, seed: 1 }));
+  close(imp[0]! + imp[1]!, 1);
+  assert.ok(imp[0]! > imp[1]!);
+  const flat = featureImportances(fitForest(X, X.map(() => 3), { trees: 5 }));
+  assert.deepEqual(flat, [0, 0]);
+});
+
+test("sorting by correlation: strongest |r| first, none last", () => {
+  const rows: ParamImportance[] = [
+    { key: "a", kind: "numeric", importance: 0.5, correlation: 0.1 },
+    { key: "b", kind: "categorical", importance: 0.3, correlation: null },
+    { key: "c", kind: "numeric", importance: 0.2, correlation: -0.8 },
+  ];
+  assert.deepEqual(sortImportance(rows, "importance").map((r) => r.key), ["a", "b", "c"]);
+  assert.deepEqual(sortImportance(rows, "correlation").map((r) => r.key), ["c", "a", "b"]);
+});
+
+test("parameterImportance is deterministic (seeded forest)", () => {
   const rows: ImportanceRow[] = Array.from({ length: 12 }, (_, i) => ({
-    params: { a: i, b: i % 3 },
+    params: { a: i, b: i % 3, c: (i * 7) % 5 },
     target: i * 2 + (i % 3),
   }));
   assert.deepEqual(parameterImportance(rows), parameterImportance(rows));
+  assert.deepEqual(parameterImportance(rows, { seed: 4 }), parameterImportance(rows, { seed: 4 }));
 });
 
-test("parameterImportance: too few runs or non-finite targets", () => {
-  assert.deepEqual(parameterImportance([{ params: { a: 1 }, target: 1 }, { params: { a: 2 }, target: 2 }]), []);
-  const rows = [
-    { params: { a: 1 }, target: 1 },
-    { params: { a: 2 }, target: NaN },
-    { params: { a: 3 }, target: 3 },
-  ];
-  assert.deepEqual(parameterImportance(rows), []);
+test("parameterImportance: needs MIN_RUNS (5) runs with a finite target", () => {
+  assert.equal(MIN_RUNS, 5);
+  const four = Array.from({ length: 4 }, (_, i) => ({ params: { a: i }, target: i }));
+  assert.deepEqual(parameterImportance(four), []);
+  assert.deepEqual(parameterImportance([...four, { params: { a: 9 }, target: NaN }]), []);
+  assert.equal(parameterImportance([...four, { params: { a: 9 }, target: 9 }]).length, 1);
 });

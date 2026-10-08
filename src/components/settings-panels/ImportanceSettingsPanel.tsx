@@ -1,12 +1,13 @@
-import { Segmented, SettingsSection, SettingsTabs, type FieldOption } from "../settings/palette";
+import { Segmented, Select, SettingsSection, SettingsTabs } from "../settings/palette";
 import { bind, type SettingsController } from "../../lib/card-settings";
-import type { ImportanceMethod, ImportanceSettings } from "../cards-settings/importance";
-import ExprField from "./ExprField";
+import type { ImportanceSort } from "../../lib/plot-utils/importance";
+import type { ImportanceSettings } from "../cards-settings/importance";
 
 export interface PanelCtx {
-  /** Target options: metrics and summary keys (params are the inputs). */
-  options: FieldOption[];
-  error: string | null;
+  /** The runs' metrics (final values). */
+  metrics: string[];
+  /** The metric shown (the chosen one, else the default). */
+  metric: string | null;
 }
 
 interface Props {
@@ -16,37 +17,29 @@ interface Props {
 }
 
 export default function ImportanceSettingsPanel({ ctl, ctx, mode }: Props) {
-  const s = ctl.value;
-  const data = (
+  if (mode !== "card") return null;
+  const metrics = ctx?.metrics ?? [];
+  const values = (
     <SettingsSection name="Series">
-      {mode === "card" && (
-        <ExprField
-          label="Target"
-          info="The value the params should explain, one number per run: min(val.loss), last(acc), …"
-          value={s.metric?.src ?? null}
-          onChange={(src) => ctl.set({ metric: src == null ? null : { src } })}
-          overridden={ctl.isOverridden("metric")}
-          onReset={() => ctl.reset("metric")}
-          disabled={ctl.locked}
-          options={ctx?.options ?? []}
-          error={ctx?.error}
-        />
-      )}
-      <Segmented<ImportanceMethod>
-        label="Method"
-        layout="stacked"
+      <Select<string>
+        label="Metric"
+        info="Its final value per run (the project's summary rule); the params should explain it."
+        value={ctx?.metric ?? ""}
+        options={metrics.length ? metrics.map((m) => ({ value: m, label: m })) : [{ value: "", label: "No metric", disabled: true }]}
+        onChange={(m) => ctl.set({ metric: m || null })}
+        overridden={ctl.isOverridden("metric")}
+        onReset={() => ctl.reset("metric")}
+        disabled={ctl.locked}
+      />
+      <Segmented<ImportanceSort>
+        label="Sort by"
         options={[
-          { value: "importance", label: "Importance (forest)" },
-          { value: "correlation", label: "Correlation (r)" },
+          { value: "importance", label: "Importance" },
+          { value: "correlation", label: "Correlation" },
         ]}
-        description={
-          s.method === "importance"
-            ? "Out-of-bag permutation importance of a 50-tree forest, relative to the target's variance. Colour: sign of the correlation."
-            : "Linear correlation with the target; numeric params only."
-        }
-        {...bind(ctl, "method")}
+        {...bind(ctl, "sort")}
       />
     </SettingsSection>
   );
-  return <SettingsTabs tabs={{ values: data }} />;
+  return <SettingsTabs tabs={{ values }} />;
 }

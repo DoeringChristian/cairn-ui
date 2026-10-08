@@ -1,45 +1,49 @@
 /**
- * Parameter importance: how much each run parameter explains a target metric.
+ * Parameter importance (wandb's approach): how much each config key explains
+ * a metric over a set of runs.
  *
- * Two views over the same (params, target) table, one row per run:
- * - correlation: Pearson r and Spearman rho per NUMERIC param (booleans count
- *   as 0/1). Categorical params have no sign, so they get null.
- * - importance: permutation importance from a seeded random forest on the
- *   params, numeric params as one column each and the rest one-hot encoded.
- *   A param's one-hot columns are permuted together, so a categorical param
- *   gets one score, not one per level. Scores are the out-of-bag MSE increase
- *   divided by the target variance, so they are unitless and comparable
- *   across metrics.
+ * - importance: a seeded random-forest regressor (bootstrap rows, a random
+ *   subset of features per split) over the params; each param's
+ *   impurity-based importance (the variance its splits remove, weighted by
+ *   rows) normalised per tree, averaged over trees and normalised to sum 1.
+ *   Numeric params are one feature each, anything else is one-hot encoded
+ *   and a param's one-hot columns add up to one score.
+ * - correlation: Pearson r per numeric param (booleans as 0/1); a
+ *   categorical param has none (null, shown "—").
+ *
+ * The correlation's colour says whether raising the param moves the metric
+ * the good way of its goal (`correlationTone`).
  *
  * Pure and deterministic for a given seed.
  */
 
+import type { Goal } from "../metric-rules.ts";
+
 export type ParamKind = "numeric" | "categorical";
 
 export interface ImportanceRow {
-  /** JSON-decoded param values by key. A missing key is a missing value. */
-  params: Record<string, unknown>;
+  /** Param values by key. A missing key is a missing value. */
+  params: Readonly<Record<string, unknown>>;
   target: number;
 }
 
 export interface ParamImportance {
   key: string;
   kind: ParamKind;
-  /** Pearson r against the target (numeric params only). */
-  pearson: number | null;
-  /** Spearman rho against the target (numeric params only). */
-  spearman: number | null;
-  /** Normalized permutation importance (can be slightly negative: noise). */
+  /** Impurity-based importance; the params' scores sum to 1 (all 0 when no tree splits). */
   importance: number;
+  /** Pearson r against the target (numeric params only). */
+  correlation: number | null;
 }
 
 export interface ForestOptions {
   trees?: number;
   maxDepth?: number;
   seed?: number;
-  /** Permutation repeats per tree and param. */
-  repeats?: number;
 }
+
+/** Fewest runs with the metric for any score. */
+export const MIN_RUNS = 5;
 
 // ---------------------------------------------------------------------------
 // Random numbers
@@ -93,26 +97,16 @@ export function pearson(x: readonly number[], y: readonly number[]): number | nu
   return Math.max(-1, Math.min(1, sxy / Math.sqrt(sxx * syy)));
 }
 
-/** 1-based ranks, ties get their average rank. */
-export function ranks(x: readonly number[]): number[] {
-  const idx = x.map((_, i) => i).sort((a, b) => x[a]! - x[b]!);
-  const out = new Array<number>(x.length);
-  let i = 0;
-  while (i < idx.length) {
-    let j = i;
-    while (j + 1 < idx.length && x[idx[j + 1]!] === x[idx[i]!]) j++;
-    const r = (i + j) / 2 + 1;
-    for (let k = i; k <= j; k++) out[idx[k]!] = r;
-    i = j + 1;
-  }
-  return out;
-}
+export type Tone = "good" | "bad" | "neutral";
 
-/** Spearman rank correlation (Pearson on average ranks). */
-export function spearman(x: readonly number[], y: readonly number[]): number | null {
-  const n = Math.min(x.length, y.length);
-  if (n < 2) return null;
-  return pearson(ranks(x.slice(0, n)), ranks(y.slice(0, n)));
+/**
+ * A correlation's colour: green ("good") when raising the param moves the
+ * metric the way its goal wants (goal lower: a negative r), red ("bad")
+ * the other way, neutral without a goal or a sign.
+ */
+export function correlationTone(r: number | null, goal: Goal): Tone {
+  if (r == null || r === 0 || goal === "none") return "neutral";
+  return (goal === "lower") === (r < 0) ? "good" : "bad";
 }
 
 // ---------------------------------------------------------------------------
@@ -193,10 +187,15 @@ type Node =
   | { leaf: true; value: number }
   | { leaf: false; feature: number; threshold: number; left: Node; right: Node };
 
-function mean(y: readonly number[], idx: readonly number[]): number {
-  let s = 0;
-  for (const i of idx) s += y[i]!;
-  return s / idx.length;
+interface Tree {
+  root: Node;
+  /** Per feature: the squared error its splits removed (sum over the tree's nodes). */
+  gain: number[];
+}
+
+export interface Forest {
+  trees: Tree[];
+  features: number;
 }
 
 function buildTree(
@@ -207,20 +206,20 @@ function buildTree(
   maxDepth: number,
   mtry: number,
   rand: () => number,
+  gain: number[],
 ): Node {
-  const value = mean(y, idx);
+  let sum = 0;
+  let sq = 0;
+  for (const i of idx) { sum += y[i]!; sq += y[i]! * y[i]!; }
+  const value = sum / idx.length;
   if (depth >= maxDepth || idx.length < 2) return { leaf: true, value };
+  const parentSse = sq - (sum * sum) / idx.length;
+  if (parentSse <= 1e-12) return { leaf: true, value };
 
-  const nFeatures = X[0]?.length ?? 0;
-  const features = Array.from({ length: nFeatures }, (_, i) => i);
+  const features = Array.from({ length: gain.length }, (_, i) => i);
   shuffleInPlace(features, rand);
 
   let best: { feature: number; threshold: number; sse: number } | null = null;
-  let totalSum = 0;
-  let totalSq = 0;
-  for (const i of idx) { totalSum += y[i]!; totalSq += y[i]! * y[i]!; }
-  const parentSse = totalSq - (totalSum * totalSum) / idx.length;
-
   for (const f of features.slice(0, mtry)) {
     const sorted = [...idx].sort((a, b) => X[a]![f]! - X[b]![f]!);
     let leftSum = 0;
@@ -234,14 +233,15 @@ function buildTree(
       if (xa === xb) continue;
       const nl = k + 1;
       const nr = sorted.length - nl;
-      const rightSum = totalSum - leftSum;
-      const rightSq = totalSq - leftSq;
+      const rightSum = sum - leftSum;
+      const rightSq = sq - leftSq;
       const sse = leftSq - (leftSum * leftSum) / nl + rightSq - (rightSum * rightSum) / nr;
-      if (!best || sse < best.sse) best = { feature: f, threshold: (xa + xb) / 2, sse };
+      if (!best || sse < best.sse - 1e-12) best = { feature: f, threshold: (xa + xb) / 2, sse };
     }
   }
   if (!best || best.sse >= parentSse - 1e-12) return { leaf: true, value };
 
+  gain[best.feature]! += parentSse - best.sse;
   const left: number[] = [];
   const right: number[] = [];
   for (const i of idx) (X[i]![best.feature]! <= best.threshold ? left : right).push(i);
@@ -249,45 +249,39 @@ function buildTree(
     leaf: false,
     feature: best.feature,
     threshold: best.threshold,
-    left: buildTree(X, y, left, depth + 1, maxDepth, mtry, rand),
-    right: buildTree(X, y, right, depth + 1, maxDepth, mtry, rand),
+    left: buildTree(X, y, left, depth + 1, maxDepth, mtry, rand, gain),
+    right: buildTree(X, y, right, depth + 1, maxDepth, mtry, rand, gain),
   };
 }
 
-export function predictTree(node: Node, x: readonly number[]): number {
+function predictTree(node: Node, x: readonly number[]): number {
   let n = node;
   while (!n.leaf) n = x[n.feature]! <= n.threshold ? n.left : n.right;
   return n.value;
 }
 
-export interface Forest {
-  trees: Array<{ root: Node; oob: number[] }>;
-}
-
-/** Bootstrap-aggregated regression trees with random feature subsets (p/3). */
+/**
+ * Bootstrap-aggregated regression trees: each tree on n rows drawn with
+ * replacement, each split choosing among ceil(sqrt(p)) random features
+ * (p = feature columns), grown until pure or `maxDepth`.
+ */
 export function fitForest(
   X: readonly number[][],
   y: readonly number[],
-  { trees = 50, maxDepth = 5, seed = 0 }: ForestOptions = {},
+  { trees = 100, maxDepth = 32, seed = 0 }: ForestOptions = {},
 ): Forest {
   const rand = mulberry32(seed);
   const n = X.length;
-  const nFeatures = X[0]?.length ?? 0;
-  const mtry = Math.max(1, Math.floor(nFeatures / 3));
-  const out: Forest["trees"] = [];
+  const p = X[0]?.length ?? 0;
+  const mtry = Math.max(1, Math.ceil(Math.sqrt(p)));
+  const out: Tree[] = [];
   for (let t = 0; t < trees; t++) {
-    const inBag = new Array<boolean>(n).fill(false);
     const sample: number[] = [];
-    for (let i = 0; i < n; i++) {
-      const j = Math.floor(rand() * n);
-      sample.push(j);
-      inBag[j] = true;
-    }
-    const oob: number[] = [];
-    for (let i = 0; i < n; i++) if (!inBag[i]) oob.push(i);
-    out.push({ root: buildTree(X, y, sample, 0, maxDepth, mtry, rand), oob });
+    for (let i = 0; i < n; i++) sample.push(Math.floor(rand() * n));
+    const gain = new Array<number>(p).fill(0);
+    out.push({ root: buildTree(X, y, sample, 0, maxDepth, mtry, rand, gain), gain });
   }
-  return { trees: out };
+  return { trees: out, features: p };
 }
 
 export function predictForest(forest: Forest, x: readonly number[]): number {
@@ -297,77 +291,40 @@ export function predictForest(forest: Forest, x: readonly number[]): number {
 }
 
 /**
- * Breiman's out-of-bag permutation importance: for every tree, the MSE on its
- * out-of-bag rows after shuffling one param's columns among those rows, minus
- * the unshuffled MSE, averaged over trees and divided by var(y).
+ * Impurity-based (mean decrease in impurity) feature importances: each
+ * tree's gains normalised to sum 1, averaged over the trees that split,
+ * normalised to sum 1 (all 0 when no tree splits).
  */
-export function permutationImportance(
-  forest: Forest,
-  enc: Encoded,
-  y: readonly number[],
-  { seed = 0, repeats = 3 }: ForestOptions = {},
-): number[] {
-  const rand = mulberry32(seed ^ 0x9e3779b9);
-  const n = y.length;
-  const my = y.reduce((a, b) => a + b, 0) / n;
-  const variance = y.reduce((a, b) => a + (b - my) * (b - my), 0) / n;
-  const sums = new Array<number>(enc.params.length).fill(0);
-  let used = 0;
-  for (const { root, oob } of forest.trees) {
-    if (oob.length < 2) continue;
-    used++;
-    let base = 0;
-    for (const i of oob) base += (predictTree(root, enc.X[i]!) - y[i]!) ** 2;
-    base /= oob.length;
-    enc.params.forEach((p, pi) => {
-      let acc = 0;
-      for (let r = 0; r < repeats; r++) {
-        const perm = [...oob];
-        shuffleInPlace(perm, rand);
-        let err = 0;
-        oob.forEach((i, k) => {
-          const x = [...enc.X[i]!];
-          const donor = enc.X[perm[k]!]!;
-          for (const c of p.columns) x[c] = donor[c]!;
-          err += (predictTree(root, x) - y[i]!) ** 2;
-        });
-        acc += err / oob.length - base;
-      }
-      sums[pi] += acc / repeats;
-    });
+export function featureImportances(forest: Forest): number[] {
+  const acc = new Array<number>(forest.features).fill(0);
+  for (const t of forest.trees) {
+    const total = t.gain.reduce((a, b) => a + b, 0);
+    if (total <= 0) continue;
+    t.gain.forEach((g, i) => (acc[i]! += g / total));
   }
-  if (used === 0 || variance === 0) return sums.map(() => 0);
-  return sums.map((s) => s / used / variance);
+  const total = acc.reduce((a, b) => a + b, 0);
+  return total > 0 ? acc.map((v) => v / total) : acc;
 }
 
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
-/** Minimum runs for any score: fewer cannot separate signal from noise at all. */
-export const MIN_RUNS = 3;
-
 /**
  * Score every param with at least two distinct values against the target.
- * Rows with a non-finite target are dropped first. Sorted by importance
- * (descending), then key.
+ * Rows with a non-finite target are dropped first; fewer than `MIN_RUNS`
+ * rows score nothing. Sorted by importance (descending), then key.
  */
-export function parameterImportance(
-  rows: readonly ImportanceRow[],
-  opts: ForestOptions = {},
-): ParamImportance[] {
+export function parameterImportance(rows: readonly ImportanceRow[], opts: ForestOptions = {}): ParamImportance[] {
   const kept = rows.filter((r) => Number.isFinite(r.target));
   if (kept.length < MIN_RUNS) return [];
   const y = kept.map((r) => r.target);
   const enc = encodeParams(kept);
   if (enc.params.length === 0) return [];
 
-  const forest = fitForest(enc.X, y, { trees: 50, maxDepth: 5, seed: 0, ...opts });
-  const imp = permutationImportance(forest, enc, y, { seed: 0, repeats: 3, ...opts });
-
-  const out: ParamImportance[] = enc.params.map((p, i) => {
-    let r: number | null = null;
-    let rho: number | null = null;
+  const perFeature = featureImportances(fitForest(enc.X, y, opts));
+  const out: ParamImportance[] = enc.params.map((p) => {
+    let correlation: number | null = null;
     if (p.kind === "numeric") {
       const xs: number[] = [];
       const ys: number[] = [];
@@ -375,11 +332,18 @@ export function parameterImportance(
         const v = numericValue(row.params[p.key]);
         if (v != null) { xs.push(v); ys.push(y[k]!); }
       });
-      r = pearson(xs, ys);
-      rho = spearman(xs, ys);
+      correlation = pearson(xs, ys);
     }
-    return { key: p.key, kind: p.kind, pearson: r, spearman: rho, importance: imp[i]! };
+    const importance = p.columns.reduce((a, c) => a + perFeature[c]!, 0);
+    return { key: p.key, kind: p.kind, importance, correlation };
   });
-  out.sort((a, b) => b.importance - a.importance || a.key.localeCompare(b.key));
-  return out;
+  return sortImportance(out, "importance");
+}
+
+export type ImportanceSort = "importance" | "correlation";
+
+/** By importance, or by the correlation's strength (|r|, none last); descending, ties by key. */
+export function sortImportance(rows: readonly ParamImportance[], by: ImportanceSort): ParamImportance[] {
+  const score = (r: ParamImportance) => (by === "importance" ? r.importance : r.correlation == null ? -1 : Math.abs(r.correlation));
+  return [...rows].sort((a, b) => score(b) - score(a) || a.key.localeCompare(b.key));
 }
