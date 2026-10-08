@@ -260,7 +260,7 @@ export default function RunsSidebar({ projectId, list, state, fields, paramKeys,
             error={search.error}
             onChange={(v) => onEdit((s) => setSearch(s, v), "Search runs", "search")}
           />
-          <RunFilterControl compact fields={fields} filter={state.filter} onChange={(f) => onEdit((s) => setFilter(s, f), "Filter runs")} />
+          <RunFilterControl fields={fields} filter={state.filter} onChange={(f) => onEdit((s) => setFilter(s, f), "Filter runs")} />
           <RunGroupControl
             className="min-w-0 max-w-[9rem] shrink"
             paramKeys={paramKeys}

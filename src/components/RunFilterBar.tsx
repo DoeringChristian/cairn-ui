@@ -1,6 +1,7 @@
 /**
  * The runs toolbar controls, shared by the runs table and the workspace
- * sidebar: the regex search box, the filter and the group-by. The filter is
+ * sidebar: the status select, the regex search box, the filter, the
+ * group-by and "Latest only". The filter is
  * a tree (lib/run-filter.ts): and/or groups over builder chips and
  * expression leaves. The root's conditions show as removable chips;
  * "Filter" opens the tree editor, where groups nest and toggle between AND
@@ -22,6 +23,7 @@ import {
   type RunFilter,
 } from "../lib/run-filter.ts";
 import { compileScalarExpr } from "../lib/runs-table/columns.ts";
+import { STATUS_OPTIONS, type StatusFilter } from "../lib/runs-table/model.ts";
 import { groupByLabel, type GroupBy } from "../lib/runs-table/group.ts";
 import Popover from "./ui/Popover";
 
@@ -62,6 +64,32 @@ function nodeText(n: FilterNode): string {
 const SMALL_BTN =
   "inline-flex items-center gap-1 rounded border border-border bg-bg px-1.5 py-0.5 text-[11px] text-fg-muted hover:border-accent hover:text-fg disabled:opacity-40 touch:min-h-9";
 
+/** `Status [All ▾]`: a status, every non-archived run, or the archived runs. */
+export function RunStatusSelect({ value, onChange }: { value: StatusFilter; onChange: (next: StatusFilter) => void }) {
+  return (
+    <label className="flex items-center gap-1 text-xs text-fg-muted">
+      Status
+      <select className="input py-1 text-xs" value={value} onChange={(e) => onChange(e.target.value as StatusFilter)}>
+        {STATUS_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** `[ ] Latest only`: the newest run of every name. */
+export function RunLatestOnlyToggle({ value, onChange }: { value: boolean; onChange: (next: boolean) => void }) {
+  return (
+    <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-fg-muted">
+      <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} className="accent-accent" />
+      Latest only
+    </label>
+  );
+}
+
 /** The search box: a regex over name, id, status and tags (lib/runs-table/search.ts). */
 export function RunSearchInput({
   value,
@@ -86,63 +114,55 @@ export function RunSearchInput({
   );
 }
 
-/**
- * The filter: the root's conditions as removable chips (not `compact`),
- * "Filter" opening the tree editor, and "Clear filters".
- */
+/** The filter: the root's conditions as removable chips, "Filter" opening the tree editor, and "Clear filters". */
 export function RunFilterControl({
   fields,
   filter: root,
   onChange: setRoot,
-  compact = false,
 }: {
   /** Filterable fields (see `filterFieldsOf`). */
   fields: string[];
   filter: GroupNode;
   onChange: (next: GroupNode) => void;
-  /** Only the button (the count in its label): no chips, no "Clear filters". */
-  compact?: boolean;
 }) {
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
   const count = root.children.length;
   return (
     <>
-      {!compact &&
-        root.children.map((c, i) => (
-          <span
-            key={`${i}:${nodeText(c)}`}
-            className={`mono inline-flex max-w-[24rem] items-center gap-1 rounded border px-1.5 py-0.5 text-xs text-fg ${
-              c.kind === "expr" && exprLeafError(c.expr)
-                ? "border-status-failed/60 bg-status-failed/10"
-                : "border-accent/40 bg-accent/10"
-            }`}
-            title={nodeText(c)}
+      {root.children.map((c, i) => (
+        <span
+          key={`${i}:${nodeText(c)}`}
+          className={`mono inline-flex max-w-[24rem] items-center gap-1 rounded border px-1.5 py-0.5 text-xs text-fg ${
+            c.kind === "expr" && exprLeafError(c.expr)
+              ? "border-status-failed/60 bg-status-failed/10"
+              : "border-accent/40 bg-accent/10"
+          }`}
+          title={nodeText(c)}
+        >
+          {i > 0 && <span className="text-fg-subtle">{root.op}</span>}
+          <span className="truncate">{nodeText(c)}</span>
+          <button
+            type="button"
+            onClick={() => setRoot(updateAt(root, [i], () => null))}
+            className="text-fg-subtle hover:text-status-failed"
+            aria-label={`Remove filter ${nodeText(c)}`}
           >
-            {i > 0 && <span className="text-fg-subtle">{root.op}</span>}
-            <span className="truncate">{nodeText(c)}</span>
-            <button
-              type="button"
-              onClick={() => setRoot(updateAt(root, [i], () => null))}
-              className="text-fg-subtle hover:text-status-failed"
-              aria-label={`Remove filter ${nodeText(c)}`}
-            >
-              {"×"}
-            </button>
-          </span>
-        ))}
+            {"×"}
+          </button>
+        </span>
+      ))}
       <button
         ref={btnRef}
         type="button"
-        className={`btn shrink-0 px-2 py-1 text-xs ${compact && count > 0 ? "border-accent/60 text-fg" : ""}`}
+        className="btn shrink-0 px-2 py-1 text-xs"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        title={compact && count > 0 ? root.children.map(nodeText).join(` ${root.op} `) : undefined}
       >
         <i className="fa-solid fa-filter mr-1 text-[10px]" aria-hidden="true" />
         Filter{count > 0 ? ` (${count})` : ""}
       </button>
-      {!compact && !isEmptyFilter(root) && (
+      {!isEmptyFilter(root) && (
         <button type="button" className="text-xs text-fg-subtle hover:text-fg" onClick={() => setRoot({ ...root, children: [] })}>
           Clear filters
         </button>

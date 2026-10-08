@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useInfiniteScroll } from "../lib/use-infinite-scroll";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useBulkRunMutation, useInfiniteRuns, useSetTags } from "../api/hooks";
-import type { Run, RunStatus } from "../api/types";
+import type { Run } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
 import { RunProgressLine, RunProgressPct } from "../components/RunProgress";
 import { formatDuration, formatRelative, safeJsonParse } from "../lib/format";
@@ -22,24 +22,20 @@ import {
   filterFieldsOf,
   isEmptyFilter,
   loadRunsFilter,
-  matchesFilter,
   saveRunsFilter,
   type RunsFilterState,
 } from "../lib/run-filter.ts";
-import { RunFilterControl, RunGroupControl, RunSearchInput } from "../components/RunFilterBar";
 import {
-  CHECK_W,
-  GROUP_CELL_CLASS,
-  GroupHeader,
-  RUN_CELL_CLASS,
-  RUN_ROW_CLASS,
-  RUNS_TABLE_CLASS,
-  RUNS_THEAD_CLASS,
-  RUNS_TH_CLASS,
-  RunNameCell,
-  RunVersion,
-} from "../components/runs-table/RunsTableParts";
-import { compileRunSearch, matchesRunSearch } from "../lib/runs-table/search.ts";
+  RunFilterControl,
+  RunGroupControl,
+  RunLatestOnlyToggle,
+  RunSearchInput,
+  RunStatusSelect,
+} from "../components/RunFilterBar";
+import { GroupHeader } from "../components/runs-table/RunsTableParts";
+import RunsTable from "../components/runs-table/RunsTable";
+import { useRunsTable } from "../components/runs-table/use-runs-table";
+import { runRowName, type StatusFilter } from "../lib/runs-table/model.ts";
 import RunControls, { RunSwatch } from "../components/RunViewControls";
 import {
   availableColumns,
@@ -47,7 +43,6 @@ import {
   columnKind,
   columnLabel,
   compileScalarExpr,
-  computeColumns,
   isNumericColumn,
   layoutColumns,
   moveColumn,
@@ -61,27 +56,12 @@ import {
   columnWidth,
   setWidth,
 } from "../lib/runs-table/columns.ts";
-import { removeSortKey, sortBy, toggleSort, type SortKey } from "../lib/runs-table/sort.ts";
-import { flattenGroups, groupRunsNested, type RunGroupNode, type TableRow } from "../lib/runs-table/group.ts";
+import { removeSortKey, toggleSort, type SortKey } from "../lib/runs-table/sort.ts";
 import { betterFor, deltaOf, formatDelta, relativeDelta, toneOf, type Tone } from "../lib/runs-table/delta.ts";
 import { RunViewContext, useRunColors, type RunView } from "../lib/run-view";
 import { useProjectRunView } from "../lib/run-view-store";
 import { newId } from "../lib/reports/ids";
 import "./runs-table.css";
-
-/** The status filter: a status, every non-archived run ("all"), or the archived runs. */
-type StatusFilter = "all" | "archived" | RunStatus;
-
-const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "running", label: "running" },
-  { value: "completed", label: "completed" },
-  { value: "failed", label: "failed" },
-  { value: "crashed", label: "crashed" },
-  { value: "killed", label: "killed" },
-  { value: "stopped", label: "stopped" },
-  { value: "archived", label: "archived" },
-];
 
 const TONE_CLASS: Record<Tone, string> = {
   better: "text-status-completed",
@@ -153,27 +133,6 @@ export default function RunsTablePage() {
     });
   }, [q.data]);
   const serverTotal = q.data?.pages[0]?.total ?? 0;
-
-  // Latest run per display_name — for highlighting and filtering.
-  const { latestByName, latestIds } = useMemo(() => {
-    const byName = new Map<string, { id: string; created_at: string }>();
-    const counts = new Map<string, number>();
-    for (const r of runs) {
-      const name = r.display_name ?? r.id;
-      counts.set(name, (counts.get(name) ?? 0) + 1);
-      const existing = byName.get(name);
-      if (!existing || r.created_at > existing.created_at) {
-        byName.set(name, { id: r.id, created_at: r.created_at });
-      }
-    }
-    const highlight = new Set<string>();
-    const all = new Set<string>();
-    for (const [name, best] of byName) {
-      all.add(best.id);
-      if ((counts.get(name) ?? 0) > 1) highlight.add(best.id);
-    }
-    return { latestByName: highlight, latestIds: all };
-  }, [runs]);
 
   // Auto-load next page when sentinel enters viewport.
   const sentinelRef = useInfiniteScroll({
@@ -279,24 +238,6 @@ export default function RunsTablePage() {
 
   // Run label cache is seeded centrally in `useInfiniteRuns` (api/hooks.ts).
 
-  const runSearch = useMemo(() => compileRunSearch(search), [search]);
-
-  const filtered = useMemo(() => {
-    return runs.filter((r) => {
-      if (showLatestOnly && !latestIds.has(r.id)) return false;
-      // Archived runs show only under the "archived" filter.
-      if (statusFilter === "archived") {
-        if (!r.archived) return false;
-      } else if (r.archived) {
-        return false;
-      } else if (statusFilter !== "all" && r.status !== statusFilter) {
-        return false;
-      }
-      if (!matchesFilter(r, filterState.filter)) return false;
-      return matchesRunSearch(r, runSearch);
-    });
-  }, [runs, statusFilter, runSearch, showLatestOnly, latestIds, filterState.filter]);
-
   const { sort, columns, computed, groupBy } = filterState;
   const setColumns = (next: ColumnsState) => setFilterState({ ...filterState, columns: next });
   // The width of the column being dragged, live; persisted once on release.
@@ -311,10 +252,18 @@ export default function RunsTablePage() {
     [runs, runView.baseline],
   );
 
-  const computedValues = useMemo(
-    () => computeColumns(baselineRun && !filtered.includes(baselineRun) ? [...filtered, baselineRun] : filtered, computed),
-    [filtered, computed, baselineRun],
-  );
+  const { runSearch, latestByName, filtered, computedValues, sorted, collapsed, toggleGroup, rows } = useRunsTable({
+    runs,
+    status: statusFilter,
+    search,
+    filter: filterState.filter,
+    latestOnly: showLatestOnly,
+    groupBy,
+    sort,
+    computed,
+    pinned: runView.pinned,
+    baseline: baselineRun,
+  });
 
   // Metric and param columns are the UNION across the loaded runs, not the
   // intersection: a run that crashed before logging `val.acc` should show a
@@ -322,14 +271,6 @@ export default function RunsTablePage() {
   const available = useMemo(() => availableColumns(filtered, computed), [filtered, computed]);
   const layout = useMemo(() => layoutColumns(available, columns), [available, columns]);
   const shownColumns = useMemo(() => [...layout.frozen, ...layout.scroll], [layout]);
-
-  const sorted = useMemo(() => {
-    const arr = sortBy(filtered, sort, (r, col) => cellValue(r, col, computedValues), (r) => r.id);
-    // Pinned runs go first, in the sorted order.
-    if (runView.pinned.length === 0) return arr;
-    const pinned = new Set(runView.pinned);
-    return [...arr.filter((r) => pinned.has(r.id)), ...arr.filter((r) => !pinned.has(r.id))];
-  }, [filtered, sort, computedValues, runView.pinned]);
 
   const colors = useRunColors(useMemo(() => sorted.map((r) => r.id), [sorted]));
 
@@ -345,23 +286,6 @@ export default function RunsTablePage() {
     }
     return out;
   }, [shownColumns, columns.better, computed, baselineRun, filtered]);
-
-  const groups = useMemo<RunGroupNode[] | null>(() => groupRunsNested(sorted, groupBy), [sorted, groupBy]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const groupByKey = JSON.stringify(groupBy);
-  useEffect(() => setCollapsed(new Set()), [groupByKey]);
-  const toggleGroup = (id: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const rows = useMemo<TableRow[]>(
-    () => (groups ? flattenGroups(groups, collapsed) : sorted.map((run) => ({ kind: "run", run, key: run.id, depth: 0 }))),
-    [groups, collapsed, sorted],
-  );
 
   // The rows in on-screen order (expanded groups only, a run listed once),
   // which is what a shift-click range spans.
@@ -421,6 +345,7 @@ export default function RunsTablePage() {
   const allVisibleSelected =
     sorted.length > 0 && sorted.every((r) => selected.has(r.id));
   const someVisibleSelected = sorted.some((r) => selected.has(r.id));
+  const grouped = groupBy.length > 0;
 
   const onHeaderCheckbox = () => {
     if (allVisibleSelected) selectNone();
@@ -503,7 +428,7 @@ export default function RunsTablePage() {
             to={`/p/${projectId}/r/${r.id}`}
             className={`mono min-h-[44px] min-w-0 flex-1 truncate leading-[44px] text-accent hover:underline ${hidden ? "opacity-50" : ""}`}
           >
-            {r.display_name ?? r.id}
+            {runRowName(r, grouped)}
           </Link>
           {runControls(r)}
           <RunStatusBadge status={r.status} archived={r.archived} />
@@ -530,56 +455,27 @@ export default function RunsTablePage() {
     );
   };
 
-  // The frozen block: checkbox at 0, Name after it, pinned columns after Name.
-  const frozenWidth = (i: number) => widthOf(layout.frozen[i]!)!;
-  const frozenLeft = (i: number) => {
-    let left = CHECK_W;
-    for (let j = 0; j < i; j++) left += frozenWidth(j);
-    return left;
-  };
-  const frozenTotal = frozenLeft(layout.frozen.length);
-  /** A resized scrolling column: fixed width, overflow ellipsized. */
-  const scrollCellStyle = (col: string): React.CSSProperties | undefined => {
-    const w = widthOf(col);
-    return w === undefined ? undefined : { width: w, minWidth: w, maxWidth: w, overflow: "hidden", textOverflow: "ellipsis" };
-  };
-  const lastFrozen = layout.frozen.length - 1;
-  const frozenProps = (i: number, extra = "") => {
-    const w = frozenWidth(i);
-    return {
-      className: `frozen ${i === lastFrozen ? "frozen-edge" : ""} ${extra}`,
-      style: { left: frozenLeft(i), width: w, minWidth: w, maxWidth: w },
-    };
-  };
+  /** After the Name cell's version: the baseline badge and the run view toggles. */
+  const nameExtras = (r: Run): ReactNode => (
+    <>
+      {runView.baseline === r.id && (
+        <span className="shrink-0 rounded bg-accent/15 px-1 text-[10px] font-medium text-accent">baseline</span>
+      )}
+      <span className="ml-auto shrink-0">
+        <RunControls runId={r.id} view={runView} onChange={setRunView} show="active" />
+      </span>
+      {/* On hover, every toggle overlays the end of the cell (no layout shift). */}
+      <span className="absolute inset-y-0 right-0 hidden items-center gap-1 bg-bg-elevated pl-2 group-hover/row:flex touch:flex">
+        <CopyId id={r.id} className="text-xs" />
+        <RunControls runId={r.id} view={runView} onChange={setRunView} show="all" />
+      </span>
+    </>
+  );
 
-  const renderCell = (r: Run, col: string, depth: number): ReactNode => {
+  const renderCell = (r: Run, col: string): ReactNode => {
     const { kind, key } = columnKind(col);
     if (kind === "builtin") {
       switch (key) {
-        case "name": {
-          const isBaseline = runView.baseline === r.id;
-          return (
-            <RunNameCell
-              name={r.display_name ?? r.id}
-              to={`/p/${projectId}/r/${r.id}`}
-              color={colors.get(r.id)}
-              depth={depth}
-              version={r.version != null ? <RunVersion version={r.version} /> : null}
-            >
-              {isBaseline && (
-                <span className="shrink-0 rounded bg-accent/15 px-1 text-[10px] font-medium text-accent">baseline</span>
-              )}
-              <span className="ml-auto shrink-0">
-                <RunControls runId={r.id} view={runView} onChange={setRunView} show="active" />
-              </span>
-              {/* On hover, every toggle overlays the end of the cell (no layout shift). */}
-              <span className="absolute inset-y-0 right-0 hidden items-center gap-1 bg-bg-elevated pl-2 group-hover/row:flex touch:flex">
-                <CopyId id={r.id} className="text-xs" />
-                <RunControls runId={r.id} view={runView} onChange={setRunView} show="all" />
-              </span>
-            </RunNameCell>
-          );
-        }
         case "status":
           return (
             <span className="dim">
@@ -636,47 +532,6 @@ export default function RunsTablePage() {
     );
   };
 
-  const renderDesktopRun = (r: Run, key: string, depth: number) => {
-    const isSelected = selected.has(r.id);
-    const rowClass = [
-      RUN_ROW_CLASS,
-      isSelected ? "is-selected bg-accent/5" : "",
-      runView.hidden.includes(r.id) ? "is-hidden-run" : "",
-    ].join(" ");
-    return (
-      <tr key={key} className={rowClass}>
-        <td
-          className={`frozen ${RUN_CELL_CLASS}`}
-          style={{
-            left: 0,
-            width: CHECK_W,
-            minWidth: CHECK_W,
-            maxWidth: CHECK_W,
-            ...(latestByName.has(r.id) ? { boxShadow: "inset 2px 0 0 rgb(var(--color-accent-rgb))" } : {}),
-          }}
-        >
-          <input
-            type="checkbox"
-            aria-label={`select run ${r.display_name ?? r.id}`}
-            checked={isSelected}
-            onChange={(e) => toggleRow(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
-          />
-        </td>
-        {layout.frozen.map((col, i) => (
-          <td key={col} {...frozenProps(i, `px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`)}>
-            {i === 0 ? renderCell(r, col, depth) : <div className="truncate">{renderCell(r, col, depth)}</div>}
-          </td>
-        ))}
-        {layout.scroll.map((col) => (
-          <td key={col} className={`px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`} style={scrollCellStyle(col)}>
-            {renderCell(r, col, depth)}
-          </td>
-        ))}
-        <td aria-hidden="true" />
-      </tr>
-    );
-  };
-
   if (!projectId) return null;
   if (q.isLoading) return <p className="text-fg-muted">Loading…</p>;
   if (q.isError)
@@ -694,22 +549,7 @@ export default function RunsTablePage() {
 
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-1 text-xs text-fg-muted">
-          Status
-          <select
-            className="input py-1 text-xs"
-            value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(e.target.value as StatusFilter)
-            }
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <RunStatusSelect value={statusFilter} onChange={setStatusFilter} />
         <label className="flex items-center gap-1 text-xs text-fg-muted">
           Search
           <RunSearchInput value={search} error={runSearch.error} onChange={setSearch} />
@@ -724,10 +564,7 @@ export default function RunsTablePage() {
           levels={filterState.groupBy}
           onChange={(groupBy) => setFilterState({ ...filterState, groupBy })}
         />
-        <label className="flex items-center gap-1.5 text-xs text-fg-muted cursor-pointer select-none">
-          <input type="checkbox" checked={showLatestOnly} onChange={(e) => setShowLatestOnly(e.target.checked)} className="accent-accent" />
-          Latest only
-        </label>
+        <RunLatestOnlyToggle value={showLatestOnly} onChange={setShowLatestOnly} />
         <button
           ref={columnsBtnRef}
           type="button"
@@ -893,93 +730,66 @@ export default function RunsTablePage() {
               unbounded in number and must stay reachable. The checkbox,
               Name and pinned columns stay frozen on the left. */}
           <div className="runs-table hidden overflow-x-auto overflow-y-hidden rounded-lg border border-border md:block">
-            <table className={RUNS_TABLE_CLASS}>
-              <thead className={RUNS_THEAD_CLASS}>
-                <tr>
-                  <th className={`frozen ${RUNS_TH_CLASS}`} style={{ left: 0, width: CHECK_W, minWidth: CHECK_W, maxWidth: CHECK_W }}>
-                    <input
-                      type="checkbox"
-                      aria-label="select all visible rows"
-                      checked={allVisibleSelected}
-                      ref={(el) => {
-                        if (el)
-                          el.indeterminate =
-                            !allVisibleSelected && someVisibleSelected;
+            <RunsTable
+              projectId={projectId}
+              rows={rows}
+              collapsed={collapsed}
+              onToggleGroup={toggleGroup}
+              grouped={grouped}
+              latestByName={latestByName}
+              colorOf={(r) => colors.get(r.id)}
+              hidden={(r) => runView.hidden.includes(r.id)}
+              lead={{
+                kind: "check",
+                selected,
+                onToggle: toggleRow,
+                all: allVisibleSelected ? "all" : someVisibleSelected ? "some" : "none",
+                onToggleAll: onHeaderCheckbox,
+              }}
+              columns={{
+                frozen: layout.frozen,
+                scroll: layout.scroll,
+                widthOf,
+                cell: renderCell,
+                nameExtras,
+                header: (col, frozen, style) => {
+                  const sortIdx = sort.findIndex((k) => k.column === col);
+                  return (
+                    <ColumnTh
+                      key={col}
+                      column={col}
+                      label={columnLabel(col, computed)}
+                      title={col}
+                      sortKey={sortIdx >= 0 ? sort[sortIdx]! : null}
+                      sortRank={sort.length > 1 && sortIdx >= 0 ? sortIdx + 1 : null}
+                      numeric={isNumericColumn(col)}
+                      pinned={layout.frozen.indexOf(col) > 0}
+                      frozen={frozen}
+                      style={style}
+                      onResize={(width, final) => {
+                        if (!final) setDragWidth({ column: col, width: clampColumnWidth(width) });
+                        else {
+                          setDragWidth(null);
+                          setColumns(setWidth(columns, col, width));
+                        }
                       }}
-                      onChange={onHeaderCheckbox}
+                      onResetWidth={() => setColumns(setWidth(columns, col, null))}
+                      onSort={(additive) => setSort(toggleSort(sort, col, additive))}
+                      onMenu={(anchor) => {
+                        menuAnchorRef.current = anchor;
+                        setMenuColumn((c) => (c === col ? null : col));
+                      }}
+                      onDropColumn={(dragged) => {
+                        if (dragged === col || dragged === "name" || col === "name") return;
+                        const draggedPinned = columns.pinned.includes(dragged);
+                        if (draggedPinned !== columns.pinned.includes(col)) return;
+                        setColumns(moveColumn(columns, layout.scroll, dragged, col));
+                      }}
                     />
-                  </th>
-                  {shownColumns.map((col) => {
-                    const fi = layout.frozen.indexOf(col);
-                    const sortIdx = sort.findIndex((k) => k.column === col);
-                    return (
-                      <ColumnTh
-                        key={col}
-                        column={col}
-                        label={columnLabel(col, computed)}
-                        title={col}
-                        sortKey={sortIdx >= 0 ? sort[sortIdx]! : null}
-                        sortRank={sort.length > 1 && sortIdx >= 0 ? sortIdx + 1 : null}
-                        numeric={isNumericColumn(col)}
-                        pinned={fi > 0}
-                        frozen={fi >= 0 ? frozenProps(fi) : null}
-                        style={fi >= 0 ? undefined : scrollCellStyle(col)}
-                        onResize={(width, final) => {
-                          if (!final) setDragWidth({ column: col, width: clampColumnWidth(width) });
-                          else {
-                            setDragWidth(null);
-                            setColumns(setWidth(columns, col, width));
-                          }
-                        }}
-                        onResetWidth={() => setColumns(setWidth(columns, col, null))}
-                        onSort={(additive) => setSort(toggleSort(sort, col, additive))}
-                        onMenu={(anchor) => {
-                          menuAnchorRef.current = anchor;
-                          setMenuColumn((c) => (c === col ? null : col));
-                        }}
-                        onDropColumn={(dragged) => {
-                          if (dragged === col || dragged === "name" || col === "name") return;
-                          const draggedPinned = columns.pinned.includes(dragged);
-                          if (draggedPinned !== columns.pinned.includes(col)) return;
-                          setColumns(moveColumn(columns, layout.scroll, dragged, col));
-                        }}
-                      />
-                    );
-                  })}
-                  {/* Filler: takes the table's spare width, so sized columns keep their widths. */}
-                  <th aria-hidden="true" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) =>
-                  row.kind === "group" ? (
-                    <tr key={row.node.id} className="is-group">
-                      <td
-                        colSpan={1 + layout.frozen.length}
-                        className={`frozen frozen-edge ${GROUP_CELL_CLASS}`}
-                        style={{ left: 0, width: frozenTotal, minWidth: frozenTotal, maxWidth: frozenTotal }}
-                      >
-                        <div style={{ paddingLeft: row.node.depth * 12 }}>
-                          <GroupHeader
-                    by={row.node.by}
-                    label={row.node.label}
-                    count={row.node.runs.length}
-                    collapsed={collapsed.has(row.node.id)}
-                    onToggle={() => toggleGroup(row.node.id)}
-                  />
-                        </div>
-                      </td>
-                      {layout.scroll.length > 0 && (
-                        <td colSpan={layout.scroll.length} className="border-t border-border-subtle bg-bg-elevated" />
-                      )}
-                      <td className="border-t border-border-subtle bg-bg-elevated" aria-hidden="true" />
-                    </tr>
-                  ) : (
-                    renderDesktopRun(row.run, row.key, row.depth)
-                  ),
-                )}
-              </tbody>
-            </table>
+                  );
+                },
+              }}
+            />
           </div>
         </>
       )}
