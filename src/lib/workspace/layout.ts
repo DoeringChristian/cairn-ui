@@ -11,7 +11,13 @@
  * - While `autoPanels` is on, every unclaimed metric that is not in
  *   `removed` gets an automatic panel `auto:<name>`, in the doc section
  *   named by the automatic rule (lib/sections.ts) after its own panels, or
- *   in an automatic section after the doc's sections. Off: none.
+ *   in an automatic section after the doc's sections (the Summary section
+ *   before them). Off: none.
+ * - A scalar logged at a single step gets no automatic panel: the Summary
+ *   section's Scalars card shows it. The Summary cards stand in for the
+ *   pseudo-series `@scalars` / `@config` (lib/workspace/summary-cards.ts),
+ *   which the caller adds to `metrics` for the runs that have data; a
+ *   Scalars / Config panel shows its pseudo-series whatever its selector.
  * - A hidden panel (`panel.hidden`) still claims its metric but renders
  *   nowhere.
  * - Automatic panels of a document section keep their A–Z place among its
@@ -25,6 +31,7 @@ import type { CardType } from "../cards/card-spec.ts";
 import { autoSectionOf, compareAutoSections } from "../sections.ts";
 import { AUTO_PREFIX, autoPanelId, claimedMetric, isAutoPanelId, ops, type Panel, type WorkspaceDoc, type WorkspaceOp } from "./doc.ts";
 import { compilePanelFilter } from "./panel-filter.ts";
+import { compareAutoNames, isSingleStepScalar, isSummaryCardType, SUMMARY_SECTION, summaryNameOf, summaryTypeOfName } from "./summary-cards.ts";
 
 /** One metric across the bound runs. */
 export interface MetricInfo {
@@ -86,6 +93,16 @@ export function panelLabel(panel: Panel): string {
   return panel.selector.names.join(", ") || panel.type;
 }
 
+/**
+ * What removing a panel records in `removed` so its automatic panel does not
+ * come back: a Summary card's pseudo-series (it keeps its `auto:` id), else
+ * the metric the panel stands in for (`claimedMetric`).
+ */
+export function claimedName(panel: Pick<Panel, "id" | "selector">): string | null {
+  if (isAutoPanelId(panel.id) && summaryTypeOfName(panel.id.slice(AUTO_PREFIX.length))) return panel.id.slice(AUTO_PREFIX.length);
+  return claimedMetric(panel);
+}
+
 /** The automatic panel for a metric. */
 export function autoPanel(m: MetricInfo): Panel {
   return { id: autoPanelId(m.name), type: m.object_type as CardType, selector: { names: [m.name] }, settings: {} };
@@ -115,8 +132,8 @@ export function deriveLayout(doc: WorkspaceDoc, metrics: readonly MetricInfo[], 
 
   // Automatic panels, bucketed by their automatic section.
   const autoBuckets = new Map<string, MetricInfo[]>();
-  for (const m of doc.autoPanels ? [...metrics].sort((a, b) => a.name.localeCompare(b.name)) : []) {
-    if (claimed.has(m.name) || removed.has(m.name)) continue;
+  for (const m of doc.autoPanels ? [...metrics].sort((a, b) => compareAutoNames(a.name, b.name)) : []) {
+    if (claimed.has(m.name) || removed.has(m.name) || isSingleStepScalar(m)) continue;
     const s = autoSectionOf(m.name, m.object_type);
     const list = autoBuckets.get(s) ?? [];
     list.push(m);
@@ -127,7 +144,9 @@ export function deriveLayout(doc: WorkspaceDoc, metrics: readonly MetricInfo[], 
     panel,
     auto,
     section,
-    metrics: resolvePanelMetrics(panel, byName),
+    metrics: isSummaryCardType(panel.type)
+      ? [byName.get(summaryNameOf(panel.type))].filter((m): m is MetricInfo => m != null)
+      : resolvePanelMetrics(panel, byName),
     label: panelLabel(panel),
   });
   const finish = (panels: RenderedPanel[], sort: boolean) => {
@@ -136,6 +155,16 @@ export function deriveLayout(doc: WorkspaceDoc, metrics: readonly MetricInfo[], 
   };
 
   const out: RenderedSection[] = [];
+  const autoSection = (name: string) => {
+    const autos = autoBuckets.get(name)!.map((m) => render(autoPanel(m), true, name));
+    const panels = finish(autos, false);
+    if (panels.length > 0) out.push({ name, inDoc: false, collapsed: false, sort: false, panels });
+  };
+  // The Summary section leads the page until it is in the document.
+  if (autoBuckets.has(SUMMARY_SECTION) && !doc.sections.some((s) => s.name === SUMMARY_SECTION)) {
+    autoSection(SUMMARY_SECTION);
+    autoBuckets.delete(SUMMARY_SECTION);
+  }
   for (const s of doc.sections) {
     // Automatic panels keep their A–Z place among the section's materialized
     // ones: each goes right before the first `auto:` panel named after it.
@@ -146,18 +175,14 @@ export function deriveLayout(doc: WorkspaceDoc, metrics: readonly MetricInfo[], 
     for (const p of s.panels) {
       if (isAutoPanelId(p.id)) {
         const name = p.id.slice(AUTO_PREFIX.length);
-        while (next < autos.length && autos[next]!.name.localeCompare(name) < 0) panels.push(render(autoPanel(autos[next++]!), true, s.name));
+        while (next < autos.length && compareAutoNames(autos[next]!.name, name) < 0) panels.push(render(autoPanel(autos[next++]!), true, s.name));
       }
       if (!p.hidden) panels.push(render(p, false, s.name));
     }
     for (const m of autos.slice(next)) panels.push(render(autoPanel(m), true, s.name));
     out.push({ name: s.name, inDoc: true, collapsed: s.collapsed, sort: s.sort, panels: finish(panels, s.sort) });
   }
-  for (const name of [...autoBuckets.keys()].sort(compareAutoSections)) {
-    const autos = autoBuckets.get(name)!.map((m) => render(autoPanel(m), true, name));
-    const panels = finish(autos, false);
-    if (panels.length > 0) out.push({ name, inDoc: false, collapsed: false, sort: false, panels });
-  }
+  for (const name of [...autoBuckets.keys()].sort(compareAutoSections)) autoSection(name);
   return out;
 }
 
@@ -177,7 +202,7 @@ export function materializeOp(sections: readonly RenderedSection[], panelId: str
   const name = panelId.slice(AUTO_PREFIX.length);
   return ops.seq(ops.ensureSections(sections.slice(0, at + 1).map((s) => s.name)), (d) => {
     const s = d.sections.find((x) => x.name === section);
-    const before = s?.panels.find((p) => isAutoPanelId(p.id) && p.id.slice(AUTO_PREFIX.length).localeCompare(name) > 0);
+    const before = s?.panels.find((p) => isAutoPanelId(p.id) && compareAutoNames(p.id.slice(AUTO_PREFIX.length), name) > 0);
     const index = before ? s!.panels.indexOf(before) : null;
     return ops.addPanels(section, [panel], index)(d);
   });
@@ -205,11 +230,15 @@ export function addToSectionOp(sections: readonly RenderedSection[], name: strin
 /**
  * The run page's layout (as wandb's run page): a panel that shows no metric
  * the run logs renders nowhere, and a section left without panels neither.
- * Multi-run cards select no metric and stay. The order is untouched.
+ * Multi-run cards select no metric and stay, except the Summary cards: they
+ * show while the run has scalars / summary values or config (their
+ * pseudo-series). The order is untouched.
  */
 export function withoutEmptyPanels(sections: readonly RenderedSection[]): RenderedSection[] {
+  const keep = (p: RenderedPanel) =>
+    p.metrics.length > 0 || (isMultiRunCardType(p.panel.type) && !isSummaryCardType(p.panel.type));
   return sections
-    .map((s) => ({ ...s, panels: s.panels.filter((p) => p.metrics.length > 0 || isMultiRunCardType(p.panel.type)) }))
+    .map((s) => ({ ...s, panels: s.panels.filter(keep) }))
     .filter((s) => s.panels.length > 0);
 }
 
