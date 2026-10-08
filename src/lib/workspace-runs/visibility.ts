@@ -87,6 +87,29 @@ export function toggleGroupEye(s: RunState, node: RunGroupNode, visible: Readonl
   return setEyes(s, runKeys, on);
 }
 
+/** The header eye: every listed run visible, none, or some. */
+export function allEye(sorted: readonly Pick<Run, "id">[], visible: ReadonlySet<string>): Eye {
+  const on = sorted.filter((r) => visible.has(r.id)).length;
+  return on === 0 ? "off" : on === sorted.length ? "on" : "mixed";
+}
+
+/**
+ * The header eye clicked: every listed run hidden (all visible) or shown
+ * (otherwise). Grouped, as every top-level group's eye (its runs back to
+ * following it); not grouped, every run's.
+ */
+export function toggleAllEyes(
+  s: RunState,
+  sorted: readonly Run[],
+  groups: readonly RunGroupNode[] | null,
+  visible: ReadonlySet<string>,
+): RunState {
+  const on = allEye(sorted, visible) !== "on";
+  const runKeys = sorted.map((r) => runKey(r.id));
+  if (!groups) return setEyes(s, runKeys, on);
+  return setEyes(setEyes(s, runKeys, null), groups.map(groupKey), on);
+}
+
 /** A run's eye clicked. */
 export const toggleRunEye = (s: RunState, run: Pick<Run, "id">, visible: ReadonlySet<string>): RunState =>
   setEyes(s, [runKey(run.id)], !visible.has(run.id));

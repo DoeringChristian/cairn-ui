@@ -6,6 +6,8 @@ import { makeRun } from "../runs-table/test-run.ts";
 import { DEFAULT_RUN_STATE, type RunState } from "./state.ts";
 import {
   DEFAULT_VISIBLE,
+  allEye,
+  toggleAllEyes,
   cardRuns,
   groupEye,
   groupKey,
@@ -120,4 +122,28 @@ test("showOnly: grouped, the ticked runs' groups (no-value runs only where ticke
   assert.equal(groups.length, 4);
   const flat = showOnly({ ...base, groupBy: [] }, all, new Set(["g1-a"]));
   assert.deepEqual([...resolveVisibility(all, null, flat.eyes).runs], ["g1-a"]);
+});
+
+test("header eye: on / off / mixed over the listed runs; a click shows all, or hides all when all are shown", () => {
+  const { sorted, groups } = fixture(3);
+  const s0 = withEyes({});
+  const v0 = resolveVisibility(sorted, groups, s0.eyes).runs;
+  assert.equal(allEye(sorted, v0), "on");
+  // All shown: hide all (grouped: every top-level group's eye, run eyes cleared).
+  const s1 = toggleAllEyes(withEyes({ "r:g0-a": true }), sorted, groups, v0);
+  assert.equal(s1.eyes["r:g0-a"], undefined);
+  const v1 = resolveVisibility(sorted, groups, s1.eyes).runs;
+  assert.equal(v1.size, 0);
+  assert.equal(allEye(sorted, v1), "off");
+  // Some shown: show all.
+  const s2 = toggleGroupEye(s1, groups[0]!, v1);
+  const v2 = resolveVisibility(sorted, groups, s2.eyes).runs;
+  assert.equal(allEye(sorted, v2), "mixed");
+  const v3 = resolveVisibility(sorted, groups, toggleAllEyes(s2, sorted, groups, v2).eyes).runs;
+  assert.equal(v3.size, sorted.length);
+  // Not grouped: every run's eye.
+  const s4 = toggleAllEyes(withEyes({}), sorted, null, resolveVisibility(sorted, null, {}).runs);
+  assert.equal(Object.keys(s4.eyes).length, sorted.length);
+  assert.equal(resolveVisibility(sorted, null, s4.eyes).runs.size, 0);
+  assert.equal(allEye([], new Set()), "off");
 });

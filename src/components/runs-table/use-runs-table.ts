@@ -1,7 +1,8 @@
 /**
  * The runs table's rows, shared by the Runs page and the workspace sidebar:
  * status, "Latest only", filter and search (lib/runs-table/model.ts), the
- * sort (computed columns included), pinned runs first, the nested groups
+ * sort (computed columns included), pinned runs first (in the sidebar
+ * listed whatever the filters), the nested groups
  * and which of them are collapsed (page-local; reset when the group-by
  * changes).
  */
@@ -11,7 +12,7 @@ import type { Run } from "../../api/types";
 import type { GroupNode } from "../../lib/run-filter";
 import { cellValue, computeColumns, type ComputedColumn } from "../../lib/runs-table/columns";
 import { flattenGroups, groupRunsNested, type GroupBy, type RunGroupNode, type TableRow } from "../../lib/runs-table/group";
-import { collapsedGroups, filterRuns, latestRuns, pinnedFirst, type StatusFilter } from "../../lib/runs-table/model";
+import { collapsedGroups, filterRunsKeeping, latestRuns, pinnedFirst, type StatusFilter } from "../../lib/runs-table/model";
 import { compileRunSearch } from "../../lib/runs-table/search";
 import { sortBy, type SortKey } from "../../lib/runs-table/sort";
 
@@ -26,6 +27,8 @@ export interface RunsTableQuery {
   computed: ComputedColumn[];
   /** Pinned run ids, listed first. */
   pinned: readonly string[];
+  /** Pinned runs are listed whatever the filters (the workspace sidebar). */
+  pinnedAlwaysListed?: boolean;
   /** Deltas compare against it even when filtered out, so its computed values are needed. */
   baseline?: Run;
   /** Which groups start collapsed (default: none). */
@@ -33,14 +36,16 @@ export interface RunsTableQuery {
 }
 
 const NONE_COLLAPSED = () => false;
+const NO_RUNS: readonly string[] = [];
 
 export function useRunsTable(q: RunsTableQuery) {
   const { runs, status, search, filter, latestOnly, groupBy, sort, computed, pinned, baseline } = q;
   const runSearch = useMemo(() => compileRunSearch(search), [search]);
   const { latestIds, latestByName } = useMemo(() => latestRuns(runs), [runs]);
+  const kept = q.pinnedAlwaysListed ? pinned : NO_RUNS;
   const filtered = useMemo(
-    () => filterRuns(runs, { status, search: runSearch, filter, latestOnly }, latestIds),
-    [runs, status, runSearch, filter, latestOnly, latestIds],
+    () => filterRunsKeeping(runs, { status, search: runSearch, filter, latestOnly }, latestIds, kept),
+    [runs, status, runSearch, filter, latestOnly, latestIds, kept],
   );
   const computedValues = useMemo(
     () => computeColumns(baseline && !filtered.includes(baseline) ? [...filtered, baseline] : filtered, computed),

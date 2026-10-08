@@ -2,7 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EMPTY_FILTER } from "../run-filter.ts";
 import { groupRunsNested } from "./group.ts";
-import { collapsedGroups, filterRuns, isStatusFilter, latestRuns, pinnedFirst, runRowName } from "./model.ts";
+import {
+  collapsedGroups,
+  filterRuns,
+  filterRunsKeeping,
+  isStatusFilter,
+  latestRuns,
+  pinnedFirst,
+  runRowName,
+  sameGroup,
+} from "./model.ts";
+import { sortBy } from "./sort.ts";
+import { cellValue } from "./columns.ts";
 import { compileRunSearch } from "./search.ts";
 import { makeRun as run } from "./test-run.ts";
 
@@ -62,4 +73,33 @@ test("runRowName: not grouped, a grouped run reads 'group · name'; grouped or w
   assert.equal(runRowName(train, true), "train");
   assert.equal(runRowName(baseline, false), "baseline");
   assert.equal(runRowName(run("abc", { display_name: null }), false), "abc");
+});
+
+test("sameGroup: every run in one non-null group drops the `group ·` prefix (a group page)", () => {
+  const a = run("a", { group: "exp-44", display_name: "train", version: 2 });
+  const b = run("b", { group: "exp-44", display_name: "eval" });
+  const c = run("c", { group: "exp-43", display_name: "eval" });
+  assert.equal(sameGroup([a, b]), true);
+  assert.equal(sameGroup([a, c]), false);
+  assert.equal(sameGroup([run("x"), run("y")]), false);
+  assert.equal(sameGroup([]), false);
+  assert.equal(runRowName(a, sameGroup([a, b])), "train");
+  assert.equal(runRowName(a, sameGroup([a, c])), "exp-44 · train");
+});
+
+test("sidebar order: the sort, pinned runs first and listed whatever the filters", () => {
+  const rs = [
+    run("a", { display_name: "beta", created_at: "2026-01-01" }),
+    run("b", { display_name: "alpha", created_at: "2026-01-03", status: "failed" }),
+    run("c", { display_name: "gamma", created_at: "2026-01-02" }),
+  ];
+  const f = { status: "completed" as const, search: NO_SEARCH, filter: EMPTY_FILTER, latestOnly: false };
+  const all = new Set(rs.map((r) => r.id));
+  assert.deepEqual(filterRunsKeeping(rs, f, all, []).map((r) => r.id), ["a", "c"]);
+  const listed = filterRunsKeeping(rs, f, all, ["b"]);
+  assert.deepEqual(listed.map((r) => r.id), ["a", "b", "c"]);
+  const byName = sortBy(listed, [{ column: "name", direction: "asc" }], (r, col) => cellValue(r, col), (r) => r.id);
+  assert.deepEqual(byName.map((r) => r.id), ["b", "a", "c"]);
+  const byCreated = sortBy(listed, [{ column: "created_at", direction: "desc" }], (r, col) => cellValue(r, col), (r) => r.id);
+  assert.deepEqual(pinnedFirst(byCreated, ["c"]).map((r) => r.id), ["c", "b", "a"]);
 });

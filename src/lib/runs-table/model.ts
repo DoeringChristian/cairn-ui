@@ -77,6 +77,22 @@ export function filterRuns(runs: readonly Run[], f: RowFilters, latestIds: Reado
   });
 }
 
+/**
+ * `filterRuns`, but the `kept` runs (the workspace sidebar's pinned runs)
+ * are listed whatever the filters; in `runs` order.
+ */
+export function filterRunsKeeping(
+  runs: readonly Run[],
+  f: RowFilters,
+  latestIds: ReadonlySet<string>,
+  kept: readonly string[],
+): Run[] {
+  if (kept.length === 0) return filterRuns(runs, f, latestIds);
+  const keep = new Set(kept);
+  const pass = new Set(filterRuns(runs, f, latestIds).map((r) => r.id));
+  return runs.filter((r) => pass.has(r.id) || keep.has(r.id));
+}
+
 /** Pinned runs first, both parts in their sorted order. */
 export function pinnedFirst(sorted: Run[], pinned: readonly string[]): Run[] {
   if (pinned.length === 0) return sorted;
@@ -103,10 +119,17 @@ export function collapsedGroups(
   return out;
 }
 
+/** Every run in the same (non-null) group: the group needs no saying on each row (a group page). */
+export function sameGroup(runs: readonly Pick<Run, "group">[]): boolean {
+  const g = runs[0]?.group;
+  return g != null && runs.every((r) => r.group === g);
+}
+
 /**
  * The Name cell's name: not grouped, a grouped run reads `exp-44 · train`
- * (its version follows); grouped (the group header says it) or without a
- * group, just the name.
+ * (its version follows); grouped (the group header says it), without a
+ * group, or when every listed run is in one group (pass `grouped ||
+ * sameGroup(listed)`), just the name.
  */
 export function runRowName(run: Pick<Run, "id" | "display_name" | "group">, grouped: boolean): string {
   const name = run.display_name ?? run.id;
