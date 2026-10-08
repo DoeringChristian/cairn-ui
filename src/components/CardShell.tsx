@@ -21,6 +21,8 @@ interface Props {
   updateSettings: (patch: Record<string, unknown>, opts?: SetOptions) => void;
   title: string;
   subtitle?: ReactNode;
+  /** Part of the title after its text, kept whole (see CardHeader). */
+  titleAddon?: ReactNode;
   /**
    * Show the subtitle only while the card is collapsed: a step readout that
    * the card's own step slider shows anyway while it is open.
@@ -58,6 +60,7 @@ export default function CardShell({
   updateSettings,
   title,
   subtitle,
+  titleAddon,
   subtitleCollapsedOnly,
   defaultHeight,
   cardKind,
@@ -140,6 +143,7 @@ export default function CardShell({
           title={shownTitle}
           onTitleChange={(t) => updateSettings({ title: t || undefined })}
           subtitle={subtitleCollapsedOnly && !collapsed ? undefined : subtitle}
+          titleAddon={titleAddon}
           collapsed={collapsed}
           onToggleCollapse={() => updateSettings({ collapsed: !settings.collapsed })}
           actions={{

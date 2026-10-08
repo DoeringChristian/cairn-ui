@@ -57,8 +57,10 @@ function pathOf(xs: readonly number[], ys: ReadonlyArray<number | null>): string
   return d;
 }
 
-function tickText(v: Scalar): string {
-  return typeof v === "number" ? formatValue(Math.abs(v) < 1e-3 && v !== 0 ? Number(v.toExponential(2)) : v) : formatValue(v);
+/** A value as an axis or the tooltip shows it: small numbers in exponent form (`1e-5`, `3.7e-4`). */
+function valueText(v: Scalar): string {
+  if (typeof v === "number" && v !== 0 && Math.abs(v) < 1e-3) return v.toExponential(2).replace(/\.?0+e/, "e");
+  return formatValue(v);
 }
 
 export default function ParallelChart({ axes, lines, brushes, onBrush, hot, onHover, className }: Props) {
@@ -82,7 +84,8 @@ export default function ParallelChart({ axes, lines, brushes, onBrush, hot, onHo
     return axes.map((_, i) => (n === 1 ? PAD.left + span / 2 : PAD.left + (i * span) / (n - 1)));
   }, [axes, w]);
   const yOf = (p: number) => PAD.top + (1 - p) * plotH;
-  const pOf = (y: number) => Math.min(1, Math.max(0, 1 - (y - PAD.top) / plotH));
+  // A drag within a few pixels of an axis end snaps to it, so the extreme lines can be brushed.
+  const pOf = (y: number) => (y <= PAD.top + 4 ? 1 : y >= PAD.top + plotH - 4 ? 0 : 1 - (y - PAD.top) / plotH);
 
   // Brushing: the axis being dragged and where the drag started.
   const drag = useRef<{ axis: number; from: number; y0: number } | null>(null);
@@ -187,7 +190,7 @@ export default function ParallelChart({ axes, lines, brushes, onBrush, hot, onHo
                   <g key={`${t.at}`}>
                     <line x1={x - 4} x2={x} y1={yOf(t.at)} y2={yOf(t.at)} stroke="currentColor" strokeOpacity={0.6} />
                     <text x={x - 6} y={yOf(t.at)} dy="0.32em" textAnchor="end" fontSize={10} fill="currentColor" className="mono">
-                      {tickText(t.value)}
+                      {valueText(t.value)}
                     </text>
                   </g>
                 ))}
@@ -233,7 +236,7 @@ export default function ParallelChart({ axes, lines, brushes, onBrush, hot, onHo
           {axes.map((a, i) => (
             <div key={`${a.label}:${i}`} className="flex justify-between gap-3">
               <span className="mono text-fg-muted">{a.label}</span>
-              <span className="mono tabular-nums">{formatValue(tip.line.values[i])}</span>
+              <span className="mono tabular-nums">{valueText(tip.line.values[i] ?? null)}</span>
             </div>
           ))}
         </div>

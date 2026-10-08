@@ -113,7 +113,10 @@ export function axisScale(values: readonly Scalar[], log = false): AxisScale {
   if (present.every((v) => typeof v === "number")) {
     const xs = (present as number[]).filter((v) => Number.isFinite(v) && (!log || v > 0)).map((v) => (log ? Math.log10(v) : v));
     if (xs.length === 0) return { kind: "numeric", lo: 0, hi: 1, log };
-    return { kind: "numeric", lo: Math.min(...xs), hi: Math.max(...xs), log };
+    const lo = Math.min(...xs);
+    const hi = Math.max(...xs);
+    // Means that differ only by rounding (3.7e-4 vs 3.7000000000000005e-4) are one value.
+    return { kind: "numeric", lo, hi: hi - lo <= 1e-9 * Math.max(Math.abs(lo), Math.abs(hi)) ? lo : hi, log };
   }
   const nums = [...new Set(present.filter((v): v is number => typeof v === "number"))].sort((a, b) => a - b);
   const texts = [...new Set(present.filter((v) => typeof v !== "number").map(catKey))].sort();

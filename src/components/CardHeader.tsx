@@ -11,6 +11,8 @@ interface Props {
   title: string;
   /** Subtle text shown after the title in the left section. */
   subtitle?: ReactNode;
+  /** Part of the title after its text, kept whole (a picker: `Parameter importance for [eval/mse ▾]`). */
+  titleAddon?: ReactNode;
   /** Card-specific controls, left of the bar (log scale, badges, …). */
   cardActions?: ReactNode;
   /** If provided, the title becomes editable. */
@@ -36,6 +38,7 @@ interface Props {
 export default function CardHeader({
   title,
   subtitle,
+  titleAddon,
   cardActions,
   onTitleChange: onTitleChangeProp,
   collapsed,
@@ -180,6 +183,7 @@ export default function CardHeader({
             )}
           </>
         )}
+        {titleAddon && <span className="shrink-0">{titleAddon}</span>}
         {subtitle && (
           <span className="min-w-0 shrink-[10000] truncate text-xs text-fg-subtle">{subtitle}</span>
         )}

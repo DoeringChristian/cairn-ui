@@ -53,8 +53,9 @@ test("numeric axes: linear or log10, positions 0 (min) .. 1 (max)", () => {
   const ticks = axisTicks(log);
   assert.deepEqual(ticks.map((t) => t.at), [1, 0]);
   assert.ok(Math.abs((ticks[0]!.value as number) - 1e-3) < 1e-15 && Math.abs((ticks[1]!.value as number) - 1e-5) < 1e-17);
-  // A constant axis sits in the middle.
+  // A constant axis sits in the middle, also when group means differ by rounding only.
   assert.equal(position(axisScale([4, 4]), 4), 0.5);
+  assert.equal(position(axisScale([3.7e-4, 3.7000000000000005e-4]), 3.7e-4), 0.5);
 });
 
 test("categorical axes: ordered categories (numbers ascending, then text)", () => {

@@ -54,6 +54,8 @@ function MetricPicker({ value, options, onChange, disabled }: { value: string | 
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const fields = useMemo<FieldOption[]>(() => options.map((m) => ({ key: m, kind: "metric", label: m })), [options]);
   if (value == null) return null;
+  // Read-only (a report, a preview): the metric as text.
+  if (disabled) return <span className="mono text-sm font-semibold">{value}</span>;
   return (
     <>
       <button
@@ -201,7 +203,7 @@ export default function ImportanceCard({ runIds: allRunIds, settingsKey, onRemov
       settings={s}
       updateSettings={ctl.set}
       title="Parameter importance for"
-      subtitle={<MetricPicker value={metric} options={metrics} disabled={ctl.locked} onChange={(m) => ctl.set({ metric: m })} />}
+      titleAddon={<MetricPicker value={metric} options={metrics} disabled={ctl.locked} onChange={(m) => ctl.set({ metric: m })} />}
       defaultHeight={300}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
