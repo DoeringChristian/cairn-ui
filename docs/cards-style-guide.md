@@ -54,7 +54,8 @@ Use the established libraries; don't write a renderer.
 | What | Use | Where |
 |---|---|---|
 | Scalar lines (many runs, many points) | uPlot | `src/charts/ScalarChart.tsx` |
-| Everything else chart-like (bar, scatter, histogram, heatmap, parallel coordinates, user figures) | Plotly | `src/charts/PlotlyChart.tsx` + the per-kind wrappers in `src/charts/` |
+| Everything else chart-like (bar, scatter, histogram, heatmap, user figures) | Plotly | `src/charts/PlotlyChart.tsx` + the per-kind wrappers in `src/charts/` |
+| Parallel coordinates | SVG (Plotly's parcoords has no per-line hover, which the workspace hover highlight needs) | `src/charts/ParallelChart.tsx` |
 | Images | `<img>` in react-zoom-pan-pinch | `src/components/image/ImagePane.tsx` |
 | 3D | three.js | `src/components/viewer3d/` |
 | Anything the browser can't decode | thumbnail + download | `src/components/UnsupportedArtifact.tsx` |
