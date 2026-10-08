@@ -52,7 +52,6 @@ export default function SweepDetailPage() {
 
   const settingsKey = (card: string) => ({ runId: `sweep:${sweep.id}`, metricName: card });
   const metricSrc = sweep.metric ? metricExpr(sweep.metric, "last") : null;
-  const metricColumn = metricSrc ? [{ src: metricSrc }] : [];
   const firstParam = searched[0] ?? paramKeys[0];
 
   return (
@@ -117,9 +116,10 @@ export default function SweepDetailPage() {
               defaults={{
                 colSpan: 4,
                 title: "Params → metric",
-                columns: [
-                  ...searched.map((key) => ({ src: paramExpr(key), log: isLogParam(sweep.space, key) })),
-                  ...metricColumn,
+                metric: sweep.metric ?? null,
+                axes: [
+                  ...searched.map((key) => ({ kind: "config" as const, key, log: isLogParam(sweep.space, key) })),
+                  ...(sweep.metric ? [{ kind: "metric" as const, key: sweep.metric }] : []),
                 ],
               }}
             />

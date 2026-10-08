@@ -78,7 +78,7 @@ const TYPE_HINTS: Partial<Record<CardType, string>> = {
   tile: "One number: the last value, reduced across runs.",
   bar: "One bar per run: the last value.",
   scatter: "One point per run: x and y from the last values.",
-  parallel: "One axis per series, one line per run.",
+  parallel: "One axis per varying config key, then the metric; one line per run.",
   importance: "Which config values drive this series.",
   "run-compare": "Config, summary and metadata side by side.",
   "code-diff": "The source of two runs, diffed.",
@@ -109,8 +109,6 @@ function multiRunExprs(type: CardType, settings: Record<string, unknown>): strin
       return src(settings.metric);
     case "scatter":
       return [...src(settings.x), ...src(settings.y)];
-    case "parallel":
-      return Array.isArray(settings.columns) ? settings.columns.flatMap(src) : [];
     default:
       return [];
   }
@@ -119,7 +117,7 @@ function multiRunExprs(type: CardType, settings: Record<string, unknown>): strin
 /** The metric series a multi-run card's settings read (unique, in order). */
 export function multiRunSeries(type: CardType, settings: Record<string, unknown>): string[] {
   // A metric by name (its final value under the project's rule).
-  if (type === "importance") return typeof settings.metric === "string" ? [settings.metric] : [];
+  if (type === "importance" || type === "parallel") return typeof settings.metric === "string" ? [settings.metric] : [];
   const out: string[] = [];
   for (const e of multiRunExprs(type, settings)) {
     try {
@@ -316,7 +314,7 @@ const SCALAR_MULTI_RUN: Array<[CardType, number, number]> = [
   ["tile", 1, 1],
   ["bar", 1, 1],
   ["scatter", 1, 2],
-  ["parallel", 1, Infinity],
+  ["parallel", 1, 1],
   ["importance", 1, 1],
 ];
 /** Cards without series: they compare whole runs. */
@@ -504,11 +502,10 @@ export function multiRunSeed(type: CardType, names: readonly string[]): Record<s
     case "bar":
       return { metric: lastOf(names[0]!) };
     case "importance":
+    case "parallel":
       return { metric: names[0]! };
     case "scatter":
       return names.length >= 2 ? { x: lastOf(names[0]!), y: lastOf(names[1]!) } : { y: lastOf(names[0]!) };
-    case "parallel":
-      return { columns: names.map(lastOf) };
     default:
       return {};
   }

@@ -32,7 +32,7 @@ test("a scalar offers the line chart, value, bar and the run-level cards; too fe
 
 test("several scalars: one-series cards are marked; scatter takes two", () => {
   const two = compatibleTypes({ mode: "series", names: ["loss", "val.acc"] }, METRICS, 2);
-  assert.deepEqual(types(two), ["scalar", "tile(shows one series)", "bar(shows one series)", "scatter", "parallel", "importance(shows one series)"]);
+  assert.deepEqual(types(two), ["scalar", "tile(shows one series)", "bar(shows one series)", "scatter", "parallel(shows one series)", "importance(shows one series)"]);
 });
 
 test("media and single-series kinds offer their own card; mixed kinds offer nothing", () => {
@@ -71,7 +71,7 @@ test("seeding: per-metric cards take the selector; multi-run cards read the seri
     settings: { reduce: "mean", metric: { src: "last(`train/loss`)" } },
   });
   assert.deepEqual(seedPanel("scatter", { mode: "series", names: ["a", "b"] }).settings, { x: { src: "last(a)" }, y: { src: "last(b)" } });
-  assert.deepEqual(seedPanel("parallel", { mode: "series", names: ["a", "val.b"] }).settings, { columns: [{ src: "last(a)" }, { src: "last(val.b)" }] });
+  assert.deepEqual(seedPanel("parallel", { mode: "series", names: ["val.b"] }).settings, { metric: "val.b" });
   assert.deepEqual(seedPanel("run-compare", { mode: "runs" }), { selector: { names: [] }, settings: {} });
   // Importance reads a metric by name (its final value under the project's rule).
   assert.deepEqual(seedPanel("importance", { mode: "series", names: ["eval/mse"] }).settings, { metric: "eval/mse" });
@@ -302,7 +302,7 @@ test("groups offer the types every group's card can take", () => {
   assert.deepEqual(types(one), ["scalar", "tile", "bar", "scatter", "parallel", "importance"]);
   // Two series in a group: the one-series cards are not.
   const two = compatibleTypes({ mode: "groups", regex: ".*\\.(loss)" }, GM, 3);
-  assert.deepEqual(types(two), ["scalar", "tile(shows one series)", "bar(shows one series)", "scatter", "parallel", "importance(shows one series)"]);
+  assert.deepEqual(types(two), ["scalar", "tile(shows one series)", "bar(shows one series)", "scatter", "parallel(shows one series)", "importance(shows one series)"]);
   // A group mixing kinds has no type.
   const mixed = compatibleTypes({ mode: "groups", regex: "(lr|samples)" }, GM, 1);
   assert.deepEqual(types(mixed), []);
