@@ -26,7 +26,20 @@ import {
   saveRunsFilter,
   type RunsFilterState,
 } from "../lib/run-filter.ts";
-import RunFilterBar from "../components/RunFilterBar";
+import { RunFilterControl, RunGroupControl, RunSearchInput } from "../components/RunFilterBar";
+import {
+  CHECK_W,
+  GROUP_CELL_CLASS,
+  GroupHeader,
+  RUN_CELL_CLASS,
+  RUN_ROW_CLASS,
+  RUNS_TABLE_CLASS,
+  RUNS_THEAD_CLASS,
+  RUNS_TH_CLASS,
+  RunNameCell,
+  RunVersion,
+} from "../components/runs-table/RunsTableParts";
+import { compileRunSearch, matchesRunSearch } from "../lib/runs-table/search.ts";
 import RunControls, { RunSwatch } from "../components/RunViewControls";
 import {
   availableColumns,
@@ -49,7 +62,7 @@ import {
   setWidth,
 } from "../lib/runs-table/columns.ts";
 import { removeSortKey, sortBy, toggleSort, type SortKey } from "../lib/runs-table/sort.ts";
-import { flattenGroups, groupByLabel, groupRunsNested, type RunGroupNode, type TableRow } from "../lib/runs-table/group.ts";
+import { flattenGroups, groupRunsNested, type RunGroupNode, type TableRow } from "../lib/runs-table/group.ts";
 import { betterFor, deltaOf, formatDelta, relativeDelta, toneOf, type Tone } from "../lib/runs-table/delta.ts";
 import { RunViewContext, useRunColors, type RunView } from "../lib/run-view";
 import { useProjectRunView } from "../lib/run-view-store";
@@ -69,9 +82,6 @@ const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "stopped", label: "stopped" },
   { value: "archived", label: "archived" },
 ];
-
-/** Width of the checkbox column (px); Name and pinned widths come from `columnWidth`. */
-const CHECK_W = 40;
 
 const TONE_CLASS: Record<Tone, string> = {
   better: "text-status-completed",
@@ -269,15 +279,7 @@ export default function RunsTablePage() {
 
   // Run label cache is seeded centrally in `useInfiniteRuns` (api/hooks.ts).
 
-  const { regex: searchRegex, error: searchError } = useMemo(() => {
-    const raw = search.trim();
-    if (!raw) return { regex: null, error: null };
-    try {
-      return { regex: new RegExp(raw, "i"), error: null };
-    } catch {
-      return { regex: null, error: "invalid regex" };
-    }
-  }, [search]);
+  const runSearch = useMemo(() => compileRunSearch(search), [search]);
 
   const filtered = useMemo(() => {
     return runs.filter((r) => {
@@ -291,14 +293,9 @@ export default function RunsTablePage() {
         return false;
       }
       if (!matchesFilter(r, filterState.filter)) return false;
-      if (searchRegex) {
-        const tags = (safeJsonParse<string[]>(r.tags) ?? []).join(" ");
-        const hay = `${r.display_name ?? ""} ${r.id} ${r.status} ${tags}`;
-        if (!searchRegex.test(hay)) return false;
-      }
-      return true;
+      return matchesRunSearch(r, runSearch);
     });
-  }, [runs, statusFilter, searchRegex, showLatestOnly, latestIds, filterState.filter]);
+  }, [runs, statusFilter, runSearch, showLatestOnly, latestIds, filterState.filter]);
 
   const { sort, columns, computed, groupBy } = filterState;
   const setColumns = (next: ColumnsState) => setFilterState({ ...filterState, columns: next });
@@ -562,18 +559,13 @@ export default function RunsTablePage() {
         case "name": {
           const isBaseline = runView.baseline === r.id;
           return (
-            <div className="relative flex min-w-0 items-center gap-1.5" style={{ paddingLeft: depth * 12 }}>
-              <RunSwatch color={colors.get(r.id)} />
-              <Link
-                to={`/p/${projectId}/r/${r.id}`}
-                className="dim mono min-w-0 truncate text-accent hover:underline"
-                title={r.display_name ?? r.id}
-              >
-                {r.display_name ?? r.id}
-              </Link>
-              {r.version != null && (
-                <span className="mono num shrink-0 text-xs text-fg-muted">v{r.version}</span>
-              )}
+            <RunNameCell
+              name={r.display_name ?? r.id}
+              to={`/p/${projectId}/r/${r.id}`}
+              color={colors.get(r.id)}
+              depth={depth}
+              version={r.version != null ? <RunVersion version={r.version} /> : null}
+            >
               {isBaseline && (
                 <span className="shrink-0 rounded bg-accent/15 px-1 text-[10px] font-medium text-accent">baseline</span>
               )}
@@ -585,7 +577,7 @@ export default function RunsTablePage() {
                 <CopyId id={r.id} className="text-xs" />
                 <RunControls runId={r.id} view={runView} onChange={setRunView} show="all" />
               </span>
-            </div>
+            </RunNameCell>
           );
         }
         case "status":
@@ -647,14 +639,14 @@ export default function RunsTablePage() {
   const renderDesktopRun = (r: Run, key: string, depth: number) => {
     const isSelected = selected.has(r.id);
     const rowClass = [
-      "group/row border-t border-border-subtle hover:bg-bg-elevated",
+      RUN_ROW_CLASS,
       isSelected ? "is-selected bg-accent/5" : "",
       runView.hidden.includes(r.id) ? "is-hidden-run" : "",
     ].join(" ");
     return (
       <tr key={key} className={rowClass}>
         <td
-          className="frozen px-3 py-2"
+          className={`frozen ${RUN_CELL_CLASS}`}
           style={{
             left: 0,
             width: CHECK_W,
@@ -720,19 +712,17 @@ export default function RunsTablePage() {
         </label>
         <label className="flex items-center gap-1 text-xs text-fg-muted">
           Search
-          <input
-            className={`input py-1 text-xs${searchError ? " border-status-failed" : ""}`}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="regex"
-            title={searchError ?? "Search by name, id, status, or tags (regex)"}
-          />
+          <RunSearchInput value={search} error={runSearch.error} onChange={setSearch} />
         </label>
-        <RunFilterBar
+        <RunFilterControl
           fields={filterFields}
+          filter={filterState.filter}
+          onChange={(filter) => setFilterState({ ...filterState, filter })}
+        />
+        <RunGroupControl
           paramKeys={paramKeys}
-          state={filterState}
-          onChange={setFilterState}
+          levels={filterState.groupBy}
+          onChange={(groupBy) => setFilterState({ ...filterState, groupBy })}
         />
         <label className="flex items-center gap-1.5 text-xs text-fg-muted cursor-pointer select-none">
           <input type="checkbox" checked={showLatestOnly} onChange={(e) => setShowLatestOnly(e.target.checked)} className="accent-accent" />
@@ -886,7 +876,13 @@ export default function RunsTablePage() {
             {rows.map((row) =>
               row.kind === "group" ? (
                 <li key={row.node.id} style={{ marginLeft: row.node.depth * 12 }}>
-                  <GroupHeader group={row.node} collapsed={collapsed.has(row.node.id)} onToggle={() => toggleGroup(row.node.id)} />
+                  <GroupHeader
+                    by={row.node.by}
+                    label={row.node.label}
+                    count={row.node.runs.length}
+                    collapsed={collapsed.has(row.node.id)}
+                    onToggle={() => toggleGroup(row.node.id)}
+                  />
                 </li>
               ) : (
                 renderMobileRun(row.run, row.key, row.depth)
@@ -897,10 +893,10 @@ export default function RunsTablePage() {
               unbounded in number and must stay reachable. The checkbox,
               Name and pinned columns stay frozen on the left. */}
           <div className="runs-table hidden overflow-x-auto overflow-y-hidden rounded-lg border border-border md:block">
-            <table className="w-full border-separate border-spacing-0 text-sm">
-              <thead className="bg-bg-elevated text-left text-xs uppercase tracking-wide text-fg-muted">
+            <table className={RUNS_TABLE_CLASS}>
+              <thead className={RUNS_THEAD_CLASS}>
                 <tr>
-                  <th className="frozen px-3 py-2" style={{ left: 0, width: CHECK_W, minWidth: CHECK_W, maxWidth: CHECK_W }}>
+                  <th className={`frozen ${RUNS_TH_CLASS}`} style={{ left: 0, width: CHECK_W, minWidth: CHECK_W, maxWidth: CHECK_W }}>
                     <input
                       type="checkbox"
                       aria-label="select all visible rows"
@@ -960,11 +956,17 @@ export default function RunsTablePage() {
                     <tr key={row.node.id} className="is-group">
                       <td
                         colSpan={1 + layout.frozen.length}
-                        className="frozen frozen-edge border-t border-border-subtle px-3 py-1.5"
+                        className={`frozen frozen-edge ${GROUP_CELL_CLASS}`}
                         style={{ left: 0, width: frozenTotal, minWidth: frozenTotal, maxWidth: frozenTotal }}
                       >
                         <div style={{ paddingLeft: row.node.depth * 12 }}>
-                          <GroupHeader group={row.node} collapsed={collapsed.has(row.node.id)} onToggle={() => toggleGroup(row.node.id)} />
+                          <GroupHeader
+                    by={row.node.by}
+                    label={row.node.label}
+                    count={row.node.runs.length}
+                    collapsed={collapsed.has(row.node.id)}
+                    onToggle={() => toggleGroup(row.node.id)}
+                  />
                         </div>
                       </td>
                       {layout.scroll.length > 0 && (
@@ -1128,32 +1130,6 @@ function RunTagCell({
         </button>
       )}
     </>
-  );
-}
-
-function GroupHeader({
-  group,
-  collapsed,
-  onToggle,
-}: {
-  group: RunGroupNode;
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={!collapsed}
-      className="flex w-full min-w-0 items-center gap-2 text-left text-xs text-fg-muted hover:text-fg touch:min-h-[40px]"
-    >
-      <i className={`fa-solid ${collapsed ? "fa-chevron-right" : "fa-chevron-down"} w-3 text-[10px]`} aria-hidden="true" />
-      <span className="mono shrink truncate text-fg-subtle">{groupByLabel(group.by)}:</span>
-      <span className={`mono truncate font-semibold ${group.label == null ? "italic text-fg-subtle" : "text-fg"}`}>
-        {group.label ?? "(none)"}
-      </span>
-      <span className="shrink-0 rounded bg-bg-hover px-1.5 py-0.5 text-[10px]">{group.runs.length}</span>
-    </button>
   );
 }
 
