@@ -4,27 +4,22 @@
  * tiles, each a schematic of its layout (lib/workspace/view-preview.ts)
  * resolved for the runs being viewed, ending in a dashed "+ New view" tile.
  *
- * - Run page (a view is open): the button names the current view; a tile
- *   switches to its view (navigation, no undo entry); "+ New view" creates a
- *   copy of the current view or an empty one and switches to it.
- * - Comparison: the button reads "Views"; a tile copies its view's layout
- *   into the comparison (an undoable edit; the runs stay); "+ New view"
- *   saves the comparison's layout as a new view.
- *
- * Tiles rename (✎, inline), duplicate (⧉) and delete (×, not the last
- * view) the same way in both.
+ * The button names the current view; a tile switches to its view
+ * (navigation, no undo entry); "+ New view" creates a copy of the current
+ * view or an empty one and switches to it. Tiles rename (✎, inline),
+ * duplicate (⧉) and delete (×, not the last view).
  */
 
 import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
 import Popover from "../ui/Popover";
 import type { WorkspaceViewDoc } from "../../api/types";
 import { useEscapeLayer } from "../../lib/use-modal-behavior";
-import { layoutOf, ops, type WorkspaceDoc } from "../../lib/workspace/doc";
+import type { WorkspaceDoc } from "../../lib/workspace/doc";
 import type { MetricInfo } from "../../lib/workspace/layout";
 import { useCurrentWorkspace } from "../../lib/workspace/use-workspace";
 import { useViews, type UseViews } from "../../lib/workspace/use-views";
 import { PREVIEW_COLUMNS, viewPreview, type ViewPreview } from "../../lib/workspace/view-preview";
-import { canDeleteView, duplicateName, EMPTY_VIEW_LAYOUT, viewSummary } from "../../lib/workspace/views";
+import { canDeleteView, duplicateName, EMPTY_VIEW, viewSummary } from "../../lib/workspace/views";
 
 const TOOL_BTN =
   "inline-flex items-center gap-1.5 rounded border border-border px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-accent hover:text-fg touch:min-h-10";
@@ -32,14 +27,13 @@ const TILE_ICON_BTN =
   "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-subtle touch:h-10 touch:w-10";
 
 export default function ViewSwitcher({ metrics }: { metrics: readonly MetricInfo[] }) {
-  const { ref, doc, update } = useCurrentWorkspace();
+  const { ref, doc } = useCurrentWorkspace();
   const views = useViews(ref?.projectId ?? null);
   const anchor = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   if (!ref) return null;
-  const runPage = ref.kind === "view";
-  const current = runPage ? ref.id : null;
+  const current = ref.id;
   const currentName = views.data?.views.find((v) => v.id === current)?.name;
 
   return (
@@ -53,7 +47,7 @@ export default function ViewSwitcher({ metrics }: { metrics: readonly MetricInfo
         data-testid="view-switcher"
       >
         <i className="fa-solid fa-table-cells-large" aria-hidden="true" />
-        <span className="truncate">{runPage ? (currentName ?? "") : "Views"}</span>
+        <span className="truncate">{currentName ?? ""}</span>
         <i className="fa-solid fa-caret-down text-[10px]" aria-hidden="true" />
       </button>
       <Popover
@@ -75,19 +69,13 @@ export default function ViewSwitcher({ metrics }: { metrics: readonly MetricInfo
             doc={doc}
             metrics={metrics}
             onPick={(v) => {
-              if (runPage) {
-                if (v.id !== current) void views.switchTo(v.id);
-              } else {
-                update(ops.replaceLayout(layoutOf(views.docOf(v.id))), { label: `Apply view “${v.name}”` });
-              }
+              if (v.id !== current) void views.switchTo(v.id);
               close();
             }}
             onCreated={(id) => {
-              if (!runPage) return;
               void views.switchTo(id);
               close();
             }}
-            runPage={runPage}
           />
         )}
       </Popover>
@@ -103,17 +91,15 @@ function ViewTiles({
   metrics,
   onPick,
   onCreated,
-  runPage,
 }: {
   views: UseViews;
   list: WorkspaceViewDoc[];
   current: string | null;
-  /** The open workspace's document (the current view, or the comparison). */
+  /** The current view's document. */
   doc: WorkspaceDoc;
   metrics: readonly MetricInfo[];
   onPick: (v: WorkspaceViewDoc) => void;
   onCreated: (id: string) => void;
-  runPage: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const run = useCallback(async (fn: () => Promise<unknown>) => {
@@ -142,16 +128,15 @@ function ViewTiles({
             onPick={() => onPick(v)}
             onRename={(name) => void run(() => views.rename(v.id, name))}
             onDuplicate={() =>
-              void run(() => views.create(duplicateName(v.name), layoutOf(v.id === current ? doc : views.docOf(v.id))))
+              void run(() => views.create(duplicateName(v.name), v.id === current ? doc : views.docOf(v.id)))
             }
             onDelete={() => void run(() => views.remove(v.id))}
           />
         ))}
         <NewViewTile
-          runPage={runPage}
           onCreate={(name, empty) =>
             void run(async () => {
-              const id = await views.create(name, empty ? EMPTY_VIEW_LAYOUT : layoutOf(doc));
+              const id = await views.create(name, empty ? EMPTY_VIEW : doc);
               onCreated(id);
             })
           }
@@ -335,10 +320,10 @@ function RenameField({ name, onDone }: { name: string; onDone: (name: string | n
 
 /**
  * The dashed "+ New view" tile (the workspace's "Add card" ghost style). It
- * turns into a name field; on the run page with "Copy of current view" /
+ * turns into a name field with "Copy of current view" /
  * "Empty (automatic panels only)" below. Enter creates, Escape cancels.
  */
-function NewViewTile({ runPage, onCreate }: { runPage: boolean; onCreate: (name: string, empty: boolean) => void }) {
+function NewViewTile({ onCreate }: { onCreate: (name: string, empty: boolean) => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const [empty, setEmpty] = useState(false);
@@ -352,7 +337,7 @@ function NewViewTile({ runPage, onCreate }: { runPage: boolean; onCreate: (name:
     e.preventDefault();
     const n = name.trim();
     if (!n) return;
-    onCreate(n, runPage && empty);
+    onCreate(n, empty);
     cancel();
   };
 
@@ -384,18 +369,14 @@ function NewViewTile({ runPage, onCreate }: { runPage: boolean; onCreate: (name:
         className="input w-full py-1 text-sm"
         data-testid="view-new-name"
       />
-      {runPage && (
-        <>
-          <label className="inline-flex items-center gap-1.5">
-            <input type="radio" name="new-view-from" checked={!empty} onChange={() => setEmpty(false)} data-testid="view-new-copy" />
-            Copy of current view
-          </label>
-          <label className="inline-flex items-center gap-1.5">
-            <input type="radio" name="new-view-from" checked={empty} onChange={() => setEmpty(true)} data-testid="view-new-empty" />
-            Empty (automatic panels only)
-          </label>
-        </>
-      )}
+      <label className="inline-flex items-center gap-1.5">
+        <input type="radio" name="new-view-from" checked={!empty} onChange={() => setEmpty(false)} data-testid="view-new-copy" />
+        Copy of current view
+      </label>
+      <label className="inline-flex items-center gap-1.5">
+        <input type="radio" name="new-view-from" checked={empty} onChange={() => setEmpty(true)} data-testid="view-new-empty" />
+        Empty (automatic panels only)
+      </label>
     </form>
   );
 }

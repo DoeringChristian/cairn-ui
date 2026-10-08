@@ -1,6 +1,6 @@
 /**
  * The card editor: one modal for adding a card to a workspace section and
- * for editing one (the gear), on the run page and comparisons alike. It is
+ * for editing one (the gear), on the run page and the workspace page alike. It is
  * the card detail shell (CardDetailModal): the card's side on the left, the
  * editor's column on the right, which always starts with the **Card**
  * section — Data (CardDataPicker), then Card type (CardTypePicker).

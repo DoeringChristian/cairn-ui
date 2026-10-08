@@ -1,9 +1,7 @@
 /**
  * Shared "auto" badge + manual refresh affordance for anything bound to a
- * dynamic `RunSelector` (see lib/run-selector.ts) — used by both
- * ComparePage (comparisons) and ReportCardsBlock (report cards blocks) so
- * the visual language for "this run set re-resolves live" is identical
- * everywhere it appears.
+ * dynamic `RunSelector` (see lib/run-selector.ts) — used by report cards
+ * blocks (ReportCardsBlock).
  */
 
 interface Props {

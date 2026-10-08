@@ -41,6 +41,11 @@ export function runColor(runId: string): string {
   return RUN_PALETTE[runColorSlot(runId)]!;
 }
 
+/** A group's colour (the workspace's ■ and its aggregate line): stable per group name. */
+export function groupColor(group: string): string {
+  return RUN_PALETTE[fnv1a(`group:${group}`) % RUN_PALETTE.length]!;
+}
+
 /**
  * Colours for the runs shown together. `createdAt(id)` orders them (older
  * first keeps its slot); unknown times sort last, ties by id.

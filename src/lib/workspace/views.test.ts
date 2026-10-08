@@ -1,14 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { WorkspaceViewDoc, WorkspaceViews } from "../../api/types.ts";
-import { EMPTY_WORKSPACE, ops } from "./doc.ts";
 import {
   canDeleteView,
   duplicateName,
-  EMPTY_VIEW_LAYOUT,
-  layoutPayload,
+  EMPTY_VIEW,
   viewAfterDelete,
-  viewLayout,
   viewSummary,
   withAdded,
   withCurrent,
@@ -26,24 +23,10 @@ const V = (id: string, name = id): WorkspaceViewDoc => ({
 });
 const LIST: WorkspaceViews = { views: [V("a", "Default"), V("b", "Media"), V("c", "Losses")], current: "b" };
 
-test("a view's layout comes from its payload; a first view not stored yet is empty", () => {
-  assert.deepEqual(viewLayout(null), EMPTY_VIEW_LAYOUT);
-  const layout = viewLayout({ autoPanels: false, hidePatterns: ["^x"], runs: { ids: ["r"] } });
-  assert.equal(layout.autoPanels, false);
-  assert.deepEqual(layout.hidePatterns, ["^x"]);
-  assert.equal("runs" in layout, false);
-});
-
-test("a view stores the layout only, never a comparison's runs", () => {
-  const doc = { ...ops.addHidePattern("sys")(EMPTY_WORKSPACE), runs: { ids: ["r1"], selector: null, view: { hidden: [], pinned: [], baseline: null } } };
-  const payload = layoutPayload(doc);
-  assert.equal("runs" in payload, false);
-  assert.deepEqual(payload.hidePatterns, ["sys"]);
-});
-
-test("the empty view lists nothing and includes unlisted metrics", () => {
-  assert.deepEqual(EMPTY_VIEW_LAYOUT.sections, []);
-  assert.equal(EMPTY_VIEW_LAYOUT.autoPanels, true);
+test("the empty view lists nothing, includes unlisted metrics and has the default run state", () => {
+  assert.deepEqual(EMPTY_VIEW.sections, []);
+  assert.equal(EMPTY_VIEW.autoPanels, true);
+  assert.deepEqual(EMPTY_VIEW.runState.eyes, {});
 });
 
 test("names, delete rules and the tile summary", () => {

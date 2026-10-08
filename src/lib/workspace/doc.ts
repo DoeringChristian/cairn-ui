@@ -1,15 +1,11 @@
 /**
- * The workspace document (pure): a layout written in metric names and
- * regexes, never in runs, plus the run set a comparison binds.
- *
- * Two kinds of workspace share this one type, its ops, the store/sync/undo
- * machinery and the renderer (components/workspace/WorkspaceView.tsx):
- *
- * - a **view** (`runs: null`, lib/workspace/views.ts): one of the project's
- *   named layouts; the run page shows the current one, bound to whichever
- *   run is being viewed;
- * - a **comparison** (`runs` set): its own layout plus its run set. Creating
- *   one copies the current view; afterwards the two are independent.
+ * The workspace document (pure): one of the project's views
+ * (lib/workspace/views.ts) — a layout written in metric names and regexes,
+ * never in runs, plus the project workspace's run state (which runs its
+ * sidebar lists and its cards draw, lib/workspace-runs/state.ts). The run
+ * page shows the current view bound to whichever run is being viewed and
+ * ignores the run state; the workspace page (pages/WorkspacePage.tsx) uses
+ * both. Both render the layout with components/workspace/WorkspaceView.tsx.
  *
  * Edits are ops, not snapshots, so a write that loses a race (409, see
  * sync.ts) is rebased by replaying the pending ops onto the server's
@@ -24,9 +20,7 @@
  */
 
 import { CARD_TYPES, type CardType } from "../cards/card-spec.ts";
-import { isRunSelector, type RunSelector } from "../run-selector.ts";
-import { parseRunView } from "../run-view-store.ts";
-import type { RunView } from "../run-view.tsx";
+import { DEFAULT_RUN_STATE, parseRunState, type RunState } from "../workspace-runs/state.ts";
 
 /** Per-card-type default values (the same shape as `settings-scope`'s `CardDefaults`). */
 export type CardDefaults = Partial<Record<CardType, Record<string, unknown>>>;
@@ -56,14 +50,6 @@ export interface SectionDef {
   /** Panels shown A–Z by title instead of in their order. */
   sort: boolean;
   panels: Panel[];
-}
-
-/** A comparison's runs: fixed ids, or a selector that resolves against the project's runs. */
-export interface RunSet {
-  ids: string[];
-  selector: RunSelector | null;
-  /** Hidden, pinned and baseline runs of this comparison. */
-  view: RunView;
 }
 
 /** The palettes a colour-by samples (charts/colormaps.ts). */
@@ -109,8 +95,8 @@ export interface WorkspaceDoc {
    */
   autoPanels: boolean;
   prefs: WorkspacePrefs;
-  /** null: a view (bound to the viewed run). A comparison's run set otherwise. */
-  runs: RunSet | null;
+  /** The workspace page's runs (search, grouping, eyes, version picks); the run page ignores it. */
+  runState: RunState;
 }
 
 export type WorkspaceOp = (doc: WorkspaceDoc) => WorkspaceDoc;
@@ -124,7 +110,7 @@ export const EMPTY_WORKSPACE: WorkspaceDoc = Object.freeze({
   removed: [],
   autoPanels: true,
   prefs: { syncZoom: false, syncCursor: true, colorBy: null },
-  runs: null,
+  runState: DEFAULT_RUN_STATE,
 }) as WorkspaceDoc;
 
 export const AUTO_PREFIX = "auto:";
@@ -202,15 +188,6 @@ function sectionsOf(v: unknown): SectionDef[] {
   return out;
 }
 
-function runsOf(v: unknown): RunSet | null {
-  if (!isObj(v)) return null;
-  return {
-    ids: unique(strings(v.ids)),
-    selector: isRunSelector(v.selector) ? (v.selector as RunSelector) : null,
-    view: parseRunView(v.view),
-  };
-}
-
 /** Coerce anything (a server payload, null) into a valid document. */
 export function normalizeWorkspace(raw: unknown): WorkspaceDoc {
   if (!isObj(raw)) return EMPTY_WORKSPACE;
@@ -232,7 +209,7 @@ export function normalizeWorkspace(raw: unknown): WorkspaceDoc {
       syncCursor: typeof prefs.syncCursor === "boolean" ? prefs.syncCursor : EMPTY_WORKSPACE.prefs.syncCursor,
       colorBy: colorByOf(prefs.colorBy),
     },
-    runs: runsOf(raw.runs),
+    runState: parseRunState(raw.runState),
   };
 }
 
@@ -258,14 +235,6 @@ export function restoreFields(before: WorkspaceDoc, fields: readonly (keyof Work
     for (const f of fields) next[f] = before[f];
     return next as unknown as WorkspaceDoc;
   };
-}
-
-/** The layout part of a document: what a view stores and a new comparison copies. */
-export type WorkspaceLayout = Omit<WorkspaceDoc, "runs">;
-
-export function layoutOf(doc: WorkspaceDoc): WorkspaceLayout {
-  const { runs: _runs, ...layout } = doc;
-  return layout;
 }
 
 // ---------------------------------------------------------------------------
@@ -524,14 +493,10 @@ export const ops = {
   /** Only the flag; turning it off from the UI goes through layout.ts `autoPanelsOp` (materializes first). */
   setAutoPanels: (on: boolean): WorkspaceOp => (d) => (d.autoPanels === on ? d : { ...d, autoPanels: on }),
 
-  // --- runs (comparisons) --------------------------------------------------
-  /** Patch a comparison's run set (no-op on a view). */
-  setRuns: (patch: Partial<RunSet>): WorkspaceOp => (d) => (d.runs ? { ...d, runs: { ...d.runs, ...patch } } : d),
-  addRuns: (ids: readonly string[]): WorkspaceOp => (d) =>
-    d.runs ? { ...d, runs: { ...d.runs, ids: union(d.runs.ids, ids) } } : d,
-  removeRun: (id: string): WorkspaceOp => (d) =>
-    d.runs ? { ...d, runs: { ...d.runs, ids: d.runs.ids.filter((x) => x !== id) } } : d,
-
-  /** Replace the layout (a comparison copying a view in); the run set stays. */
-  replaceLayout: (layout: WorkspaceLayout): WorkspaceOp => (d) => ({ ...layout, runs: d.runs }),
+  // --- the workspace page's runs -------------------------------------------
+  /** Edit the run state (lib/workspace-runs/state.ts edits); an unchanged state is a no-op. */
+  updateRunState: (fn: (s: RunState) => RunState): WorkspaceOp => (d) => {
+    const runState = fn(d.runState);
+    return JSON.stringify(runState) === JSON.stringify(d.runState) ? d : { ...d, runState };
+  },
 };

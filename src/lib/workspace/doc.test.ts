@@ -26,14 +26,14 @@ test("normalize fills a null or partial payload and drops malformed entries", ()
     removed: ["m", "m", 3],
     defaults: { scalar: { smoothing: 0.5 }, bar: 3 },
     prefs: { syncZoom: true },
-    runs: { ids: ["r1", "r1"], selector: { kind: "bogus" } },
+    runState: { search: "x", groupBy: "bogus" },
   });
   assert.deepEqual(names(d), ["a:p1", "b:"]);
   assert.equal(d.sections[1]!.collapsed, true);
   assert.deepEqual(d.removed, ["m"]);
   assert.deepEqual(d.defaults, { scalar: { smoothing: 0.5 } });
   assert.deepEqual(d.prefs, { syncZoom: true, syncCursor: true, colorBy: null });
-  assert.deepEqual(d.runs, { ids: ["r1"], selector: null, view: { hidden: [], pinned: [], baseline: null } });
+  assert.deepEqual(d.runState, { ...EMPTY_WORKSPACE.runState, search: "x" });
 });
 
 test("ensureSections inserts missing sections in rendered order", () => {
@@ -103,11 +103,10 @@ test("section defaults: empty values remove the type and the section", () => {
   assert.deepEqual(ops.setDefaults("scalar", {})(c).defaults, {});
 });
 
-test("run ops touch comparisons only", () => {
-  assert.equal(ops.addRuns(["r"])(EMPTY_WORKSPACE), EMPTY_WORKSPACE);
-  const c = normalizeWorkspace({ runs: { ids: ["a"] } });
-  assert.deepEqual(ops.addRuns(["a", "b"])(c).runs!.ids, ["a", "b"]);
-  assert.deepEqual(ops.removeRun("a")(c).runs!.ids, []);
+test("run state edits: a change replaces it, no change keeps the document", () => {
+  const d = ops.updateRunState((s) => ({ ...s, groupBy: "none" }))(EMPTY_WORKSPACE);
+  assert.equal(d.runState.groupBy, "none");
+  assert.equal(ops.updateRunState((s) => ({ ...s }))(d), d);
 });
 
 test("rebase replays pending ops onto the server document", () => {
@@ -130,16 +129,15 @@ test("undo restores only the fields an op changed", () => {
   assert.deepEqual(undone.sections.map((s) => s.name), ["val"]);
 });
 
-test("a view copied into a comparison round-trips the layout and keeps the run set", async () => {
-  const { layoutPayload, viewLayout } = await import("./views.ts");
-  const doc = ops.addPanels("a", [P("1", ["x"])])(normalizeWorkspace({ runs: { ids: ["r1"] } }));
-  const p = JSON.parse(JSON.stringify(layoutPayload(doc)));
-  assert.equal("runs" in p, false);
-  const layout = viewLayout(p);
-  const other = normalizeWorkspace({ runs: { ids: ["r2"] } });
-  const applied = ops.replaceLayout(layout)(other);
-  assert.deepEqual(names(applied), ["a:1"]);
-  assert.deepEqual(applied.runs!.ids, ["r2"]);
+test("a view's payload round-trips the layout and the run state", async () => {
+  const { viewPayload } = await import("./views.ts");
+  const doc = ops.seq(
+    ops.addPanels("a", [P("1", ["x"])]),
+    ops.updateRunState((s) => ({ ...s, eyes: { "g:exp": false } })),
+  )(EMPTY_WORKSPACE);
+  const back = normalizeWorkspace(JSON.parse(JSON.stringify(viewPayload(doc))));
+  assert.deepEqual(names(back), ["a:1"]);
+  assert.deepEqual(back.runState.eyes, { "g:exp": false });
 });
 
 test("prefs.colorBy: null by default, clamped and defaulted when set", () => {

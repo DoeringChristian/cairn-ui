@@ -11,7 +11,7 @@ import App from "./App";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProjectLayout from "./pages/ProjectLayout";
 import RunsTablePage from "./pages/RunsTablePage";
-import ComparePage from "./pages/compare/ComparePage";
+import WorkspacePage from "./pages/WorkspacePage";
 import RunDetailPage from "./pages/RunDetailPage";
 import RunOverviewTab from "./pages/RunOverviewTab";
 import RunMetricsTab from "./pages/RunMetricsTab";
@@ -65,7 +65,7 @@ const router = createBrowserRouter([
         element: <ProjectLayout />,
         children: [
           { index: true, element: <RunsTablePage /> },
-          { path: "compare", element: <ComparePage /> },
+          { path: "workspace", element: <WorkspacePage /> },
           // The artifact explorer and the lineage viewer are code-split
           // (React Flow loads only when a graph is shown).
           {

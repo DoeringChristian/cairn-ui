@@ -1,6 +1,6 @@
 /**
- * A titled, collapsible section of a workspace (the run page and
- * comparisons render the same one, through components/workspace/).
+ * A titled, collapsible section of a workspace (the run page and the
+ * workspace page render the same one, through components/workspace/).
  *
  * The header's actions are workspace edits the caller turns into document
  * ops: collapse, rename (double-click the name), move up / down, sort A–Z,

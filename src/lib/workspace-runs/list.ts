@@ -56,6 +56,8 @@ export interface GroupEntry {
   names: NameRow[];
   /** The resolved picks (name key → run id | null). */
   picks: GroupPicks;
+  /** The group's graph over its listed runs (picks.ts works on it). */
+  graph: GroupGraph;
   newest: string;
   visible: boolean;
   eye: Eye;
@@ -89,8 +91,6 @@ export interface SidebarList {
   /** `showing <visible> of <listed>` entries. */
   listed: number;
   visible: number;
-  /** The group graphs the list was built from (listed runs only), by group. */
-  graphs: Map<string, GroupGraph>;
 }
 
 /** Case-insensitive substring of the run's name, id or group. */
@@ -171,13 +171,12 @@ export function buildList(
   graphs: ReadonlyMap<string, GroupGraph>,
 ): SidebarList {
   const listed = runs.filter((r) => !r.archived && matchesSearch(r, state.search)).sort(byNewest);
-  const usedGraphs = new Map<string, GroupGraph>();
 
   if (state.groupBy === "none") {
     const entries = listed.map((run) => ({ kind: "run" as const, key: runKey(run.id), run, newest: run.created_at, visible: false }));
     const vis = visibleKeys(entries, state.eyes);
     for (const e of entries) e.visible = vis.has(e.key);
-    return { groupBy: "none", groups: [], ungrouped: [], runs: entries, listed: entries.length, visible: vis.size, graphs: usedGraphs };
+    return { groupBy: "none", groups: [], ungrouped: [], runs: entries, listed: entries.length, visible: vis.size };
   }
 
   const byGroup = new Map<string, ListedRun[]>();
@@ -194,7 +193,6 @@ export function buildList(
 
   const groups: GroupEntry[] = [...byGroup].map(([group, members]) => {
     const graph = groupGraphOf(group, members, graphs.get(group));
-    usedGraphs.set(group, graph);
     const mode = state.groups[group];
     const picks = mode && mode !== "latest" ? resolvePicks(graph, mode.picks) : latestPicks(graph);
     const names = nameRows(graph, picks, state.hiddenNames[group] ?? []);
@@ -205,6 +203,7 @@ export function buildList(
       custom: !!mode && mode !== "latest",
       names,
       picks,
+      graph,
       newest: members[0]!.created_at,
       visible: false,
       eye: "off",
@@ -247,7 +246,6 @@ export function buildList(
     runs: [],
     listed: groups.length + ungrouped.length,
     visible: vis.size,
-    graphs: usedGraphs,
   };
 }
 
@@ -280,4 +278,24 @@ export function runsForCards(list: SidebarList): CardRuns {
   }
   for (const u of list.ungrouped) if (u.visible) runIds.push(u.pick);
   return { runIds, groupOf };
+}
+
+/**
+ * "Show in workspace" (the runs table): only the ticked runs' groups and
+ * ticked ungrouped runs (their name, at the newest ticked version) visible,
+ * for both Group by modes; the search is cleared so they are listed.
+ * `runs` are the project's runs, so every other entry gets an explicit eye
+ * off.
+ */
+export function showOnly(s: RunState, runs: readonly ListedRun[], ticked: ReadonlySet<string>): RunState {
+  const eyes: Record<string, boolean> = {};
+  const ungrouped = { ...s.ungrouped };
+  for (const r of [...runs].filter((r) => !r.archived).sort(byNewest)) {
+    const on = ticked.has(r.id);
+    eyes[runKey(r.id)] = on;
+    const key = r.group != null ? groupKey(r.group) : ungroupedKey(nameKey(graphRun(r)));
+    if (on && !eyes[key] && r.group == null) ungrouped[nameKey(graphRun(r))] = r.id;
+    eyes[key] = (eyes[key] ?? false) || on;
+  }
+  return { ...s, search: "", eyes, ungrouped };
 }

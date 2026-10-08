@@ -1,26 +1,24 @@
 /**
- * Which workspace a view edits: one of the project's workspace views (the
- * run page shows the current one) or one comparison. Both are the same
- * document type behind the same store, sync and undo; they differ only in
- * where the server keeps them.
+ * Which workspace document a page edits: one of the project's workspace
+ * views (the run page and the workspace page show the current one).
  */
 
 import { createContext, useContext } from "react";
 
-export type WorkspaceRef =
-  | { kind: "view"; projectId: string; id: string }
-  | { kind: "comparison"; projectId: string; id: string };
+export interface WorkspaceRef {
+  kind: "view";
+  projectId: string;
+  id: string;
+}
 
-/** The store key: `view:<pid>:<id>` or `comparison:<pid>:<id>`. */
+/** The store key: `view:<pid>:<id>`. */
 export function refKey(ref: WorkspaceRef): string {
   return `${ref.kind}:${ref.projectId}:${ref.id}`;
 }
 
 /** The server URL of a workspace document. */
 export function refUrl(ref: WorkspaceRef): string {
-  return ref.kind === "view"
-    ? `/api/projects/${ref.projectId}/views/${ref.id}`
-    : `/api/projects/${ref.projectId}/comparisons/${ref.id}`;
+  return `/api/projects/${ref.projectId}/views/${ref.id}`;
 }
 
 export const viewRef = (projectId: string, id: string): WorkspaceRef => ({ kind: "view", projectId, id });

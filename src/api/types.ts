@@ -488,17 +488,7 @@ export interface SweepDetail extends Sweep {
 
 export type SweepAction = "pause" | "resume" | "stop" | "cancel";
 
-// ── Workspace views + comparisons (server: routes/project_docs.py) ────
-
-/** A comparison as listed (routes/project_docs.py). */
-export interface ComparisonSummary {
-  id: string;
-  name: string;
-  rev: number;
-  created_at: string;
-  updated_at: string;
-  run_count: number;
-}
+// ── Workspace views (server: routes/project_docs.py) ────
 
 export interface WorkspaceGet {
   /** 0 (with a null payload) before the first save. */

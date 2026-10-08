@@ -1,11 +1,11 @@
 /**
  * A project's workspace views for components (lib/workspace/views.ts): the
- * list (oldest first, each with its layout), the current view (the run
+ * list (oldest first, each with its document), the current view (the run
  * page's, kept on the server) and the list's edits. Switching is
  * navigation: it records no undo entry.
  *
- * Listed layouts seed the workspace store (`seedWorkspace`) so a view
- * switched to paints at once; a view's latest layout is the store's copy,
+ * Listed documents seed the workspace store (`seedWorkspace`) so a view
+ * switched to paints at once; a view's latest document is the store's copy,
  * which carries this tab's unsaved edits.
  */
 
@@ -14,19 +14,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { qk } from "../../api/query-keys";
 import type { WorkspaceViews } from "../../api/types";
-import { normalizeWorkspace, type WorkspaceDoc, type WorkspaceLayout } from "./doc";
+import { normalizeWorkspace, type WorkspaceDoc } from "./doc";
 import { useUndoStack } from "../undo-context";
 import { refKey, viewRef } from "./ref";
 import { dropWorkspace, getWorkspace, seedWorkspace, workspaceState } from "./store";
-import { layoutPayload, viewAfterDelete, withAdded, withCurrent, withRemoved, withRenamed } from "./views";
+import { viewAfterDelete, viewPayload, withAdded, withCurrent, withRemoved, withRenamed } from "./views";
 
 export interface UseViews {
   data: WorkspaceViews | undefined;
-  /** The latest layout of a listed view (this tab's unsaved edits included). */
+  /** The latest document of a listed view (this tab's unsaved edits included). */
   docOf: (id: string) => WorkspaceDoc;
   switchTo: (id: string) => Promise<void>;
   /** A new view, last in the list; returns its id. */
-  create: (name: string, layout: WorkspaceLayout) => Promise<string>;
+  create: (name: string, doc: WorkspaceDoc) => Promise<string>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
@@ -73,8 +73,8 @@ export function useViews(projectId: string | null): UseViews {
   );
 
   const create = useCallback(
-    async (name: string, layout: WorkspaceLayout) => {
-      const payload = layoutPayload(layout);
+    async (name: string, doc: WorkspaceDoc) => {
+      const payload = viewPayload(doc);
       const res = await api.createView(pid, name, payload);
       set((l) =>
         withAdded(l, { id: res.id, name: res.name, rev: res.rev, created_at: res.created_at, updated_at: res.created_at, payload }),

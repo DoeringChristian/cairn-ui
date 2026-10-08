@@ -7,7 +7,7 @@ import RunStatusBadge from "../components/RunStatusBadge";
 import { RunProgressLine, RunProgressPct } from "../components/RunProgress";
 import { formatDuration, formatRelative, safeJsonParse } from "../lib/format";
 import { formatValue } from "../lib/plot-utils/format";
-import { createComparison } from "../lib/workspace/comparisons";
+import { showInWorkspace } from "../lib/workspace-runs/show-in-workspace";
 import { downloadBlob } from "../lib/download";
 import { api } from "../api/client";
 import Popover from "../components/ui/Popover";
@@ -445,12 +445,10 @@ export default function RunsTablePage() {
     }
   }, [selected]);
 
-  const onCompare = async () => {
-    // The selected runs, with a copy of the current view's layout.
-    const now = new Date();
-    const label = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
-    const id = await createComparison(projectId!, `Comparison ${label}`, Array.from(selected));
-    navigate(`/p/${projectId}/compare?c=${encodeURIComponent(id)}&tab=metrics`);
+  const onShowInWorkspace = async () => {
+    // Only the ticked runs' groups (and ticked ungrouped runs) visible in the current view.
+    await showInWorkspace(projectId!, new Set(selected));
+    navigate(`/p/${projectId}/workspace`);
   };
 
   useWindowScrollRestore(
@@ -770,18 +768,6 @@ export default function RunsTablePage() {
           <button
             type="button"
             className="btn px-2 py-1 text-xs"
-            onClick={() => {
-              if (!projectId) return;
-              void createComparison(projectId, "New comparison", []).then((id) =>
-                navigate(`/p/${projectId}/compare?c=${encodeURIComponent(id)}&tab=metrics`),
-              );
-            }}
-          >
-            New comparison
-          </button>
-          <button
-            type="button"
-            className="btn px-2 py-1 text-xs"
             onClick={() => setImportOpen(true)}
           >
             Import
@@ -820,11 +806,10 @@ export default function RunsTablePage() {
           <button
             type="button"
             className="btn gap-1 px-2 py-1 text-xs touch:min-h-[40px]"
-            onClick={onCompare}
+            onClick={() => void onShowInWorkspace()}
             disabled={selectedCount === 0}
           >
-            Compare
-            <span className="hidden md:inline">{selectedCount} run{selectedCount === 1 ? "" : "s"}</span>
+            Show in workspace
           </button>
           {/* Secondary actions sit inline from md up and behind "More" below it. */}
           <div className="hidden items-center gap-2 md:flex">

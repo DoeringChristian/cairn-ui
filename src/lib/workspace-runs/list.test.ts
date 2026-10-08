@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { GroupGraph } from "./graph.ts";
-import { buildList, runsForCards, type ListedRun } from "./list.ts";
+import { buildList, runsForCards, showOnly, type ListedRun } from "./list.ts";
 import {
   DEFAULT_RUN_STATE,
   parseRunState,
@@ -179,4 +179,15 @@ test("run state: parse keeps valid fields and drops the rest", () => {
     },
   );
   assert.equal(parseRunState({ groupBy: "weird" }).groupBy, "group");
+});
+
+test("show only: the ticked runs' groups and ungrouped names, every other entry off", () => {
+  const { runs, graphs } = project();
+  const s = showOnly({ ...DEFAULT_RUN_STATE, search: "zzz" }, runs, new Set(["b-e1", "u-b1"]));
+  assert.equal(s.search, "");
+  const list = buildList(runs, s, graphs);
+  assert.deepEqual(list.groups.filter((g) => g.visible).map((g) => g.group), ["exp-43"]);
+  assert.deepEqual(list.ungrouped.map((u) => [u.visible, u.pick]), [[true, "u-b1"]]);
+  const flat = buildList(runs, { ...s, groupBy: "none" }, graphs);
+  assert.deepEqual(flat.runs.filter((e) => e.visible).map((e) => e.run.id), ["u-b1", "b-e1"]);
 });

@@ -1,6 +1,6 @@
 /**
  * The in-tab working copy of each workspace document (every workspace view
- * and comparison this tab opened), keyed by `refKey`.
+ * this tab opened), keyed by `refKey`.
  *
  * Per document it holds the last version the server confirmed (`base`, at
  * `rev`), the local ops not yet written (`pending`) and the document every
@@ -103,7 +103,7 @@ export function confirmWrite(key: string, n: number, rev: number, payload: Works
   saveJson(localStorage, storageKeys.workspace(key), { rev, payload });
 }
 
-/** Forget a document (a deleted comparison). */
+/** Forget a document (a deleted view). */
 export function dropWorkspace(key: string): void {
   states.delete(key);
   try {

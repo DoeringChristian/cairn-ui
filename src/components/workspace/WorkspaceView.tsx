@@ -1,7 +1,7 @@
 /**
  * The workspace renderer: one layout document + a bound run set. The run
- * page (`runIds = [the run]`) and every comparison (`runIds = its runs`)
- * render exactly this component — toolbar, sections, panels, adding cards
+ * page (`runIds = [the run]`) and the workspace page (`runIds = the runs
+ * its sidebar picks`) render exactly this component — toolbar, sections, panels, adding cards
  * (the one way: the dashed "Add card" ghost card ending each section's grid),
  * the card editor adding and editing cards (components/workspace/CardEditor.tsx),
  * "+ New section" below the last
@@ -72,8 +72,6 @@ interface Props {
   runIds: readonly string[];
   /** Names the reports "send section to report" creates: `<section> · <reportLabel>`. */
   reportLabel: string;
-  /** Extra toolbar buttons (the run page's "New comparison"). */
-  toolbarActions?: ReactNode;
 }
 
 /**
@@ -94,7 +92,7 @@ export default function WorkspaceView(props: Props) {
   );
 }
 
-function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Props) {
+function WorkspaceViewInner({ wsRef, runIds, reportLabel }: Props) {
   const navigate = useNavigate();
   const key = refKey(wsRef);
   const scope = `ws:${key}`;
@@ -402,7 +400,6 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, toolbarActions }: Prop
           onManageCards={() => setManageOpen(true)}
           onToggleAutoPanels={toggleAutoPanels}
           metrics={metrics}
-          actions={toolbarActions}
         />
         {unlisted > 0 && (
           <div className="flex items-center justify-end gap-3">

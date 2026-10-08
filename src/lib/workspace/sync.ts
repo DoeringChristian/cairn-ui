@@ -2,8 +2,7 @@
  * Server sync for workspace documents: a debounced PUT carrying the rev it
  * was based on. A 409 means another tab or user wrote first; its body is
  * the server's document, which the pending ops are replayed onto (rebase)
- * before writing again. Views and comparisons use the same
- * protocol at different URLs (ref.ts).
+ * before writing again.
  */
 
 import { api } from "../../api/client";

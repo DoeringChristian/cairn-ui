@@ -10,7 +10,7 @@
  * read-only surface shows only the search box.
  */
 
-import { useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import { CardMutationContext } from "../lib/card-settings";
 import { formatShortcut } from "../lib/shortcuts";
 import { IS_MAC, useShortcut } from "../lib/use-shortcut";
@@ -37,8 +37,6 @@ interface Props {
   onToggleAutoPanels?: () => void;
   /** The bound runs' metrics: the view switcher's tiles resolve each view's layout against them. */
   metrics: readonly MetricInfo[];
-  /** Extra buttons at the start of the action group (e.g. "New comparison"). */
-  actions?: ReactNode;
 }
 
 const CHIP =
@@ -53,7 +51,6 @@ export default function WorkspaceToolbar({
   onManageCards,
   onToggleAutoPanels,
   metrics,
-  actions,
 }: Props) {
   const { doc, readOnly, update } = useCurrentWorkspace();
   const mutable = useContext(CardMutationContext) && !readOnly;
@@ -133,7 +130,6 @@ export default function WorkspaceToolbar({
 
       {mutable && (
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {actions}
           {onManageCards && (
             <button
               type="button"

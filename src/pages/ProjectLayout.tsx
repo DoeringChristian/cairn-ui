@@ -28,9 +28,9 @@ const NAV_ITEMS = [
     ),
   },
   {
-    path: "compare",
+    path: "workspace",
     end: false,
-    label: "Compare",
+    label: "Workspace",
     icon: (
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="2,14 6,6 10,10 14,3" />

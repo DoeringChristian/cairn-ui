@@ -264,19 +264,6 @@ export const api = {
     post<{ name: string; role: string }>("/api/auth/otp", { otp }),
   logout: () => post<{ ok: boolean }>("/api/auth/logout", {}),
 
-  // Comparisons: workspace documents with a run set (routes/project_docs.py).
-  comparisons: (projectId: string) =>
-    get<{ comparisons: import("./types").ComparisonSummary[] }>(`/api/projects/${projectId}/comparisons`),
-  createComparison: (projectId: string, name: string, payload: Record<string, unknown>) =>
-    post<{ id: string; name: string; rev: number; created_at: string }>(
-      `/api/projects/${projectId}/comparisons`,
-      { name, payload },
-    ),
-  renameComparison: (projectId: string, id: string, name: string) =>
-    patch<{ id: string; name: string }>(`/api/projects/${projectId}/comparisons/${id}`, { name }),
-  deleteComparison: (projectId: string, id: string) =>
-    del_<{ deleted: string }>(`/api/projects/${projectId}/comparisons/${id}`),
-
   // One group's lineage graph: its runs and the edges between them (lib/workspace-runs).
   groupGraph: (projectId: string, group: string) =>
     get<import("../lib/workspace-runs/graph").GroupGraph>(
@@ -519,8 +506,8 @@ export const api = {
   sweepAction: (sweepId: string, action: import("./types").SweepAction) =>
     post<import("./types").SweepDetail>(`/api/sweeps/${sweepId}/${action}`, {}),
 
-  // ── Workspace documents: views and comparisons (lib/workspace/*) ──────
-  /** A view or a comparison: `{rev, payload}` (rev 0 / null payload: a project's first view before it is stored). */
+  // ── Workspace documents: the project's views (lib/workspace/*) ──────
+  /** A view: `{rev, payload}` (rev 0 / null payload: a project's first view before it is stored). */
   workspaceDoc: (ref: import("../lib/workspace/ref").WorkspaceRef) =>
     get<import("./types").WorkspaceGet>(refUrl(ref)),
   /** A stale `baseRev` resolves to `{conflict}` (the server's document), not an error. */

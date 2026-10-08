@@ -1,30 +1,24 @@
 /**
- * Workspace views (pure): a project's list of named layouts. The run page
- * always shows one of them, the project's current view (kept on the server,
- * so the same on every browser), and every edit there is saved into it.
- * Switching views is navigation, not an edit. A comparison keeps its own
- * layout: picking a view there copies that view's layout in (an undoable
- * edit), and "+ New view" saves the comparison's layout as a new view.
+ * Workspace views (pure): a project's list of named workspace documents
+ * (layout + the workspace page's run state). The run page and the workspace
+ * page always show one of them, the project's current view (kept on the
+ * server, so the same on every browser), and every edit there is saved into
+ * it. Switching views is navigation, not an edit.
  *
  * The list is in creation order (oldest first) and never empty: the server
  * refuses to delete the last view.
  */
 
 import type { WorkspaceViewDoc, WorkspaceViews } from "../../api/types.ts";
-import { EMPTY_WORKSPACE, layoutOf, normalizeWorkspace, type WorkspaceDoc, type WorkspaceLayout } from "./doc.ts";
+import { EMPTY_WORKSPACE, type WorkspaceDoc } from "./doc.ts";
 
-/** A view's layout from its stored payload (null: a first view not stored yet). */
-export function viewLayout(payload: unknown): WorkspaceLayout {
-  return layoutOf(normalizeWorkspace(payload));
+/** What a view stores: its document. */
+export function viewPayload(doc: WorkspaceDoc): Record<string, unknown> {
+  return doc as unknown as Record<string, unknown>;
 }
 
-/** What a view stores: the layout of `doc` (a comparison's runs are not part of it). */
-export function layoutPayload(doc: WorkspaceDoc | WorkspaceLayout): Record<string, unknown> {
-  return layoutOf({ ...doc, runs: null }) as unknown as Record<string, unknown>;
-}
-
-/** "Empty (automatic panels only)": a new view's layout with nothing listed. */
-export const EMPTY_VIEW_LAYOUT: WorkspaceLayout = layoutOf(EMPTY_WORKSPACE);
+/** "Empty (automatic panels only)": a new view with nothing listed and the default run state. */
+export const EMPTY_VIEW: WorkspaceDoc = EMPTY_WORKSPACE;
 
 /** The name ⧉ gives a view's copy. */
 export const duplicateName = (name: string) => `${name} copy`;
