@@ -22,6 +22,8 @@ export interface Series {
   role?: SeriesRole;
   /** The run the series belongs to (none for a group's mean and band). */
   runId?: string;
+  /** The group it is drawn for (a group's mean, band and members). */
+  group?: string;
 }
 
 export type SeriesRole = "line" | "member" | "bandHi" | "bandLo";

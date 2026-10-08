@@ -180,19 +180,20 @@ export function groupSeries(
   const out: Series[] = [];
   for (const g of aggregated) {
     const first = g.members[0]!;
-    const color = colorOf(first.group!);
+    const group = first.group!;
+    const color = colorOf(group);
     const count = opts.countInLabel === false ? "" : ` (n=${g.members.length})`;
     const label = `${opts.labelMetric ? `${first.metricName} · ` : ""}${first.group}${count}`;
     if (g.members.length === 1) {
-      out.push({ ...first.series, key: g.key, label, color, role: "line" });
+      out.push({ ...first.series, key: g.key, label, color, role: "line", group });
       continue;
     }
     if (!opts.hideMembers) {
-      for (const m of g.members) out.push({ ...m.series, color, role: "member" });
+      for (const m of g.members) out.push({ ...m.series, color, role: "member", group });
     }
-    out.push({ key: g.key, label, color, points: g.hi, role: "bandHi" });
-    out.push({ key: g.key, label, color, points: g.lo, role: "bandLo" });
-    out.push({ key: g.key, label, color, points: g.mean, role: "line" });
+    out.push({ key: g.key, label, color, points: g.hi, role: "bandHi", group });
+    out.push({ key: g.key, label, color, points: g.lo, role: "bandLo", group });
+    out.push({ key: g.key, label, color, points: g.mean, role: "line", group });
   }
   for (const u of ungrouped) out.push(u.series);
   return { series: out, groups: groups.length };

@@ -42,6 +42,8 @@ export interface DrawnSeries {
   role: DrawnRole;
   /** The run the line belongs to (none for a group's centre and band). */
   runId?: string;
+  /** The group the line is drawn for (a group's centre, band and members). */
+  group?: string;
   /** Source points aligned with the shared x array (null = no sample at that x). */
   points: Array<SeriesPoint | null>;
 }
@@ -129,7 +131,7 @@ export function alignSeries(series: Series[], opts: AlignOptions): AlignedData {
   const lines = prepared.map(({ s, role, points }): DrawnSeries => {
     const col = new Array<SeriesPoint | null>(xs.length).fill(null);
     for (const pt of points) col[index.get(pt.x)!] = pt;
-    return { key: s.key, label: s.label, color: s.color, role, runId: s.runId, points: col };
+    return { key: s.key, label: s.label, color: s.color, role, runId: s.runId, group: s.group, points: col };
   });
   const own = lines.map((l) => l.points.map((p) => (p ? p.y : null)));
   const ys = stack === "none" ? own : stackColumns(own, stack);

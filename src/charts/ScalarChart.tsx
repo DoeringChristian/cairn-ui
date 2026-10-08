@@ -10,6 +10,7 @@ import type { StackMode } from "../lib/plot-utils/stack.ts";
 import { onPrintLayout } from "../lib/print-layout.ts";
 import { readChartTheme, withAlpha } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
+import { lineMatches, targetOfLine, useRunHover } from "../lib/workspace-runs/hover.ts";
 
 export type LineType = "linear" | "monotone" | "step" | "stepBefore" | "stepAfter";
 
@@ -161,6 +162,10 @@ interface LiveStyle {
  * changes restyle the uPlot series in place; only a change of the lines, the
  * scales or the axes rebuilds it. While not interactive (a touch device with
  * the card's interact toggle off, see lib/use-interact) the cursor is off.
+ *
+ * Under a run hover store (the workspace, lib/workspace-runs/hover.ts) the
+ * hovered run's or group's lines are highlighted like a legend click, and
+ * hovering a line publishes its run or group.
  */
 export default function ScalarChart(props: ScalarChartProps) {
   const {
@@ -175,10 +180,13 @@ export default function ScalarChart(props: ScalarChartProps) {
   const [isolated, setIsolated] = useState<string | null>(null);
   const [plotWidth, setPlotWidth] = useState(0);
   const interactive = useInteract();
+  const runHover = useRunHover();
+  /** Whether this chart published the store's current target (so only it clears it). */
+  const publishedHover = useRef(false);
 
   // Callbacks and bounds read at event time, so they never force a rebuild.
-  const live = useRef({ props, focused });
-  live.current = { props, focused };
+  const live = useRef({ props, focused, runHover });
+  live.current = { props, focused, runHover };
 
   // Full fidelity buckets the visible x range, one bucket per pixel.
   const bucketLo = view.xMin ?? xRange[0];
@@ -205,6 +213,14 @@ export default function ScalarChart(props: ScalarChartProps) {
   const keys = useMemo(() => new Set(legendItems.map((l) => l.key)), [legendItems]);
   const hl = highlight && keys.has(highlight) ? highlight : null;
   const iso = isolated && keys.has(isolated) ? isolated : null;
+  // The highlighted lines: the legend's pick, else the workspace's hovered run or group.
+  const ext = runHover.target;
+  const hot = useMemo<ReadonlySet<string> | null>(() => {
+    if (hl) return new Set([hl]);
+    if (!ext) return null;
+    const ks = new Set(legendItems.filter((l) => lineMatches(l, ext)).map((l) => l.key));
+    return ks.size > 0 ? ks : null;
+  }, [hl, ext, legendItems]);
 
   const focusedLine = focused != null && focused > 0 ? lines[focused - 1] : undefined;
   const focusedKey = focusedLine?.key;
@@ -216,17 +232,17 @@ export default function ScalarChart(props: ScalarChartProps) {
     return lines.map((l) => {
       const own = styles[l.key] ?? {};
       const isBaseline = baseline != null && l.runId === baseline && l.role === "line";
-      const dimmed = hl != null && l.key !== hl;
+      const dimmed = hot != null && !hot.has(l.key);
       const edge = isEdge(l);
       const faded = isFaded(l);
       const alpha = edge ? 0 : (faded ? 0.25 : 1) * (dimmed ? 0.2 : 1);
-      const width = edge ? 0 : faded ? 1 : (own.width ?? (isBaseline ? 3 : 1.5)) + (l.key === hl ? 1 : 0);
+      const width = edge ? 0 : faded ? 1 : (own.width ?? (isBaseline ? 3 : 1.5)) + (hot?.has(l.key) ? 1 : 0);
       const hoveredBaseline = isBaseline && l.key === focusedKey;
       const dash = hoveredBaseline ? DASHES.dashed : !faded && own.dash ? DASHES[own.dash] : DASHES.solid;
       const show = iso == null || l.key === iso;
       return { stroke: withAlpha(l.color, alpha), width, dash, show };
     });
-  }, [lines, props.styles, baseline, hl, iso, focusedKey]);
+  }, [lines, props.styles, baseline, hot, iso, focusedKey]);
 
   // Each band / envelope / stacked area fills between its two edges (1-based: 0 is x).
   const bandPairs = useMemo(() => {
@@ -251,12 +267,12 @@ export default function ScalarChart(props: ScalarChartProps) {
     strokes: style.map((s) => s.stroke),
     bandFills: bandPairs.map((b) => {
       const l = lines[b.hi - 1];
-      const dim = hl != null && l != null && l.key !== hl;
+      const dim = hot != null && l != null && !hot.has(l.key);
       return withAlpha(b.color, b.alpha * (dim ? 0.3 : 1));
     }),
     firstFill:
       stack !== "none" && lines[0]
-        ? withAlpha(lines[0].color, 0.35 * (hl != null && lines[0].key !== hl ? 0.3 : 1))
+        ? withAlpha(lines[0].color, 0.35 * (hot != null && !hot.has(lines[0].key) ? 0.3 : 1))
         : null,
   };
 
@@ -374,8 +390,25 @@ export default function ScalarChart(props: ScalarChartProps) {
             setHover({ idx, left: left + u.over.offsetLeft, top: top + u.over.offsetTop });
           },
         ],
-        // A band edge focuses its group's line.
-        setSeries: [(_u, seriesIdx) => setFocused(seriesIdx == null ? null : parentLine(lines, seriesIdx))],
+        // A band edge focuses its group's line; the focused line's run or group is the workspace's hover.
+        setSeries: [
+          (_u, seriesIdx, opts) => {
+            const f = seriesIdx == null ? null : parentLine(lines, seriesIdx);
+            setFocused(f);
+            // Only focus changes (not a line shown or hidden) are hovers.
+            if ((opts as { focus?: unknown } | undefined)?.focus == null) return;
+            const l = f != null && f > 0 ? lines[f - 1] : undefined;
+            const t = l ? targetOfLine(l) : null;
+            const h = live.current.runHover;
+            if (t) {
+              h.set(t);
+              publishedHover.current = true;
+            } else if (publishedHover.current) {
+              h.set(null);
+              publishedHover.current = false;
+            }
+          },
+        ],
       },
     };
 
@@ -446,6 +479,10 @@ export default function ScalarChart(props: ScalarChartProps) {
     return () => {
       ro.disconnect();
       offPrint();
+      if (publishedHover.current) {
+        live.current.runHover.set(null);
+        publishedHover.current = false;
+      }
       plot.destroy();
       plotRef.current = null;
       setHover(null);
@@ -494,7 +531,13 @@ export default function ScalarChart(props: ScalarChartProps) {
       <div
         className="relative flex-1 min-h-0 min-w-0"
         style={{ touchAction: interactive ? "none" : "pan-y" }}
-        onMouseLeave={() => setHover(null)}
+        onMouseLeave={() => {
+          setHover(null);
+          if (publishedHover.current) {
+            runHover.set(null);
+            publishedHover.current = false;
+          }
+        }}
       >
         <div ref={plotHostRef} className="absolute inset-0" />
         {hover && rows.length > 0 && (
