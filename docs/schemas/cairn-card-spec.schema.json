@@ -304,7 +304,7 @@
             "latest-n",
             "newest-per-name"
           ],
-          "description": "\"latest-n\": the N most recently created matching runs. \"newest-per-name\": the single newest matching run per distinct display name."
+          "description": "\"latest-n\": the N most recently created matching runs. \"newest-per-name\": the single newest matching run per series (group, job_type, name)."
         },
         "n": {
           "type": "number",
