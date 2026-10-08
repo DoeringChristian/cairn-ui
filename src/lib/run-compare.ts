@@ -10,7 +10,8 @@
 import type { RunDetailResponse } from "../api/types.ts";
 import { safeJsonParse } from "./format.ts";
 import { decodeConfigValue } from "./plot-utils/format.ts";
-import { isSystemMetric, summaryRuleFor } from "./metric-defs.ts";
+import { isSystemMetric } from "./metric-defs.ts";
+import { noRules, type Goal, type RuleOf } from "./metric-rules.ts";
 import { computeCellStatuses, isNumericSeries, toNumeric, type CellComparison } from "./table-diff.ts";
 
 export type CompareValue = string | number | boolean | null;
@@ -23,8 +24,11 @@ export interface CompareRow {
   differs: boolean;
   /** Per cell, for a numeric row (see lib/table-diff.ts); `null` otherwise. */
   statuses: CellComparison[] | null;
-  /** Lower is better (a metric whose summary rule is "min"): colour inverted. */
-  lowerBetter: boolean;
+  /**
+   * Which way is better: a metric's goal in the project (lib/metric-rules.ts);
+   * "none" leaves the row uncoloured. Params colour higher green.
+   */
+  goal: Goal;
 }
 
 export interface CompareTable {
@@ -33,10 +37,10 @@ export interface CompareTable {
   rows: CompareRow[];
 }
 
-function makeRow(key: string, values: CompareValue[], lowerBetter = false): CompareRow {
+function makeRow(key: string, values: CompareValue[], goal: Goal): CompareRow {
   const differs = values.some((v) => v == null) || values.some((v) => v !== values[0]);
-  const statuses = isNumericSeries(values) ? computeCellStatuses(values.map(toNumeric)) : null;
-  return { key, values, differs, statuses, lowerBetter };
+  const statuses = goal !== "none" && isNumericSeries(values) ? computeCellStatuses(values.map(toNumeric)) : null;
+  return { key, values, differs, statuses, goal };
 }
 
 function byKey(runs: readonly RunDetailResponse[], cells: (rd: RunDetailResponse) => Iterable<[string, CompareValue]>): Map<string, Map<string, CompareValue>> {
@@ -51,41 +55,38 @@ function byKey(runs: readonly RunDetailResponse[], cells: (rd: RunDetailResponse
   return map;
 }
 
-function toTable(runs: readonly RunDetailResponse[], map: Map<string, Map<string, CompareValue>>, lower?: Set<string>): CompareTable {
+function toTable(runs: readonly RunDetailResponse[], map: Map<string, Map<string, CompareValue>>, goalOf: (key: string) => Goal): CompareTable {
   const runIds = runs.map((rd) => rd.run.id);
   const rows = Array.from(map.keys())
     .sort()
     .map((key) => {
       const row = map.get(key)!;
-      return makeRow(key, runIds.map((id) => row.get(id) ?? null), lower?.has(key) ?? false);
+      return makeRow(key, runIds.map((id) => row.get(id) ?? null), goalOf(key));
     });
   return { runIds, rows };
 }
 
 /** Each run's params, decoded (see `decodeConfigValue`). */
 export function buildParamDiff(runs: readonly RunDetailResponse[]): CompareTable {
-  return toTable(runs, byKey(runs, (rd) => rd.params.map((p) => [p.key, decodeConfigValue(p.value)] as [string, CompareValue])));
+  return toTable(runs, byKey(runs, (rd) => rd.params.map((p) => [p.key, decodeConfigValue(p.value)] as [string, CompareValue])), () => "higher");
 }
 
 /**
  * Each run's final metric values: `run.values` (a scalar's last point, its
- * `summary=` rule's value, or an explicit `run.summary(...)` key), without the
- * `system.*` sampler metrics. A metric whose rule is "min" (in any run's
- * metric defs or stats) counts lower as better.
+ * summary rule's value, or an explicit `run.summary(...)` key), without the
+ * `system.*` sampler metrics. Each row's goal is the metric's in the project
+ * (`ruleOf`, lib/metric-rules.ts).
  */
-export function buildMetricsSummary(runs: readonly RunDetailResponse[]): CompareTable {
-  const lower = new Set<string>();
+export function buildMetricsSummary(runs: readonly RunDetailResponse[], ruleOf: RuleOf = noRules): CompareTable {
   const map = byKey(runs, (rd) => {
     const out: [string, CompareValue][] = [];
     for (const [name, v] of Object.entries(rd.run.values ?? {})) {
       if (isSystemMetric(name)) continue;
       out.push([name, v]);
-      const rule = summaryRuleFor(name, rd.metric_defs) ?? rd.run.stats?.[name]?.rule ?? null;
-      if (rule === "min") lower.add(name);
     }
     return out;
   });
-  return toTable(runs, map, lower);
+  return toTable(runs, map, (key) => ruleOf(key).goal);
 }
 
 const ENV_FIELDS = ["python_version", "platform", "cuda_available", "cuda_version", "gpu_names"] as const;
@@ -103,7 +104,7 @@ export function buildEnvDiff(runs: readonly RunDetailResponse[]): CompareTable {
       return raw != null ? String(raw) : "—";
     });
     // Env values are labels, never coloured.
-    return { ...makeRow(field.replace(/_/g, " "), values), statuses: null };
+    return makeRow(field.replace(/_/g, " "), values, "none");
   });
   return { runIds, rows };
 }

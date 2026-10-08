@@ -422,6 +422,20 @@ export const api = {
     get<{ viewers: import("./types").ViewerInfo[] }>(
       `/api/projects/${encodeURIComponent(projectId)}/viewers${opts.allVersions ? "?all_versions=1" : ""}`,
     ),
+  /** The project's metric rules: logged, overridden and effective (lib/metric-rules.ts). */
+  metricRules: (projectId: string) =>
+    get<import("../lib/metric-rules").MetricRulesDoc>(`/api/projects/${encodeURIComponent(projectId)}/metric-rules`),
+  /** Override one metric's summary and/or goal (null: not overridden). */
+  setMetricRule: (projectId: string, metric: string, override: import("../lib/metric-rules").MetricOverride) =>
+    put<import("../lib/metric-rules").MetricRulesDoc>(
+      `/api/projects/${encodeURIComponent(projectId)}/metric-rules/${metric.split("/").map(encodeURIComponent).join("/")}`,
+      { summary: override.summary ?? null, goal: override.goal ?? null },
+    ),
+  /** Drop one metric's override (back to the logged rule). */
+  resetMetricRule: (projectId: string, metric: string) =>
+    del_<import("../lib/metric-rules").MetricRulesDoc>(
+      `/api/projects/${encodeURIComponent(projectId)}/metric-rules/${metric.split("/").map(encodeURIComponent).join("/")}`,
+    ),
   /** The project's default viewer per kind (lib/custom/viewers.ts defaultViewerName). */
   viewerDefaults: (projectId: string) =>
     get<import("./types").ViewerDefaults>(`/api/projects/${encodeURIComponent(projectId)}/viewer-defaults`),

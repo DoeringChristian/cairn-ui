@@ -1,24 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { betterFor, betterFromRule, deltaOf, formatDelta, relativeDelta, toneOf } from "./delta.ts";
-import { makeRun, stats } from "./test-run.ts";
+import { deltaOf, exprGoal, formatDelta, goalFor, relativeDelta, toneOf } from "./delta.ts";
+import { rulesOf } from "../metric-rules.ts";
 
-test("betterFromRule: min → lower, max → higher, else none", () => {
-  assert.equal(betterFromRule("min"), "lower");
-  assert.equal(betterFromRule("max"), "higher");
-  assert.equal(betterFromRule("mean"), null);
-  assert.equal(betterFromRule(null), null);
-});
-
-test("betterFor: override beats the baseline's rule, which beats other runs'", () => {
-  const base = makeRun("b", { stats: stats({ loss: [0, 1, "min"] }) });
-  const other = makeRun("o", { stats: stats({ acc: [0, 1, "max"], loss: [0, 1, "max"] }) });
-  assert.equal(betterFor("value:loss", undefined, base, [other]), "lower");
-  assert.equal(betterFor("value:loss", "higher", base, [other]), "higher");
-  assert.equal(betterFor("value:acc", undefined, base, [base, other]), "higher");
-  assert.equal(betterFor("param:lr", undefined, base, [other]), null);
-  assert.equal(betterFor("computed:c", "lower", base, []), "lower");
-  assert.equal(betterFor("value:loss", undefined, undefined, []), null);
+test("goalFor: a metric's rule, a computed column's one metric, else none", () => {
+  const ruleOf = rulesOf({ logged: { loss: "min" }, overrides: { acc: { goal: "higher" } }, rules: {} });
+  const computed = [
+    { id: "c", expr: "min(loss) * 2" },
+    { id: "d", expr: "last(loss) / last(acc)" },
+  ];
+  assert.equal(goalFor("value:loss", ruleOf, computed), "lower");
+  assert.equal(goalFor("value:acc", ruleOf, computed), "higher");
+  assert.equal(goalFor("value:other", ruleOf, computed), "none");
+  assert.equal(goalFor("param:lr", ruleOf, computed), "none");
+  assert.equal(goalFor("computed:c", ruleOf, computed), "lower");
+  assert.equal(goalFor("computed:d", ruleOf, computed), "none");
+  assert.equal(exprGoal("((", ruleOf), "none");
 });
 
 test("deltaOf / toneOf", () => {
@@ -32,7 +29,7 @@ test("deltaOf / toneOf", () => {
   assert.equal(toneOf(1, "higher"), "better");
   assert.equal(toneOf(-1, "higher"), "worse");
   assert.equal(toneOf(0, "higher"), "same");
-  assert.equal(toneOf(1, null), "neutral");
+  assert.equal(toneOf(1, "none"), "neutral");
   assert.equal(toneOf(null, "lower"), "neutral");
 });
 

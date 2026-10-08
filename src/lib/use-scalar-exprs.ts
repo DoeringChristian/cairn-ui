@@ -12,7 +12,7 @@
  * The planning and evaluation are pure (lib/scalar-exprs.ts).
  */
 import { useMemo } from "react";
-import { useRunsDetails, useSequencesForRuns } from "../api/hooks";
+import { useMetricRules, useRunsDetails, useSequencesForRuns } from "../api/hooks";
 import type { RunDetailResponse } from "../api/types";
 import type { RunContext, SeriesData } from "./expr";
 import {
@@ -56,6 +56,8 @@ export function useScalarExprs(runIds: string[], srcs: readonly string[]): Scala
   const seriesKey = seriesQs.map((q) => q.dataUpdatedAt).join("|");
 
   const loading = detailQs.some((q) => q.isLoading) || seriesQs.some((q) => q.isLoading);
+  // Metric pickers reduce each metric by its summary rule in the project.
+  const ruleOf = useMetricRules(detailQs.find((q) => q.data)?.data?.run.project_id);
 
   return useMemo(() => {
     const details = new Map<string, RunDetailResponse>();
@@ -91,8 +93,8 @@ export function useScalarExprs(runIds: string[], srcs: readonly string[]): Scala
       }
     });
 
-    const options = scalarFieldOptions([...details.values()]);
+    const options = scalarFieldOptions([...details.values()], ruleOf);
     return { values, errors, asofJoin, contexts, details, options, loading };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runIds, plan, specs, detailsKey, seriesKey, loading]);
+  }, [runIds, plan, specs, detailsKey, seriesKey, loading, ruleOf]);
 }

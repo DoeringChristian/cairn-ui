@@ -6,10 +6,11 @@
  */
 
 import { useMemo, useRef, useState } from "react";
-import { useRunsDetails } from "../api/hooks";
+import { useRunsDetails, useMetricRules } from "../api/hooks";
 import type { RunDetailResponse } from "../api/types";
 import { useCardSettings } from "../lib/card-settings";
 import { downloadCsv, safeName } from "../lib/download";
+import type { RuleOf } from "../lib/metric-rules";
 import { buildEnvDiff, buildMetricsSummary, buildParamDiff, selectRows, type CompareTable } from "../lib/run-compare";
 import { disambiguateRunLabels, shortRunId, useRunMetadataVersion } from "../lib/run-label";
 import { useRunColors, useVisibleRuns } from "../lib/run-view";
@@ -36,10 +37,10 @@ const TABLES: Record<RunCompareSection, (p: RunCompareSectionProps) => JSX.Eleme
   env: EnvDiffTable,
 };
 
-const BUILD: Record<RunCompareSection, (runs: readonly RunDetailResponse[]) => CompareTable> = {
+const BUILD: Record<RunCompareSection, (runs: readonly RunDetailResponse[], ruleOf: RuleOf) => CompareTable> = {
   metrics: buildMetricsSummary,
-  params: buildParamDiff,
-  env: buildEnvDiff,
+  params: (runs) => buildParamDiff(runs),
+  env: (runs) => buildEnvDiff(runs),
 };
 
 export default function RunCompareCard({ runIds: allRunIds, settingsKey, onRemove, autoOpenSettings }: Props) {
@@ -58,6 +59,7 @@ export default function RunCompareCard({ runIds: allRunIds, settingsKey, onRemov
     [dataKey, runIds.join("|")],
   );
 
+  const ruleOf = useMetricRules(runs[0]?.run.project_id);
   const metaVersion = useRunMetadataVersion();
   const labels = useMemo(
     () => disambiguateRunLabels(runIds),
@@ -127,7 +129,7 @@ export default function RunCompareCard({ runIds: allRunIds, settingsKey, onRemov
         const headers = ["table", "key", ...runs.map((rd) => labels[rd.run.id] ?? shortRunId(rd.run.id))];
         const rows: (string | number)[][] = [];
         for (const sec of s.sections) {
-          for (const r of selectRows(BUILD[sec](runs), s)) {
+          for (const r of selectRows(BUILD[sec](runs, ruleOf), s)) {
             rows.push([sec, r.key, ...r.values.map((v) => (v == null ? "" : typeof v === "number" ? v : String(v)))]);
           }
         }

@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from "react";
+import { useMetricRules } from "../api/hooks";
 import { useNavigate } from "react-router-dom";
 import { useCardSettings } from "../lib/card-settings";
 import { instanceDefaults, type ScatterSettings } from "./cards-settings/scatter";
 import ScatterChart, { type ScatterPoint } from "../charts/ScatterChart";
 import type { Better, ParetoDirection } from "../lib/plot-utils/pareto";
-import { summaryRuleFor } from "../lib/metric-defs";
 import { downloadCsv, safeName } from "../lib/download";
 import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import { useRunColors, useVisibleRuns } from "../lib/run-view";
@@ -84,15 +84,9 @@ export default function ScatterPlotCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exprs, runIds, runColors, settings.color, settings.labelTemplate, settings.tooltipFields, runMetaVersion]);
 
-  // Pareto direction per axis: the setting, else the metric's summary rule
-  // ("max" = higher is better), else lower is better.
-  const ruleOf = (metric: string) => {
-    for (const d of exprs.details.values()) {
-      const rule = summaryRuleFor(metric, d.metric_defs);
-      if (rule) return rule;
-    }
-    return null;
-  };
+  // Pareto direction per axis: the setting, else the metric's goal in the
+  // project (lib/metric-rules.ts), else lower is better.
+  const ruleOf = useMetricRules(exprs.details.values().next().value?.run.project_id);
   const paretoAuto: { x: Better; y: Better } = {
     x: (settings.x && ruleDirection(settings.x.src, ruleOf)) || "min",
     y: (settings.y && ruleDirection(settings.y.src, ruleOf)) || "min",

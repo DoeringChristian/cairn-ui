@@ -118,7 +118,7 @@ export default function CompareRowsTable({
                     </td>
                     {row.values.map((v, i) => {
                       const st = row.statuses?.[i];
-                      const diffCls = st && v != null ? diffCellClassName(st, row.lowerBetter) : "";
+                      const diffCls = st && v != null ? diffCellClassName(st, row.goal === "lower") : "";
                       return (
                         <td
                           key={runIds[i]}

@@ -28,6 +28,7 @@ export const qk = {
   artifactText: (hash: string | null | undefined) => ["artifact-text", hash] as const,
   /** A project's default viewer per kind (lib/custom/hooks useViewerDefaults). */
   viewerDefaults: (project: string) => ["viewer-defaults", project] as const,
+  metricRules: (project: string) => ["metric-rules", project] as const,
   /** The first `bytes` of an artifact as text (a file too big to show whole). */
   artifactTextHead: (hash: string, bytes: number) => ["artifact-text-head", hash, bytes] as const,
   // Artifact registry: every key starts with "artifact-" or "lineage" (see

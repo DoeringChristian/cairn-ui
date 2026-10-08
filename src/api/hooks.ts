@@ -14,6 +14,7 @@ import { qk } from "./query-keys";
 import { MAX_LIVE_IDS, mergeLiveRuns, runningIds } from "./runs-live-core";
 import { addRunMetadata, setRunMetadata } from "../lib/run-label";
 import { resolveRunSelectorFromRuns, type RunSelector } from "../lib/run-selector";
+import { rulesOf, type RuleOf } from "../lib/metric-rules";
 
 export function useHealth() {
   return useQuery({ queryKey: qk.health(), queryFn: api.health, refetchInterval: 5_000 });
@@ -508,4 +509,19 @@ export function useSweepAction(sweepId: string, projectId: string) {
       qc.invalidateQueries({ queryKey: qk.sweeps(projectId) });
     },
   });
+}
+
+/**
+ * A project's metric rules as a resolver (lib/metric-rules.ts): each
+ * metric's effective summary and goal. No project (or not loaded yet): no
+ * rules.
+ */
+export function useMetricRules(projectId: string | null | undefined): RuleOf {
+  const q = useQuery({
+    queryKey: qk.metricRules(projectId ?? ""),
+    queryFn: () => api.metricRules(projectId!),
+    enabled: !!projectId,
+    staleTime: 10_000,
+  });
+  return useMemo(() => rulesOf(q.data), [q.data]);
 }

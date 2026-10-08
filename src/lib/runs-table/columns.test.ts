@@ -14,7 +14,6 @@ import {
   computeColumns,
   layoutColumns,
   moveColumn,
-  setBetter,
   setHidden,
   setWidth,
   togglePinned,
@@ -23,7 +22,7 @@ import {
 import { makeRun, stats } from "./test-run.ts";
 
 const runs = [
-  makeRun("a", { values: { "val.loss": 0.3, acc: 0.9 }, params: { lr: 0.1 }, stats: stats({ "val.loss": [0.2, 0.5, "min"] }) }),
+  makeRun("a", { values: { "val.loss": 0.3, acc: 0.9 }, params: { lr: 0.1 }, stats: stats({ "val.loss": [0.2, 0.5] }) }),
   makeRun("b", { values: { acc: 0.8 }, params: { lr: 0.01, opt: "sgd" } }),
 ];
 
@@ -72,12 +71,6 @@ test("moveColumn: reorders the scrolling block; new columns land near their kin"
   let p = togglePinned(togglePinned(EMPTY_COLUMNS, "param:lr"), "value:acc");
   p = moveColumn(p, [], "value:acc", "param:lr");
   assert.deepEqual(p.pinned, ["value:acc", "param:lr"]);
-});
-
-test("setBetter sets and clears a per-column override", () => {
-  const s = setBetter(EMPTY_COLUMNS, "value:acc", "higher");
-  assert.deepEqual(s.better, { "value:acc": "higher" });
-  assert.deepEqual(setBetter(s, "value:acc", null).better, {});
 });
 
 test("computed columns: scalar expressions over stats, params and values", () => {

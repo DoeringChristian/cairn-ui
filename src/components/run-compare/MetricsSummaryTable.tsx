@@ -1,15 +1,17 @@
 import { useMemo } from "react";
+import { useMetricRules } from "../../api/hooks";
 import { buildMetricsSummary, differingCount, selectRows } from "../../lib/run-compare";
 import CompareRowsTable, { type RunCompareSectionProps } from "./CompareRowsTable";
 
 /**
  * Each run's final metric values side by side: the same values the runs
- * table shows. The best cell is green, the worst red; a metric whose summary
- * rule is "min" counts lower as better (marked ↓). `system.*` metrics are
- * left out.
+ * table shows. For a metric with a goal in the project (lib/metric-rules.ts)
+ * the best cell is green and the worst red (lower is better: marked ↓).
+ * `system.*` metrics are left out.
  */
 export default function MetricsSummaryTable({ runs, labels, colors, onlyDiffs, filter = "", pinnedKeys = [], onTogglePin, actions }: RunCompareSectionProps) {
-  const table = useMemo(() => buildMetricsSummary(runs), [runs]);
+  const ruleOf = useMetricRules(runs[0]?.run.project_id);
+  const table = useMemo(() => buildMetricsSummary(runs, ruleOf), [runs, ruleOf]);
   const rows = useMemo(() => selectRows(table, { onlyDiffs, filter, pinnedKeys }), [table, onlyDiffs, filter, pinnedKeys]);
   const n = differingCount(table);
   return (
@@ -31,8 +33,8 @@ export default function MetricsSummaryTable({ runs, labels, colors, onlyDiffs, f
       pinnedKeys={pinnedKeys}
       onTogglePin={onTogglePin}
       keySuffix={(row) =>
-        row.lowerBetter && (
-          <span className="ml-0.5 text-[10px] text-fg-subtle" title='summary="min": lower is better'>
+        row.goal === "lower" && (
+          <span className="ml-0.5 text-[10px] text-fg-subtle" title="lower is better">
             ↓
           </span>
         )

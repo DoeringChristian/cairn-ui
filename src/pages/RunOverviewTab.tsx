@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArtifacts, useSourceTree } from "../api/hooks";
-import type { ArtifactVersionInfo, MetricDef, Param, Run } from "../api/types";
+import { useMetricRules, useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArtifacts, useSourceTree } from "../api/hooks";
+import type { ArtifactVersionInfo, Param, Run } from "../api/types";
 import { groupWorkspacePath } from "../components/runs-table/RunsTableParts";
 import TagInput from "../components/TagInput";
 import { copyText } from "../lib/clipboard";
@@ -23,7 +23,6 @@ interface Ctx {
   summary: Param[];
   /** The summary as logged (nested), media values as `$media` markers. */
   summaryDoc: Record<string, unknown>;
-  metricDefs: MetricDef[];
 }
 
 /**
@@ -34,14 +33,14 @@ interface Ctx {
  * artifacts it logged and used.
  */
 export default function RunOverviewTab() {
-  const { run, params, summary, summaryDoc, metricDefs } = useOutletContext<Ctx>();
+  const { run, params, summary, summaryDoc } = useOutletContext<Ctx>();
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-semibold">Overview</h2>
       <RunBlock run={run} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ConfigTable params={params} />
-        <SummaryTable run={run} summary={summary} summaryDoc={summaryDoc} metricDefs={metricDefs} />
+        <SummaryTable run={run} summary={summary} summaryDoc={summaryDoc} />
       </div>
       <RunArtifactsSection run={run} />
     </div>
@@ -277,9 +276,10 @@ function ConfigTable({ params }: { params: Param[] }) {
   );
 }
 
-function SummaryTable({ run, summary, summaryDoc, metricDefs }: { run: Run; summary: Param[]; summaryDoc: Record<string, unknown>; metricDefs: MetricDef[] }) {
+function SummaryTable({ run, summary, summaryDoc }: { run: Run; summary: Param[]; summaryDoc: Record<string, unknown> }) {
   const [query, setQuery] = useState("");
-  const all = summaryRows(run.values ?? {}, summaryDoc, summary, metricDefs);
+  const ruleOf = useMetricRules(run.project_id);
+  const all = summaryRows(run.values ?? {}, summaryDoc, summary, ruleOf);
   const rows = filterRows(all, query);
   return (
     <Section title={`Summary (${all.length})`} right={all.length > 0 ? <SearchBox value={query} onChange={setQuery} label="Search summary" /> : undefined}>

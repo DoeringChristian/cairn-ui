@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { RunDetailResponse } from "../api/types.ts";
 import { buildEnvDiff, buildMetricsSummary, buildParamDiff, differingCount, selectRows } from "./run-compare.ts";
+import { rulesOf } from "./metric-rules.ts";
 
 function run(
   id: string,
@@ -9,8 +10,6 @@ function run(
     params?: Record<string, string>;
     values?: Record<string, number | string | null>;
     env?: Record<string, unknown> | null;
-    defs?: { name: string; summary?: string }[];
-    stats?: Record<string, { rule: string | null }>;
   } = {},
 ): RunDetailResponse {
   return {
@@ -18,10 +17,8 @@ function run(
       id,
       env_snapshot: opts.env === undefined ? null : JSON.stringify(opts.env),
       values: opts.values ?? {},
-      stats: opts.stats,
     },
     params: Object.entries(opts.params ?? {}).map(([key, value]) => ({ key, value, value_type: "str" })),
-    metric_defs: opts.defs,
   } as unknown as RunDetailResponse;
 }
 
@@ -41,23 +38,26 @@ test("param diff: rows per key, missing counts as differing, numeric rows get st
   assert.equal(differingCount(t), 2);
 });
 
-test("metrics summary: system.* dropped, min rule from defs or stats inverts the colour", () => {
-  const t = buildMetricsSummary([
-    run("a", {
-      values: { loss: 0.2, acc: 0.9, err: 3, "system.cpu": 50 },
-      defs: [{ name: "loss", summary: "min" }],
-      stats: { err: { rule: "min" } },
-    }),
-    run("b", { values: { loss: 0.5, acc: 0.8, err: 3 } }),
-  ]);
-  assert.deepEqual(t.rows.map((r) => r.key), ["acc", "err", "loss"]);
-  const [acc, err, loss] = t.rows;
-  assert.equal(acc!.lowerBetter, false);
+test("metrics summary: system.* dropped, each row's goal from the project's rules", () => {
+  const ruleOf = rulesOf({ logged: { loss: "min", acc: "max" }, overrides: { err: { goal: "lower" } }, rules: {} });
+  const t = buildMetricsSummary(
+    [
+      run("a", { values: { loss: 0.2, acc: 0.9, err: 3, f1: 0.5, "system.cpu": 50 } }),
+      run("b", { values: { loss: 0.5, acc: 0.8, err: 3, f1: 0.4 } }),
+    ],
+    ruleOf,
+  );
+  assert.deepEqual(t.rows.map((r) => r.key), ["acc", "err", "f1", "loss"]);
+  const [acc, err, f1, loss] = t.rows;
+  assert.equal(acc!.goal, "higher");
   assert.deepEqual(acc!.statuses, ["higher", "lower"]);
-  assert.equal(loss!.lowerBetter, true);
-  assert.equal(err!.lowerBetter, true);
+  assert.equal(loss!.goal, "lower");
+  assert.equal(err!.goal, "lower");
   assert.equal(err!.differs, false);
   assert.deepEqual(err!.statuses, ["equal", "equal"]);
+  // No goal: not coloured.
+  assert.equal(f1!.goal, "none");
+  assert.equal(f1!.statuses, null);
 });
 
 test("env diff: headline fields, dashes without a snapshot, never coloured", () => {

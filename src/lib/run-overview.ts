@@ -5,7 +5,8 @@
  * Pure: runs under `node --test`.
  */
 
-import type { MetricDef, Param } from "../api/types.ts";
+import type { RuleOf } from "./metric-rules.ts";
+import type { Param } from "../api/types.ts";
 import { isSystemMetric, metricValueSource } from "./metric-defs.ts";
 import { summaryMediaOf, type SummaryMedia } from "./media/summary-media.ts";
 
@@ -56,13 +57,13 @@ export function summaryRows(
   values: Readonly<Record<string, unknown>>,
   summaryDoc: Readonly<Record<string, unknown>>,
   summary: readonly Param[],
-  defs: readonly MetricDef[] | undefined,
+  ruleOf: RuleOf,
 ): SummaryRow[] {
   const explicit = new Set(summary.map((p) => p.key));
   const rows = new Map<string, SummaryRow>();
   for (const [key, value] of Object.entries(values)) {
     if (isSystemMetric(key)) continue;
-    rows.set(key, { key, value, source: metricValueSource(key, explicit, defs), media: null });
+    rows.set(key, { key, value, source: metricValueSource(key, explicit, ruleOf), media: null });
   }
   for (const [key, value] of summaryLeaves(summaryDoc)) {
     if (rows.has(key) || isSystemMetric(key)) continue;

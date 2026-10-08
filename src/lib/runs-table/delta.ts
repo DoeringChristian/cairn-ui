@@ -1,45 +1,38 @@
 /**
  * Deltas against the baseline run, coloured better or worse.
  *
- * Which way is better comes from the column's own `better` setting when the
- * user set one, else from the metric's summary rule (`run.stats[key].rule`
- * as the server reports it): `min` means lower is better, `max` higher.
- * Any other rule (mean, last, none) has no direction, and the delta is shown
- * uncoloured.
+ * Which way is better is the metric's goal in the project
+ * (lib/metric-rules.ts: a project override, else from its summary rule, min
+ * means lower is better, max higher). A computed column reads the goal of
+ * the one metric its expression reads; a config column has none. Without a
+ * goal the delta is shown uncoloured.
  */
 
-import type { Run } from "../../api/types.ts";
-import { columnKind, type Better } from "./columns.ts";
+import { deps, parse } from "../expr/index.ts";
+import type { Goal, RuleOf } from "../metric-rules.ts";
+import { columnKind, type ComputedColumn } from "./columns.ts";
 
 export type Tone = "better" | "worse" | "same" | "neutral";
 
-/** The better direction a summary rule implies (null = no direction). */
-export function betterFromRule(rule: string | null | undefined): Better | null {
-  if (rule === "min") return "lower";
-  if (rule === "max") return "higher";
-  return null;
+/** The goal of an expression's value: its one metric's (none when it reads several or none). */
+export function exprGoal(src: string, ruleOf: RuleOf): Goal {
+  try {
+    const ms = deps(parse(src)).metrics;
+    return ms.length === 1 ? ruleOf(ms[0]!).goal : "none";
+  } catch {
+    return "none";
+  }
 }
 
-/**
- * A column's better direction: the explicit setting, else (for a metric
- * column) the baseline's summary rule for the metric, else any run's.
- */
-export function betterFor(
-  col: string,
-  override: Better | undefined,
-  baseline: Run | undefined,
-  runs: readonly Run[],
-): Better | null {
-  if (override) return override;
+/** A column's goal: a metric's, a computed column's metric's, else none. */
+export function goalFor(col: string, ruleOf: RuleOf, computed: readonly ComputedColumn[]): Goal {
   const { kind, key } = columnKind(col);
-  if (kind !== "value") return null;
-  const fromBaseline = betterFromRule(baseline?.stats?.[key]?.rule);
-  if (fromBaseline) return fromBaseline;
-  for (const r of runs) {
-    const b = betterFromRule(r.stats?.[key]?.rule);
-    if (b) return b;
+  if (kind === "value") return ruleOf(key).goal;
+  if (kind === "computed") {
+    const c = computed.find((x) => x.id === key);
+    return c ? exprGoal(c.expr, ruleOf) : "none";
   }
-  return null;
+  return "none";
 }
 
 /** `value − baseline` for two finite numbers (bools as 0/1), else null. */
@@ -50,11 +43,11 @@ export function deltaOf(value: unknown, baseline: unknown): number | null {
   return a - b;
 }
 
-export function toneOf(delta: number | null, better: Better | null): Tone {
+export function toneOf(delta: number | null, goal: Goal): Tone {
   if (delta === null) return "neutral";
   if (delta === 0) return "same";
-  if (!better) return "neutral";
-  return (delta < 0) === (better === "lower") ? "better" : "worse";
+  if (goal === "none") return "neutral";
+  return (delta < 0) === (goal === "lower") ? "better" : "worse";
 }
 
 /** `+0.0123`, `-4.5e-5`: a signed, compact delta. */

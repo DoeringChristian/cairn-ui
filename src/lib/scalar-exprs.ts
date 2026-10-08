@@ -11,6 +11,7 @@
  *
  * Tested in `scalar-exprs.test.ts`.
  */
+import { goalDirection, noRules, type RuleOf } from "./metric-rules.ts";
 import {
   check,
   deps,
@@ -261,7 +262,7 @@ export function reducerForRule(rule: string | null | undefined): Reducer {
  * `last(loss)`), and every summary key as `summary.<key>`. Any other
  * expression is typed in.
  */
-export function scalarFieldOptions(details: ReadonlyArray<RunDetailResponse | undefined>): FieldOption[] {
+export function scalarFieldOptions(details: ReadonlyArray<RunDetailResponse | undefined>, ruleOf: RuleOf = noRules): FieldOption[] {
   const params = new Set<string>();
   const summary = new Set<string>();
   const metrics = new Map<string, string | null>();
@@ -269,8 +270,8 @@ export function scalarFieldOptions(details: ReadonlyArray<RunDetailResponse | un
     if (!d) continue;
     for (const p of d.params) params.add(p.key);
     for (const s of d.summary ?? []) summary.add(s.key);
-    for (const [name, s] of Object.entries(d.run.stats ?? {})) {
-      if (!metrics.get(name)) metrics.set(name, s.rule ?? null);
+    for (const name of Object.keys(d.run.stats ?? {})) {
+      if (!metrics.has(name)) metrics.set(name, ruleOf(name).summary);
     }
   }
   const sorted = <T>(xs: Iterable<T>, key: (x: T) => string) => [...xs].sort((a, b) => key(a).localeCompare(key(b)));
@@ -283,14 +284,11 @@ export function scalarFieldOptions(details: ReadonlyArray<RunDetailResponse | un
 }
 
 /**
- * Which way is better for an expression's value, from its metric's summary
- * rule (`max` = higher is better) when it reads exactly one metric with a
- * min/max rule; else null (the caller's default).
+ * Which way is better for an expression's value: the goal of its metric in
+ * the project (lib/metric-rules.ts) when it reads exactly one metric; else
+ * null (the caller's default).
  */
-export function ruleDirection(
-  src: string,
-  ruleOf: (metric: string) => string | null | undefined,
-): "min" | "max" | null {
+export function ruleDirection(src: string, ruleOf: RuleOf): "min" | "max" | null {
   let node: Node;
   try {
     node = parse(src);
@@ -299,6 +297,5 @@ export function ruleDirection(
   }
   const ms = deps(node).metrics;
   if (ms.length !== 1) return null;
-  const rule = ruleOf(ms[0]!);
-  return rule === "min" || rule === "max" ? rule : null;
+  return goalDirection(ruleOf(ms[0]!).goal);
 }

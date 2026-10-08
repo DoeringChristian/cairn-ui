@@ -88,7 +88,7 @@ export default function RunDetailPage() {
         ))}
       </nav>
       <RunViewContext.Provider value={runView}>
-        <Outlet context={{ run, params: q.data.params, config: q.data.config_doc ?? {}, summary: q.data.summary ?? [], summaryDoc: q.data.summary_doc ?? {}, metricDefs: q.data.metric_defs ?? [] }} />
+        <Outlet context={{ run, params: q.data.params, config: q.data.config_doc ?? {}, summary: q.data.summary ?? [], summaryDoc: q.data.summary_doc ?? {} }} />
       </RunViewContext.Provider>
     </div>
   );

@@ -87,7 +87,7 @@ export interface Run {
    */
   values?: Record<string, number | string | boolean | null>;
   // --- wave 2 / B: per-metric stats (GET /api/runs/{id}; /api/runs?include=stats) ---
-  /** Per scalar metric: count, first/last (by step), min/max/mean, step span, rule. */
+  /** Per scalar metric: count, first/last (by step), min/max/mean, step span. */
   stats?: Record<string, RunMetricStats>;
 }
 
@@ -102,8 +102,6 @@ export interface RunMetricStats {
   mean: number | null;
   first_step: number;
   last_step: number;
-  /** The metric's summary rule (min|max|mean|last), or null. */
-  rule: string | null;
 }
 
 export interface Param {

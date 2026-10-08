@@ -1,0 +1,1090 @@
+{
+ "description": "Effective metric rule (cairn/server/metric_rules.py effective_rule, cairn-ui src/lib/metric-rules.ts effectiveRule): summary = override.summary ?? logged ?? null; goal = override.goal ?? from the effective summary (min: lower, max: higher) ?? from the logged summary ?? none.",
+ "cases": [
+  {
+   "override": null,
+   "logged": null,
+   "expected": {
+    "summary": null,
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "lower"
+   },
+   "logged": null,
+   "expected": {
+    "summary": null,
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "higher"
+   },
+   "logged": null,
+   "expected": {
+    "summary": null,
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "none"
+   },
+   "logged": null,
+   "expected": {
+    "summary": null,
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": null
+   },
+   "logged": null,
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "lower"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "higher"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "min",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "none"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "min",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": null
+   },
+   "logged": null,
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "lower"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "max",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "higher"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "none"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "max",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": null
+   },
+   "logged": null,
+   "expected": {
+    "summary": "mean",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "lower"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "mean",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "higher"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "mean",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "none"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "mean",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": null
+   },
+   "logged": null,
+   "expected": {
+    "summary": "last",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "lower"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "last",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "higher"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "last",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "none"
+   },
+   "logged": null,
+   "expected": {
+    "summary": "last",
+    "goal": "none"
+   }
+  },
+  {
+   "override": null,
+   "logged": "min",
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "lower"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "higher"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "min",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "none"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "min",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": null
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "lower"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "higher"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "min",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "none"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "min",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": null
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "lower"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "max",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "higher"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "none"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "max",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": null
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "mean",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "lower"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "mean",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "higher"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "mean",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "none"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "mean",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": null
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "last",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "lower"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "last",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "higher"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "last",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "none"
+   },
+   "logged": "min",
+   "expected": {
+    "summary": "last",
+    "goal": "none"
+   }
+  },
+  {
+   "override": null,
+   "logged": "max",
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "lower"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "max",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "higher"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "none"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "max",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": null
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "lower"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "higher"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "min",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "none"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "min",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": null
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "lower"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "max",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "higher"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "none"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "max",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": null
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "mean",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "lower"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "mean",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "higher"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "mean",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "none"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "mean",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": null
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "last",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "lower"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "last",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "higher"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "last",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "none"
+   },
+   "logged": "max",
+   "expected": {
+    "summary": "last",
+    "goal": "none"
+   }
+  },
+  {
+   "override": null,
+   "logged": "mean",
+   "expected": {
+    "summary": "mean",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "lower"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "mean",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "higher"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "mean",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "none"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "mean",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": null
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "lower"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "higher"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "min",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "none"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "min",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": null
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "lower"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "max",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "higher"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "none"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "max",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": null
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "mean",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "lower"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "mean",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "higher"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "mean",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "none"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "mean",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": null
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "last",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "lower"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "last",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "higher"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "last",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "none"
+   },
+   "logged": "mean",
+   "expected": {
+    "summary": "last",
+    "goal": "none"
+   }
+  },
+  {
+   "override": null,
+   "logged": "last",
+   "expected": {
+    "summary": "last",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "lower"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "last",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "higher"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "last",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": null,
+    "goal": "none"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "last",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": null
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "lower"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "min",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "higher"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "min",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "min",
+    "goal": "none"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "min",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": null
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "lower"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "max",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "higher"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "max",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "max",
+    "goal": "none"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "max",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": null
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "mean",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "lower"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "mean",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "higher"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "mean",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "mean",
+    "goal": "none"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "mean",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": null
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "last",
+    "goal": "none"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "lower"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "last",
+    "goal": "lower"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "higher"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "last",
+    "goal": "higher"
+   }
+  },
+  {
+   "override": {
+    "summary": "last",
+    "goal": "none"
+   },
+   "logged": "last",
+   "expected": {
+    "summary": "last",
+    "goal": "none"
+   }
+  }
+ ]
+}

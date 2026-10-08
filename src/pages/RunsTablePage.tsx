@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useInfiniteScroll } from "../lib/use-infinite-scroll";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useBulkRunMutation, useInfiniteRuns, useSetTags } from "../api/hooks";
+import { useBulkRunMutation, useInfiniteRuns, useMetricRules, useSetTags } from "../api/hooks";
 import type { Run } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
 import { RunProgressLine, RunProgressPct } from "../components/RunProgress";
@@ -47,10 +47,8 @@ import {
   isNumericColumn,
   layoutColumns,
   moveColumn,
-  setBetter,
   setHidden,
   togglePinned,
-  type Better,
   type ColumnsState,
   type ComputedColumn,
   clampColumnWidth,
@@ -58,7 +56,8 @@ import {
   setWidth,
 } from "../lib/runs-table/columns.ts";
 import { removeSortKey, toggleSort, type SortKey } from "../lib/runs-table/sort.ts";
-import { betterFor, deltaOf, formatDelta, relativeDelta, toneOf, type Tone } from "../lib/runs-table/delta.ts";
+import { deltaOf, formatDelta, goalFor, relativeDelta, toneOf, type Tone } from "../lib/runs-table/delta.ts";
+import type { Goal } from "../lib/metric-rules.ts";
 import { RunViewContext, useRunColors, type RunView } from "../lib/run-view";
 import { useProjectRunView } from "../lib/run-view-store";
 import { newId } from "../lib/reports/ids";
@@ -252,18 +251,16 @@ export default function RunsTablePage() {
 
   const colors = useRunColors(useMemo(() => sorted.map((r) => r.id), [sorted]));
 
-  const betterByColumn = useMemo(() => {
-    const out = new Map<string, Better | null>();
+  // Which way is better per column: the project's metric rules (deltas).
+  const ruleOf = useMetricRules(projectId);
+  const goalByColumn = useMemo(() => {
+    const out = new Map<string, Goal>();
     for (const col of shownColumns) {
       if (!isNumericColumn(col) || col === "duration") continue;
-      const { kind, key } = columnKind(col);
-      const own = columns.better[col] ?? (kind === "computed" ? computed.find((c) => c.id === key)?.better : undefined);
-      // Config params are inputs, not results: deltas only once the user says which way is better.
-      if (kind === "param" && !own) continue;
-      out.set(col, betterFor(col, own, baselineRun, filtered));
+      out.set(col, goalFor(col, ruleOf, computed));
     }
     return out;
-  }, [shownColumns, columns.better, computed, baselineRun, filtered]);
+  }, [shownColumns, ruleOf, computed]);
 
   // The rows in on-screen order (expanded groups only, a run listed once),
   // which is what a shift-click range spans.
@@ -493,14 +490,14 @@ export default function RunsTablePage() {
     }
     const v = cellValue(r, col, computedValues);
     let delta: ReactNode = null;
-    if (baselineRun && baselineRun.id !== r.id && betterByColumn.has(col)) {
+    if (baselineRun && baselineRun.id !== r.id && goalByColumn.has(col)) {
       const base = cellValue(baselineRun, col, computedValues);
       const d = deltaOf(v, base);
       if (d !== null) {
         const rel = relativeDelta(d, base);
         delta = (
           <span
-            className={`ml-1.5 text-[10px] ${TONE_CLASS[toneOf(d, betterByColumn.get(col) ?? null)]}`}
+            className={`ml-1.5 text-[10px] ${TONE_CLASS[toneOf(d, goalByColumn.get(col) ?? "none")]}`}
             title={`vs baseline${rel !== null ? ` (${rel > 0 ? "+" : ""}${(rel * 100).toFixed(1)}%)` : ""}`}
           >
             {formatDelta(d)}
@@ -796,7 +793,6 @@ export default function RunsTablePage() {
             columns={columns}
             sort={sort}
             computed={computed}
-            better={isNumericColumn(menuColumn) && menuColumn !== "duration" ? (betterByColumn.get(menuColumn) ?? null) : undefined}
             onColumns={setColumns}
             onSort={setSort}
             onComputed={setComputed}
@@ -1097,7 +1093,6 @@ function ColumnMenu({
   columns,
   sort,
   computed,
-  better,
   onColumns,
   onSort,
   onComputed,
@@ -1108,8 +1103,6 @@ function ColumnMenu({
   columns: ColumnsState;
   sort: SortKey[];
   computed: ComputedColumn[];
-  /** The column's resolved better direction; undefined when deltas don't apply. */
-  better: Better | null | undefined;
   onColumns: (next: ColumnsState) => void;
   onSort: (next: SortKey[]) => void;
   onComputed: (next: ComputedColumn[]) => void;
@@ -1124,11 +1117,6 @@ function ColumnMenu({
   const act = (fn: () => void) => () => {
     fn();
     onClose();
-  };
-  const own = columns.better[column] ?? def?.better;
-  const setOwnBetter = (b: Better | null) => {
-    if (def) onComputed(computed.map((c) => (c.id === def.id ? { ...c, better: b ?? undefined } : c)));
-    else onColumns(setBetter(columns, column, b));
   };
   if (editing && def) {
     return (
@@ -1176,26 +1164,6 @@ function ColumnMenu({
           </button>
         </>
       )}
-      {better !== undefined && (
-        <>
-          <div className="my-1 border-t border-border-subtle" />
-          <div className="flex items-center gap-1 px-2 py-1 text-[11px] text-fg-muted">
-            <span className="mr-auto">Better</span>
-            {([null, "lower", "higher"] as const).map((b) => (
-              <button
-                key={b ?? "auto"}
-                type="button"
-                aria-pressed={(own ?? null) === b}
-                className={`rounded border px-1.5 py-0.5 ${(own ?? null) === b ? "border-accent bg-accent/10 text-fg" : "border-border hover:text-fg"}`}
-                onClick={() => setOwnBetter(b)}
-                title={b === null ? `From the metric's summary rule${better && !own ? ` (${better})` : ""}` : `${b} is better`}
-              >
-                {b ?? "auto"}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
       {def && (
         <>
           <div className="my-1 border-t border-border-subtle" />
@@ -1227,7 +1195,6 @@ function ComputedForm({
 }) {
   const [expr, setExpr] = useState(initial?.expr ?? "");
   const [name, setName] = useState(initial?.name ?? "");
-  const [better, setBetterDraft] = useState<Better | "">(initial?.better ?? "");
   const error = expr.trim() ? compileScalarExpr(expr.trim()).error : null;
   return (
     <form
@@ -1238,12 +1205,10 @@ function ComputedForm({
         onSubmit({
           expr: expr.trim(),
           ...(name.trim() ? { name: name.trim() } : {}),
-          ...(better ? { better } : {}),
         });
         if (!initial) {
           setExpr("");
           setName("");
-          setBetterDraft("");
         }
       }}
     >
@@ -1264,17 +1229,6 @@ function ComputedForm({
           placeholder="Name (optional)"
           aria-label="Column name"
         />
-        <select
-          className="input w-full py-1 text-xs"
-          value={better}
-          onChange={(e) => setBetterDraft(e.target.value as Better | "")}
-          aria-label="Better"
-          title="Which way is better, for deltas against the baseline"
-        >
-          <option value="">better: none</option>
-          <option value="lower">lower is better</option>
-          <option value="higher">higher is better</option>
-        </select>
       </div>
       <div className="flex justify-end gap-1">
         {onCancel && (

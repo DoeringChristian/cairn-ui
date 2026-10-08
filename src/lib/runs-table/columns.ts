@@ -16,9 +16,6 @@ import { runContextOf, parseTags } from "./context.ts";
 export const BUILTIN_COLUMNS = ["name", "status", "created_at", "duration", "tags"] as const;
 export type BuiltinColumn = (typeof BUILTIN_COLUMNS)[number];
 
-/** Which way is better for a column's values (deltas against the baseline). */
-export type Better = "lower" | "higher";
-
 export interface ComputedColumn {
   /** Stable id; the column id is `computed:<id>`. */
   id: string;
@@ -26,7 +23,6 @@ export interface ComputedColumn {
   name?: string;
   /** A scalar expression (lib/expr), e.g. `min(val.loss)`. */
   expr: string;
-  better?: Better;
 }
 
 export interface ColumnsState {
@@ -35,13 +31,11 @@ export interface ColumnsState {
   hidden: string[];
   /** Pinned column ids, in pin order (they freeze after Name). */
   pinned: string[];
-  /** Per-column "better" override, beating the metric's summary rule. */
-  better: Record<string, Better>;
   /** Widths (px) the user dragged columns to; a column not listed has its default width. */
   widths: Record<string, number>;
 }
 
-export const EMPTY_COLUMNS: ColumnsState = { order: [], hidden: [], pinned: [], better: {}, widths: {} };
+export const EMPTY_COLUMNS: ColumnsState = { order: [], hidden: [], pinned: [], widths: {} };
 
 /** Default widths (px): Name and pinned columns are fixed; scrolling columns size to their content. */
 export const NAME_WIDTH = 360;
@@ -185,13 +179,6 @@ export function moveColumn(state: ColumnsState, visible: readonly string[], col:
   // Keep ordered-but-now-hidden columns' slots at the end so they return near where they were.
   const keep = state.order.filter((c) => !order.includes(c) && c !== col);
   return { ...state, order: [...order, ...keep] };
-}
-
-export function setBetter(state: ColumnsState, col: string, better: Better | null): ColumnsState {
-  const next = { ...state.better };
-  if (better) next[col] = better;
-  else delete next[col];
-  return { ...state, better: next };
 }
 
 // ---------------------------------------------------------------------------

@@ -34,11 +34,11 @@ export function makeRun(id: string, extra: Partial<Run> = {}): Run {
   };
 }
 
-/** `run.stats` from `{metric: [min, max, rule?]}` (first = min, last = max, mean = midpoint). */
-export function stats(spec: Record<string, [number, number, string?]>): Record<string, RunMetricStats> {
+/** `run.stats` from `{metric: [min, max]}` (first = min, last = max, mean = midpoint). */
+export function stats(spec: Record<string, [number, number]>): Record<string, RunMetricStats> {
   const out: Record<string, RunMetricStats> = {};
-  for (const [k, [min, max, rule]] of Object.entries(spec)) {
-    out[k] = { count: 2, first: min, last: max, min, max, mean: (min + max) / 2, first_step: 0, last_step: 1, rule: rule ?? null };
+  for (const [k, [min, max]] of Object.entries(spec)) {
+    out[k] = { count: 2, first: min, last: max, min, max, mean: (min + max) / 2, first_step: 0, last_step: 1 };
   }
   return out;
 }

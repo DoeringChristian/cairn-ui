@@ -1,3 +1,4 @@
+import { rulesOf } from "./metric-rules.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -48,9 +49,9 @@ function detail(over: Partial<RunDetailResponse["run"]> = {}, extra: Partial<Run
       archived_at: null,
       archived: false,
       stats: {
-        "val.loss": { count: 3, first: 3, last: 1.5, min: 1, max: 3, mean: 2, first_step: 0, last_step: 2, rule: "min" },
-        acc: { count: 3, first: 0.1, last: 0.9, min: 0.1, max: 0.9, mean: 0.5, first_step: 0, last_step: 2, rule: null },
-        "train/loss": { count: 1, first: 4, last: 4, min: 4, max: 4, mean: 4, first_step: 0, last_step: 0, rule: "max" },
+        "val.loss": { count: 3, first: 3, last: 1.5, min: 1, max: 3, mean: 2, first_step: 0, last_step: 2 },
+        acc: { count: 3, first: 0.1, last: 0.9, min: 0.1, max: 0.9, mean: 0.5, first_step: 0, last_step: 2 },
+        "train/loss": { count: 1, first: 4, last: 4, min: 4, max: 4, mean: 4, first_step: 0, last_step: 0 },
       },
       ...over,
     },
@@ -123,7 +124,7 @@ test("quoting: picked names parse back to the same metric / key", () => {
 });
 
 test("field options: params, metrics by their rule, summary keys", () => {
-  const opts = scalarFieldOptions([detail(), undefined]);
+  const opts = scalarFieldOptions([detail(), undefined], rulesOf({ logged: { "val.loss": "min", "train/loss": "max" }, overrides: {}, rules: {} }));
   assert.deepEqual(
     opts.map((o) => [o.kind, o.key]),
     [
@@ -139,9 +140,8 @@ test("field options: params, metrics by their rule, summary keys", () => {
   assert.equal(reducerForRule(null), "last");
 });
 
-test("rule direction: one metric with a min/max rule", () => {
-  const rules: Record<string, string> = { "val.loss": "min", acc: "max" };
-  const of = (m: string) => rules[m];
+test("rule direction: one metric with a goal", () => {
+  const of = rulesOf({ logged: { "val.loss": "min" }, overrides: { acc: { goal: "higher" } }, rules: {} });
   assert.equal(ruleDirection("min(val.loss)", of), "min");
   assert.equal(ruleDirection("last(acc) * 100", of), "max");
   assert.equal(ruleDirection("config.lr", of), null);
