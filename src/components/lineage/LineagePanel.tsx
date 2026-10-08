@@ -10,6 +10,7 @@ import { formatBytes, formatRelative, safeJsonParse } from "../../lib/format";
 import ChipEditor from "../artifacts/ChipEditor";
 import { AliasesEditor, DescriptionEditor, TagsEditor } from "../artifacts/VersionEditors";
 import RunStatusBadge from "../RunStatusBadge";
+import { groupPagePath } from "../runs-table/RunsTableParts";
 import ConfigTree from "../viewers/ConfigTree";
 import { TypeBadgeInline } from "./TypeBadgeInline";
 
@@ -112,7 +113,15 @@ function RunDetails({ node, projectId, actions }: { node: LineageRunNode; projec
       ) : (
         <dl>
           <Row label="Status">{node.status ? <RunStatusBadge status={node.status as RunStatus} archived={node.archived} /> : "—"}</Row>
-          <Row label="Group">{node.group ?? <span className="text-fg-subtle">—</span>}</Row>
+          <Row label="Group">
+            {node.group != null && project ? (
+              <Link to={groupPagePath(project, node.group)} className="mono text-accent hover:underline">
+                {node.group}
+              </Link>
+            ) : (
+              (node.group ?? <span className="text-fg-subtle">—</span>)
+            )}
+          </Row>
           <Row label="Job type">{node.job_type ?? <span className="text-fg-subtle">—</span>}</Row>
           <Row label="Created">{formatRelative(node.created_at)}</Row>
           <Row label="Tags">

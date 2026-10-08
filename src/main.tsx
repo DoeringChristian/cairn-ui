@@ -12,6 +12,7 @@ import ProjectsPage from "./pages/ProjectsPage";
 import ProjectLayout from "./pages/ProjectLayout";
 import RunsTablePage from "./pages/RunsTablePage";
 import WorkspacePage from "./pages/WorkspacePage";
+import GroupPage, { GroupRunsTab, GroupWorkspaceTab } from "./pages/GroupPage";
 import RunDetailPage from "./pages/RunDetailPage";
 import RunOverviewTab from "./pages/RunOverviewTab";
 import RunMetricsTab from "./pages/RunMetricsTab";
@@ -66,6 +67,15 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <RunsTablePage /> },
           { path: "workspace", element: <WorkspacePage /> },
+          // A run group's page: its workspace (index) and its runs.
+          {
+            path: "g/:group",
+            element: <GroupPage />,
+            children: [
+              { index: true, element: <GroupWorkspaceTab /> },
+              { path: "runs", element: <GroupRunsTab /> },
+            ],
+          },
           // The artifact explorer and the lineage viewer are code-split
           // (React Flow loads only when a graph is shown).
           {

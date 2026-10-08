@@ -12,6 +12,8 @@ import { shortRunLabel, useRunMetadataVersion } from "../lib/run-label";
 import CopyId from "../components/CopyId";
 import AlertBell from "../components/alerts/AlertBell";
 import ShortcutsDialog from "../components/ShortcutsDialog";
+import { groupPagePath } from "../components/runs-table/RunsTableParts";
+import { GroupSummary } from "./GroupPage";
 
 
 const NAV_ITEMS = [
@@ -105,7 +107,7 @@ const NAV_ITEMS = [
 ];
 
 export default function ProjectLayout() {
-  const { projectId, runId } = useParams<{ projectId: string; runId?: string }>();
+  const { projectId, runId, group } = useParams<{ projectId: string; runId?: string; group?: string }>();
   useRunMetadataVersion();
   if (!projectId) return null;
 
@@ -147,6 +149,14 @@ export default function ProjectLayout() {
             <Link to={`/p/${projectId}`} className="mono hover:text-fg">
               {projectId}
             </Link>
+            {group != null && (
+              <>
+                <span>›</span>
+                <Link to={groupPagePath(projectId, group)} className="mono text-fg hover:underline">
+                  {group}
+                </Link>
+              </>
+            )}
             {runId && (
               <>
                 <span>›</span>
@@ -154,7 +164,8 @@ export default function ProjectLayout() {
                 <CopyId id={runId} className="text-[10px]" />
               </>
             )}
-            <span className="ml-auto">
+            <span className="ml-auto flex items-center gap-3">
+              {group != null && <GroupSummary projectId={projectId} group={group} />}
               <AlertBell projectId={projectId} />
             </span>
           </nav>

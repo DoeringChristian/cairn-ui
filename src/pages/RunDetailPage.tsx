@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet, useParams } from "react-router-dom";
 import { useRun, useStopRun } from "../api/hooks";
 import type { Run } from "../api/types";
 import RunStatusBadge from "../components/RunStatusBadge";
+import { groupPagePath } from "../components/runs-table/RunsTableParts";
 import { RunProgressHeader } from "../components/RunProgress";
 import RunAlertBanners from "../components/alerts/RunAlertBanners";
 import { formatDuration, formatRelative } from "../lib/format";
@@ -38,6 +39,16 @@ export default function RunDetailPage() {
         </h1>
         {run.version != null ? (
           <span className="mono num text-sm text-fg-muted">v{run.version}</span>
+        ) : null}
+        {run.group != null ? (
+          <Link
+            to={groupPagePath(projectId, run.group)}
+            className="mono rounded border border-border px-1.5 py-0.5 text-xs text-fg-muted hover:border-accent hover:text-accent"
+            title={`Open the group ${run.group}`}
+            data-testid="run-group-badge"
+          >
+            {run.group} ↗
+          </Link>
         ) : null}
         <RunStatusBadge status={run.status} archived={run.archived} />
         {run.status === "running" && <StopButton run={run} />}
