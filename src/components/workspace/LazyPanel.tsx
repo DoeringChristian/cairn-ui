@@ -45,6 +45,8 @@ const DEFAULT_HEIGHTS: Partial<Record<CardType, number>> = {
   importance: 350,
   "run-compare": 420,
   "code-diff": 480,
+  scalars: 260,
+  config: 320,
 };
 /** For a card whose height follows its content (audio, artifact): a guess. */
 const AUTO_HEIGHT_GUESS = 200;

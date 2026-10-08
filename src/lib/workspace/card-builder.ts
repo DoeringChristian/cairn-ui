@@ -31,6 +31,7 @@ import { autoSectionOf, compareAutoSections } from "../sections.ts";
 import type { MetricSelector, Panel, WorkspaceDoc } from "./doc.ts";
 import { compileSelectorRegex, deriveLayout, panelLabel, type MetricInfo, type RenderedSection } from "./layout.ts";
 import { compilePanelFilter, matchesAnyPattern } from "./panel-filter.ts";
+import { summaryTypeOfName } from "./summary-cards.ts";
 
 /** What a card shows (a panel's data, see `panelData`). */
 export type PanelData =
@@ -63,6 +64,8 @@ const TYPE_LABELS: Partial<Record<CardType, string>> = {
   importance: "Parameter importance",
   "run-compare": "Run comparer",
   "code-diff": "Code diff",
+  scalars: "Scalars",
+  config: "Config",
   pointcloud: "Point cloud",
   boxes3d: "3D boxes",
   preset: "Confusion / PR / ROC",
@@ -79,6 +82,8 @@ const TYPE_HINTS: Partial<Record<CardType, string>> = {
   importance: "Which config values drive this series.",
   "run-compare": "Config, summary and metadata side by side.",
   "code-diff": "The source of two runs, diffed.",
+  scalars: "Single-step metrics, summary values and run info: one row per run.",
+  config: "The config, tags and notes: one column per run.",
 };
 
 export function builderTypeLabel(type: CardType): string {
@@ -314,7 +319,7 @@ const SCALAR_MULTI_RUN: Array<[CardType, number, number]> = [
   ["importance", 1, 1],
 ];
 /** Cards without series: they compare whole runs. */
-const RUN_TYPES: CardType[] = ["run-compare", "code-diff", "parallel", "scatter", "bar", "tile", "importance"];
+const RUN_TYPES: CardType[] = ["scalars", "config", "run-compare", "code-diff", "parallel", "scatter", "bar", "tile", "importance"];
 
 export interface CompatResult {
   options: TypeOption[];
@@ -611,7 +616,7 @@ export function cardCatalogue(doc: WorkspaceDoc, metrics: readonly MetricInfo[])
   const byName = new Map(metrics.map((m) => [m.name, m]));
   for (const name of [...doc.removed].sort()) {
     const m = byName.get(name);
-    const kind = m?.object_type ?? "scalar";
+    const kind = summaryTypeOfName(name) ?? m?.object_type ?? "scalar";
     push("removed", { id: `auto:${name}`, type: kind as CardType, selector: { names: [name] }, settings: {} }, autoSectionOf(name, kind));
   }
   return out;

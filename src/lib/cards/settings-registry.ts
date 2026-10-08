@@ -20,12 +20,14 @@ import { meta as importance } from "../../components/cards-settings/importance.t
 import { meta as runCompare } from "../../components/cards-settings/run-compare.ts";
 import { meta as custom } from "../../components/cards-settings/custom.ts";
 import { meta as codeDiff } from "../../components/cards-settings/code-diff.ts";
+import { meta as config } from "../../components/cards-settings/config.ts";
 import { meta as markdown } from "../../components/cards-settings/markdown.ts";
 import { meta as mesh } from "../../components/cards-settings/mesh.ts";
 import { meta as parallel } from "../../components/cards-settings/parallel.ts";
 import { meta as pointcloud } from "../../components/cards-settings/pointcloud.ts";
 import { meta as preset } from "../../components/cards-settings/preset.ts";
 import { meta as scalar } from "../../components/cards-settings/scalar.ts";
+import { meta as scalars } from "../../components/cards-settings/scalars.ts";
 import { meta as scatter } from "../../components/cards-settings/scatter.ts";
 import { meta as table } from "../../components/cards-settings/table.ts";
 import { meta as tensor } from "../../components/cards-settings/tensor.ts";
@@ -60,6 +62,8 @@ const REGISTRY: Record<CardType, CardSettingsMeta<any>> = {
   importance,
   "run-compare": runCompare,
   "code-diff": codeDiff,
+  scalars,
+  config,
   table,
   html,
   markdown,

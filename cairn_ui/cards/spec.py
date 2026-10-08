@@ -70,6 +70,8 @@ CARD_TYPES: tuple[str, ...] = (
     "importance",
     "run-compare",
     "code-diff",
+    "scalars",
+    "config",
     # Renderer-only types (CardRenderer.tsx's object_type switch).
     "table",
     "html",
@@ -99,6 +101,8 @@ CardType = Literal[
     "importance",
     "run-compare",
     "code-diff",
+    "scalars",
+    "config",
     "table",
     "html",
     "markdown",

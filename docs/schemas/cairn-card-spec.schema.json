@@ -59,6 +59,8 @@
         "importance",
         "run-compare",
         "code-diff",
+        "scalars",
+        "config",
         "table",
         "html",
         "markdown",

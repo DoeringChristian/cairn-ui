@@ -46,7 +46,7 @@ test("media and single-series kinds offer their own card; mixed kinds offer noth
 test("regex data offers the per-metric card of its matches' kind; whole runs offer run-level cards", () => {
   assert.deepEqual(types(compatibleTypes({ mode: "regex", regex: "val\\..*" }, METRICS, 1)), ["scalar"]);
   assert.deepEqual(compatibleTypes({ mode: "regex", regex: "(" }, METRICS, 1).options, []);
-  assert.equal(types(compatibleTypes({ mode: "runs" }, METRICS, 1))[0], "run-compare(needs 2+ runs)");
+  assert.deepEqual(types(compatibleTypes({ mode: "runs" }, METRICS, 1)).slice(0, 3), ["scalars", "config", "run-compare(needs 2+ runs)"]);
 });
 
 test("an edited card keeps its type on offer even when its data is not logged", () => {

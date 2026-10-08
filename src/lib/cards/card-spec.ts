@@ -51,6 +51,8 @@ export const CARD_TYPES = [
   "importance",
   "run-compare",
   "code-diff",
+  "scalars",
+  "config",
   // Renderer-only types (CardRenderer.tsx's `metric.object_type` switch)
   // that predate this reconciliation without a `ComparisonCard.type` entry.
   "table",

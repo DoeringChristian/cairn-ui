@@ -38,6 +38,8 @@ const CARD_MIN_SIZES: Record<string, CardMinSize> = {
   importance: { minHeight: 220, minSpan: 1 },
   "run-compare": { minHeight: 200, minSpan: 2 },
   "code-diff": { minHeight: 280, minSpan: 3 },
+  scalars: { minHeight: 140, minSpan: 2 },
+  config: { minHeight: 140, minSpan: 2 },
   html: { minHeight: 150, minSpan: 1 },
   markdown: { minHeight: 150, minSpan: 1 },
   text: { minHeight: 150, minSpan: 1 },

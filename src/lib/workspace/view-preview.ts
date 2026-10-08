@@ -70,6 +70,8 @@ const OTHER_ICONS: Partial<Record<CardType, string>> = {
   importance: "fa-ranking-star",
   "run-compare": "fa-table-columns",
   "code-diff": "fa-code-compare",
+  scalars: "fa-table-list",
+  config: "fa-sliders",
 };
 
 /** The icon a preview box shows for a card type. */
