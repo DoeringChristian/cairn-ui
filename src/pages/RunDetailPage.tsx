@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useParams } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useParams } from "react-router-dom";
 import { useRun, useStopRun } from "../api/hooks";
 import type { Run } from "../api/types";
 import CopyId from "../components/CopyId";
@@ -9,10 +9,12 @@ import RunAlertBanners from "../components/alerts/RunAlertBanners";
 import { formatDuration, formatRelative } from "../lib/format";
 import { RunViewContext } from "../lib/run-view";
 import { useProjectRunView } from "../lib/run-view-store";
+import { cameFromWorkspace, workspacePath } from "../lib/run-nav";
 
+/** The tabs as wandb's: Workspace is the default (the bare run path). */
 const TABS = [
+  { id: ".", label: "Workspace" },
   { id: "overview", label: "Overview" },
-  { id: "workspace", label: "Workspace" },
   { id: "system", label: "System" },
   { id: "logs", label: "Logs" },
   { id: "files", label: "Files" },
@@ -24,6 +26,9 @@ export default function RunDetailPage() {
   const q = useRun(runId!);
   // The project's run view (hidden, pinned, baseline), shared with the runs table.
   const runView = useProjectRunView(projectId);
+  // Opened from the workspace's runs sidebar: a link back to it (the tabs keep the state).
+  const location = useLocation();
+  const fromWorkspace = cameFromWorkspace(location.state);
 
   if (q.isLoading) return <p className="text-fg-muted">Loading…</p>;
   if (q.isError) return <p className="text-status-failed">Error: {String(q.error)}</p>;
@@ -35,6 +40,16 @@ export default function RunDetailPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-baseline gap-3">
+        {fromWorkspace ? (
+          <Link
+            to={workspacePath(projectId)}
+            className="shrink-0 text-sm text-fg-muted hover:text-accent"
+            title="Back to the project workspace"
+            data-testid="back-to-workspace"
+          >
+            ← Workspace
+          </Link>
+        ) : null}
         <h1 className="mono min-w-0 break-all text-xl font-semibold">
           {run.display_name ?? run.id}
         </h1>
@@ -73,7 +88,8 @@ export default function RunDetailPage() {
           <NavLink
             key={t.id}
             to={t.id}
-            end={t.id === "overview"}
+            state={location.state}
+            end={t.id === "."}
             className={({ isActive }) =>
               [
                 "border-b-2 px-3 py-2 text-sm transition-colors",

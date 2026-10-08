@@ -87,9 +87,8 @@ const router = createBrowserRouter([
             path: "r/:runId",
             element: <RunDetailPage />,
             children: [
-              { index: true, element: <RunOverviewTab /> },
+              { index: true, element: <RunWorkspaceTab /> },
               { path: "overview", element: <RunOverviewTab /> },
-              { path: "workspace", element: <RunWorkspaceTab /> },
               { path: "system", element: <RunSystemTab /> },
               { path: "logs", element: <RunLogsTab /> },
               { path: "files", element: <RunFilesTab /> },

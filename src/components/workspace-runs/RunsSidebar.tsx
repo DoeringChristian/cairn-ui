@@ -7,7 +7,7 @@
  * The rows come from `useRunsTable` (RunsWorkspace), the eyes from
  * lib/workspace-runs/visibility.ts; the header eye shows or hides every
  * listed run. Every toolbar or eye edit is a run-state edit (`onEdit`),
- * saved into the current view; collapsing is page-local. Pinned runs (the
+ * saved into the current view; collapsed groups are kept for the session. Pinned runs (the
  * project run view's) are listed first whatever the filters, with a pin
  * toggle on row hover. Hovering a row or a group header highlights its
  * line(s) in the charts (grouped: the innermost group's line), and a hovered line lights its row
@@ -54,8 +54,10 @@ interface Props {
   groupOf: ReadonlyMap<string, string> | null;
   /** The innermost groups' colours (lib/run-color.ts `groupLineColors`). */
   groupColors: ReadonlyMap<string, string>;
-  /** The project run view: its pinned runs. */
-  runView: RunViewContextValue;
+  /** The project run view: its pinned runs (a pin toggle per row); absent: none. */
+  runView?: RunViewContextValue;
+  /** The run links' history state (the workspace's: the run page's "← Workspace"). */
+  runLinkState?: unknown;
   /** Every run the sidebar lists from (a group's name filters to its runs). */
   runs: readonly Run[];
   onEdit: RunStateEdit;
@@ -113,6 +115,7 @@ export default function RunsSidebar({
   groupOf,
   groupColors,
   runView,
+  runLinkState,
   runs,
   onEdit,
 }: Props) {
@@ -179,11 +182,16 @@ export default function RunsSidebar({
               onAll: () => onEdit((s) => toggleAllEyes(s, table.sorted, table.groups, visible), "Toggle every run"),
             }}
             groupName={(g) => ({ onClick: () => onEdit((s) => filterToGroup(s, g, runs), `Filter to ${g}`) })}
-            nameExtras={(r) => (
-              <span className="ml-auto shrink-0">
-                <RunViewControls runId={r.id} view={runView.view} onChange={runView.set} toggles={["pin"]} />
-              </span>
-            )}
+            runLinkState={runLinkState}
+            nameExtras={
+              runView
+                ? (r) => (
+                    <span className="ml-auto shrink-0">
+                      <RunViewControls runId={r.id} view={runView.view} onChange={runView.set} toggles={["pin"]} />
+                    </span>
+                  )
+                : undefined
+            }
             hover={
               hover.active
                 ? {

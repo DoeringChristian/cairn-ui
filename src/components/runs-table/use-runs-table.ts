@@ -7,7 +7,7 @@
  * changes).
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Run } from "../../api/types";
 import type { GroupNode } from "../../lib/run-filter";
 import { cellValue, computeColumns, type ComputedColumn } from "../../lib/runs-table/columns";
@@ -15,6 +15,8 @@ import { flattenGroups, groupRunsNested, type GroupBy, type RunGroupNode, type T
 import { collapsedGroups, filterRunsKeeping, latestRuns, pinnedFirst, type StatusFilter } from "../../lib/runs-table/model";
 import { compileRunSearch } from "../../lib/runs-table/search";
 import { sortBy, type SortKey } from "../../lib/runs-table/sort";
+import { restoredToggles } from "../../lib/run-nav";
+import { loadJson, saveJson, storageKeys } from "../../lib/storage";
 
 export interface RunsTableQuery {
   runs: readonly Run[];
@@ -33,6 +35,8 @@ export interface RunsTableQuery {
   baseline?: Run;
   /** Which groups start collapsed (default: none). */
   defaultCollapsed?: (node: RunGroupNode, index: number) => boolean;
+  /** Keep the toggled groups for the session under this key (the workspace sidebar: back from a run page as left). */
+  collapsedKey?: string;
 }
 
 const NONE_COLLAPSED = () => false;
@@ -57,9 +61,21 @@ export function useRunsTable(q: RunsTableQuery) {
   );
   const groups = useMemo(() => groupRunsNested(sorted, groupBy), [sorted, groupBy]);
 
-  const [toggled, setToggled] = useState<Set<string>>(new Set());
   const groupByKey = JSON.stringify(groupBy);
-  useEffect(() => setToggled(new Set()), [groupByKey]);
+  const { collapsedKey } = q;
+  const [toggled, setToggled] = useState<Set<string>>(() =>
+    collapsedKey ? restoredToggles(loadJson(sessionStorage, storageKeys.runsCollapsed(collapsedKey)), groupByKey) : new Set(),
+  );
+  // A new group-by starts from the default again.
+  const groupedBy = useRef(groupByKey);
+  useEffect(() => {
+    if (groupedBy.current === groupByKey) return;
+    groupedBy.current = groupByKey;
+    setToggled(new Set());
+  }, [groupByKey]);
+  useEffect(() => {
+    if (collapsedKey) saveJson(sessionStorage, storageKeys.runsCollapsed(collapsedKey), { groupBy: groupedBy.current, toggled: [...toggled] });
+  }, [collapsedKey, toggled]);
   const toggleGroup = useCallback(
     (id: string) =>
       setToggled((prev) => {

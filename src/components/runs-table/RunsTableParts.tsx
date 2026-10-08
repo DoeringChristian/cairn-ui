@@ -143,6 +143,7 @@ export function RunNameCell({
   before,
   name,
   to,
+  linkState,
   color,
   depth = 0,
   version,
@@ -154,6 +155,8 @@ export function RunNameCell({
   name: string;
   /** The run page; null: plain text (no run to open). */
   to: string | null;
+  /** The link's history state (the workspace sidebar's: the run page's back link). */
+  linkState?: unknown;
   /** The dot's colour; null: a hollow dot; `false`: no dot (a run inside a group). */
   color: string | null | undefined | false;
   depth?: number;
@@ -166,7 +169,7 @@ export function RunNameCell({
       {before}
       {color === false ? null : color === null ? <HollowDot /> : <RunSwatch color={color} />}
       {to ? (
-        <Link to={to} className="dim mono min-w-0 truncate text-accent hover:underline" title={name}>
+        <Link to={to} state={linkState} className="dim mono min-w-0 truncate text-accent hover:underline" title={name}>
           {name}
         </Link>
       ) : (

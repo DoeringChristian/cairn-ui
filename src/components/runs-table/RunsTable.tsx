@@ -103,6 +103,8 @@ interface Props {
   /** After the Name cell's version. */
   nameExtras?: (run: Run) => ReactNode;
   hover?: RunsTableHover;
+  /** The run links' history state (the workspace sidebar: lib/run-nav.ts `FROM_WORKSPACE`). */
+  runLinkState?: unknown;
   /** A run group's name in a group header (`group` levels); default: a link to the workspace filtered to it. */
   groupName?: (group: string) => GroupNameAction;
 }
@@ -157,6 +159,7 @@ export default function RunsTable({
   groupColors,
   groupHidden,
   listed,
+  runLinkState,
 }: Props) {
   // Checkboxes have their own column; eyes sit in the Name cell, before the dot (or the group's caret),
   // so they indent with the name. Only the header's eye-all stays left of "Name".
@@ -195,6 +198,7 @@ export default function RunsTable({
       }
       name={runRowName(r, grouped)}
       to={`/p/${projectId}/r/${r.id}`}
+      linkState={runLinkState}
       color={depth > 0 ? false : colorOf(r)}
       depth={depth}
       version={r.version != null ? <RunVersion version={r.version} /> : null}

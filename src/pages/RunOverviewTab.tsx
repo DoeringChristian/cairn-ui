@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useOutletContext, useParams } from "react-router-dom";
+import { Link, useLocation, useOutletContext, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useMetricRules, useRuns, useSetNotes, useSetTags, useRunInputArtifacts, useRunOutputArtifacts, useSourceTree } from "../api/hooks";
@@ -299,13 +299,16 @@ function SummaryTable({ run, summary, summaryDoc }: { run: Run; summary: Param[]
 /** A media value of the summary: its kind ("figure", "6 images"), linking to its card in the Workspace tab. */
 function SummaryMediaValue({ runId, name, media }: { runId: string; name: string; media: SummaryMedia }) {
   const { projectId } = useParams<{ projectId: string }>();
+  // The run page's history state (opened from the workspace: its back link) goes along.
+  const location = useLocation();
   const gallery = useQuery({ ...galleryQuery(media.hash), enabled: isGalleryMedia(media) });
   return (
     <span className="inline-flex min-w-0 flex-wrap items-baseline gap-1.5 text-fg-muted" data-summary-media={name}>
       <span>{summaryMediaLabel(media, gallery.data)}</span>
       <span aria-hidden="true">·</span>
       <Link
-        to={`/p/${projectId}/r/${runId}/workspace?card=${encodeURIComponent(name)}`}
+        to={`/p/${projectId}/r/${runId}?card=${encodeURIComponent(name)}`}
+        state={location.state}
         className="text-xs text-fg-subtle hover:text-accent hover:underline"
       >
         show in Workspace

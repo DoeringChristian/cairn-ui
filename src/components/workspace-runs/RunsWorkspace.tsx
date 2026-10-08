@@ -11,7 +11,9 @@
  * (lib/workspace-runs/grouping-context.ts): scalar cards draw one line per
  * innermost group (`group: exp-44, jobType: train`). A run
  * hover store (lib/workspace-runs/hover.ts) links sidebar rows and chart
- * lines.
+ * lines. A run opened from the sidebar shows a "← Workspace" link back
+ * (lib/run-nav.ts); the sidebar's collapsed groups and scroll are kept for
+ * the session, the run state is the view's.
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -29,6 +31,7 @@ import { innermostLineOf, type RunGroupNode } from "../../lib/runs-table/group";
 import { useRunColors } from "../../lib/run-view";
 import { groupLineColors } from "../../lib/run-color";
 import { useProjectRunView } from "../../lib/run-view-store";
+import { FROM_WORKSPACE } from "../../lib/run-nav";
 import { ops } from "../../lib/workspace/doc";
 import type { WorkspaceRef } from "../../lib/workspace/ref";
 import { useWorkspace } from "../../lib/workspace/use-workspace";
@@ -71,6 +74,7 @@ export default function RunsWorkspace({ wsRef }: { wsRef: WorkspaceRef }) {
     pinned: runView.view.pinned,
     pinnedAlwaysListed: true,
     defaultCollapsed: firstGroupOpen,
+    collapsedKey: `workspace:${projectId}`,
   });
   const visibility = useMemo(() => resolveVisibility(table.sorted, table.groups, state.eyes), [table.sorted, table.groups, state.eyes]);
   const cards = useMemo(() => cardRuns(table.sorted, table.groups, visibility.runs), [table.sorted, table.groups, visibility.runs]);
@@ -122,6 +126,7 @@ export default function RunsWorkspace({ wsRef }: { wsRef: WorkspaceRef }) {
               groupOf={grouping ? cards.groupOf : null}
               groupColors={groupColors}
               runView={runView}
+              runLinkState={FROM_WORKSPACE}
               runs={runs}
               onEdit={edit}
             />

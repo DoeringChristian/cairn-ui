@@ -27,6 +27,8 @@ export const storageKeys = {
   alertsSeen: (projectId: string) => `cairn:alerts-seen:${projectId}`,
   streamMode: "cairn:stream-mode",
   scroll: (key: string) => `cairn:scroll:${key}`, // sessionStorage
+  /** The workspace sidebar's toggled (collapsed / expanded) groups — see components/runs-table/use-runs-table.ts. */
+  runsCollapsed: (key: string) => `cairn:runs-collapsed:${key}`, // sessionStorage
   // --- media (wave 2, agent C) ---
   /** A section's media sync value and key — see components/card-kit/media-sync.tsx. */
   mediaSync: (scopeKey: string) => `cairn:media-sync:${scopeKey}`,
