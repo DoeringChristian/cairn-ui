@@ -2,7 +2,9 @@
 
 The authoring half of the viewer: it builds card specs the browser's renderer
 consumes, and elements that embed those cards in a notebook. It renders nothing
-itself — the browser does, at ``/embed/card``.
+itself — the browser does, at ``/embed/card`` (one card) and
+``/embed/{run,workspace,report}`` (pages: :func:`workspace`, :func:`report`,
+and a run's own notebook display).
 
 Reached as :mod:`cairn.ui`, which is a thin binding onto this module. It lives
 here rather than in cairn-track because it is part of the viewer, not part of
@@ -30,10 +32,14 @@ from .compare import (
     pointcloud_compare,
     volume_compare,
 )
-from .elements import CardElement
+from .elements import CardElement, PageElement
+from .pages import report, workspace
 
 __all__ = [
     "CardElement",
+    "PageElement",
+    "workspace",
+    "report",
     "CardSpec",
     "CardSettingsSpec",
     "SeriesRef",

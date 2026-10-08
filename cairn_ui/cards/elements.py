@@ -33,6 +33,10 @@ class Element:
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         return {"text/html": self._repr_html_(), "text/plain": repr(self)}, {}
 
+    def _mime_(self) -> tuple[str, str]:
+        """marimo's display protocol."""
+        return "text/html", self._repr_html_()
+
 log = logging.getLogger(__name__)
 
 # Reuses the viewer's `cairn:resize` postMessage protocol
@@ -69,20 +73,16 @@ _CAIRN_UI_DEFAULT_PORT = 4301
 _log = logging.getLogger(__name__)
 
 
-class CardElement(Element):
-    """A server-backed ``CardSpec`` — renders as a live ``/embed/card`` iframe.
+class ServedElement(Element):
+    """An element rendered by a cairn viewer: finds the server to point at.
 
-    Degradation: try the live iframe first (POST
-    ``/api/embed/specs`` -> ``sid`` -> ``<iframe src=".../embed/card?sid=...">``);
-    fall back to an inline text notice (still valid HTML, safe in
-    ``_repr_html_``) when no cairn server is reachable — e.g. pure local
-    ``file://``-mode reading (``cairn.Reader(repo="./.cairn")`` with no
-    ``cairn ui`` running).
+    Base of :class:`CardElement` (one card, ``/embed/card``) and
+    :class:`PageElement` (a page, ``/embed/run`` / ``/embed/workspace`` /
+    ``/embed/report``).
     """
 
     def __init__(
         self,
-        spec: dict[str, Any],
         *,
         server: str | None = None,
         token: str | None = None,
@@ -90,7 +90,6 @@ class CardElement(Element):
         reader_server: str | None = None,
         repo_path: str | Path | None = None,
     ) -> None:
-        self.spec = spec
         self._server_override = server
         self._reader_server = reader_server
         """The HTTP base the source `Reader` was connected to when it was
@@ -199,6 +198,48 @@ class CardElement(Element):
         except Exception:  # noqa: BLE001 - any failure means "not reachable"
             return False
 
+    def _no_server_notice(self, what: str) -> str:
+        """How to get a viewer, as text: no server was reachable."""
+        repo_flag = f" --repo {self._repo_path}" if self._repo_path else ""
+        start_cmd = f"cairn ui{repo_flag} --no-auth"
+        return (
+            f"cairn: no reachable cairn server — {what} needs a running "
+            "`cairn ui` on the SAME repo to render live.\n"
+            f"  Start one:     {start_cmd}\n"
+            "  Or point at one explicitly, via any of:\n"
+            '    cairn.configure(repo="cairn://localhost:PORT")\n'
+            "    CAIRN_REPO=cairn://localhost:PORT\n"
+            f'    {type(self).__name__}(..., server="http://localhost:PORT")'
+        )
+
+
+class CardElement(ServedElement):
+    """A server-backed ``CardSpec`` — renders as a live ``/embed/card`` iframe.
+
+    Degradation: try the live iframe first (POST
+    ``/api/embed/specs`` -> ``sid`` -> ``<iframe src=".../embed/card?sid=...">``);
+    fall back to an inline text notice (still valid HTML, safe in
+    ``_repr_html_``) when no cairn server is reachable — e.g. pure local
+    ``file://``-mode reading (``cairn.Reader(repo="./.cairn")`` with no
+    ``cairn ui`` running).
+    """
+
+    def __init__(
+        self,
+        spec: dict[str, Any],
+        *,
+        server: str | None = None,
+        token: str | None = None,
+        height: int = _DEFAULT_IFRAME_HEIGHT,
+        reader_server: str | None = None,
+        repo_path: str | Path | None = None,
+    ) -> None:
+        super().__init__(
+            server=server, token=token, height=height,
+            reader_server=reader_server, repo_path=repo_path,
+        )
+        self.spec = spec
+
     def _post_spec(self, server: str) -> str | None:
         try:
             import httpx
@@ -243,18 +284,8 @@ class CardElement(Element):
         iframe = self.iframe_html()
         if iframe is not None:
             return iframe
-        repo_flag = f" --repo {self._repo_path}" if self._repo_path else ""
-        start_cmd = f"cairn ui{repo_flag} --no-auth"
         spec_json = _html.escape(json.dumps(self.spec, indent=2))
-        notice = (
-            "cairn: no reachable cairn server — this card needs a running "
-            "`cairn ui` on the SAME repo to render live.\n"
-            f"  Start one:     {start_cmd}\n"
-            "  Or point at one explicitly, via any of:\n"
-            '    cairn.configure(repo="cairn://localhost:PORT")\n'
-            "    CAIRN_REPO=cairn://localhost:PORT\n"
-            '    CardElement(..., server="http://localhost:PORT")'
-        )
+        notice = self._no_server_notice("this card")
         return (
             f"<pre>{_html.escape(notice)}</pre>\n"
             "<details><summary>spec (debug)</summary>"
@@ -263,3 +294,50 @@ class CardElement(Element):
 
     def __repr__(self) -> str:
         return f"CardElement(type={self.spec.get('type')!r}, series={len(self.spec.get('series', []))})"
+
+
+#: A page embed's default height (px): the iframe scrolls inside.
+_DEFAULT_PAGE_HEIGHT = 720
+
+
+class PageElement(ServedElement):
+    """A viewer page inline: an ``<iframe>`` to ``/embed/run/<id>``,
+    ``/embed/workspace/<project>`` or ``/embed/report/<project>/<id>`` (the
+    page without the app's navigation, live like the page itself).
+
+    ``path`` is the embed path with its query (``/embed/run/abc?tab=logs``).
+    With no reachable viewer it renders a text notice saying how to start one
+    (``cairn ui``) instead of raising.
+    """
+
+    def __init__(
+        self,
+        path: str,
+        *,
+        server: str | None = None,
+        height: int = _DEFAULT_PAGE_HEIGHT,
+        reader_server: str | None = None,
+        repo_path: str | Path | None = None,
+    ) -> None:
+        super().__init__(server=server, height=height, reader_server=reader_server, repo_path=repo_path)
+        self.path = path
+
+    def url(self) -> str | None:
+        """The embed page's URL on the resolved viewer, or None without one."""
+        server = self._resolve_server()
+        return f"{server.rstrip('/')}{self.path}" if server else None
+
+    def _repr_html_(self) -> str:
+        src = self.url()
+        if src is None:
+            return f"<pre>{_html.escape(self._no_server_notice('this page'))}</pre>"
+        # Popups: "open in cairn" opens the page in a new tab; forms: the login page.
+        return (
+            f'<iframe src="{_html.escape(src)}" '
+            f'style="width:100%;height:{int(self._height)}px;border:0;" '
+            'sandbox="allow-scripts allow-same-origin allow-forms allow-popups '
+            'allow-popups-to-escape-sandbox"></iframe>'
+        )
+
+    def __repr__(self) -> str:
+        return f"PageElement({self.path!r})"
