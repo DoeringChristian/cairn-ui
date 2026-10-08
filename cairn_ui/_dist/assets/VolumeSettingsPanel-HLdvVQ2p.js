@@ -1,0 +1,1 @@
+import{j as s,G as i,J as n,U as o}from"./index-CnkqC_Rx.js";function u({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{values:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{u as default};
