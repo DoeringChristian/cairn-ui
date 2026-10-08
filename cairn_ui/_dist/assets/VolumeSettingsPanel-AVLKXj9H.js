@@ -1,0 +1,1 @@
+import{j as s,J as i,D as n,M as o}from"./index-C5Xpp_YY.js";function u({ctl:t,ctx:a,mode:e}){return s.jsx(i,{tabs:{values:s.jsx(o,{ctl:t,ctx:a}),display:s.jsx(n,{ctl:t,ctx:a,mode:e})}})}export{u as default};

@@ -48,7 +48,7 @@ def run_page(
 
 def workspace(
     project: str,
-    filter: str | Mapping[str, Any] | None = None,  # noqa: A002 - the runs table's word
+    filter: str | Mapping[str, Any] | None = None,
     *,
     height: int = _DEFAULT_PAGE_HEIGHT,
     server: str | None = None,
