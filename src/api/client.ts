@@ -277,6 +277,12 @@ export const api = {
   deleteComparison: (projectId: string, id: string) =>
     del_<{ deleted: string }>(`/api/projects/${projectId}/comparisons/${id}`),
 
+  // One group's lineage graph: its runs and the edges between them (lib/workspace-runs).
+  groupGraph: (projectId: string, group: string) =>
+    get<import("../lib/workspace-runs/graph").GroupGraph>(
+      `/api/projects/${projectId}/groups/${encodeURIComponent(group)}/graph`,
+    ),
+
   // Reports (server-persisted)
   reports: (projectId: string, params: { limit?: number; offset?: number } = {}) => {
     const q = new URLSearchParams();

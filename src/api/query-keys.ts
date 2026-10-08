@@ -54,6 +54,8 @@ export const qk = {
   views: (projectId: string) => ["views", projectId] as const,
   /** The project's comparisons (names + run counts); each one's document lives in lib/workspace/store.ts. */
   comparisons: (projectId: string) => ["comparisons", projectId] as const,
+  /** One group's lineage graph (runs + edges inside the group). */
+  groupGraph: (projectId: string, group: string) => ["group-graph", projectId, group] as const,
   // Report share links (wave 3 / I).
   reportShares: (projectId: string, reportId: string) => ["report-shares", projectId, reportId] as const,
   shareContext: () => ["share-context"] as const,
