@@ -116,6 +116,8 @@ export interface SequenceMeta {
   min_step: number;
   max_step: number;
   count: number;
+  /** A scalar series: its values never decrease along its steps (an x-axis candidate). */
+  monotonic?: boolean;
   /** Custom data (`object_type: "custom"`): the kind of the latest point (`guiding/vmf`). */
   kind?: string | null;
   /**

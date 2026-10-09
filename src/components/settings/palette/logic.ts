@@ -14,6 +14,8 @@ export interface FieldOption {
   key: string;
   kind: FieldKind;
   label: string;
+  /** A muted note under the label (e.g. "Not monotonically increasing"). */
+  note?: string;
 }
 
 export const FIELD_KIND_ORDER: readonly FieldKind[] = ["param", "metric", "expr"];

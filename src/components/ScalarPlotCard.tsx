@@ -437,8 +437,18 @@ export default function ScalarPlotCard({
       .flatMap((name) => (perRun ? allRunIds.map((rid) => ({ runId: rid, name })) : [{ name }]));
     updateSettings({ metrics: [...kept, ...fresh] });
   };
+  const nonMonotonic = useMemo(
+    () =>
+      new Set(
+        (runSequences.data?.sequences ?? [])
+          .filter((m) => m.object_type === "scalar" && m.monotonic === false)
+          .map((m) => m.name),
+      ),
+    [runSequences.data],
+  );
   const panelCtx: ScalarPanelCtx = {
     metricNames,
+    nonMonotonic,
     chosen,
     // A workspace card's series are its panel's data, picked in the card editor's Data.
     onChosenChange: panelSeries ? undefined : onChosenChange,

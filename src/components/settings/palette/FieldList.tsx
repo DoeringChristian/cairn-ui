@@ -122,7 +122,10 @@ export default function FieldList({ options, exclude, selected, onPick, regexTog
                   ].join(" ")}
                 >
                   <KindBadge kind={o.kind} />
-                  <span className="mono min-w-0 flex-1 truncate">{o.label}</span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="mono truncate">{o.label}</span>
+                    {o.note && <span className="truncate text-[10px] text-fg-subtle">{o.note}</span>}
+                  </span>
                   {o.key === selected && <i aria-hidden="true" className="fa-solid fa-check text-[10px]" />}
                 </button>
               );

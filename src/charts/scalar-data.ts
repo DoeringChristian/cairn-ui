@@ -370,7 +370,39 @@ export function metricRef(name: string): string {
 export function xAxisKind(src: string): "step" | "wall_time" | "relative_time" | "value" {
   const s = src.trim();
   if (s === "step" || s === "wall_time" || s === "relative_time") return s;
+  if (s === "process_time") return "relative_time";
   return "value";
+}
+
+/** The x-axis picker's fixed choices (wandb's Step / Relative Time / Wall Time). */
+export const X_AXIS_CHOICES: ReadonlyArray<{ key: string; label: string }> = [
+  { key: "step", label: "Step" },
+  { key: "relative_time", label: "Relative time (wall)" },
+  { key: "process_time", label: "Relative time (process)" },
+  { key: "wall_time", label: "Wall time" },
+];
+
+export const NOT_MONOTONIC = "Not monotonically increasing";
+
+/**
+ * The x-axis picker's metric choices: every metric as an expression, the
+ * ones whose values decrease somewhere (`monotonic === false` in any run
+ * listed) noted, as wandb lists them.
+ */
+export function xMetricChoices(
+  metrics: ReadonlyArray<{ name: string; monotonic?: boolean }>,
+): Array<{ key: string; label: string; note?: string }> {
+  const bad = new Set<string>();
+  const names = new Set<string>();
+  for (const m of metrics) {
+    names.add(m.name);
+    if (m.monotonic === false) bad.add(m.name);
+  }
+  return [...names].sort().map((n) => ({
+    key: metricRef(n),
+    label: n,
+    ...(bad.has(n) ? { note: NOT_MONOTONIC } : {}),
+  }));
 }
 
 // ---------------------------------------------------------------------------

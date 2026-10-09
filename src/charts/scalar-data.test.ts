@@ -13,6 +13,9 @@ import {
   renderLabel,
   sequenceData,
   xAxisKind,
+  xMetricChoices,
+  X_AXIS_CHOICES,
+  NOT_MONOTONIC,
 } from "./scalar-data.ts";
 import type { Series } from "../lib/plot-utils/types.ts";
 
@@ -161,4 +164,34 @@ test("metricRef quotes names that are not plain metric names", () => {
     const c = compileSeriesExpr(metricRef(name));
     assert.deepEqual(exprMetrics(c.value), [name]);
   }
+});
+
+
+test("x-axis choices: wandb's four time/step axes, metrics noted when not monotonic", () => {
+  assert.deepEqual(
+    X_AXIS_CHOICES.map((c) => c.key),
+    ["step", "relative_time", "process_time", "wall_time"],
+  );
+  const got = xMetricChoices([
+    { name: "train/loss", monotonic: false },
+    { name: "epoch", monotonic: true },
+    { name: "lr" },
+    { name: "epoch", monotonic: false }, // another run: decreasing there
+  ]);
+  assert.deepEqual(got, [
+    { key: "epoch", label: "epoch", note: NOT_MONOTONIC },
+    { key: "lr", label: "lr" },
+    { key: "`train/loss`", label: "train/loss", note: NOT_MONOTONIC },
+  ]);
+});
+
+test("process_time formats as seconds, like relative_time; time axes evaluate on the line's steps", () => {
+  assert.equal(xAxisKind("process_time"), "relative_time");
+  const ctx = ctxOf({ loss: [pt(0, 1, 10), pt(1, 2, 25)] }, { run: { id: "r", created_at: new Date(T0).toISOString() } });
+  for (const x of ["relative_time", "process_time"]) {
+    const line = metricLine("loss", compileSeriesExpr(x).value!, ctx);
+    assert.deepEqual(line.points.map((p) => p.x), [10, 25]);
+  }
+  const wall = metricLine("loss", compileSeriesExpr("wall_time").value!, ctx);
+  assert.deepEqual(wall.points.map((p) => p.x), [T0 + 10_000, T0 + 25_000]);
 });

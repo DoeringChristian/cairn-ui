@@ -28,12 +28,21 @@ import { SMOOTHING_KINDS, formatSmoothing, type SmoothingKind } from "../../lib/
 import type { AggKind, BandKind } from "../../lib/plot-utils/aggregate";
 import type { StackMode } from "../../lib/plot-utils/stack";
 import type { ScalarGroupMode } from "../../lib/plot-utils/scalar-grouping";
-import { compileSeriesExpr, compileTemplate, metricRef, type Compiled } from "../../charts/scalar-data";
+import {
+  X_AXIS_CHOICES,
+  compileSeriesExpr,
+  compileTemplate,
+  metricRef,
+  xMetricChoices,
+  type Compiled,
+} from "../../charts/scalar-data";
 
 /** What the card knows at runtime; absent in the defaults editor. */
 export interface ScalarPanelCtx {
   /** Scalar metrics the card's runs log (their names). */
   metricNames: string[];
+  /** Metrics whose values decrease somewhere (noted in the x-axis picker). */
+  nonMonotonic?: ReadonlySet<string>;
   /** The metrics the card draws (names; every run draws each). */
   chosen: string[];
   /**
@@ -84,11 +93,7 @@ function bindField<K extends "legend" | "tooltip" | "axisTitles", F extends keyo
   };
 }
 
-const AXIS_OPTIONS: FieldOption[] = [
-  { key: "step", kind: "expr", label: "Step" },
-  { key: "wall_time", kind: "expr", label: "Wall time" },
-  { key: "relative_time", kind: "expr", label: "Relative time (s)" },
-];
+const AXIS_OPTIONS: FieldOption[] = X_AXIS_CHOICES.map((c) => ({ ...c, kind: "expr" }));
 
 /** The source with its error span underlined (an empty span at the end shows a caret). */
 function ErrorSpan({ src, span }: { src: string; span: { start: number; end: number } }) {
@@ -263,7 +268,9 @@ export default function ScalarSettingsPanel({ ctl, ctx, mode }: Props) {
   const metricOptions: FieldOption[] = (ctx?.metricNames ?? []).map((n) => ({ key: n, kind: "metric", label: n }));
   const xOptions: FieldOption[] = [
     ...AXIS_OPTIONS,
-    ...(ctx?.metricNames ?? []).map((n): FieldOption => ({ key: metricRef(n), kind: "metric", label: n })),
+    ...xMetricChoices(
+      (ctx?.metricNames ?? []).map((name) => ({ name, monotonic: !ctx?.nonMonotonic?.has(name) })),
+    ).map((o): FieldOption => ({ ...o, kind: "metric" })),
   ];
 
   const data = (
