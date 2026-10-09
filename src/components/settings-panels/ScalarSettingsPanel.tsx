@@ -543,7 +543,20 @@ export default function ScalarSettingsPanel({ ctl, ctx, mode }: Props) {
             { value: "bottom" as const, label: "Bottom" },
             { value: "top" as const, label: "Top" },
             { value: "right" as const, label: "Right" },
+            { value: "left" as const, label: "Left" },
           ]}
+        />
+        <Segmented
+          {...bindField(ctl, "legend", "fontSize")}
+          value={s.legend.fontSize ?? "auto"}
+          label="Legend font size"
+          options={[
+            { value: "small" as const, label: "Small" },
+            { value: "medium" as const, label: "Medium" },
+            { value: "large" as const, label: "Large" },
+            { value: "auto" as const, label: "Auto" },
+          ]}
+          description="Auto: small on a narrow chart, medium on a wide one."
         />
         <CheckedText
           label="Legend template"

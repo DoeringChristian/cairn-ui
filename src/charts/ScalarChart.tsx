@@ -11,7 +11,7 @@ import { onPrintLayout } from "../lib/print-layout.ts";
 import { readChartTheme, withAlpha } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
 import { lineMatches, targetOfLine, useRunHover } from "../lib/workspace-runs/hover.ts";
-import { showPointMarkers } from "../lib/plot-utils/scalar-legend.ts";
+import { legendFontPx, showPointMarkers, type LegendFontSize } from "../lib/plot-utils/scalar-legend.ts";
 
 export type LineType = "linear" | "monotone" | "step" | "stepBefore" | "stepAfter";
 
@@ -52,7 +52,7 @@ export interface ScalarChartProps {
   stack: StackMode;
   /** Min/max bucketing per pixel of the visible x range. */
   fullFidelity: boolean;
-  legend: { show: boolean; position: "bottom" | "top" | "right" };
+  legend: { show: boolean; position: "bottom" | "top" | "right" | "left"; fontSize?: LegendFontSize };
   tooltip: { showWallTime: boolean };
   /** Tooltip label per line key (the tooltip template); else the line's label. */
   tooltipLabels?: ReadonlyMap<string, string>;
@@ -533,7 +533,8 @@ export default function ScalarChart(props: ScalarChartProps) {
   const legendEl = legend.show && legendItems.length > 1 && (
     <ChartLegend
       items={legendItems}
-      vertical={legend.position === "right"}
+      side={legend.position === "right" || legend.position === "left" ? legend.position : null}
+      fontPx={legendFontPx(legend.fontSize ?? "auto", plotWidth)}
       highlight={hl}
       isolated={iso}
       onHighlight={(k) => setHighlight((cur) => (cur === k ? null : k))}
@@ -542,8 +543,10 @@ export default function ScalarChart(props: ScalarChartProps) {
   );
 
   return (
-    <div className={`flex min-h-0 ${legend.position === "right" ? "flex-row" : "flex-col"} ${className ?? ""}`}>
-      {legend.position === "top" && legendEl}
+    <div
+      className={`flex min-h-0 ${legend.position === "right" || legend.position === "left" ? "flex-row" : "flex-col"} ${className ?? ""}`}
+    >
+      {(legend.position === "top" || legend.position === "left") && legendEl}
       <div
         className="relative flex-1 min-h-0 min-w-0"
         style={{ touchAction: interactive ? "none" : "pan-y" }}
@@ -568,7 +571,7 @@ export default function ScalarChart(props: ScalarChartProps) {
           />
         )}
       </div>
-      {legend.position !== "top" && legendEl}
+      {(legend.position === "bottom" || legend.position === "right") && legendEl}
     </div>
   );
 }
@@ -578,10 +581,12 @@ export default function ScalarChart(props: ScalarChartProps) {
  * Alt-click to show only that line (again to show all).
  */
 function ChartLegend({
-  items, vertical, highlight, isolated, onHighlight, onIsolate,
+  items, side, fontPx, highlight, isolated, onHighlight, onIsolate,
 }: {
   items: DrawnSeries[];
-  vertical: boolean;
+  /** Beside the plot (a column), else above / below it (wrapping rows). */
+  side: "left" | "right" | null;
+  fontPx: number;
   highlight: string | null;
   isolated: string | null;
   onHighlight: (key: string) => void;
@@ -590,10 +595,11 @@ function ChartLegend({
   return (
     <div
       className={
-        vertical
-          ? "flex w-40 shrink-0 flex-col gap-0.5 overflow-y-auto pl-2 text-[10px] text-fg-muted"
-          : "flex flex-wrap gap-x-3 gap-y-0.5 px-1 pt-1 text-[10px] text-fg-muted"
+        side
+          ? `flex w-40 shrink-0 flex-col gap-0.5 overflow-y-auto text-fg-muted ${side === "right" ? "pl-2" : "pr-2"}`
+          : "flex flex-wrap gap-x-3 gap-y-0.5 px-1 pt-1 text-fg-muted"
       }
+      style={{ fontSize: `${fontPx}px` }}
     >
       {items.map((s) => {
         const active = s.key === highlight || s.key === isolated;

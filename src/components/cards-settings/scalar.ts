@@ -5,6 +5,7 @@ import type { SmoothingKind } from "../../lib/plot-utils/smooth";
 import type { AggKind, BandKind } from "../../lib/plot-utils/aggregate";
 import type { StackMode } from "../../lib/plot-utils/stack";
 import type { ScalarGroupMode } from "../../lib/plot-utils/scalar-grouping";
+import type { LegendFontSize } from "../../lib/plot-utils/scalar-legend";
 import { plotCardPolicy } from "../card-kit/plot-card-policy.ts";
 import type { CardSettingsMeta } from "./meta";
 
@@ -31,7 +32,7 @@ export type DerivedSeries = {
   style?: SeriesStyle;
 };
 
-export type LegendPosition = "bottom" | "top" | "right";
+export type LegendPosition = "bottom" | "top" | "right" | "left";
 
 export interface ScalarSettings extends BaseCardSettings {
   metrics: SeriesRef[];
@@ -67,7 +68,7 @@ export interface ScalarSettings extends BaseCardSettings {
   latestPerGroup: boolean;
   lineType: "linear" | "monotone" | "step" | "stepBefore" | "stepAfter";
   /** `template`: `${…}` text per run (`${run.name} lr=${config.lr}`); empty is the automatic label. */
-  legend: { show: boolean; position: LegendPosition; template: string };
+  legend: { show: boolean; position: LegendPosition; template: string; fontSize: LegendFontSize };
   /** `template`: the tooltip row's label, as the legend's. */
   tooltip: { template: string; showWallTime: boolean };
   /** Axis titles; empty draws none. */
@@ -109,7 +110,7 @@ export const builtin: ScalarSettings = {
   hideMembers: false,
   latestPerGroup: false,
   lineType: "linear",
-  legend: { show: true, position: "bottom", template: "" },
+  legend: { show: true, position: "bottom", template: "", fontSize: "auto" },
   tooltip: { template: "", showWallTime: true },
   axisTitles: { x: "", y: "" },
   showOriginal: true,
