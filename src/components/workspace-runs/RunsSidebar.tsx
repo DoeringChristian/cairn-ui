@@ -1,7 +1,7 @@
 /**
  * The workspace's runs sidebar: the Runs page's table with the Name
  * column only and an eye in place of each checkbox (in the Name cell). Above it the runs table's toolbar minus Columns
- * (Status, Search, Filter, Group, Latest only) plus the sort, then
+ * (Status, Search, Filter with "Latest versions only", Group) plus the sort, then
  * `3 of 4 groups shown`.
  *
  * The rows come from `useRunsTable` (RunsWorkspace), the eyes from
@@ -21,7 +21,6 @@ import type { Run } from "../../api/types";
 import {
   RunFilterControl,
   RunGroupControl,
-  RunLatestOnlyToggle,
   RunSearchInput,
   RunStatusSelect,
 } from "../RunFilterBar";
@@ -38,7 +37,7 @@ import { sameGroup } from "../../lib/runs-table/model";
 import { DEFAULT_SORT, initialDirection, type SortKey } from "../../lib/runs-table/sort";
 import type { RunViewContextValue } from "../../lib/run-view";
 import { targetOfRun, useRunHover } from "../../lib/workspace-runs/hover";
-import { setFilter, setLatestOnly, setSearch, setSort, setStatus, type RunState } from "../../lib/workspace-runs/state";
+import { setFilter, setSearch, setSort, setStatus, type RunState } from "../../lib/workspace-runs/state";
 import { allEye, filterToGroup, groupEye, regroup, toggleAllEyes, toggleGroupEye, toggleRunEye, type Visibility } from "../../lib/workspace-runs/visibility";
 import "../../pages/runs-table.css";
 
@@ -155,7 +154,6 @@ export default function RunsSidebar({
             levels={state.groupBy}
             onChange={(levels) => onEdit((s) => regroup(s, levels, table.sorted, visible), "Group runs")}
           />
-          <RunLatestOnlyToggle value={state.latestOnly} onChange={(v) => onEdit((s) => setLatestOnly(s, v), "Latest only")} />
           <RunSortControl columns={sortColumns} sort={state.sort} onChange={(sort) => onEdit((s) => setSort(s, sort), "Sort runs")} />
         </div>
         <p className="text-xs text-fg-muted" data-testid="runs-showing">

@@ -20,6 +20,7 @@ import {
   resolveRunSets,
   runSetColors,
   runSetFamilyColor,
+  runSetFilter,
   runSetOfIds,
   unionOfSets,
   type RunSet,
@@ -82,15 +83,15 @@ test("set ops: add, rename, remove (never the last), insert from the workspace",
   const state = {
     status: "running",
     search: "eager",
-    filter: { kind: "group" as const, op: "and" as const, children: [{ kind: "expr" as const, expr: "config.lr > 0.001" }] },
+    filter: { kind: "group" as const, op: "and" as const, children: [{ kind: "expr" as const, expr: "config.lr > 0.001" }], latestOnly: true },
     groupBy: [{ source: "group" as const }],
-    latestOnly: true,
     sort: [{ column: "name", direction: "asc" as const }],
     eyes: { "r:a": false },
   };
   const ins = insertRunSetFromWorkspace(sets, state, "Default");
   assert.equal(ins.length, 2);
-  assert.deepEqual(ins[1], { name: "Default", filter: state.filter, groupBy: state.groupBy, latestOnly: true, sort: state.sort, eyes: { "r:a": false } });
+  // The filter's "Latest versions only" is the set's own latestOnly, beside the tree.
+  assert.deepEqual(ins[1], { name: "Default", filter: { kind: "group", op: "and", children: state.filter.children }, groupBy: state.groupBy, latestOnly: true, sort: state.sort, eyes: { "r:a": false } });
   // A copy: the workspace's later edits do not reach it.
   state.eyes["r:a"] = true;
   state.filter.children.push({ kind: "expr", expr: "x" });
@@ -104,4 +105,10 @@ test("each set's dot is its colour family's middle shade", () => {
   assert.match(runSetFamilyColor(0), /^#[0-9a-f]{6}$/);
   assert.notEqual(runSetFamilyColor(0), runSetFamilyColor(1));
   assert.equal(runSetFamilyColor(8), runSetFamilyColor(0));
+});
+
+test("runSetFilter: the set's latestOnly as its editor's \"Latest versions only\"", () => {
+  const set = defaultRunSet("s");
+  assert.equal(runSetFilter(set), set.filter);
+  assert.deepEqual(runSetFilter({ ...set, latestOnly: true }), { ...set.filter, latestOnly: true });
 });

@@ -12,7 +12,11 @@ import {
   addChild,
   exprLeafError,
   filterFieldsOf,
+  filterTree,
   isEmptyFilter,
+  isEmptyRunsFilter,
+  parseRunsFilter,
+  withLatestOnly,
   isOperator,
   matchesFilter,
   matchesFilters,
@@ -169,4 +173,21 @@ test("NaN is unordered, like Python", () => {
     assert.equal(evaluate(op, NaN, 1), false);
     assert.equal(evaluate(op, 1, NaN), false);
   }
+});
+
+test("RunsFilter: \"Latest versions only\" on the root, parsed, toggled, never in the tree", () => {
+  assert.equal(withLatestOnly(EMPTY_FILTER, false), EMPTY_FILTER, "nothing to drop: the same object");
+  const on = withLatestOnly(EMPTY_FILTER, true);
+  assert.deepEqual(on, { ...EMPTY_FILTER, latestOnly: true });
+  assert.equal(isEmptyFilter(on), true, "the tree constrains nothing");
+  assert.equal(isEmptyRunsFilter(on), false, "but the filter does");
+  assert.equal(isEmptyRunsFilter(EMPTY_FILTER), true);
+  assert.deepEqual(withLatestOnly(on, false), EMPTY_FILTER);
+  assert.equal("latestOnly" in filterTree(on), false);
+  // Tree edits keep it (the root is spread).
+  assert.equal((addChild(on, [], { kind: "expr", expr: "x" }) as typeof on).latestOnly, true);
+  const tree = { kind: "group", op: "or", children: [{ kind: "chip", field: "status", op: "exact", arg: "failed" }] };
+  assert.deepEqual(parseRunsFilter({ ...tree, latestOnly: true }), { ...tree, latestOnly: true });
+  assert.deepEqual(parseRunsFilter({ ...tree, latestOnly: "yes" }), tree);
+  assert.deepEqual(parseRunsFilter(null), EMPTY_FILTER);
 });

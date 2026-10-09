@@ -9,7 +9,9 @@ test("parseRunState: the toolbar and the eyes; what does not parse takes its def
   const s = parseRunState({
     status: "failed",
     search: "train",
+    filter: { kind: "group", op: "or", children: [{ kind: "expr", expr: "x" }], latestOnly: true },
     groupBy: [{ source: "param", key: "lr" }, { source: "bogus" }],
+    // The old placement: ignored.
     latestOnly: true,
     sort: [{ column: "values.loss", direction: "asc" }, { column: "", direction: "asc" }, { column: "x", direction: "up" }],
     eyes: { "r:a": false, "g:group:exp": true, bad: 1 },
@@ -18,16 +20,15 @@ test("parseRunState: the toolbar and the eyes; what does not parse takes its def
   assert.deepEqual(s, {
     status: "failed",
     search: "train",
-    filter: DEFAULT_RUN_STATE.filter,
+    filter: { kind: "group", op: "or", children: [{ kind: "expr", expr: "x" }], latestOnly: true },
     groupBy: [{ source: "param", key: "lr" }],
-    latestOnly: true,
     sort: [{ column: "values.loss", direction: "asc" }],
     eyes: { "r:a": false, "g:group:exp": true },
     toggled: [],
     columns: DEFAULT_RUN_STATE.columns,
     computed: [],
   });
-  const bad = parseRunState({ status: "nope", search: 3, groupBy: "x", latestOnly: "yes", eyes: [] });
+  const bad = parseRunState({ status: "nope", search: 3, groupBy: "x", filter: { latestOnly: true }, eyes: [] });
   assert.deepEqual(bad, DEFAULT_RUN_STATE);
 });
 

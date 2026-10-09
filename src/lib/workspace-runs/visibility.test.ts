@@ -123,9 +123,9 @@ test("showOnly: exactly the ticked runs, grouped or not; a partly ticked group s
   const { sorted, groups } = fixture(3);
   const extra = makeRun("loose2", { display_name: "other", created_at: at(58) });
   const all = sortNewest([...sorted, extra]);
-  const base = { ...DEFAULT_RUN_STATE, search: "x", status: "failed" as const, latestOnly: true };
+  const base = { ...DEFAULT_RUN_STATE, search: "x", status: "failed" as const, filter: { ...DEFAULT_RUN_STATE.filter, latestOnly: true } };
   const s = showOnly(base, all, new Set(["g1-a", "loose"]));
-  assert.deepEqual([s.search, s.status, s.latestOnly], ["", "all", false]);
+  assert.deepEqual([s.search, s.status, s.filter], ["", "all", DEFAULT_RUN_STATE.filter]);
   const allGroups = groupRunsNested(all, BY_GROUP)!;
   const vis = resolveVisibility(all, allGroups, s.eyes).runs;
   assert.deepEqual([...vis].sort(), ["g1-a", "loose"]);
@@ -183,6 +183,9 @@ test("withGroupCondition: adds `group = g`, replaces an earlier one, keeps the o
   // The condition really filters to the group.
   assert.equal(matchesFilter(makeRun("a", { group: "exp-44" }), one), true);
   assert.equal(matchesFilter(makeRun("b", { group: "exp-43" }), one), false);
+  // "Latest versions only" stays on the root, never on the wrapped OR tree.
+  assert.deepEqual(withGroupCondition({ ...EMPTY_FILTER, latestOnly: true }, "g"), { kind: "group", op: "and", children: [chip("group", "g")], latestOnly: true });
+  assert.deepEqual(withGroupCondition({ ...or, latestOnly: true }, "g"), { kind: "group", op: "and", children: [or, chip("group", "g")], latestOnly: true });
 });
 
 test("filterToGroup: filters, keeps the eyes, shows the group's runs hidden by a group eye", () => {

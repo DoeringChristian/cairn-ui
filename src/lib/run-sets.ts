@@ -1,10 +1,11 @@
 /**
  * Run sets: the runs of a report's cards cell (wandb's panel-grid run sets).
  * A run set is a frozen copy of the workspace's runs table state — its
- * filter tree, group-by levels, Latest only, sort and eyes — and its runs are
+ * filter tree, group-by levels, latest versions only (the filter's "Latest
+ * versions only", kept beside the tree here), sort and eyes — and its runs are
  * resolved live, exactly as the workspace resolves the runs its cards draw
  * (lib/workspace-runs/visibility.ts): over the project's newest
- * `RUN_SET_POOL` runs, archived runs left out, Latest only, the filter, the
+ * `RUN_SET_POOL` runs, archived runs left out, latest versions only, the filter, the
  * sort, the grouping and the eyes (by default the `DEFAULT_VISIBLE` newest
  * groups, or runs when not grouped).
  *
@@ -14,7 +15,7 @@
  */
 
 import type { Run } from "../api/types.ts";
-import { EMPTY_FILTER, matchesFilter, parseFilter, type GroupNode } from "./run-filter.ts";
+import { EMPTY_FILTER, filterTree, matchesFilter, parseFilter, type GroupNode, type RunsFilter } from "./run-filter.ts";
 import { cellValue } from "./runs-table/columns.ts";
 import { groupRunsNested, isGroupBy, type GroupBy } from "./runs-table/group.ts";
 import { latestRuns } from "./runs-table/model.ts";
@@ -62,7 +63,7 @@ export function parseRunSet(raw: unknown, index = 0): RunSet | null {
 
 /**
  * The runs a set shows, in table order. `pool`: the project's newest runs,
- * archived ones included (they count for Latest only), with `params`,
+ * archived ones included (they count for latest versions only), with `params`,
  * `values` and `stats`.
  */
 export function resolveRunSet(set: RunSet, pool: readonly Run[]): string[] {
@@ -143,15 +144,22 @@ export const renameRunSet = (sets: readonly RunSet[], index: number, name: strin
   updateRunSet(sets, index, (s) => ({ ...s, name }));
 
 /** The runs table state a set freezes (the workspace's run state minus its status and search). */
-export type FrozenRunsState = Pick<RunSet, "filter" | "groupBy" | "latestOnly" | "sort" | "eyes">;
+export interface FrozenRunsState extends Pick<RunSet, "groupBy" | "sort" | "eyes"> {
+  /** The filter, with "Latest versions only" (the set's `latestOnly`). */
+  filter: RunsFilter;
+}
+
+/** The runs table filter a set's tree and `latestOnly` make (its editor's Filter control). */
+export const runSetFilter = (set: Pick<RunSet, "filter" | "latestOnly">): RunsFilter =>
+  set.latestOnly ? { ...set.filter, latestOnly: true } : set.filter;
 
 /** A set frozen from a runs table state (the workspace view's `runState`): a copy, so later edits there do not reach it. */
 export function runSetFromState(state: FrozenRunsState, name: string): RunSet {
   return structuredClone({
     name,
-    filter: state.filter,
+    filter: filterTree(state.filter),
     groupBy: state.groupBy,
-    latestOnly: state.latestOnly,
+    latestOnly: state.filter.latestOnly === true,
     sort: state.sort,
     eyes: state.eyes,
   });

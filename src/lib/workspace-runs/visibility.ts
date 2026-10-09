@@ -11,7 +11,7 @@
  */
 
 import type { Run } from "../../api/types.ts";
-import { EMPTY_FILTER, type ChipNode, type FilterNode, type GroupNode } from "../run-filter.ts";
+import { EMPTY_FILTER, withLatestOnly, type ChipNode, type FilterNode, type RunsFilter } from "../run-filter.ts";
 import { aggregates, groupByLabel, groupLineLabel, groupRunsNested, type RunGroupNode } from "../runs-table/group.ts";
 import { setEyes, type RunState } from "./state.ts";
 
@@ -171,14 +171,15 @@ export function cardRuns(sorted: readonly Run[], groups: readonly RunGroupNode[]
  * nothing else, grouped or not. Grouped, every top-level group's eye is off
  * and the ticked runs' own eyes on, so a group shows ◐ when it has other
  * runs and its aggregate line is over the ticked runs only. The status,
- * search, filter and latest only are cleared so every ticked run is
- * listed. `runs`: the runs the page lists from.
+ * search and filter are cleared so every ticked run is
+ * listed (the filter's "Latest versions only" with them). `runs`: the runs
+ * the page lists from.
  */
 export function showOnly(s: RunState, runs: readonly Run[], ticked: ReadonlySet<string>): RunState {
   const eyes: Record<string, boolean> = {};
   for (const r of runs) eyes[runKey(r.id)] = ticked.has(r.id);
   for (const g of groupRunsNested(runs, s.groupBy) ?? []) eyes[groupKey(g)] = false;
-  return { ...s, status: "all", search: "", filter: EMPTY_FILTER, latestOnly: false, eyes };
+  return { ...s, status: "all", search: "", filter: EMPTY_FILTER, eyes };
 }
 
 const isGroupCondition = (n: FilterNode): boolean => n.kind === "chip" && n.field === "group" && n.op === "exact";
@@ -186,11 +187,13 @@ const isGroupCondition = (n: FilterNode): boolean => n.kind === "chip" && n.fiel
 /**
  * The filter with the condition `group = <group>`: it replaces the root's
  * existing `group =` condition (a click picks one group), else it is added
- * (an OR root is kept whole, AND-ed with it).
+ * (an OR root is kept whole, AND-ed with it). "Latest versions only" stays.
  */
-export function withGroupCondition(filter: GroupNode, group: string): GroupNode {
+export function withGroupCondition(f: RunsFilter, group: string): RunsFilter {
   const chip: ChipNode = { kind: "chip", field: "group", op: "exact", arg: group };
-  if (filter.op === "or" && filter.children.length > 0) return { kind: "group", op: "and", children: [filter, chip] };
+  const latest = f.latestOnly === true;
+  const filter = withLatestOnly(f, false);
+  if (filter.op === "or" && filter.children.length > 0) return withLatestOnly({ kind: "group", op: "and", children: [filter, chip] }, latest);
   const children: FilterNode[] = [];
   let placed = false;
   for (const n of filter.children) {
@@ -201,7 +204,7 @@ export function withGroupCondition(filter: GroupNode, group: string): GroupNode 
     }
   }
   if (!placed) children.push(chip);
-  return { kind: "group", op: "and", children };
+  return withLatestOnly({ kind: "group", op: "and", children }, latest);
 }
 
 /**

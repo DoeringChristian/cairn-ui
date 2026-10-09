@@ -1,7 +1,7 @@
 /**
  * "⤓ Insert from workspace" in a report cell's run set list: a run set
  * copying the project workspace's current view's run state (filter,
- * group-by, Latest only, sort, eyes; lib/run-sets.ts
+ * group-by, latest versions only, sort, eyes; lib/run-sets.ts
  * `insertRunSetFromWorkspace`), named after the view. A cell without cards
  * also gets the workspace layout's cards (lib/workspace/layout-cards.ts),
  * over the runs its sets then resolve to, each with its settings overrides

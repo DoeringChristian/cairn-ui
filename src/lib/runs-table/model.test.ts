@@ -78,11 +78,12 @@ test("filterRuns: archived only under 'archived', status, latest only, search", 
     run("4", { display_name: "train" }),
   ];
   const ids = (status: Parameters<typeof filterRuns>[1]["status"], extra: Partial<Parameters<typeof filterRuns>[1]> = {}, latest = new Set(rs.map((r) => r.id))) =>
-    filterRuns(rs, { status, search: NO_SEARCH, filter: EMPTY_FILTER, latestOnly: false, ...extra }, latest).map((r) => r.id);
+    filterRuns(rs, { status, search: NO_SEARCH, filter: EMPTY_FILTER, ...extra }, latest).map((r) => r.id);
   assert.deepEqual(ids("all"), ["1", "2", "4"]);
   assert.deepEqual(ids("archived"), ["3"]);
   assert.deepEqual(ids("failed"), ["2"]);
-  assert.deepEqual(ids("all", { latestOnly: true }, new Set(["1", "4"])), ["1", "4"]);
+  // The filter's "Latest versions only".
+  assert.deepEqual(ids("all", { filter: { ...EMPTY_FILTER, latestOnly: true } }, new Set(["1", "4"])), ["1", "4"]);
   assert.deepEqual(ids("all", { search: compileRunSearch("^tr") }), ["4"]);
   assert.equal(isStatusFilter("crashed"), true);
   assert.equal(isStatusFilter("bogus"), false);
@@ -133,7 +134,7 @@ test("sidebar order: the sort, pinned runs first and listed whatever the filters
     run("b", { display_name: "alpha", created_at: "2026-01-03", status: "failed" }),
     run("c", { display_name: "gamma", created_at: "2026-01-02" }),
   ];
-  const f = { status: "completed" as const, search: NO_SEARCH, filter: EMPTY_FILTER, latestOnly: false };
+  const f = { status: "completed" as const, search: NO_SEARCH, filter: EMPTY_FILTER };
   const all = new Set(rs.map((r) => r.id));
   assert.deepEqual(filterRunsKeeping(rs, f, all, []).map((r) => r.id), ["a", "c"]);
   const listed = filterRunsKeeping(rs, f, all, ["b"]);
@@ -163,13 +164,13 @@ test("group header click: selects all its runs, keeps other selections; clears t
 });
 
 test("needsEveryRun: only the default view pages lazily", () => {
-  const base = { filter: EMPTY_FILTER, groupBy: [], search: "", status: "all" as const, latestOnly: false, sort: [{ column: "created_at", direction: "desc" as const }] };
+  const base = { filter: EMPTY_FILTER, groupBy: [], search: "", status: "all" as const, sort: [{ column: "created_at", direction: "desc" as const }] };
   assert.equal(needsEveryRun(base), false);
   assert.equal(needsEveryRun({ ...base, sort: [] }), false);
   assert.equal(needsEveryRun({ ...base, search: "train-1" }), true);
   assert.equal(needsEveryRun({ ...base, search: "  " }), false);
   assert.equal(needsEveryRun({ ...base, status: "failed" }), true);
-  assert.equal(needsEveryRun({ ...base, latestOnly: true }), true);
+  assert.equal(needsEveryRun({ ...base, filter: { ...EMPTY_FILTER, latestOnly: true } }), true);
   assert.equal(needsEveryRun({ ...base, groupBy: [{ source: "group" }] }), true);
   assert.equal(needsEveryRun({ ...base, sort: [{ column: "name", direction: "asc" }] }), true);
   assert.equal(needsEveryRun({ ...base, sort: [{ column: "created_at", direction: "asc" }] }), true);

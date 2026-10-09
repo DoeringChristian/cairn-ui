@@ -1,11 +1,11 @@
 /**
  * The runs toolbar controls, shared by the runs table and the workspace
- * sidebar: the status select, the regex search box, the filter, the
- * group-by and "Latest only". The filter is
- * a tree (lib/run-filter.ts): and/or groups over builder chips and
- * expression leaves. The root's conditions show as removable chips;
- * "Filter" opens the tree editor, where groups nest and toggle between AND
- * and OR. Group-by is a list of levels (nested groups), each a run field, a
+ * sidebar: the status select, the regex search box, the filter and the
+ * group-by. The filter is a tree (lib/run-filter.ts): and/or groups over
+ * builder chips and expression leaves, plus "Latest versions only" (the
+ * newest run of every series). The root's conditions show as removable
+ * chips; "Filter" opens the editor, where "Latest versions only" toggles
+ * and groups nest and toggle between AND and OR. Group-by is a list of levels (nested groups), each a run field, a
  * param or an expression. State lives with the page; these only edit it.
  */
 
@@ -14,13 +14,15 @@ import {
   OPERATORS,
   addChild,
   exprLeafError,
-  isEmptyFilter,
+  isEmptyRunsFilter,
   updateAt,
+  withLatestOnly,
   type FilterNode,
   type GroupNode,
   type NodePath,
   type Operator,
   type RunFilter,
+  type RunsFilter,
 } from "../lib/run-filter.ts";
 import { compileScalarExpr } from "../lib/runs-table/columns.ts";
 import { STATUS_OPTIONS, type StatusFilter } from "../lib/runs-table/model.ts";
@@ -80,16 +82,6 @@ export function RunStatusSelect({ value, onChange }: { value: StatusFilter; onCh
   );
 }
 
-/** `[ ] Latest only`: the newest run of every series (group, job_type, name). */
-export function RunLatestOnlyToggle({ value, onChange }: { value: boolean; onChange: (next: boolean) => void }) {
-  return (
-    <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-fg-muted">
-      <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} className="accent-accent" />
-      Latest only
-    </label>
-  );
-}
-
 /** The search box: a regex over name, id, status and tags (lib/runs-table/search.ts). */
 export function RunSearchInput({
   value,
@@ -114,26 +106,48 @@ export function RunSearchInput({
   );
 }
 
-/** The filter: the root's conditions as removable chips, "Filter" opening the tree editor, and "Clear filters". */
+const CHIP = "mono inline-flex max-w-[24rem] items-center gap-1 rounded border px-1.5 py-0.5 text-xs text-fg";
+
+/**
+ * The filter: "latest versions only" and the root's conditions as removable
+ * chips, "Filter" opening the editor, and "Clear filters".
+ */
 export function RunFilterControl({
   fields,
-  filter: root,
-  onChange: setRoot,
+  filter,
+  onChange,
 }: {
   /** Filterable fields (see `filterFieldsOf`). */
   fields: string[];
-  filter: GroupNode;
-  onChange: (next: GroupNode) => void;
+  filter: RunsFilter;
+  onChange: (next: RunsFilter) => void;
 }) {
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
-  const count = root.children.length;
+  const latestOnly = filter.latestOnly === true;
+  // The tree's edits keep "Latest versions only" as it is.
+  const root: GroupNode = filter;
+  const setRoot = (next: GroupNode) => onChange(withLatestOnly(next, latestOnly));
+  const count = root.children.length + (latestOnly ? 1 : 0);
   return (
     <>
+      {latestOnly && (
+        <span className={`${CHIP} border-accent/40 bg-accent/10`} data-testid="filter-latest-only">
+          <span className="truncate">latest versions only</span>
+          <button
+            type="button"
+            onClick={() => onChange(withLatestOnly(filter, false))}
+            className="text-fg-subtle hover:text-status-failed"
+            aria-label="Remove filter latest versions only"
+          >
+            {"×"}
+          </button>
+        </span>
+      )}
       {root.children.map((c, i) => (
         <span
           key={`${i}:${nodeText(c)}`}
-          className={`mono inline-flex max-w-[24rem] items-center gap-1 rounded border px-1.5 py-0.5 text-xs text-fg ${
+          className={`${CHIP} ${
             c.kind === "expr" && exprLeafError(c.expr)
               ? "border-status-failed/60 bg-status-failed/10"
               : "border-accent/40 bg-accent/10"
@@ -162,12 +176,24 @@ export function RunFilterControl({
         <i className="fa-solid fa-filter mr-1 text-[10px]" aria-hidden="true" />
         Filter{count > 0 ? ` (${count})` : ""}
       </button>
-      {!isEmptyFilter(root) && (
-        <button type="button" className="text-xs text-fg-subtle hover:text-fg" onClick={() => setRoot({ ...root, children: [] })}>
+      {!isEmptyRunsFilter(filter) && (
+        <button type="button" className="text-xs text-fg-subtle hover:text-fg" onClick={() => onChange({ kind: "group", op: root.op, children: [] })}>
           Clear filters
         </button>
       )}
       <Popover open={open} onClose={() => setOpen(false)} anchorRef={btnRef} title="Filter runs" titleAnchored width={520} align="start" bodyClassName="p-3">
+        <label className="mb-2 flex cursor-pointer select-none items-start gap-2 border-b border-border-subtle pb-2 text-xs text-fg">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-accent"
+            checked={latestOnly}
+            onChange={(e) => onChange(withLatestOnly(filter, e.target.checked))}
+          />
+          <span>
+            Latest versions only
+            <span className="block text-[11px] text-fg-subtle">The newest version of every run series (group, job type, name).</span>
+          </span>
+        </label>
         <GroupEditor node={root} path={[]} root={root} fields={fields} onRoot={setRoot} />
       </Popover>
     </>

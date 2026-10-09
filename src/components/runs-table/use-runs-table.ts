@@ -1,6 +1,6 @@
 /**
  * The runs table's rows, shared by the Runs page and the workspace sidebar:
- * status, "Latest only", filter and search (lib/runs-table/model.ts), the
+ * status, filter (with "Latest versions only") and search (lib/runs-table/model.ts), the
  * sort (computed columns included), pinned runs first (listed whatever
  * the filters when asked), the nested groups and which of them are
  * collapsed: the caller's (`toggled`, the workspace view's run state
@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Run } from "../../api/types";
-import type { GroupNode } from "../../lib/run-filter";
+import type { RunsFilter } from "../../lib/run-filter";
 import { cellValue, computeColumns, type ComputedColumn } from "../../lib/runs-table/columns";
 import { flattenGroups, groupRunsNested, type GroupBy, type RunGroupNode, type TableRow } from "../../lib/runs-table/group";
 import { collapsedGroups, filterRunsKeeping, latestRuns, pinnedFirst, type StatusFilter } from "../../lib/runs-table/model";
@@ -21,8 +21,8 @@ export interface RunsTableQuery {
   runs: readonly Run[];
   status: StatusFilter;
   search: string;
-  filter: GroupNode;
-  latestOnly: boolean;
+  /** The filter, with "Latest versions only". */
+  filter: RunsFilter;
   groupBy: GroupBy[];
   sort: SortKey[];
   computed: ComputedColumn[];
@@ -47,13 +47,13 @@ const NONE_COLLAPSED = () => false;
 const NO_RUNS: readonly string[] = [];
 
 export function useRunsTable(q: RunsTableQuery) {
-  const { runs, status, search, filter, latestOnly, groupBy, sort, computed, pinned, baseline } = q;
+  const { runs, status, search, filter, groupBy, sort, computed, pinned, baseline } = q;
   const runSearch = useMemo(() => compileRunSearch(search), [search]);
   const { latestIds, latestByName } = useMemo(() => latestRuns(runs), [runs]);
   const kept = q.pinnedAlwaysListed ? pinned : NO_RUNS;
   const filtered = useMemo(
-    () => filterRunsKeeping(runs, { status, search: runSearch, filter, latestOnly }, latestIds, kept),
-    [runs, status, runSearch, filter, latestOnly, latestIds, kept],
+    () => filterRunsKeeping(runs, { status, search: runSearch, filter }, latestIds, kept),
+    [runs, status, runSearch, filter, latestIds, kept],
   );
   const computedValues = useMemo(
     () => computeColumns(baseline && !filtered.includes(baseline) ? [...filtered, baseline] : filtered, computed),
@@ -95,5 +95,5 @@ export function useRunsTable(q: RunsTableQuery) {
     [groups, collapsed, sorted],
   );
 
-  return { runSearch, latestByName, filtered, computedValues, sorted, groups, collapsed, toggleGroup, rows };
+  return { runSearch, latestIds, latestByName, filtered, computedValues, sorted, groups, collapsed, toggleGroup, rows };
 }

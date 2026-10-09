@@ -21,7 +21,6 @@ import { filterFieldsOf } from "../lib/run-filter.ts";
 import {
   RunFilterControl,
   RunGroupControl,
-  RunLatestOnlyToggle,
   RunSearchInput,
   RunStatusSelect,
 } from "../components/RunFilterBar";
@@ -65,7 +64,6 @@ import {
   setColumns as setColumnsOf,
   setComputed as setComputedOf,
   setFilter,
-  setLatestOnly,
   setSearch,
   setSort as setSortOf,
   setStatus,
@@ -171,7 +169,7 @@ export default function RunsTablePage() {
   });
   const allTags = useProjectTags(runs);
 
-  // Filters, groups, search, status, "Latest only" and sorting apply to the
+  // Filters (with "Latest versions only"), groups, search, status and sorting apply to the
   // loaded runs, so while any is active load every page: a search over the
   // first 100 runs silently hides matches (see needsEveryRun).
   const needsAllRuns = needsEveryRun(state);
@@ -265,7 +263,6 @@ export default function RunsTablePage() {
     status: state.status,
     search: state.search,
     filter: state.filter,
-    latestOnly: state.latestOnly,
     groupBy,
     sort,
     computed,
@@ -654,7 +651,6 @@ export default function RunsTablePage() {
           levels={state.groupBy}
           onChange={(levels) => edit((s) => regroup(s, levels, sorted, visible), "Group runs")}
         />
-        <RunLatestOnlyToggle value={state.latestOnly} onChange={(v) => edit((s) => setLatestOnly(s, v), "Latest only")} />
         <button
           ref={columnsBtnRef}
           type="button"

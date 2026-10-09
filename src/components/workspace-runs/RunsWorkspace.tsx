@@ -75,7 +75,6 @@ export default function RunsWorkspace({ wsRef, initialFilter = null }: { wsRef: 
     status: state.status,
     search: state.search,
     filter: state.filter,
-    latestOnly: state.latestOnly,
     groupBy: state.groupBy,
     sort: state.sort,
     computed: NO_COMPUTED,

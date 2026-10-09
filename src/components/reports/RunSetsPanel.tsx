@@ -13,7 +13,7 @@
  * resolves to now, **Edit** and **✕** (the last set cannot be removed).
  * **Edit** opens the set's name and the workspace's runs sidebar
  * (RunsSidebar: the shared runs table with eyes and its toolbar) over the
- * project's runs, scoped to the set: its filter, group-by, Latest only, sort
+ * project's runs, scoped to the set: its filter, group-by, latest versions only, sort
  * and eyes are the set's (lib/run-sets.ts); Status and Search only narrow
  * what the editor lists. **+ Add run set** adds a default set, **⤓ Insert
  * from workspace** a set copying the workspace view's run state (and, in a
@@ -23,7 +23,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import type { Run } from "../../api/types";
-import { filterFieldsOf } from "../../lib/run-filter";
+import { filterFieldsOf, filterTree } from "../../lib/run-filter";
 import { availableColumns } from "../../lib/runs-table/columns";
 import { firstGroupOpen, type StatusFilter } from "../../lib/runs-table/model";
 import {
@@ -32,6 +32,7 @@ import {
   removeRunSet,
   renameRunSet,
   runSetFamilyColor,
+  runSetFilter,
   updateRunSet,
   type RunSet,
 } from "../../lib/run-sets";
@@ -147,7 +148,7 @@ export default function RunSetsPanel({ projectId, sets, resolved, pool, onChange
               className={LINK_BTN}
               onClick={() => void insert()}
               disabled={inserting}
-              title="Add a run set copying the workspace's filter, grouping, Latest only, sort and eyes"
+              title="Add a run set copying the workspace's filter (latest versions only included), grouping, sort and eyes"
             >
               {inserting ? "Inserting…" : "⤓ Insert from workspace"}
             </button>
@@ -184,7 +185,8 @@ function RunSetEditor({
   // Status and Search only narrow the list: a run set has neither.
   const [status, setStatus] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
-  const state: RunState = { ...DEFAULT_RUN_STATE, status, search, filter: set.filter, groupBy: set.groupBy, latestOnly: set.latestOnly, sort: set.sort, eyes: set.eyes };
+  const filter = runSetFilter(set);
+  const state: RunState = { ...DEFAULT_RUN_STATE, status, search, filter, groupBy: set.groupBy, sort: set.sort, eyes: set.eyes };
 
   const filterFields = useMemo(() => filterFieldsOf(pool), [pool]);
   const paramKeys = useMemo(
@@ -192,7 +194,7 @@ function RunSetEditor({
     [filterFields],
   );
   const sortColumns = useMemo(() => availableColumns(pool, NO_COMPUTED).filter((c) => c !== "tags"), [pool]);
-  const query = { runs: pool, filter: set.filter, latestOnly: set.latestOnly, groupBy: set.groupBy, sort: set.sort, computed: NO_COMPUTED, pinned: NO_PINS };
+  const query = { runs: pool, filter, groupBy: set.groupBy, sort: set.sort, computed: NO_COMPUTED, pinned: NO_PINS };
   // The set's runs (lib/run-sets.ts `resolveRunSet`: what the cards draw) and the runs listed here.
   const full = useRunsTable({ ...query, status: "all", search: "" });
   const table = useRunsTable({ ...query, status, search, defaultCollapsed: firstGroupOpen });
@@ -202,8 +204,15 @@ function RunSetEditor({
     const next = fn(state);
     if (next.status !== status) setStatus(next.status);
     if (next.search !== search) setSearch(next.search);
-    if (next.filter !== state.filter || next.groupBy !== state.groupBy || next.latestOnly !== state.latestOnly || next.sort !== state.sort || next.eyes !== state.eyes) {
-      onChange((s) => ({ ...s, filter: next.filter, groupBy: next.groupBy, latestOnly: next.latestOnly, sort: next.sort, eyes: next.eyes }));
+    if (next.filter !== state.filter || next.groupBy !== state.groupBy || next.sort !== state.sort || next.eyes !== state.eyes) {
+      onChange((s) => ({
+        ...s,
+        filter: filterTree(next.filter),
+        latestOnly: next.filter.latestOnly === true,
+        groupBy: next.groupBy,
+        sort: next.sort,
+        eyes: next.eyes,
+      }));
     }
   };
 

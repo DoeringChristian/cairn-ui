@@ -24,7 +24,7 @@
  *       series: [{ runId: run_a, name: loss }]
  *
  * Each run set is the workspace's runs table state, frozen (its filter tree,
- * group-by, Latest only, sort and eyes); its runs are resolved live
+ * group-by, latest versions only, sort and eyes); its runs are resolved live
  * (`resolveRunSets`), and the cards draw the union of the sets' runs. A fence
  * with the old `runs:` key (static ids or a selector) is not read at all
  * (`CairnLegacyRunsError`): no migration.

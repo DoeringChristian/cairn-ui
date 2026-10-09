@@ -228,6 +228,30 @@ export type FilterNode = ChipNode | ExprNode | GroupNode;
 
 export const EMPTY_FILTER: GroupNode = { kind: "group", op: "and", children: [] };
 
+/**
+ * The runs table's filter (the workspace view's run state): the tree's root,
+ * plus "Latest versions only", which lists only the newest run of every
+ * series (lib/run-series.ts; applied by lib/runs-table/model.ts, as it needs
+ * every run). Nested groups never carry it.
+ */
+export interface RunsFilter extends GroupNode {
+  latestOnly?: boolean;
+}
+
+/** The filter with "Latest versions only" on or off (off: the key dropped). */
+export function withLatestOnly(f: GroupNode, on: boolean): RunsFilter {
+  if (!on && !("latestOnly" in f)) return f;
+  const { latestOnly: _drop, ...tree } = f as RunsFilter;
+  void _drop;
+  return on ? { ...tree, latestOnly: true } : tree;
+}
+
+/** The filter's tree alone ("Latest versions only" dropped). */
+export const filterTree = (f: RunsFilter): GroupNode => withLatestOnly(f, false);
+
+/** True when the filter lists every run: no condition, not "Latest versions only". */
+export const isEmptyRunsFilter = (f: RunsFilter): boolean => !f.latestOnly && isEmptyFilter(f);
+
 /** The builtins chips compile to: `__op_<operator>(fieldValue, coercedArg)`. */
 export type OpBuiltin = `__op_${Operator}`;
 
@@ -388,4 +412,10 @@ function parseNode(v: unknown, depth: number): FilterNode | null {
 export function parseFilter(raw: unknown): GroupNode {
   const n = parseNode(raw, 0);
   return n && n.kind === "group" ? n : EMPTY_FILTER;
+}
+
+/** Parse a stored runs table filter: the tree, and "Latest versions only" on the root. */
+export function parseRunsFilter(raw: unknown): RunsFilter {
+  const n = parseNode(raw, 0);
+  return n && n.kind === "group" ? withLatestOnly(n, isObj(raw) && raw.latestOnly === true) : EMPTY_FILTER;
 }

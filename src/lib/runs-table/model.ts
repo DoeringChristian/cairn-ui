@@ -1,12 +1,12 @@
 /**
  * The runs table's row model (pure), shared by the Runs page and the
  * workspace sidebar (components/runs-table/use-runs-table.ts): the status
- * filter, "Latest only", the filter + search, pinned-first, the collapsed
+ * filter, the filter (with "Latest versions only") + search, pinned-first, the collapsed
  * groups and the Name cell's name.
  */
 
 import type { Run, RunStatus } from "../../api/types.ts";
-import { isEmptyFilter, matchesFilter, type GroupNode } from "../run-filter.ts";
+import { isEmptyRunsFilter, matchesFilter, type RunsFilter } from "../run-filter.ts";
 import { DEFAULT_SORT, type SortKey } from "./sort.ts";
 import type { RunGroupNode } from "./group.ts";
 import { matchesRunSearch, type RunSearch } from "./search.ts";
@@ -38,7 +38,8 @@ export interface LatestRuns {
 }
 
 /**
- * The newest run per series ("Latest only", and the highlight). A series is
+ * The newest run per series ("Latest versions only", the eye menu's "Show
+ * latest only", and the highlight). A series is
  * (group, job type, display name) (lib/run-series.ts): versions are numbered
  * per (project, group, job_type, name), so `train` in two groups, or under
  * two job types, are two series.
@@ -57,14 +58,13 @@ export function latestRuns(runs: readonly Run[]): LatestRuns {
 export interface RowFilters {
   status: StatusFilter;
   search: RunSearch;
-  filter: GroupNode;
-  latestOnly: boolean;
+  filter: RunsFilter;
 }
 
-/** The runs the table lists: status (archived only under "archived"), latest only, filter, search. */
+/** The runs the table lists: status (archived only under "archived"), the filter (latest versions only, the tree), search. */
 export function filterRuns(runs: readonly Run[], f: RowFilters, latestIds: ReadonlySet<string>): Run[] {
   return runs.filter((r) => {
-    if (f.latestOnly && !latestIds.has(r.id)) return false;
+    if (f.filter.latestOnly && !latestIds.has(r.id)) return false;
     if (f.status === "archived") {
       if (!r.archived) return false;
     } else if (r.archived) {
@@ -96,23 +96,22 @@ export function filterRunsKeeping(
 /** Pinned runs first, both parts in their sorted order. */
 /**
  * Whether the Runs page must load every page of runs: anything that picks
- * or orders rows from the whole project (filter, grouping, search, status,
- * "Latest only", a sort other than the server's newest-first) is wrong over
+ * or orders rows from the whole project (filter incl. "Latest versions
+ * only", grouping, search, status, a sort other than the server's newest-first) is wrong over
  * just the first pages: it silently hides matches, or puts rows from the
  * first 100 at the top. Only the default view pages lazily.
  */
 export function needsEveryRun(q: {
-  filter: GroupNode;
+  filter: RunsFilter;
   groupBy: readonly unknown[];
   search: string;
   status: StatusFilter;
-  latestOnly: boolean;
   sort: readonly SortKey[];
 }): boolean {
   const defaultSort =
     q.sort.length === 0 ||
     (q.sort.length === 1 && q.sort[0]!.column === DEFAULT_SORT[0]!.column && q.sort[0]!.direction === DEFAULT_SORT[0]!.direction);
-  return !isEmptyFilter(q.filter) || q.groupBy.length > 0 || q.search.trim() !== "" || q.status !== "all" || q.latestOnly || !defaultSort;
+  return !isEmptyRunsFilter(q.filter) || q.groupBy.length > 0 || q.search.trim() !== "" || q.status !== "all" || !defaultSort;
 }
 
 export function pinnedFirst(sorted: Run[], pinned: readonly string[]): Run[] {
