@@ -7,6 +7,8 @@ import { LayoutSection, SliderSection, bind, type MediaPanelCtx, type PanelSurfa
 export interface FigurePanelCtx extends MediaPanelCtx {
   /** Whether the shown figures can be overlaid (multi-run cards). */
   merge?: FigureMergeabilityResult;
+  /** Current panes, for the compare slot count. */
+  paneKeys?: readonly string[];
 }
 
 const COMPARE_OPTIONS = [
@@ -49,7 +51,7 @@ export default function FigureSettingsPanel({
   const data = <SliderSection ctl={ctl} ctx={ctx} />;
   const display = (
     <>
-      {mode === "card" && ctx?.multi && (
+      {mode === "card" && ctx?.multi && s.panelMode === "gallery" && (
         <SettingsSection name="Compare">
           <Segmented<FigureCompareMode>
             value={compare}
@@ -61,12 +63,12 @@ export default function FigureSettingsPanel({
             description={
               compare === "overlay" && ctx.merge && !ctx.merge.mergeable
                 ? `Overlay unavailable for this figure type${ctx.merge.reason ? ` (${ctx.merge.reason})` : ""}; showing panes.`
-                : "Overlay merges every run's figure into one plot, coloured by run; panes show them side by side."
+                : "Overlay merges every run's figure into one plot, coloured by run (gallery mode); panes show them side by side."
             }
           />
         </SettingsSection>
       )}
-      <LayoutSection ctl={ctl} ctx={ctx} mode={mode} />
+      <LayoutSection ctl={ctl} modes ctx={ctx} mode={mode} paneKeys={ctx?.paneKeys} />
       <SettingsSection name="Appearance">
         <Switch {...bind(ctl, "displayModeBar")} label="Show modebar" description="Plotly's zoom/pan/camera/save toolbar" />
         <Switch {...bind(ctl, "scrollZoom")} label="Scroll to zoom" />

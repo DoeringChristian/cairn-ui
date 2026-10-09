@@ -3,11 +3,11 @@ import type { SeriesRef } from "../card-kit/use-card-series";
 import { plotCardPolicy } from "../card-kit/plot-card-policy.ts";
 import type { CardSettingsMeta } from "./meta";
 import {
-  MEDIA_COLUMNS_CASCADE,
+  MEDIA_LAYOUT_CASCADE,
   MEDIA_SLIDER_CASCADE,
-  mediaColumnsBuiltin,
+  mediaLayoutBuiltin,
   mediaSliderBuiltin,
-  type MediaColumnsSettings,
+  type MediaLayoutSettings,
   type MediaSliderSettings,
 } from "./media.ts";
 
@@ -30,7 +30,7 @@ export type FigureCompareMode = "panes" | "overlay";
  */
 export type FigureWebGLMode = "auto" | "on" | "off";
 
-export interface FigureSettings extends BaseCardSettings, MediaSliderSettings, MediaColumnsSettings {
+export interface FigureSettings extends BaseCardSettings, MediaSliderSettings, MediaLayoutSettings {
   metrics: SeriesRef[];
   paneWidths?: number[];
   displayModeBar: boolean;
@@ -48,7 +48,7 @@ export const builtin: FigureSettings = {
   version: 1,
   colSpan: plotCardPolicy("figure").colSpan,
   ...mediaSliderBuiltin,
-  ...mediaColumnsBuiltin,
+  ...mediaLayoutBuiltin,
   metrics: [],
   displayModeBar: false,
   scrollZoom: true,
@@ -72,7 +72,7 @@ export const meta: CardSettingsMeta<FigureSettings> = {
     "showLegend",
     "webgl",
     ...MEDIA_SLIDER_CASCADE,
-    ...MEDIA_COLUMNS_CASCADE,
+    ...MEDIA_LAYOUT_CASCADE,
   ],
   tabs: ["values", "display"],
 };

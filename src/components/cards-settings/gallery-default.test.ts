@@ -5,6 +5,7 @@ import * as video from "./video.ts";
 import * as audio from "./audio.ts";
 import * as text from "./text.ts";
 import * as tensor from "./tensor.ts";
+import * as figure from "./figure.ts";
 import * as volume from "./volume.ts";
 import { scene3dMeta } from "./scene3d.ts";
 
@@ -13,8 +14,8 @@ test("gallery column content: Index for image/video/audio/text lists (wandb), Ru
   assert.equal(scene3dMeta().builtin.galleryContent, "run");
 });
 
-test("tensor and the volume fallback take the media layout: Index gallery content (2D / placeholder tiles, no WebGL)", () => {
-  for (const m of [tensor, volume]) {
+test("figure, tensor and the volume fallback take the media layout: Index gallery content", () => {
+  for (const m of [figure, tensor, volume]) {
     assert.equal(m.meta.builtin.galleryContent, "index");
     assert.equal(m.meta.builtin.panelMode, "gallery");
     assert.equal(m.meta.builtin.indexMode, "all");
