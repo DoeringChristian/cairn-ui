@@ -37,7 +37,6 @@ test("tabs are known and in display order", () => {
 });
 
 test("simple cards: their slider under Values, the rest under Display", () => {
-  assert.deepEqual(metaFor("text").tabs, ["display"]);
   assert.deepEqual(metaFor("artifact").tabs, ["values"]);
-  for (const type of ["html", "markdown", "audio"] as const) assert.deepEqual(metaFor(type).tabs, ["values", "display"], type);
+  for (const type of ["html", "markdown", "audio", "text"] as const) assert.deepEqual(metaFor(type).tabs, ["values", "display"], type);
 });
