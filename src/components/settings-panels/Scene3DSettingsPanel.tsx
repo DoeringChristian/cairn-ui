@@ -5,6 +5,7 @@ import { SettingsAction, SettingsSection, SettingsTabs, Switch } from "../settin
 import { LayoutSection, SliderSection, bind, type MediaPanelCtx, type PanelSurface } from "./media-panel-kit";
 
 export interface Scene3DPanelCtx extends MediaPanelCtx {
+  paneKeys?: readonly string[];
   /** The kind's own view controls (point size, colour by, wireframe, …). */
   viewSettings?: ReactNode;
   onResetCamera?: () => void;
@@ -30,7 +31,7 @@ export default function Scene3DSettingsPanel({
         {multi && <Switch {...bind(ctl, "syncCameras")} label="Sync cameras" description="Orbiting one pane moves them all." />}
         {card && ctx?.onResetCamera && <SettingsAction label="Reset camera" icon="fa-rotate-left" onClick={ctx.onResetCamera} />}
       </SettingsSection>
-      <LayoutSection ctl={ctl} ctx={ctx} mode={mode} />
+      <LayoutSection ctl={ctl} modes ctx={ctx} mode={mode} paneKeys={ctx?.paneKeys} />
     </>
   );
   return <SettingsTabs tabs={{ values: data, display }} />;

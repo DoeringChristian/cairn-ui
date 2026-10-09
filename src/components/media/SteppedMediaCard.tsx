@@ -87,7 +87,7 @@ export interface SteppedMediaPanelCtx extends MediaPanelCtx, ReferencePanelCtx {
 
 interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
   /** Card kind, used for CardShell sizing and as the comparison card type. */
-  kind: "markdown" | "html" | "audio" | "video" | "custom";
+  kind: "markdown" | "html" | "audio" | "video" | "text" | "custom";
   /** Word in the empty state: "no {noun} logged yet". */
   noun: string;
   /** Gallery item captions as chips over the items (pictures: video, audio) rather than a line above. */

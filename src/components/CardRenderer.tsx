@@ -347,7 +347,7 @@ function BuiltinSeriesCard(props: SeriesDescriptor) {
     case "tensor":
       return <TensorCard {...baseProps} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
     case "text":
-      return <TextViewerCard {...baseProps} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
+      return <TextViewerCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
     case "table":
       return (
         <Suspense fallback={<LazyCardFallback label="loading table…" />}>

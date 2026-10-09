@@ -1,45 +1,43 @@
 import type { SettingsController } from "../../lib/card-settings";
 import type { TextSettings } from "../cards-settings/text";
-import { Segmented, SettingsTabs, Switch, type Bound } from "../settings/palette";
+import type { SteppedMediaPanelCtx } from "../media/SteppedMediaCard";
+import { Segmented, SettingsSection, SettingsTabs, Switch } from "../settings/palette";
+import { LayoutSection, SliderSection, bind, type PanelSurface } from "./media-panel-kit";
 
-interface Props {
+/** Text: the slider (and Index) under Values; the layout and the text's look under Display. */
+export default function TextSettingsPanel({
+  ctl,
+  ctx,
+  mode,
+}: {
   ctl: SettingsController<TextSettings>;
-  ctx?: undefined;
-  mode: "card" | "defaults";
-}
-
-function bind<K extends keyof TextSettings & string>(ctl: SettingsController<TextSettings>, k: K): Bound<TextSettings[K]> {
-  return {
-    value: ctl.value[k],
-    onChange: (v) => ctl.set({ [k]: v } as Partial<TextSettings>),
-    overridden: ctl.isOverridden(k),
-    onReset: () => ctl.reset(k),
-    disabled: ctl.locked,
-  };
-}
-
-/** Settings of the text card: its display. */
-export default function TextSettingsPanel({ ctl }: Props) {
+  ctx?: SteppedMediaPanelCtx;
+  mode: PanelSurface;
+}) {
   return (
     <SettingsTabs
       tabs={{
+        values: <SliderSection ctl={ctl} ctx={ctx} />,
         display: (
-    <div>
-      <Segmented
-        label="Font size"
-        {...bind(ctl, "fontSize")}
-        options={[
-          { value: "xs", label: "XS" },
-          { value: "sm", label: "S" },
-          { value: "base", label: "M" },
-        ]}
-      />
-      <Switch
-        label="Word wrap"
-        description="Wrap long lines to the card's width; off scrolls sideways."
-        {...bind(ctl, "wordWrap")}
-      />
-    </div>
+          <>
+            <LayoutSection ctl={ctl} modes ctx={ctx} mode={mode} paneKeys={ctx?.paneKeys} />
+            <SettingsSection name="Appearance">
+              <Segmented
+                label="Font size"
+                {...bind(ctl, "fontSize")}
+                options={[
+                  { value: "xs", label: "XS" },
+                  { value: "sm", label: "S" },
+                  { value: "base", label: "M" },
+                ]}
+              />
+              <Switch
+                label="Word wrap"
+                description="Wrap long lines to the card's width; off scrolls sideways."
+                {...bind(ctl, "wordWrap")}
+              />
+            </SettingsSection>
+          </>
         ),
       }}
     />

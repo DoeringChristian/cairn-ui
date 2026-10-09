@@ -11,6 +11,7 @@ import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid } from "../c
 import { useMediaPanes, useScalarMetricNames } from "../card-kit/use-media-panes";
 import { scene3dInstanceDefaults, type Scene3DSettings } from "../cards-settings/scene3d";
 import { useOverlaySlot } from "../card-kit/use-overlay-slot";
+import MediaTiles, { useMediaLayout, type LayoutTile } from "../card-kit/MediaTiles";
 import { plotCardPolicy } from "../card-kit/plot-card-policy";
 import CardShell from "../CardShell";
 import SeriesChipStrip from "../SeriesChipStrip";
@@ -50,12 +51,15 @@ function SceneGallery<V extends object, M extends Scene3DMeta>({
   point,
   item,
   onItem,
+  items,
   ...rest
 }: {
   spec: Scene3DKind<V, M>;
   point: SequencePoint;
   item: number;
   onItem: (item: number) => void;
+  /** The list items the tile shows (the card's Index); null: all. */
+  items: readonly number[] | null;
   view: V;
   link: CameraLink | null;
   resetKey: number;
@@ -65,13 +69,15 @@ function SceneGallery<V extends object, M extends Scene3DMeta>({
   const run = usePaneLabelInline(true);
   if (!frame) return <div className="h-full motion-safe:animate-pulse rounded bg-bg-hover" />;
   if (frame.items.length === 0) return <div className="flex h-full items-center justify-center text-xs text-fg-subtle">empty gallery</div>;
-  const index = Math.min(item, frame.items.length - 1);
+  const picked = (items ?? frame.items.map((_, i) => i)).filter((i) => i < frame.items.length);
+  if (picked.length === 0) return <div className="flex h-full items-center justify-center text-xs text-fg-subtle">no item at this index</div>;
+  const index = picked.includes(item) ? item : picked[0]!;
   const caption = pointCaption(frame.point.metadata);
   const tabs = (
     <div className="absolute left-1 right-1 top-1 flex flex-wrap items-center gap-1" data-gallery-step={frame.point.step} data-gallery-count={frame.items.length}>
       {run && <RunChip {...run} className="max-w-[30%]" />}
       {caption && <span className="max-w-[40%] truncate rounded bg-bg/80 px-1.5 py-0.5 text-[10px] text-fg-muted" title={caption}>{caption}</span>}
-      {frame.items.map((it, i) => (
+      {picked.length > 1 && picked.map((i) => [frame.items[i]!, i] as const).map(([it, i]) => (
         <button
           key={i}
           type="button"
@@ -83,7 +89,7 @@ function SceneGallery<V extends object, M extends Scene3DMeta>({
             i === index ? "bg-accent text-bg" : "bg-bg/80 text-fg-muted hover:text-fg"
           }`}
         >
-          {it.caption ?? `#${i + 1}`}
+          {it.caption ?? `#${i}`}
         </button>
       ))}
     </div>
@@ -94,16 +100,17 @@ function SceneGallery<V extends object, M extends Scene3DMeta>({
 
 function ScenePane<V extends object, M extends Scene3DMeta>({
   spec,
-  points,
-  targetStep,
+  current,
+  items,
   item,
   onItem,
   ...rest
 }: {
   spec: Scene3DKind<V, M>;
-  points: SequencePoint[];
-  /** The pane's step (per run for a slider key); null shows the empty state. */
-  targetStep: number | null;
+  /** The tile's point (see MediaTiles); null shows the empty state. */
+  current: SequencePoint | null;
+  /** The list items the tile shows; null: all. */
+  items: readonly number[] | null;
   /** The shown item of a gallery point. */
   item: number;
   onItem: (item: number) => void;
@@ -111,12 +118,11 @@ function ScenePane<V extends object, M extends Scene3DMeta>({
   link: CameraLink | null;
   resetKey: number;
 }) {
-  const current = targetStep == null ? null : resolveAtStep(points, targetStep);
   if (!current) {
     return <div className="flex h-full items-center justify-center text-sm text-fg-muted">no {spec.noun} logged yet</div>;
   }
   if (isGalleryPoint(current)) {
-    return <SceneGallery {...rest} spec={spec} point={current} item={item} onItem={onItem} />;
+    return <SceneGallery {...rest} spec={spec} point={current} item={item} onItem={onItem} items={items} />;
   }
   return <SceneView {...rest} spec={spec} hash={current.artifact_hash!} meta={sceneMeta<M>(current)} />;
 }
@@ -198,6 +204,28 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
 
   const paneKeys = panes.keys;
   const paneLabels = panes.labels;
+  const paneOptions = useMemo(
+    () => paneKeys.map((k, i) => ({
+      key: k,
+      label: paneLabels.get(k) ?? effectiveMetrics[i]!.name,
+      color: panes.multiRun ? panes.colors.get(panes.runIds[i]!) : undefined,
+    })),
+    [paneKeys, paneLabels, effectiveMetrics, panes],
+  );
+  const layout = useMediaLayout({ settings, values, currentValue, stepFor, seriesPoints, paneKeys, nearest: false });
+  const renderTile = (tile: LayoutTile) => (
+    <ScenePane
+      key={tile.id}
+      spec={spec}
+      current={tile.point}
+      items={tile.items}
+      item={item}
+      onItem={setItem}
+      view={view}
+      link={link}
+      resetKey={resetKey}
+    />
+  );
 
   const subtitle = slider.summary
     ? "summary"
@@ -239,6 +267,10 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
             onResetCamera: () => setResetKey((k) => k + 1),
             multi: panes.visibleCount > 1,
             scalarMetrics,
+            paneKeys,
+            lists: layout.lists,
+            listCount: layout.listCount,
+            sliderValue: currentValue,
             following: slider.sync != null,
           }}
         />
@@ -256,25 +288,28 @@ export default function Scene3DCard<V extends object, M extends Scene3DMeta>({
         style={slot.style}
       >
         <div className="flex h-full min-h-0 flex-col">
-          <div className="min-h-0 flex-1">
-            <MultiPaneGrid
-              paneKeys={paneKeys}
-              labels={paneLabels}
-              colors={panes.paneColors}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <MediaTiles
+              layout={layout}
+              settings={settings}
+              update={ctl.set}
+              panes={paneOptions}
+              multiRun={panes.multiRun}
+              keyName={keyName}
+              values={values}
+              currentValue={currentValue}
+              onValue={slider.setValue}
               inModal={false}
-              columns={settings.columns}
-              onPaneWidthsChange={() => {}}
-              renderPane={(key, i) => (
-                <ScenePane
-                  key={key}
-                  spec={spec}
-                  points={seriesPoints[i] ?? []}
-                  targetStep={stepFor(i)}
-                  item={item}
-                  onItem={setItem}
-                  view={view}
-                  link={link}
-                  resetKey={resetKey}
+              renderTile={renderTile}
+              renderPanes={(tiles) => (
+                <MultiPaneGrid
+                  paneKeys={tiles.map((t) => paneKeys[t.run]!)}
+                  labels={paneLabels}
+                  colors={panes.paneColors}
+                  inModal={false}
+                  columns={settings.columns}
+                  onPaneWidthsChange={() => {}}
+                  renderPane={(_key, k) => renderTile(tiles[k]!)}
                 />
               )}
             />

@@ -1,24 +1,28 @@
-import type { BaseCardSettings } from "../card-kit/base-settings";
 import type { CardSettingsMeta } from "./meta";
+import {
+  STEPPED_MEDIA_CASCADE,
+  steppedMediaBuiltin,
+  steppedMediaInstanceDefaults,
+  type SteppedMediaSettings,
+} from "./stepped-media.ts";
 
-export interface TextSettings extends BaseCardSettings {
+export interface TextSettings extends SteppedMediaSettings {
   fontSize: "xs" | "sm" | "base";
   wordWrap: boolean;
-  xAxis?: "step" | "relative_time" | "wall_time";
 }
 
 export const builtin: TextSettings = {
+  ...steppedMediaBuiltin,
   version: 1,
+  metrics: [],
   fontSize: "xs",
   wordWrap: true,
 };
 
-export function instanceDefaults(_seed: { name: string }): Partial<TextSettings> {
-  return {};
-}
+export const instanceDefaults = steppedMediaInstanceDefaults as (seed: { name: string }) => Partial<TextSettings>;
 
 export const meta: CardSettingsMeta<TextSettings> = {
   builtin,
-  cascadeKeys: ["fontSize", "wordWrap"],
-  tabs: ["display"],
+  cascadeKeys: ["fontSize", "wordWrap", ...STEPPED_MEDIA_CASCADE],
+  tabs: ["values", "display"],
 };
