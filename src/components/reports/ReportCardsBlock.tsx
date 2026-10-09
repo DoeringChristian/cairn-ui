@@ -9,6 +9,11 @@
  * toolbar (RunSetsPanel: add, edit, remove, insert from the workspace), so
  * the report itself shows only its cards.
  *
+ * The cell provides its run sets' grouping as the workspace provides its own
+ * (lib/workspace-runs/grouping-context.ts, `runSetsGrouping`): a card in
+ * "Workspace" grouping mode draws one line per innermost group of its run's
+ * set (one line per run when no set is grouped).
+ *
  * Report cards resolve against built-in defaults only (no workspace or
  * section defaults), so a report looks the same to everyone. `readOnly`
  * (view mode) freezes the cell: no toolbar, reorder or remove, and card
@@ -31,7 +36,8 @@ import { CascadeScopeContext } from "../../lib/settings-scope";
 import { rebindCardsToMetricIndex, rebindCardsToRuns, rebuildCardsFromRuns } from "../../lib/comparisons";
 import { cardFromSpec, cardSettingsKeyForReport, newId, restoreReportCardSettings, useMetricIndex, type CardsBlock } from "../../lib/reports";
 import { recompileDecision, recompileFailedBlock } from "../../lib/reports/recompile";
-import { resolveRunSet, runSetColors, unionOfSets, type RunSet } from "../../lib/run-sets";
+import { resolveRunSetLines, runSetColors, runSetsGrouping, unionOfSets, type ResolvedRunSet, type RunSet } from "../../lib/run-sets";
+import { GroupingSourceContext, WorkspaceGroupingContext, type WorkspaceGrouping } from "../../lib/workspace-runs/grouping-context";
 import { RunColorByContext, type RunColorByValue } from "../../lib/run-color-by-context";
 import { useRunSetPool } from "../../api/hooks";
 import { EMPTY_RUN_VIEW, RunViewContext, usePageColors, type RunView } from "../../lib/run-view";
@@ -59,19 +65,37 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
 
   // The cell's runs: each run set resolved over the project's runs, or fixed.
   const fixed = parsedBlock.fixedRuns;
+  const fixedGroups = parsedBlock.fixedGroups;
   const poolQ = useRunSetPool(projectId, !fixed);
   const pool = poolQ.data?.runs;
-  const resolvedSets = useMemo(
-    () => fixed ?? (pool ? parsedBlock.runSets.map((set) => resolveRunSet(set, pool)) : null),
-    [fixed, pool, parsedBlock.runSets],
+  const resolvedLines = useMemo<ResolvedRunSet[] | null>(
+    () =>
+      fixed
+        ? fixed.map((runIds, i) => ({ runIds, groupOf: fixedGroups?.[i] ?? {} }))
+        : pool
+          ? parsedBlock.runSets.map((set) => resolveRunSetLines(set, pool))
+          : null,
+    [fixed, fixedGroups, pool, parsedBlock.runSets],
   );
+  const resolvedSets = useMemo(() => resolvedLines?.map((r) => r.runIds) ?? null, [resolvedLines]);
   const resolved = resolvedSets !== null;
   const runIds = useMemo(() => unionOfSets(resolvedSets ?? []), [resolvedSets]);
   const runIdsKey = runIds.join("|");
 
+  // The cell's grouping, as the workspace provides its own: a card's
+  // "Workspace" grouping follows the run sets (null: none grouped, a line per run).
+  const groupOf = useMemo(
+    () => (resolvedLines ? runSetsGrouping(parsedBlock.runSets, resolvedLines) : null),
+    [resolvedLines, parsedBlock.runSets],
+  );
+
   // Several sets: each its own colour family (as a colour-by would).
-  // One colour assignment for the cell's cards (lib/page-colors-context.ts).
-  const pageColors = usePageColors(runIds);
+  // One colour assignment for the cell's cards and group lines (lib/page-colors-context.ts).
+  const pageColors = usePageColors(runIds, groupOf ?? undefined);
+  const grouping = useMemo<WorkspaceGrouping | null>(
+    () => (groupOf ? { groupOf, colorOf: pageColors.groups } : null),
+    [groupOf, pageColors.groups],
+  );
   const familyColors = useMemo(() => (resolvedSets ? runSetColors(resolvedSets) : null), [resolvedSets]);
   const colorCtx = useMemo<RunColorByValue | null>(
     () => (familyColors ? { runIds, colorBy: null, colors: familyColors, legend: [], error: null, loading: false } : null),
@@ -106,7 +130,7 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
     return r;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [decision, parsedBlock, liveMetricIndex, runIdsKey, reportId]);
-  const block = recompiled?.ok ? { ...recompiled.block, ...(fixed ? { fixedRuns: fixed } : {}) } : parsedBlock;
+  const block = recompiled?.ok ? { ...recompiled.block, ...(fixed ? { fixedRuns: fixed, fixedGroups } : {}) } : parsedBlock;
   const error = recompiled ? (recompiled.ok ? undefined : recompiled.error) : parsedBlock.error;
   // Render-only rebind (never persisted — see the auto-rebind effect below
   // for the persisting counterpart): the persisted `cards` can be stale
@@ -244,6 +268,8 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
     <RunViewContext.Provider value={runViewCtx}>
     <PageColorsContext.Provider value={pageColors}>
     <RunColorByContext.Provider value={colorCtx}>
+    <WorkspaceGroupingContext.Provider value={grouping}>
+    <GroupingSourceContext.Provider value="report">
     <div>
       {!readOnly && toolbar(
         <>
@@ -343,6 +369,8 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
         </MediaSyncProvider>
       )}
     </div>
+    </GroupingSourceContext.Provider>
+    </WorkspaceGroupingContext.Provider>
     </RunColorByContext.Provider>
     </PageColorsContext.Provider>
     </RunViewContext.Provider>

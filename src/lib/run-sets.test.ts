@@ -17,7 +17,9 @@ import {
   removeRunSet,
   renameRunSet,
   resolveRunSet,
+  resolveRunSetLines,
   resolveRunSets,
+  runSetsGrouping,
   runSetColors,
   runSetFamilyColor,
   runSetFilter,
@@ -28,12 +30,42 @@ import {
 
 const doc = JSON.parse(readFileSync(new URL("../../docs/schemas/run-set-vectors.json", import.meta.url), "utf8")) as {
   pools: Record<string, Run[]>;
-  cases: Array<{ name: string; pool: string; set: RunSet; expected: string[] }>;
+  cases: Array<{ name: string; pool: string; set: RunSet; expected: string[]; expectedGroupOf: Record<string, string> }>;
 };
 
 test("run-set-vectors.json: every case matches", () => {
   assert.ok(doc.cases.length >= 20);
   for (const c of doc.cases) assert.deepEqual(resolveRunSet(parseRunSet(c.set)!, doc.pools[c.pool]!), c.expected, c.name);
+  for (const c of doc.cases) assert.deepEqual(resolveRunSetLines(parseRunSet(c.set)!, doc.pools[c.pool]!).groupOf, c.expectedGroupOf, c.name);
+});
+
+test("runSetsGrouping: an ungrouped set gives no grouping (a line per run)", () => {
+  const pool = doc.pools.main!;
+  const set = runSetOfIds(["r01", "r02", "r08"]);
+  assert.equal(runSetsGrouping([set], [resolveRunSetLines(set, pool)]), null);
+});
+
+test("runSetsGrouping: one grouped set, each run its innermost group line", () => {
+  const pool = doc.pools.main!;
+  const set = { ...runSetOfIds(["r01", "r02", "r08", "r09", "r11"]), groupBy: [{ source: "group" as const }] };
+  const g = runSetsGrouping([set], [resolveRunSetLines(set, pool)])!;
+  assert.deepEqual(Object.fromEntries(g), { r01: "group: exp-44", r02: "group: exp-44", r08: "group: seeds", r09: "group: seeds" });
+  // r11 has no group: under (none), its own line.
+  assert.equal(g.has("r11"), false);
+});
+
+test("runSetsGrouping: several sets keep their groups apart; a run takes its first set's line", () => {
+  const pool = doc.pools.main!;
+  const a = { ...runSetOfIds(["r08", "r09"], "Seeds"), groupBy: [{ source: "group" as const }] };
+  const b = { ...runSetOfIds(["r09", "r10"], "More"), groupBy: [{ source: "group" as const }] };
+  const plain = runSetOfIds(["r01"], "Plain");
+  const g = runSetsGrouping([a, b, plain], [a, b, plain].map((s) => resolveRunSetLines(s, pool)))!;
+  assert.deepEqual(Object.fromEntries(g), { r09: "Seeds › group: seeds", r08: "Seeds › group: seeds", r10: "More › group: seeds" });
+  // Sets sharing a name are told apart by their position.
+  const twin = { ...b, name: "Seeds" };
+  const t = runSetsGrouping([a, twin], [a, twin].map((s) => resolveRunSetLines(s, pool)))!;
+  assert.equal(t.get("r08"), "Seeds (1) › group: seeds");
+  assert.equal(t.get("r10"), "Seeds (2) › group: seeds");
 });
 
 test("parseRunSet: defaults for what does not parse", () => {

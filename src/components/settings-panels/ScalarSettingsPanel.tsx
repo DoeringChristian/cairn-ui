@@ -53,8 +53,10 @@ export interface ScalarPanelCtx {
   onChosenChange?: (names: string[]) => void;
   paramKeys: string[];
   multipleRuns: boolean;
-  /** In a workspace: whether its sidebar is grouped; undefined outside one. */
+  /** In a workspace or a report cell: whether its sidebar (run sets) is grouped; undefined elsewhere. */
   workspaceGrouped?: boolean;
+  /** Who provides that grouping (the wording). */
+  groupingSource?: "workspace" | "report";
   /** The drawn lines, for per-series styles. */
   lines: Array<{ key: string; label: string; color: string }>;
 }
@@ -413,18 +415,23 @@ export default function ScalarSettingsPanel({ ctl, ctx, mode }: Props) {
   const showGrouping = !card || ctx?.multipleRuns;
   const paramKeys = ctx?.paramKeys ?? [];
   const inWorkspace = ctx?.workspaceGrouped !== undefined;
-  // The card's own grouping draws in `key` mode, and in `workspace` mode outside a workspace.
+  // The card's own grouping draws in `key` mode, and in `workspace` mode outside a workspace or report cell.
   const ownGrouping = s.groupMode === "key" || (s.groupMode === "workspace" && !inWorkspace);
+  const inReport = ctx?.groupingSource === "report";
   const modeHelp: Record<ScalarGroupMode, string> = {
     workspace: !card
-      ? "Follow the workspace's grouping; elsewhere group by the key below."
+      ? "Follow the workspace's grouping (in a report, the run set's); elsewhere group by the key below."
       : !inWorkspace
         ? "Not in a workspace: runs group by the key below."
-        : ctx?.workspaceGrouped
-          ? "Follows the workspace's grouping: one line per sidebar group."
-          : "Follows the workspace, which is not grouped: one line per run.",
-    off: "One line per run, even when the workspace is grouped.",
-    key: "The card's own grouping, also in a grouped workspace.",
+        : inReport
+          ? ctx?.workspaceGrouped
+            ? "Follows the run set's grouping: one line per group."
+            : "Follows the run set, which is not grouped: one line per run."
+          : ctx?.workspaceGrouped
+            ? "Follows the workspace's grouping: one line per sidebar group."
+            : "Follows the workspace, which is not grouped: one line per run.",
+    off: inReport ? "One line per run, even when the run set is grouped." : "One line per run, even when the workspace is grouped.",
+    key: inReport ? "The card's own grouping, also when the run set is grouped." : "The card's own grouping, also in a grouped workspace.",
   };
   const by = s.groupBy ?? { source: "group" as const, key: "" };
   const grouping = showGrouping && (

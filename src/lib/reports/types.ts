@@ -27,6 +27,8 @@ export interface CardsBlock {
    * (a share link's sets, resolved by the server).
    */
   fixedRuns?: string[][];
+  /** In-memory only, with `fixedRuns`: each set's group lines (run id → line, lib/run-sets.ts `ResolvedRunSet`). */
+  fixedGroups?: Record<string, string>[];
   /** Runs hidden from this cell's charts, pinned first, and its baseline (```cairn `view`). */
   runView?: RunView;
   cards: ComparisonCard[];

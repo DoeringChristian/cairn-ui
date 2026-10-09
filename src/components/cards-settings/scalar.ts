@@ -58,8 +58,8 @@ export interface ScalarSettings extends BaseCardSettings {
   maxRuns: number | null;
   /**
    * Whose grouping draws (lib/plot-utils/scalar-grouping.ts): `workspace`
-   * follows the workspace sidebar (outside a workspace the card's `groupBy`
-   * applies), `off` is a line per run, `key` is always the card's `groupBy`.
+   * follows the workspace sidebar, or a report cell's run sets (elsewhere,
+   * the run page, the card's `groupBy` applies), `off` is a line per run, `key` is always the card's `groupBy`.
    */
   groupMode: ScalarGroupMode;
   /** Collapse runs sharing a group / job type / param value into a centre line and band. */

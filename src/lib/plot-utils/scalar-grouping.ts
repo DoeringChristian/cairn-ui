@@ -5,8 +5,9 @@
  *   `WorkspaceGroupingContext`): grouped, one line per innermost sidebar group
  *   (mean, a min–max band, the group's colour, its `group: exp-44, jobType:
  *   train` label); not grouped, one line per run.
- *   Outside a workspace (no context: the run page, reports) there is no
- *   workspace grouping and the card's own grouping settings apply.
+ *   A report cell provides its run sets' grouping the same way (follow the
+ *   run set). Without a context (the run page) the card's own grouping
+ *   settings apply.
  * - `off`: one line per run, even in a grouped workspace.
  * - `key`: the card's own `groupBy` with its own agg / band / hideMembers /
  *   latestPerGroup, everywhere — an explicit card setting wins over the

@@ -585,6 +585,8 @@ export interface ShareContext {
   source_run_ids: string[];
   /** Each ```cairn fence's run sets, resolved by the server: `[fence][set] → run ids`. */
   run_sets: string[][][];
+  /** Each set's group lines, as `run_sets`: `[fence][set] → {run id: innermost group line}` (lib/run-sets.ts `resolveRunSetLines`). */
+  run_set_groups: Record<string, string>[][];
 }
 
 // ── Report editing: conflicts, assets, comments (wave 3, agent H) ────────

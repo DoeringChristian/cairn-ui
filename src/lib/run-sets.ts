@@ -67,12 +67,60 @@ export function parseRunSet(raw: unknown, index = 0): RunSet | null {
  * `values` and `stats`.
  */
 export function resolveRunSet(set: RunSet, pool: readonly Run[]): string[] {
+  return resolveRunSetLines(set, pool).runIds;
+}
+
+/** A set's runs and their group lines. */
+export interface ResolvedRunSet {
+  /** The runs, in table order (`resolveRunSet`). */
+  runIds: string[];
+  /**
+   * Each grouped run's innermost group line (`group: exp-44, jobType:
+   * train`, the workspace's `cardRuns` groupOf); runs under a `(none)` and
+   * every run of a set without grouping are not in it.
+   */
+  groupOf: Record<string, string>;
+}
+
+/** `resolveRunSet` with each run's group line (a share link's server-resolved sets carry the same). */
+export function resolveRunSetLines(set: RunSet, pool: readonly Run[]): ResolvedRunSet {
   const { latestIds } = latestRuns(pool);
   const listed = pool.filter((r) => !r.archived && (!set.latestOnly || latestIds.has(r.id)) && matchesFilter(r, set.filter));
   const sorted = sortBy(listed, set.sort, (r, col) => cellValue(r, col), (r) => r.id);
   const groups = groupRunsNested(sorted, set.groupBy);
   const visible = resolveVisibility(sorted, groups, set.eyes);
-  return cardRuns(sorted, groups, visible.runs).runIds;
+  const { runIds, groupOf } = cardRuns(sorted, groups, visible.runs);
+  return { runIds, groupOf: Object.fromEntries(groupOf) };
+}
+
+/**
+ * The grouping a report cell provides its cards (as the workspace does,
+ * lib/workspace-runs/grouping-context.ts), so a card's "Workspace" grouping
+ * follows the cell's run sets: each run's innermost group line from its
+ * set's group-by. With several sets the line is prefixed with its set's
+ * name (`Run set 2 › group: exp-44`), so groups of different sets never
+ * merge; a run in several sets takes its first set's line, as it takes its
+ * first set's place and colour. Null: no set is grouped (one line per run).
+ */
+export function runSetsGrouping(
+  sets: readonly Pick<RunSet, "name" | "groupBy">[],
+  resolved: readonly ResolvedRunSet[],
+): Map<string, string> | null {
+  if (!sets.some((s) => s.groupBy.length > 0)) return null;
+  const names = resolved.map((_, i) => sets[i]?.name || `Run set ${i + 1}`);
+  const dup = (n: string) => names.filter((m) => m === n).length > 1;
+  const out = new Map<string, string>();
+  const seen = new Set<string>();
+  resolved.forEach((set, i) => {
+    const prefix = resolved.length > 1 ? `${dup(names[i]!) ? `${names[i]} (${i + 1})` : names[i]} › ` : "";
+    for (const id of set.runIds) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const line = set.groupOf[id];
+      if (line !== undefined) out.set(id, prefix + line);
+    }
+  });
+  return out;
 }
 
 export interface ResolvedRunSets {

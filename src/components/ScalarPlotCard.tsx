@@ -45,7 +45,7 @@ import { renderSeriesLabel, type LabelPart } from "../lib/plot-utils/scalar-lege
 import { SMOOTHING_KINDS, formatSmoothing } from "../lib/plot-utils/smooth";
 import { groupSeries } from "../lib/plot-utils/aggregate";
 import { RUN_PALETTE } from "../lib/run-color";
-import { WorkspaceGroupingContext } from "../lib/workspace-runs/grouping-context";
+import { GroupingSourceContext, WorkspaceGroupingContext } from "../lib/workspace-runs/grouping-context";
 import { planScalarGrouping } from "../lib/plot-utils/scalar-grouping";
 import { useRunColors, useRunView, useVisibleRuns } from "../lib/run-view";
 import { cursorSyncKey, useChartSyncEnabled, useSyncedView } from "../lib/chart-sync";
@@ -149,6 +149,7 @@ export default function ScalarPlotCard({
   // Whose grouping draws: the workspace's (`groupMode` workspace, in a
   // workspace), the card's own, or none (lib/plot-utils/scalar-grouping.ts).
   const wsGrouping = useContext(WorkspaceGroupingContext);
+  const groupingSource = useContext(GroupingSourceContext);
   const plan = useMemo(
     () =>
       planScalarGrouping(
@@ -467,6 +468,7 @@ export default function ScalarPlotCard({
     paramKeys,
     multipleRuns,
     workspaceGrouped: wsGrouping === undefined ? undefined : wsGrouping !== null,
+    groupingSource,
     lines: series
       .filter((s) => (s.role ?? "line") === "line" && !s.key.startsWith("expr:"))
       .map((s) => ({ key: s.key, label: s.label, color: s.color })),

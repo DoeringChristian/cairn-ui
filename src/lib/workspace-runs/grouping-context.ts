@@ -6,9 +6,13 @@
  * its runs, min–max band, the colour `colorOf(line)` the sidebar's dot
  * shows) labelled with that path.
  *
- * `undefined` (no provider: the run page, reports): the card's own grouping
- * settings apply. `null` (the workspace, not grouped): no grouping,
- * one line per run. A card's explicit `groupMode` (off / by key) wins over
+ * A report cell provides its run sets' grouping the same way (lib/run-sets.ts
+ * `runSetsGrouping`: each set's own group-by, lines of different sets kept
+ * apart), so "Workspace" there means "follow the run set".
+ *
+ * `undefined` (no provider: the run page): the card's own grouping
+ * settings apply. `null` (the workspace or a report cell, not grouped): no
+ * grouping, one line per run. A card's explicit `groupMode` (off / by key) wins over
  * either (lib/plot-utils/scalar-grouping.ts).
  */
 
@@ -22,3 +26,6 @@ export interface WorkspaceGrouping {
 }
 
 export const WorkspaceGroupingContext = createContext<WorkspaceGrouping | null | undefined>(undefined);
+
+/** Who provides the grouping: the workspace sidebar or a report cell's run sets (the card editor's wording). */
+export const GroupingSourceContext = createContext<"workspace" | "report">("workspace");

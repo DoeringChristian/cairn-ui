@@ -12,7 +12,8 @@
  * their metric index — never from the project run list, which a share cannot
  * read. Each cell's run sets come resolved by the server (`run_sets`, per
  * ```cairn fence: the scope it computed, cairn's run_sets.py) and are
- * rendered as fixed run sets.
+ * rendered as fixed run sets, with their group lines (`run_set_groups`)
+ * so the cards group as the cell's run sets do.
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -87,7 +88,14 @@ function blocksFromContext(ctx: ShareContext): { blocks: ReportBlock[]; settings
     resolveRunSets: (sets, fence) => sets.map((_, i) => ctx.run_sets[fence]?.[i] ?? []),
     fixRuns: true,
   });
-  return { blocks: parsed.blocks, settings: parsed.settings };
+  // Each fence is one cards cell, in order: its sets' group lines too.
+  let fence = -1;
+  const blocks = parsed.blocks.map((b) => {
+    if (b.type !== "cards") return b;
+    fence += 1;
+    return { ...b, fixedGroups: ctx.run_set_groups?.[fence] ?? [] };
+  });
+  return { blocks, settings: parsed.settings };
 }
 
 /** `/s/:reportId` — the shared report, read-only. */
