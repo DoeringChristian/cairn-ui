@@ -8,8 +8,10 @@
  * lib/workspace-runs/visibility.ts; the header eye shows or hides every
  * listed run. Every toolbar or eye edit is a run-state edit (`onEdit`),
  * saved into the current view; collapsed groups are kept for the session. Pinned runs (the
- * project run view's) are listed first whatever the filters, with a pin
- * toggle on row hover. Hovering a row or a group header highlights its
+ * project run view's) are listed first whatever the filters. Rows are
+ * compact: a set pin or baseline shows after the version, and hovering a
+ * row shows only its copyable id (pin and baseline are set on the Runs
+ * page). Hovering a row or a group header highlights its
  * line(s) in the charts (grouped: the innermost group's line), and a hovered line lights its row
  * (lib/workspace-runs/hover.ts). A group's name filters the workspace to
  * the group (visibility.ts `filterToGroup`).
@@ -26,7 +28,7 @@ import {
 import CopyId from "../CopyId";
 import RunViewControls, { type RunViewToggle } from "../RunViewControls";
 
-/** The run view toggles a sidebar row offers (its eye is the workspace's own). */
+/** The run view marks a sidebar row shows when set (its eye is the workspace's own). */
 const SIDEBAR_TOGGLES: readonly RunViewToggle[] = ["pin", "baseline"];
 import RunsTable from "../runs-table/RunsTable";
 import type { useRunsTable } from "../runs-table/use-runs-table";
@@ -191,15 +193,12 @@ export default function RunsSidebar({
               runView
                 ? (r) => (
                     <>
-                      {/* As the Runs page's Name cell: set toggles stay, and on hover the copyable id
-                          and every toggle overlay the end of the cell (no layout shift). The eye
-                          is the sidebar's own, so the run view's "hide" toggle is left out. */}
-                      <span className="ml-auto shrink-0">
-                        <RunViewControls runId={r.id} view={runView.view} onChange={runView.set} toggles={SIDEBAR_TOGGLES} show="active" />
-                      </span>
-                      <span className="row-overlay absolute inset-y-0 right-0 hidden items-center gap-1 pl-2 group-hover/row:flex touch:flex">
+                      {/* Compact (the sidebar is narrow, names stay readable): a set pin or baseline
+                          inline after the version; on hover only the copyable id overlays the end
+                          of the cell (no layout shift). Pin and baseline are set on the Runs page. */}
+                      <RunViewControls runId={r.id} view={runView.view} onChange={runView.set} toggles={SIDEBAR_TOGGLES} show="active" />
+                      <span className="row-overlay absolute inset-y-0 right-0 hidden items-center pl-2 group-hover/row:flex touch:flex">
                         <CopyId id={r.id} className="text-xs" />
-                        <RunViewControls runId={r.id} view={runView.view} onChange={runView.set} toggles={SIDEBAR_TOGGLES} show="all" />
                       </span>
                     </>
                   )
