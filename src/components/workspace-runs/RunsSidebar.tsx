@@ -32,8 +32,8 @@ import { sameGroup } from "../../lib/runs-table/model";
 import { DEFAULT_SORT, initialDirection, type SortKey } from "../../lib/runs-table/sort";
 import type { RunViewContextValue } from "../../lib/run-view";
 import { targetOfRun, useRunHover } from "../../lib/workspace-runs/hover";
-import { setFilter, setGroupBy, setLatestOnly, setSearch, setSort, setStatus, type RunState } from "../../lib/workspace-runs/state";
-import { allEye, filterToGroup, groupEye, toggleAllEyes, toggleGroupEye, toggleRunEye, type Visibility } from "../../lib/workspace-runs/visibility";
+import { setFilter, setLatestOnly, setSearch, setSort, setStatus, type RunState } from "../../lib/workspace-runs/state";
+import { allEye, filterToGroup, groupEye, regroup, toggleAllEyes, toggleGroupEye, toggleRunEye, type Visibility } from "../../lib/workspace-runs/visibility";
 import "../../pages/runs-table.css";
 
 export type RunStateEdit = (fn: (s: RunState) => RunState, label: string, mergeKey?: string) => void;
@@ -147,7 +147,7 @@ export default function RunsSidebar({
             className="min-w-0 max-w-[12rem]"
             paramKeys={paramKeys}
             levels={state.groupBy}
-            onChange={(levels) => onEdit((s) => setGroupBy(s, levels), "Group runs")}
+            onChange={(levels) => onEdit((s) => regroup(s, levels, table.sorted, visible), "Group runs")}
           />
           <RunLatestOnlyToggle value={state.latestOnly} onChange={(v) => onEdit((s) => setLatestOnly(s, v), "Latest only")} />
           <RunSortControl columns={sortColumns} sort={state.sort} onChange={(sort) => onEdit((s) => setSort(s, sort), "Sort runs")} />

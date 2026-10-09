@@ -110,6 +110,20 @@ export function toggleAllEyes(
   return setEyes(setEyes(s, runKeys, null), groups.map(groupKey), on);
 }
 
+/**
+ * The Group by changed: what is visible stays visible. The default ("the
+ * newest `DEFAULT_VISIBLE`") counts groups when grouped and runs when not,
+ * and a top-level group's eye means nothing under another grouping, so
+ * every listed run's eye is set from what is shown now and the group eyes
+ * are dropped. Runs not listed keep their eyes.
+ */
+export function regroup(s: RunState, groupBy: RunState["groupBy"], listed: readonly Pick<Run, "id">[], visible: ReadonlySet<string>): RunState {
+  const eyes: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(s.eyes)) if (!k.startsWith("g:")) eyes[k] = v;
+  for (const r of listed) eyes[runKey(r.id)] = visible.has(r.id);
+  return { ...s, groupBy, eyes };
+}
+
 /** A run's eye clicked. */
 export const toggleRunEye = (s: RunState, run: Pick<Run, "id">, visible: ReadonlySet<string>): RunState =>
   setEyes(s, [runKey(run.id)], !visible.has(run.id));

@@ -13,6 +13,7 @@ import {
   filterToGroup,
   groupEye,
   groupKey,
+  regroup,
   resolveVisibility,
   showOnly,
   toggleGroupEye,
@@ -227,4 +228,21 @@ test("cardRuns: nested, each run maps to its innermost group path", () => {
     x: "group: exp-44, jobType: (none)",
     b: "group: (none), jobType: (none)",
   });
+});
+
+test("regroup: what is visible stays visible when the Group by changes", () => {
+  // 6 groups x 2 runs + 1 loose = 13 runs: grouped, every group (and so every run) is visible by default.
+  const { sorted, groups } = fixture(6);
+  const s = withEyes({ "g:group:exp-3": false, "r:gone": true });
+  const before = resolveVisibility(sorted, groups, s.eyes).runs;
+  assert.equal(before.size, sorted.length - 2);
+  const ungrouped = regroup(s, [], sorted, before);
+  assert.deepEqual(ungrouped.groupBy, []);
+  const after = resolveVisibility(sorted, null, ungrouped.eyes).runs;
+  assert.deepEqual([...after].sort(), [...before].sort()); // not just the newest 10
+  assert.equal(Object.keys(ungrouped.eyes).some((k) => k.startsWith("g:")), false);
+  assert.equal(ungrouped.eyes["r:gone"], true); // an unlisted run keeps its eye
+  // And back: grouping again keeps the same runs.
+  const regrouped = regroup(ungrouped, BY_GROUP, sorted, after);
+  assert.deepEqual([...resolveVisibility(sorted, groups, regrouped.eyes).runs].sort(), [...before].sort());
 });
