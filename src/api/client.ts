@@ -14,6 +14,7 @@
 import { seedRunCursor, seedRunEpoch } from "./live-updates-core";
 import { SeriesBatcher, type SeriesBatchResponse } from "./series-batch";
 import { refUrl } from "../lib/workspace/ref";
+import { createLimiter } from "./fetch-limit";
 
 function redirectToLogin(): void {
   if (typeof window === "undefined") return;
@@ -65,14 +66,21 @@ export function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Reads in flight at once (see fetch-limit.ts). */
+const limitReads = createLimiter(24);
+
 async function get<T>(path: string): Promise<T> {
-  const res = await checkOk(await fetch(path), path);
-  return (await res.json()) as T;
+  return limitReads(async () => {
+    const res = await checkOk(await fetch(path), path);
+    return (await res.json()) as T;
+  });
 }
 
 async function bytes(path: string, init?: RequestInit): Promise<ArrayBuffer> {
-  const res = await checkOk(await fetch(path, init), path);
-  return res.arrayBuffer();
+  return limitReads(async () => {
+    const res = await checkOk(await fetch(path, init), path);
+    return res.arrayBuffer();
+  });
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {

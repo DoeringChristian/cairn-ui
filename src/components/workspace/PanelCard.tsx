@@ -48,7 +48,12 @@ export default function PanelCard(props: Props) {
     const names = rendered.metrics.length > 0 ? rendered.metrics.map((m) => m.name) : "names" in panel.selector ? panel.selector.names : [];
     const series = isMultiRunCardType(panel.type)
       ? visible.map((runId) => ({ runId, name: label }))
-      : names.flatMap((name) => visible.filter((r) => rendered.metrics.find((m) => m.name === name)?.runIds.includes(r) ?? true).map((runId) => ({ runId, name })));
+      : names.flatMap((name) => {
+          // A Set per metric: `runIds.includes` per visible run was O(runs²) per panel.
+          const logged = rendered.metrics.find((m) => m.name === name);
+          const has = logged ? new Set(logged.runIds) : null;
+          return visible.filter((r) => has?.has(r) ?? true).map((runId) => ({ runId, name }));
+        });
     return { cardType: panel.type, series, settingsKey };
   }, [rendered.metrics, panel, label, visible, settingsKey]);
   return (
@@ -64,7 +69,10 @@ function PanelCardBody({ rendered, runIds, settingsKey, onRemove, autoOpenSettin
 
   const series = useMemo<ComparisonSeriesRef[]>(() => {
     const out: ComparisonSeriesRef[] = [];
-    for (const m of metrics) for (const runId of visible) if (m.runIds.includes(runId)) out.push({ runId, name: m.name });
+    for (const m of metrics) {
+      const has = new Set(m.runIds);
+      for (const runId of visible) if (has.has(runId)) out.push({ runId, name: m.name });
+    }
     return out;
   }, [metrics, visible]);
 

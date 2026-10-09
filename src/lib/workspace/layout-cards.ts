@@ -25,7 +25,10 @@ export function layoutCards(
     if (isMultiRunCardType(rp.panel.type)) {
       return [{ card: { id: rp.panel.id, type: rp.panel.type, series: runIds.map((runId) => ({ runId, name: rp.label })) }, settings }];
     }
-    const series = rp.metrics.flatMap((m) => runIds.filter((r) => m.runIds.includes(r)).map((runId) => ({ runId, name: m.name })));
+    const series = rp.metrics.flatMap((m) => {
+      const has = new Set(m.runIds);
+      return runIds.filter((r) => has.has(r)).map((runId) => ({ runId, name: m.name }));
+    });
     return series.length ? [{ card: { id: rp.panel.id, type: rp.panel.type, series }, settings }] : [];
   });
 }

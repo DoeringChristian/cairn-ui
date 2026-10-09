@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { MANY_QUERIES_PROPS } from "../../api/hooks";
 import { qk } from "../../api/query-keys";
 import { allSummarySeries, seriesRuns, type SeriesRef } from "../../lib/media/summary-series";
 
@@ -15,7 +16,7 @@ export function useSummarySeries(series: readonly SeriesRef[]): boolean {
   const stable = useMemo(() => [...series], [seriesSig]);
   const runIds = useMemo(() => seriesRuns(stable), [stable]);
   const qs = useQueries({
-    queries: runIds.map((id) => ({ queryKey: qk.sequences(id), queryFn: () => api.sequences(id) })),
+    queries: runIds.map((id) => ({ queryKey: qk.sequences(id), queryFn: () => api.sequences(id), notifyOnChangeProps: [...MANY_QUERIES_PROPS] })),
   });
   const sig = qs.map((q) => q.dataUpdatedAt).join("|");
   return useMemo(() => {

@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { MANY_QUERIES_PROPS } from "../api/hooks";
 import { qk } from "../api/query-keys";
 import { isMultiRunCardType, type ComparisonSeriesRef } from "../lib/comparisons";
 import { type AddCardSelection } from "../lib/reports";
@@ -104,6 +105,7 @@ export default function AddCardModal({
           queryKey: qk.sequences(rid),
           queryFn: () => api.sequences(rid),
           staleTime: 10_000,
+          notifyOnChangeProps: [...MANY_QUERIES_PROPS],
         }))
       : [],
   });

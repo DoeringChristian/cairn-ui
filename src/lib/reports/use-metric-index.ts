@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { MANY_QUERIES_PROPS } from "../../api/hooks";
 import { qk } from "../../api/query-keys";
 import type { SequenceMeta } from "../../api/types";
 import { buildMetricIndex, type MetricIndex } from "./metric-index";
@@ -15,6 +16,7 @@ export function useMetricIndex(runIds: string[]): { index: MetricIndex; isLoadin
       queryKey: qk.sequences(rid),
       queryFn: () => api.sequences(rid),
       staleTime: 10_000,
+      notifyOnChangeProps: [...MANY_QUERIES_PROPS],
     })),
   });
 

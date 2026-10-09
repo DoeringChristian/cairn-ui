@@ -16,6 +16,16 @@ import { addRunMetadata, setRunMetadata } from "../lib/run-label";
 import { RUN_SET_POOL } from "../lib/run-sets";
 import { rulesOf, type MetricOverride, type MetricRulesDoc, type RuleOf } from "../lib/metric-rules";
 
+/**
+ * `notifyOnChangeProps` for a `useQueries` over many runs. Without it each
+ * result is a tracking proxy, and every property read on one result marks
+ * that property on *all* the observers (TanStack Query #7000): reading
+ * `dataUpdatedAt` across N results is O(N²) per render, seconds per render
+ * at 1000 runs. These are the props the run-scale hooks read; a change to
+ * any of them re-renders.
+ */
+export const MANY_QUERIES_PROPS = ["data", "dataUpdatedAt", "error", "isError", "isLoading", "isPending", "status"] as const;
+
 export function useHealth() {
   return useQuery({ queryKey: qk.health(), queryFn: api.health, refetchInterval: 5_000 });
 }
@@ -137,6 +147,7 @@ export function useRunsDetails(
       queryKey: qk.run(rid),
       queryFn: () => api.run(rid),
       staleTime: 5_000,
+      notifyOnChangeProps: [...MANY_QUERIES_PROPS],
       refetchInterval: (q: { state: { data?: RunDetailResponse } }) =>
         live && q.state.data?.run.status === "running" ? 2_000 : false,
     })),
@@ -203,6 +214,7 @@ export function useSequencesForRuns(
       queryKey: qk.sequence(spec.runId, spec.name),
       queryFn: () => api.sequence(spec.runId, spec.name),
       staleTime: Infinity,
+      notifyOnChangeProps: [...MANY_QUERIES_PROPS],
     })),
   });
 }

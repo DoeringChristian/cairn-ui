@@ -256,9 +256,26 @@ export function shortRunLabel(runId: string, siblingRunIds?: string[]): string {
   if (!siblingRunIds || siblingRunIds.length === 0) {
     return runName(runId);
   }
-  const ids = siblingRunIds.includes(runId) ? siblingRunIds : [...siblingRunIds, runId];
-  const labels = disambiguateRunLabels(ids);
+  const labels = siblingRunIds.includes(runId)
+    ? siblingLabels(siblingRunIds)
+    : disambiguateRunLabels([...siblingRunIds, runId]);
   return labels[runId] ?? runName(runId);
+}
+
+/** The last labels per sibling list (by identity), valid while the metadata cache is unchanged. */
+const _siblingLabels = new WeakMap<readonly string[], { version: number; length: number; labels: Record<string, string> }>();
+
+/**
+ * `disambiguateRunLabels(ids)`, memoized on the array: callers label each of
+ * N runs against the same N siblings, which recomputed every label N times
+ * (O(N²); seconds per chart at 1000 runs).
+ */
+function siblingLabels(ids: string[]): Record<string, string> {
+  const hit = _siblingLabels.get(ids);
+  if (hit && hit.version === _version && hit.length === ids.length) return hit.labels;
+  const labels = disambiguateRunLabels(ids);
+  _siblingLabels.set(ids, { version: _version, length: ids.length, labels });
+  return labels;
 }
 
 /**

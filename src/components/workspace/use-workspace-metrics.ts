@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { MANY_QUERIES_PROPS } from "../../api/hooks";
 import { qk } from "../../api/query-keys";
 import type { MetricInfo } from "../../lib/workspace/layout";
 import { mergeRunMetrics } from "../../lib/workspace/metrics";
@@ -19,7 +20,7 @@ export function useWorkspaceMetrics(runIds: readonly string[]): {
   error: unknown;
 } {
   const runQs = useQueries({
-    queries: runIds.map((id) => ({ queryKey: qk.run(id), queryFn: () => api.run(id), staleTime: 5_000 })),
+    queries: runIds.map((id) => ({ queryKey: qk.run(id), queryFn: () => api.run(id), staleTime: 5_000, notifyOnChangeProps: [...MANY_QUERIES_PROPS] })),
   });
   const seqQs = useQueries({
     queries: runIds.map((id, i) => {
@@ -27,12 +28,15 @@ export function useWorkspaceMetrics(runIds: readonly string[]): {
       return {
         queryKey: qk.sequences(id),
         queryFn: () => api.sequences(id),
-        refetchInterval: status === undefined || status === "running" ? 2_000 : (false as const),
+        notifyOnChangeProps: [...MANY_QUERIES_PROPS],
+        // Only a run known to be running: polling every run whose details are
+        // still loading made 1000 bound runs poll their rosters every 2 s.
+        refetchInterval: status === "running" ? 2_000 : (false as const),
       };
     }),
   });
   const artQs = useQueries({
-    queries: runIds.map((id) => ({ queryKey: qk.runOutputArtifacts(id), queryFn: () => api.runOutputArtifacts(id) })),
+    queries: runIds.map((id) => ({ queryKey: qk.runOutputArtifacts(id), queryFn: () => api.runOutputArtifacts(id), notifyOnChangeProps: [...MANY_QUERIES_PROPS] })),
   });
   const key = [...seqQs, ...artQs].map((q) => q.dataUpdatedAt).join("|");
   const metrics = useMemo(

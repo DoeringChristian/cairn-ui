@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Run } from "../api/types.ts";
-import { disambiguateRunLabels, setRunMetadata } from "./run-label.ts";
+import { disambiguateRunLabels, setRunMetadata, shortRunLabel } from "./run-label.ts";
 import { makeRun } from "./runs-table/test-run.ts";
 
 let seq = 0;
@@ -107,4 +107,19 @@ test("the group shows first; the job type only where the name collides within a 
     [b.id]: "exp-2 · eval · ft v1",
     [c.id]: "exp-2 · finetune · ft v1",
   });
+});
+
+test("shortRunLabel against the same siblings is memoized, and follows metadata changes", () => {
+  const a = run({ display_name: "probe", version: 1 });
+  const b = run({ display_name: "probe", version: 2 });
+  const siblings = [a.id, b.id];
+  assert.equal(shortRunLabel(a.id, siblings), "probe v1");
+  assert.equal(shortRunLabel(b.id, siblings), "probe v2");
+  // A rename bumps the metadata version: the cached labels are recomputed.
+  setRunMetadata([{ ...b, display_name: "other" }]);
+  assert.equal(shortRunLabel(a.id, siblings), "probe");
+  assert.equal(shortRunLabel(b.id, siblings), "other");
+  // A run outside the siblings is labelled against them plus itself.
+  const c = run({ display_name: "probe", version: 3 });
+  assert.equal(shortRunLabel(c.id, siblings), "probe v3");
 });

@@ -18,15 +18,22 @@ export interface RunMetricsInput {
 
 export function mergeRunMetrics(runs: readonly RunMetricsInput[]): MetricInfo[] {
   const byName = new Map<string, MetricInfo>();
+  // Which runs each name already lists: `runIds.includes` was O(runs²) per metric.
+  const listed = new Map<string, Set<string>>();
   const add = (runId: string, name: string, objectType: string, count: number, kind?: string | null) => {
     if (isInternalName(name)) return;
     const m = byName.get(name);
     if (!m) {
       byName.set(name, { name, object_type: objectType, count, runIds: [runId], ...(kind ? { kind } : {}) });
+      listed.set(name, new Set([runId]));
       return;
     }
     if (!m.kind && kind) m.kind = kind;
-    if (!m.runIds.includes(runId)) m.runIds.push(runId);
+    const ids = listed.get(name)!;
+    if (!ids.has(runId)) {
+      ids.add(runId);
+      m.runIds.push(runId);
+    }
     m.count = Math.max(m.count, count);
   };
   for (const r of runs) {
