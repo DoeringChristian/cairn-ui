@@ -23,7 +23,11 @@ import {
   RunSearchInput,
   RunStatusSelect,
 } from "../RunFilterBar";
-import RunViewControls from "../RunViewControls";
+import CopyId from "../CopyId";
+import RunViewControls, { type RunViewToggle } from "../RunViewControls";
+
+/** The run view toggles a sidebar row offers (its eye is the workspace's own). */
+const SIDEBAR_TOGGLES: readonly RunViewToggle[] = ["pin", "baseline"];
 import RunsTable from "../runs-table/RunsTable";
 import type { useRunsTable } from "../runs-table/use-runs-table";
 import { columnKind, columnLabel } from "../../lib/runs-table/columns";
@@ -186,9 +190,18 @@ export default function RunsSidebar({
             nameExtras={
               runView
                 ? (r) => (
-                    <span className="ml-auto shrink-0">
-                      <RunViewControls runId={r.id} view={runView.view} onChange={runView.set} toggles={["pin"]} />
-                    </span>
+                    <>
+                      {/* As the Runs page's Name cell: set toggles stay, and on hover the copyable id
+                          and every toggle overlay the end of the cell (no layout shift). The eye
+                          is the sidebar's own, so the run view's "hide" toggle is left out. */}
+                      <span className="ml-auto shrink-0">
+                        <RunViewControls runId={r.id} view={runView.view} onChange={runView.set} toggles={SIDEBAR_TOGGLES} show="active" />
+                      </span>
+                      <span className="absolute inset-y-0 right-0 hidden items-center gap-1 bg-bg-elevated pl-2 group-hover/row:flex touch:flex">
+                        <CopyId id={r.id} className="text-xs" />
+                        <RunViewControls runId={r.id} view={runView.view} onChange={runView.set} toggles={SIDEBAR_TOGGLES} show="all" />
+                      </span>
+                    </>
                   )
                 : undefined
             }
