@@ -397,6 +397,7 @@ export default function TableCard({
               disabled={ctl.locked || !tableTouched}
               onClick={resetTable}
               title="Reset the filter, sort, columns and page size"
+              aria-label="Reset table"
             >
               <i className="fa-solid fa-rotate-left text-[10px]" aria-hidden="true" />
               Reset
