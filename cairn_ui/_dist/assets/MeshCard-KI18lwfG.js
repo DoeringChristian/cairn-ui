@@ -1,1 +1,0 @@
-import{j as o}from"./index-VbJux7sf.js";import{S as t}from"./Scene3DCard-BTnutqpA.js";import{M as m}from"./Scene3DViewer-p-KColtI.js";import"./Scene3DSettingsPanel-dvMminHG.js";import"./SettingsAction-DsFj_2E-.js";import"./three.module-BpQc8NG3.js";function n(r){return o.jsx(t,{...r,spec:m})}export{n as default};
