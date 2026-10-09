@@ -13,20 +13,21 @@ const P = (id: string, name: string, type: Panel["type"] = "scalar", settings: R
 });
 const geometry = (rows: ReturnType<typeof packRows>) => rows.map((r) => r.map((b) => `${b.x}+${b.w}`).join(" "));
 
-test("a card's span: its own colSpan, else its type's built-in one, clamped to the 6 columns", () => {
-  assert.equal(cardSpan({ type: "scalar", settings: {} }), 3);
-  assert.equal(cardSpan({ type: "tile", settings: {} }), 1);
-  assert.equal(cardSpan({ type: "run-compare", settings: {} }), 6);
-  assert.equal(cardSpan({ type: "scalar", settings: { colSpan: 2 } }), 2);
-  assert.equal(cardSpan({ type: "scalar", settings: { colSpan: 9 } }), 6);
-  assert.equal(cardSpan({ type: "scalar", settings: { colSpan: 0 } }), 1);
+test("a card's span on the 12 columns: its own width, else its type's default; other stored widths are ignored", () => {
+  assert.equal(cardSpan({ type: "scalar", settings: {} }), 6);
+  assert.equal(cardSpan({ type: "tile", settings: {} }), 3);
+  assert.equal(cardSpan({ type: "run-compare", settings: {} }), 12);
+  assert.equal(cardSpan({ type: "scalar", settings: { width: "1/3" } }), 4);
+  assert.equal(cardSpan({ type: "scalar", settings: { width: "full" } }), 12);
+  assert.equal(cardSpan({ type: "scalar", settings: { width: "2/3" } }), 6);
+  assert.equal(cardSpan({ type: "scalars", settings: { colSpan: 2 } }), 12);
 });
 
 test("boxes wrap like the grid: a box that does not fit the rest of a row starts the next", () => {
   const c = (w: number, i: number) => ({ id: `p${i}`, type: "scalar" as const, w });
-  assert.deepEqual(geometry(packRows([3, 3, 3].map(c))), ["0+3 3+3", "0+3"]);
-  assert.deepEqual(geometry(packRows([1, 1, 4, 2, 6].map(c))), ["0+1 1+1 2+4", "0+2", "0+6"]);
-  assert.deepEqual(geometry(packRows([4, 4].map(c))), ["0+4", "0+4"]);
+  assert.deepEqual(geometry(packRows([6, 6, 6].map(c))), ["0+6 6+6", "0+6"]);
+  assert.deepEqual(geometry(packRows([3, 3, 3, 3, 4, 4, 4, 12].map(c))), ["0+3 3+3 6+3 9+3", "0+4 4+4 8+4", "0+12"]);
+  assert.deepEqual(geometry(packRows([4, 6, 4].map(c))), ["0+4 4+6", "0+4"]);
   assert.deepEqual(packRows([]), []);
 });
 
@@ -43,14 +44,14 @@ test("the preview resolves the view for the viewed run: automatic panels while u
   const on = viewPreview(EMPTY_WORKSPACE, metrics);
   assert.deepEqual(on.sections.map((s) => s.name), ["Charts", "Media"]);
   assert.equal(on.cards, 3);
-  assert.deepEqual(geometry(on.sections[0]!.rows), ["0+3 3+3"]);
+  assert.deepEqual(geometry(on.sections[0]!.rows), ["0+6 6+6"]);
 
   // Listed only: just the panels the layout lists.
-  const listed = ops.seq(ops.addPanels("Losses", [P("p1", "loss", "scalar", { colSpan: 6 })]), ops.setAutoPanels(false))(EMPTY_WORKSPACE);
+  const listed = ops.seq(ops.addPanels("Losses", [P("p1", "loss", "scalar", { width: "full" })]), ops.setAutoPanels(false))(EMPTY_WORKSPACE);
   const off = viewPreview(listed, metrics);
   assert.deepEqual(off.sections.map((s) => s.name), ["Losses"]);
   assert.equal(off.cards, 1);
-  assert.deepEqual(geometry(off.sections[0]!.rows), ["0+6"]);
+  assert.deepEqual(geometry(off.sections[0]!.rows), ["0+12"]);
 });
 
 test("a collapsed section shows only its rule; hidden panels and hide patterns are left out", () => {

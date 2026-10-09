@@ -3,19 +3,20 @@
  * workspace resolves it for the runs being viewed (`deriveLayout`, so
  * automatic panels appear while the view includes unlisted metrics), each
  * section as its name and a rule, each card as a box on the workspace's
- * 6-column grid, as wide as its column span, with its card type's icon.
+ * 12-column grid, as wide as its width (full, 1/2, 1/3 or 1/4 of the row;
+ * lib/cards/card-width.ts), with its card type's icon.
  * Cards wrap to a new row like the grid does (no dense packing). A
  * collapsed section shows just its rule.
  */
 
 import type { CardType } from "../cards/card-spec.ts";
-import { metaFor } from "../cards/settings-registry.ts";
+import { GRID_COLUMNS, defaultCardWidth, resolveCardWidth, widthSpan } from "../cards/card-width.ts";
 import { kindIcon } from "../viewers/kind.ts";
 import type { Panel, WorkspaceDoc } from "./doc.ts";
 import { deriveLayout, type MetricInfo, type RenderedSection } from "./layout.ts";
 
-/** The workspace grid's columns (ReorderableCardGrid: `md:grid-cols-6`). */
-export const PREVIEW_COLUMNS = 6;
+/** The workspace grid's columns (ReorderableCardGrid: `md:grid-cols-12`). */
+export const PREVIEW_COLUMNS = GRID_COLUMNS;
 
 export interface PreviewBox {
   id: string;
@@ -24,7 +25,7 @@ export interface PreviewBox {
   icon: string;
   /** Column the box starts in (0-based). */
   x: number;
-  /** Columns it spans (1–6). */
+  /** Columns it spans (12, 6, 4 or 3). */
   w: number;
 }
 
@@ -80,12 +81,9 @@ export function cardTypeIcon(type: CardType): string {
   return kind ? kindIcon(kind) : (OTHER_ICONS[type] ?? "fa-square");
 }
 
-/** A card's column span: its own setting, else its type's built-in one; clamped to 1–6. */
+/** A card's column span: its own width, else its type's default (a stored width that isn't one of the four is ignored). */
 export function cardSpan(panel: Pick<Panel, "type" | "settings">): number {
-  const own = panel.settings.colSpan;
-  const builtin = (metaFor(panel.type)?.builtin as { colSpan?: unknown } | undefined)?.colSpan;
-  const span = typeof own === "number" ? own : typeof builtin === "number" ? builtin : 3;
-  return Math.max(1, Math.min(PREVIEW_COLUMNS, Math.round(span)));
+  return widthSpan(resolveCardWidth(panel.settings.width, defaultCardWidth(panel.type)));
 }
 
 /** Lay boxes into rows of `PREVIEW_COLUMNS`: a box that does not fit what is left of a row starts the next. */
