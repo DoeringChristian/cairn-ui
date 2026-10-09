@@ -161,3 +161,114 @@ export function brushMatches(positions: ReadonlyArray<number | null>, brushes: R
   }
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Many axes: which default axes fit, and labels that never overlap.
+// ---------------------------------------------------------------------------
+
+/**
+ * The least room between two axes, px: an axis's tick values are drawn to
+ * its left (up to ~9 characters of 10px mono) and must clear the previous
+ * axis.
+ */
+export const MIN_AXIS_GAP = 64;
+
+/** How many axes a plot `span` px wide holds (at least 2). */
+export function axesThatFit(span: number): number {
+  return Math.max(2, Math.floor(span / MIN_AXIS_GAP) + 1);
+}
+
+/** Bins a numeric axis's values fall into for `axisVariation`. */
+const VARIATION_BINS = 10;
+
+/**
+ * How much the runs vary along a config key: the Shannon entropy (bits) of
+ * its present values, numbers counted in `VARIATION_BINS` equal-width bins
+ * over their range (in log10 when every value is positive and they span
+ * more than two decades: a learning rate), anything else by distinct value.
+ * 0 for a constant; up to log2(bins) for numbers spread evenly.
+ */
+export function axisVariation(values: readonly Scalar[]): number {
+  const present = values.filter((v): v is Exclude<Scalar, null> => v != null);
+  if (present.length === 0) return 0;
+  const counts = new Map<string, number>();
+  const nums = present.every((v) => typeof v === "number" && Number.isFinite(v)) ? (present as number[]) : null;
+  if (nums) {
+    const log = nums.every((v) => v > 0) && Math.max(...nums) / Math.min(...nums) > 100;
+    const xs = log ? nums.map(Math.log10) : nums;
+    const lo = Math.min(...xs);
+    const hi = Math.max(...xs);
+    for (const x of xs) {
+      const bin = hi === lo ? 0 : Math.min(VARIATION_BINS - 1, Math.floor(((x - lo) / (hi - lo)) * VARIATION_BINS));
+      counts.set(String(bin), (counts.get(String(bin)) ?? 0) + 1);
+    }
+  } else {
+    for (const v of present) counts.set(catKey(v), (counts.get(catKey(v)) ?? 0) + 1);
+  }
+  let h = 0;
+  for (const c of counts.values()) {
+    const p = c / present.length;
+    h -= p * Math.log2(p);
+  }
+  return h;
+}
+
+/**
+ * The default axes a card shows when it holds at most `max` axes: all of
+ * them when they fit, else the metric axis and the `max - 1` config keys
+ * the runs vary most along (`axisVariation`; ties: the earlier key), in
+ * their default order. The rest are added in the settings.
+ */
+export function fitDefaultAxes(axes: readonly ParallelAxis[], runs: readonly PcRun[], max: number): ParallelAxis[] {
+  if (axes.length <= max) return [...axes];
+  const metrics = axes.filter((a) => a.kind === "metric");
+  const room = Math.max(0, max - metrics.length);
+  const ranked = axes
+    .map((a, i) => ({ a, i, v: a.kind === "config" ? axisVariation(runs.map((r) => runValue(r, a))) : -1 }))
+    .filter((x) => x.a.kind === "config")
+    .sort((x, y) => y.v - x.v || x.i - y.i)
+    .slice(0, room);
+  const keep = new Set(ranked.map((x) => x.i));
+  return axes.filter((a, i) => a.kind === "metric" || keep.has(i));
+}
+
+/** Width of one character of an axis label (11px monospace), px. */
+export const LABEL_CHAR_W = 6.7;
+/** Most characters an axis label shows (the rest: "…", the full name in its tooltip). */
+export const LABEL_MAX_CHARS = 22;
+
+export interface AxisLabel {
+  /** The label as drawn (truncated with "…" when its room is short). */
+  text: string;
+  /** 0: the top row; 1: the second row (labels staggered). */
+  row: 0 | 1;
+}
+
+const clip = (label: string, chars: number) =>
+  label.length <= chars ? label : chars <= 1 ? "…" : `${label.slice(0, chars - 1)}…`;
+
+/**
+ * The axes' labels, centred over axes at `xs` in a plot `width` px wide,
+ * so that no two overlap: on one row when every label (at most
+ * `LABEL_MAX_CHARS`) fits between its neighbours; else staggered on two
+ * rows (alternate axes), each label truncated to the room up to the next
+ * label on its row. A label never runs past the plot's edges.
+ */
+export function axisLabels(labels: readonly string[], xs: readonly number[], width: number): AxisLabel[] {
+  /** Room between label `i` and its neighbours `step` axes away (none: unbounded). */
+  const between = (i: number, step: number) => {
+    const left = i - step >= 0 ? (xs[i]! - xs[i - step]!) / 2 : Infinity;
+    const right = i + step < xs.length ? (xs[i + step]! - xs[i]!) / 2 : Infinity;
+    // Centred: twice the nearer side, less a gap between neighbours.
+    return 2 * Math.min(left, right) - 6;
+  };
+  /** Room up to the plot's edges. */
+  const edges = (i: number) => 2 * Math.min(xs[i]!, width - xs[i]!);
+  const chars = (px: number) => Math.max(0, Math.min(LABEL_MAX_CHARS, Math.floor(px / LABEL_CHAR_W)));
+  const oneRow = labels.every((l, i) => Math.min(l.length, LABEL_MAX_CHARS) <= chars(between(i, 1)));
+  const step = oneRow ? 1 : 2;
+  return labels.map((l, i) => ({
+    text: clip(l, chars(Math.min(between(i, step), edges(i)))),
+    row: (oneRow ? 0 : i % 2) as 0 | 1,
+  }));
+}

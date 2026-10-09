@@ -103,7 +103,7 @@ export default function ParallelSettingsPanel({ ctl, ctx, mode }: Props) {
         {s.axes != null && (
           <SettingsAction
             label="Default axes"
-            description="The config keys that vary across the runs, then the metric."
+            description="The config keys that vary across the runs (those the runs vary most along when not all fit), then the metric."
             icon="fa-rotate-left"
             disabled={ro}
             onClick={() => ctl.set({ axes: null })}

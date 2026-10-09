@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  axesThatFit,
   axesWithMetric,
+  axisLabels,
+  axisVariation,
+  fitDefaultAxes,
+  LABEL_CHAR_W,
+  MIN_AXIS_GAP,
   axisScale,
   axisTicks,
   brushMatches,
@@ -99,4 +105,74 @@ test("grouped: one line per innermost group, numbers averaged, categories only w
   assert.deepEqual(lines[2]!.values, [2e-5, "sgd", 0.2]);
   // Not grouped: one line per run.
   assert.equal(linesOf(unitsOf(runs, null), axes).length, 5);
+});
+
+test("axesThatFit: one axis per MIN_AXIS_GAP px of plot, at least two", () => {
+  assert.equal(axesThatFit(0), 2);
+  assert.equal(axesThatFit(MIN_AXIS_GAP * 10), 11);
+  assert.equal(axesThatFit(MIN_AXIS_GAP * 10 - 1), 10);
+});
+
+test("axisVariation: entropy of the values (numbers in 10 bins, log10 over decades)", () => {
+  assert.equal(axisVariation([3, 3, 3]), 0);
+  assert.equal(axisVariation([null, null]), 0);
+  assert.equal(axisVariation(["a", "b"]), 1);
+  assert.equal(axisVariation(["a", "b", "c", "d"]), 2);
+  // Ten evenly spread numbers: one per bin.
+  assert.ok(Math.abs(axisVariation([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) - Math.log2(10)) < 1e-9);
+  // A learning rate over three decades spreads in log10, not crowded into the lowest bin.
+  assert.ok(Math.abs(axisVariation([1e-5, 1e-4, 1e-3, 1e-2]) - 2) < 1e-9);
+  assert.equal(axisVariation([1, 1, 1, 100]) < axisVariation([1, 2, 3, 4]), true);
+});
+
+test("fitDefaultAxes: the metric and the most-varying config keys, in default order", () => {
+  const runs: PcRun[] = Array.from({ length: 8 }, (_, i) => ({
+    id: `r${i}`,
+    config: { flag: i % 2 === 0 ? "x" : "y", seed: i, opt: i < 7 ? "adam" : "sgd", lr: 10 ** -(1 + (i % 4)) },
+    values: { loss: i },
+  }));
+  const axes: ParallelAxis[] = [
+    { kind: "config", key: "flag" },
+    { kind: "config", key: "seed" },
+    { kind: "config", key: "opt" },
+    { kind: "config", key: "lr" },
+    { kind: "metric", key: "loss" },
+  ];
+  assert.deepEqual(fitDefaultAxes(axes, runs, 5), axes);
+  // seed (3 bits) and lr (2 bits) vary most; flag (1 bit), opt (0.54 bits) dropped.
+  assert.deepEqual(fitDefaultAxes(axes, runs, 3).map((a) => a.key), ["seed", "lr", "loss"]);
+  assert.deepEqual(fitDefaultAxes(axes, runs, 4).map((a) => a.key), ["flag", "seed", "lr", "loss"]);
+  // Ties keep the earlier key.
+  const tie: PcRun[] = [{ id: "a", config: { p: 1, q: 1 }, values: {} }, { id: "b", config: { p: 2, q: 2 }, values: {} }];
+  assert.deepEqual(fitDefaultAxes([{ kind: "config", key: "p" }, { kind: "config", key: "q" }], tie, 1).map((a) => a.key), ["p"]);
+});
+
+test("axisLabels: one row when every label fits between its neighbours", () => {
+  const xs = [100, 300, 500];
+  assert.deepEqual(axisLabels(["lr", "batch_size", "loss"], xs, 600), [
+    { text: "lr", row: 0 },
+    { text: "batch_size", row: 0 },
+    { text: "loss", row: 0 },
+  ]);
+  // At most 22 characters, as before.
+  assert.equal(axisLabels(["a".repeat(30), "b", "c"], [400, 800, 1200], 1600)[0]!.text, `${"a".repeat(21)}…`);
+});
+
+test("axisLabels: staggered on two rows and truncated so no two overlap", () => {
+  const n = 12;
+  const xs = Array.from({ length: n }, (_, i) => 56 + i * 40);
+  const names = Array.from({ length: n }, (_, i) => `optimizer.param_${i}`);
+  const out = axisLabels(names, xs, 56 + 11 * 40 + 40);
+  assert.deepEqual(out.map((l) => l.row), names.map((_, i) => i % 2));
+  // Neighbours on a row are two axes apart: each label within 2 * 40 - 6 px.
+  for (let i = 0; i < n; i++) {
+    const w = out[i]!.text.length * LABEL_CHAR_W;
+    assert.ok(w <= 2 * 40 * 2 - 6 - 0, `label ${i} ${w}px`);
+    if (i + 2 < n) assert.ok(xs[i]! + w / 2 <= xs[i + 2]! - (out[i + 2]!.text.length * LABEL_CHAR_W) / 2 + 1e-9, `labels ${i} and ${i + 2} overlap`);
+    assert.ok(out[i]!.text.endsWith("…"));
+    assert.ok(names[i]!.startsWith(out[i]!.text.slice(0, -1)));
+  }
+  // Never past the plot's edges.
+  const edge = axisLabels(["a_long_config_key_name", "b"], [20, 400], 800);
+  assert.ok(edge[0]!.text.length * LABEL_CHAR_W <= 40);
 });

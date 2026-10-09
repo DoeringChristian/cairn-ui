@@ -1,6 +1,8 @@
 /**
  * Parallel coordinates, drawn as SVG: one vertical axis per column (label on
- * top, top/bottom values or each category at the left of the axis), one
+ * top: staggered on two rows and truncated when the axes are too close for
+ * them, lib/parallel-coords.ts `axisLabels`, the full name in a tooltip;
+ * top/bottom values or each category at the left of the axis), one
  * polyline per line through its positions (a missing position breaks the
  * line). Drag along an axis to brush it (a click clears it): lines outside
  * any brush are dimmed. Hovering a line shows its label and values and
@@ -10,7 +12,7 @@
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { axisTicks, brushMatches, type AxisScale, type Brush } from "../lib/parallel-coords.ts";
+import { axisLabels, axisTicks, brushMatches, type AxisScale, type Brush } from "../lib/parallel-coords.ts";
 import type { Scalar } from "../lib/summary-tables.ts";
 import { formatValue } from "../lib/plot-utils/format.ts";
 
@@ -37,10 +39,17 @@ interface Props {
   /** The highlighted line's key (hovered here or elsewhere), or null. */
   hot: string | null;
   onHover: (line: ParallelChartLine | null) => void;
+  /** The plot's width (between the first and last axis' room), whenever it changes. */
+  onSpan?: (span: number) => void;
   className?: string;
 }
 
 const PAD = { top: 30, bottom: 14, left: 56, right: 40 };
+/** Labels on two rows: the plot starts this much lower. */
+const SECOND_ROW = 13;
+
+/** The plot's width in a box `w` px wide. */
+export const plotSpan = (w: number) => Math.max(1, w - PAD.left - PAD.right);
 const DIM = "rgb(var(--color-fg-subtle-rgb) / 0.18)";
 
 function pathOf(xs: readonly number[], ys: ReadonlyArray<number | null>): string {
@@ -63,7 +72,7 @@ function valueText(v: Scalar): string {
   return formatValue(v);
 }
 
-export default function ParallelChart({ axes, lines, brushes, onBrush, hot, onHover, className }: Props) {
+export default function ParallelChart({ axes, lines, brushes, onBrush, hot, onHover, onSpan, className }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   useLayoutEffect(() => {
@@ -77,15 +86,21 @@ export default function ParallelChart({ axes, lines, brushes, onBrush, hot, onHo
   }, []);
 
   const { w, h } = size;
-  const plotH = Math.max(1, h - PAD.top - PAD.bottom);
+  // Before paint: the card picks its axes for this width.
+  useLayoutEffect(() => {
+    if (w > 0) onSpan?.(plotSpan(w));
+  }, [w, onSpan]);
   const xs = useMemo(() => {
     const n = axes.length;
-    const span = Math.max(1, w - PAD.left - PAD.right);
+    const span = plotSpan(w);
     return axes.map((_, i) => (n === 1 ? PAD.left + span / 2 : PAD.left + (i * span) / (n - 1)));
   }, [axes, w]);
-  const yOf = (p: number) => PAD.top + (1 - p) * plotH;
+  const labels = useMemo(() => axisLabels(axes.map((a) => a.label), xs, w), [axes, xs, w]);
+  const top = PAD.top + (labels.some((l) => l.row === 1) ? SECOND_ROW : 0);
+  const plotH = Math.max(1, h - top - PAD.bottom);
+  const yOf = (p: number) => top + (1 - p) * plotH;
   // A drag within a few pixels of an axis end snaps to it, so the extreme lines can be brushed.
-  const pOf = (y: number) => (y <= PAD.top + 4 ? 1 : y >= PAD.top + plotH - 4 ? 0 : 1 - (y - PAD.top) / plotH);
+  const pOf = (y: number) => (y <= top + 4 ? 1 : y >= top + plotH - 4 ? 0 : 1 - (y - top) / plotH);
 
   // Brushing: the axis being dragged and where the drag started.
   const drag = useRef<{ axis: number; from: number; y0: number } | null>(null);
@@ -140,7 +155,7 @@ export default function ParallelChart({ axes, lines, brushes, onBrush, hot, onHo
     const rank = (x: (typeof out)[number]) => (x.line.key === hot ? 2 : x.match ? 1 : 0);
     return out.sort((a, b) => rank(a) - rank(b));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines, xs, brushes, hot, plotH]);
+  }, [lines, xs, brushes, hot, plotH, top]);
 
   return (
     <div ref={hostRef} className={`relative select-none ${className ?? ""}`} data-testid="parallel-chart">
@@ -182,8 +197,8 @@ export default function ParallelChart({ axes, lines, brushes, onBrush, hot, onHo
             return (
               <g key={`${a.label}:${i}`}>
                 <line x1={x} x2={x} y1={yOf(1)} y2={yOf(0)} stroke="currentColor" strokeOpacity={0.6} />
-                <text x={x} y={12} textAnchor="middle" className="mono" fontSize={11} fill="rgb(var(--color-fg-rgb))">
-                  {a.label.length > 22 ? `${a.label.slice(0, 21)}…` : a.label}
+                <text x={x} y={12 + labels[i]!.row * SECOND_ROW} textAnchor="middle" className="mono" fontSize={11} fill="rgb(var(--color-fg-rgb))">
+                  {labels[i]!.text}
                   <title>{a.label}{a.scale.kind === "numeric" && a.scale.log ? " (log)" : ""}</title>
                 </text>
                 {axisTicks(a.scale).map((t) => (
