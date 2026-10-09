@@ -303,7 +303,7 @@ export interface TypeOption {
 }
 
 /** Per-metric card types that draw one series only. */
-const SINGLE_SERIES = new Set<string>(["histogram", "tensor", "text", "artifact"]);
+const SINGLE_SERIES = new Set<string>(["histogram", "text", "artifact"]);
 /** Per-metric card types (a series kind renders as the card of its own kind). */
 const SERIES_TYPES = new Set<string>([
   "scalar", "image", "figure", "audio", "video", "histogram", "tensor", "text", "pointcloud", "mesh", "boxes3d",

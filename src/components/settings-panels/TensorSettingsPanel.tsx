@@ -2,9 +2,10 @@ import type { ReactNode } from "react";
 import type { SettingsController } from "../../lib/card-settings";
 import type { TensorSettings, TensorViewMode } from "../cards-settings/tensor";
 import { ColormapSelect, Segmented, SettingsSection, SettingsTabs, Slider, Switch } from "../settings/palette";
-import { SliderSection, bind, type MediaPanelCtx, type PanelSurface } from "./media-panel-kit";
+import type { SteppedMediaPanelCtx } from "../media/SteppedMediaCard";
+import { LayoutSection, SliderSection, bind, type PanelSurface } from "./media-panel-kit";
 
-export interface TensorPanelCtx extends MediaPanelCtx {
+export interface TensorPanelCtx extends SteppedMediaPanelCtx {
   /** Sizes of the leading (all but the last two) dimensions: one slice slider each. */
   leadingDims: readonly number[];
   /** The tensor is below 2D (a heatmap falls back to a histogram). */
@@ -58,6 +59,7 @@ export default function TensorSettingsPanel({
 
   const display = (
     <>
+      <LayoutSection ctl={ctl} modes ctx={ctx} mode={mode} paneKeys={ctx?.paneKeys} />
       <SettingsSection name="Appearance">
         <Segmented<TensorViewMode>
           {...bind(ctl, "viewMode")}

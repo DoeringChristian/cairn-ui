@@ -83,6 +83,8 @@ export interface MediaView<S> {
 /** Runtime info a stepped media settings panel gets. */
 export interface SteppedMediaPanelCtx extends MediaPanelCtx, ReferencePanelCtx {
   paneKeys: readonly string[];
+  /** The first pane's point at the slider's value (its facts for the panel: a tensor's shape). */
+  currentPoint: SequencePoint | null;
 }
 
 interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
@@ -90,6 +92,14 @@ interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
   kind: "markdown" | "html" | "audio" | "video" | "text" | "custom" | "volume" | "tensor";
   /** Word in the empty state: "no {noun} logged yet". */
   noun: string;
+  /**
+   * Gallery items fill their tile, rows at least this tall (px): renderers
+   * that size to their box (a tensor heatmap). Omitted: items take their
+   * content's height.
+   */
+  galleryFill?: number;
+  /** Facts of the shown point before the slider readout in the subtitle (a tensor's shape and dtype). */
+  subtitleDetail?: (point: SequencePoint | null) => ReactNode;
   /** Gallery item captions as chips over the items (pictures: video, audio) rather than a line above. */
   captionOverlay?: boolean;
   /** MIME type for the download filename when the point carries none. */
@@ -159,6 +169,8 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   viewReset,
   captionOverlay,
   instanceDefaults,
+  galleryFill,
+  subtitleDetail,
 }: Props<S>) {
   const { ctl, effectiveMetrics, allRunIds } =
     useCardSeries<S>({
@@ -235,11 +247,14 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
 
 
-  const subtitle = slider.summary
+  const readout = slider.summary
     ? "summary"
     : values.length > 0
       ? `${keyName === STEP_KEY ? "step" : keyName} ${formatNum(currentValue)} (${safeIdx + 1}/${values.length})`
       : `${metric.count} pts`;
+  const currentPoint = values.length > 0 ? pointAt(0, currentValue, nearest) : null;
+  const detail = subtitleDetail?.(currentPoint);
+  const subtitle = detail ? <>{detail} · {readout}</> : readout;
 
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -286,6 +301,8 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
           point={point}
           frame={galleryFrames?.get(paneId)}
           captionOverlay={captionOverlay}
+          fill={galleryFill != null}
+          minItemHeight={galleryFill}
           prefetchItem={prefetchItem}
           peekItem={peekItem}
           indices={tile.items ?? undefined}
@@ -379,7 +396,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       updateSettings={updateShared}
       title={metric.name}
       subtitle={subtitle}
-      subtitleCollapsedOnly={values.length > 1}
+      subtitleCollapsedOnly={values.length > 1 && !detail}
       defaultHeight={defaultHeight}
       onSettings={() => setExpanded(true)}
       onRemove={onRemove}
@@ -398,6 +415,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
         lists: layout.lists,
         listCount: layout.listCount,
         sliderValue: currentValue,
+        currentPoint,
       })}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

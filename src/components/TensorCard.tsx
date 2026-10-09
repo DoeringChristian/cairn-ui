@@ -1,177 +1,72 @@
-import { useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSequence } from "../api/hooks";
+/**
+ * Tensor card — `cairn.Tensor` blobs, one per step, on the stepped media
+ * shell (slider, Index, gallery / grid / compare, media limit, several
+ * runs); each tile a TensorView (stats, histogram or heatmap).
+ */
+
+import { useQuery } from "@tanstack/react-query";
+import type { SequencePoint } from "../api/types";
 import { safeJsonParse } from "../lib/format";
-import { downloadArtifact, artifactFilename } from "../lib/download";
-import { api } from "../api/client";
-import { cardOverridesStorageKey, useCardSettings, type CardSettingsKey } from "../lib/card-settings";
-import type { TensorSettings } from "./cards-settings/tensor";
-import type { SequenceMeta } from "../api/types";
-import GalleryView from "./media/GalleryView";
+import type { SettingsController } from "../lib/card-settings";
 import { isGalleryPoint } from "../lib/media/gallery";
 import { galleryQuery } from "../lib/media/gallery-query";
-import { StatsGrid, TensorView, npyQueryOf, tensorFacts, type TensorMeta } from "./viewers/TensorViewer";
-import CardShell from "./CardShell";
-import StepSlider from "./StepSlider";
-import { useStepSlider, resolveAtStep } from "./card-kit";
-import { useScalarMetricNames } from "./card-kit/use-media-panes";
+import type { TensorSettings } from "./cards-settings/tensor";
+import SteppedMediaCard, { type SteppedMediaCardProps, type SteppedMediaPanelCtx } from "./media/SteppedMediaCard";
 import TensorSettingsPanel from "./settings-panels/TensorSettingsPanel";
+import { StatsGrid, TensorView, npyQueryOf, tensorFacts, type TensorMeta } from "./viewers/TensorViewer";
 
-interface Props {
-  runId: string;
-  metric: SequenceMeta;
-  settingsKeyOverride?: CardSettingsKey;
-  onRemove?: () => void;
-  autoOpenSettings?: boolean;
+/** A point's tensor facts: its own metadata, or a gallery's first item's. */
+function usePointMeta(point: SequencePoint | null): { meta: TensorMeta | null; count: number | null } {
+  const gallery = isGalleryPoint(point);
+  const items = useQuery({ ...galleryQuery(point?.artifact_hash ?? ""), enabled: gallery });
+  if (!gallery) return { meta: safeJsonParse<TensorMeta>(point?.artifact_metadata), count: null };
+  return { meta: (items.data?.[0]?.metadata ?? null) as TensorMeta | null, count: items.data?.length ?? null };
 }
 
-export default function TensorCard({
-  runId,
-  metric,
-  settingsKeyOverride,
-  onRemove,
-  autoOpenSettings,
-}: Props) {
-  const q = useSequence(runId, metric.name);
-  const points = useMemo(
-    () => (q.data?.points ?? []).filter((p) => p.artifact_hash),
-    [q.data],
-  );
+/** `[n × ]shape · dtype` of the shown tensor, for the subtitle. */
+function TensorSubtitle({ point }: { point: SequencePoint }) {
+  const { meta, count } = usePointMeta(point);
+  const shape = meta?.shape ?? [];
+  return <>{isGalleryPoint(point) ? `${count ?? "…"} × ` : ""}{shape.length > 0 ? shape.join("×") : "scalar"} · {meta?.dtype ?? "?"}</>;
+}
 
-  const settingsKey = useMemo(
-    () =>
-      settingsKeyOverride ?? {
-        runId,
-        metricName: metric.name,
-      },
-    [settingsKeyOverride, runId, metric.name],
-  );
-  const ctl = useCardSettings<TensorSettings>(settingsKey, "tensor");
-  const settings = ctl.value;
-
-  const seriesPoints = useMemo(() => [points], [points]);
-  const seriesRunIds = useMemo(() => [runId], [runId]);
-  const ownSeries = useMemo(() => [{ runId, name: metric.name }], [runId, metric.name]);
-  const slider = useStepSlider({
-    seriesPoints,
-    persistedIdx: settings.sliderStep,
-    updateSettings: ctl.set,
-    sliderKey: settings.sliderKey,
-    seriesRunIds,
-    series: ownSeries,
-    sync: { cardId: cardOverridesStorageKey(settingsKey), follow: settings.followSection },
-  });
-  const { safeIdx, currentStep, onSliderChange } = slider;
-  const scalarMetrics = useScalarMetricNames(runId);
-  const current = useMemo(
-    () => resolveAtStep(points, currentStep) ?? points[0],
-    [points, currentStep],
-  );
-  const qc = useQueryClient();
-  // A gallery's facts (shape, stats) for the subtitle and settings come from its first item.
-  const gallery = isGalleryPoint(current);
-  const galleryItems = useQuery({ ...galleryQuery(current?.artifact_hash ?? ""), enabled: gallery });
-  const meta = useMemo(
-    () => (gallery
-      ? (galleryItems.data?.[0]?.metadata ?? null) as TensorMeta | null
-      : safeJsonParse<TensorMeta>(current?.artifact_metadata)),
-    [gallery, galleryItems.data, current],
-  );
-  const { ndim, shapeLabel, leadingDims } = tensorFacts(meta, settings);
-  const statsGrid = meta && <StatsGrid meta={meta} shapeLabel={shapeLabel} />;
-
-  const [expanded, setExpanded] = useState(autoOpenSettings ?? false);
-
-
-  const subtitle =
-    points.length > 0
-      ? `${gallery ? `${galleryItems.data?.length ?? "…"} × ` : ""}${shapeLabel} · ${meta?.dtype ?? "?"} · ${slider.summary ? "summary" : `step ${current?.step ?? "—"} (${safeIdx + 1}/${slider.values.length})`}`
-      : `${metric.count} pts`;
-
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  const renderBody = () => {
-    if (q.isLoading) {
-      return <div className="h-48 motion-safe:animate-pulse rounded bg-bg-hover" />;
-    }
-    if (!current?.artifact_hash) {
-      return <div className="text-sm text-fg-muted">no tensor logged yet</div>;
-    }
-    if (gallery) {
-      return (
-        <div className="flex-1 min-h-0 overflow-auto">
-          <GalleryView
-            point={current}
-            fill
-            minItemHeight={150}
-            prefetchItem={(p) => qc.prefetchQuery(npyQueryOf(p.artifact_hash!))}
-            peekItem={(p) => settings.viewMode === "stats" || qc.getQueryData(npyQueryOf(p.artifact_hash!).queryKey) !== undefined}
-            renderItem={(item) => <TensorView hash={item.artifact_hash!} meta={safeJsonParse<TensorMeta>(item.artifact_metadata)} settings={settings} />}
-          />
-        </div>
-      );
-    }
-    return <TensorView hash={current.artifact_hash} meta={meta} settings={settings} />;
-  };
-
-  const renderContent = () => (
-    <>
-      {renderBody()}
-      {slider.values.length > 1 && (
-        <StepSlider
-          points={slider.sliderPoints}
-          currentIndex={safeIdx}
-          onChange={onSliderChange}
-          keyName={slider.keyName}
-          xAxis={settings.xAxis}
-          onXAxisChange={(m) => ctl.set({ xAxis: m })}
-          className="mt-3"
-        />
-      )}
-    </>
-  );
-
-  const settingsPanel = (
+/** The settings panel with the shown tensor's facts (slice sliders, stats). */
+function TensorPanel({ ctl, ctx }: { ctl: SettingsController<TensorSettings>; ctx: SteppedMediaPanelCtx }) {
+  const { meta } = usePointMeta(ctx.currentPoint);
+  const { ndim, shapeLabel, leadingDims } = tensorFacts(meta, ctl.value);
+  return (
     <TensorSettingsPanel
       ctl={ctl}
       mode="card"
-      ctx={{
-        leadingDims,
-        below2d: ndim < 2,
-        stats: statsGrid,
-        scalarMetrics,
-        following: slider.sync != null,
-      }}
+      ctx={{ ...ctx, leadingDims, below2d: ndim < 2, stats: meta && <StatsGrid meta={meta} shapeLabel={shapeLabel} /> }}
     />
   );
+}
 
+/** The tensor viewer reads blobs up to 10 MB (TensorViewer's SIZE_CAP). */
+const PREFETCH_CAP = 10 * 1024 * 1024;
+
+export default function TensorCard(props: SteppedMediaCardProps) {
   return (
-    <CardShell cardKind="tensor"
-      cardRef={cardRef}
-      settings={settings}
-      updateSettings={ctl.set}
-      title={metric.name}
-      subtitle={subtitle}
+    <SteppedMediaCard<TensorSettings>
+      {...props}
+      kind="tensor"
+      noun="tensor"
+      defaultMime="application/octet-stream"
       defaultHeight={300}
-      onSettings={() => setExpanded(true)}
-      onRemove={onRemove}
-      onDownload={
-        // A gallery: its items (marked by GalleryView), zipped.
-        current?.artifact_hash && !gallery
-          ? () =>
-              downloadArtifact(
-                api.artifactUrl(current.artifact_hash!),
-                artifactFilename(metric.name, current.step, current.artifact_mime, ".npy"),
-              )
-          : undefined
-      }
-      settingsPanel={settingsPanel}
-      modalOpen={expanded}
-      onModalClose={() => setExpanded(false)}
-      modalContent={<div className="flex h-full flex-col">{renderContent()}</div>}
-      scrollIntoViewOnMount={autoOpenSettings}
-    >
-      <>{renderContent()}</>
-    </CardShell>
+      nearest
+      galleryFill={150}
+      subtitleDetail={(point) => (point ? <TensorSubtitle point={point} /> : null)}
+      settingsPanel={(ctl, ctx) => <TensorPanel ctl={ctl} ctx={ctx} />}
+      // Blobs past the viewer's read cap show stats only: nothing to warm.
+      prefetch={(qc, point) => ((point.artifact_size ?? 0) > PREFETCH_CAP ? Promise.resolve() : qc.prefetchQuery(npyQueryOf(point.artifact_hash!)))}
+      peek={(qc, point) => (point.artifact_size ?? 0) > PREFETCH_CAP || qc.getQueryData(npyQueryOf(point.artifact_hash!).queryKey) !== undefined}
+      renderArtifact={({ point, hash, settings, single }) => {
+        const view = (
+          <TensorView hash={hash} meta={safeJsonParse<TensorMeta>(point.artifact_metadata)} size={point.artifact_size ?? null} settings={settings} />
+        );
+        return single ? <div className="flex min-h-0 flex-1 flex-col">{view}</div> : <div className="flex h-full min-h-[150px] flex-col">{view}</div>;
+      }}
+    />
   );
 }

@@ -345,7 +345,7 @@ function BuiltinSeriesCard(props: SeriesDescriptor) {
     case "histogram":
       return <HistogramCard {...baseProps} extraSeries={extraSeries} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
     case "tensor":
-      return <TensorCard {...baseProps} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
+      return <TensorCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
     case "text":
       return <TextViewerCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
     case "table":
