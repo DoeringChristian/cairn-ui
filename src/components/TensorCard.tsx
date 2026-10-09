@@ -55,7 +55,7 @@ export default function TensorCard(props: SteppedMediaCardProps) {
       defaultMime="application/octet-stream"
       defaultHeight={300}
       nearest
-      galleryFill={150}
+      galleryFill={100}
       subtitleDetail={(point) => (point ? <TensorSubtitle point={point} /> : null)}
       settingsPanel={(ctl, ctx) => <TensorPanel ctl={ctl} ctx={ctx} />}
       // Blobs past the viewer's read cap show stats only: nothing to warm.
@@ -65,7 +65,7 @@ export default function TensorCard(props: SteppedMediaCardProps) {
         const view = (
           <TensorView hash={hash} meta={safeJsonParse<TensorMeta>(point.artifact_metadata)} size={point.artifact_size ?? null} settings={settings} />
         );
-        return single ? <div className="flex min-h-0 flex-1 flex-col">{view}</div> : <div className="flex h-full min-h-[150px] flex-col">{view}</div>;
+        return single ? <div className="flex min-h-0 flex-1 flex-col">{view}</div> : <div className="flex h-full min-h-[100px] flex-col">{view}</div>;
       }}
     />
   );
