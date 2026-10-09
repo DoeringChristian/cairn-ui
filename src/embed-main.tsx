@@ -24,7 +24,7 @@
 
 import React, { Component, useMemo, useRef, type ReactNode } from "react";
 import ReactDOM from "react-dom/client";
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery, notifyManager } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import ComparisonCardView from "./components/comparison/ComparisonCardView";
 import { cardSettingsKeyForScope } from "./lib/comparisons";
@@ -33,9 +33,14 @@ import { CardMutationContext, saveCardOverrides, type CardOverrides } from "./li
 import { CascadeScopeContext } from "./lib/settings-scope";
 import { useEmitAutoHeight } from "./lib/use-emit-auto-height";
 import { installStaleBuildReload } from "./lib/stale-build";
+import { throttledScheduler } from "./api/notify-throttle";
 import "./index.css";
 
 installStaleBuildReload();
+
+// Query updates landing in a burst (hundreds of runs loading) render together,
+// at most every 50 ms, instead of one render per response.
+notifyManager.setScheduler(throttledScheduler(50));
 
 const queryClient = new QueryClient({
   defaultOptions: {

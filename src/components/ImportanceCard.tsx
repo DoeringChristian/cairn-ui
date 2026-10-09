@@ -104,14 +104,19 @@ export default function ImportanceCard({ runIds: allRunIds, settingsKey, onRemov
     }
     return out;
   }, [runs, metric]);
-  const scores = useMemo(() => parameterImportance(rows), [rows]);
+  // Fit once the runs are in, and again only when the rows' content changes:
+  // refitting the forest (0.3 s at 1000 runs) as each run's details landed,
+  // or were refetched unchanged, took the page for tens of seconds.
+  const rowsKey = useMemo(() => JSON.stringify(rows), [rows]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const scores = useMemo(() => (loading ? [] : parameterImportance(rows)), [rowsKey, loading]);
   const sorted = useMemo(() => sortImportance(scores, s.sort), [scores, s.sort]);
   const goal = metric ? ruleOf(metric).goal : "none";
 
   const message =
     runIds.length === 0
       ? "No runs."
-      : loading && runs.length === 0
+      : loading
         ? "Loading…"
         : !metric
           ? "No metric logged on these runs."

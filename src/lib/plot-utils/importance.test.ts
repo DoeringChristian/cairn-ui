@@ -140,3 +140,20 @@ test("parameterImportance: needs MIN_RUNS (5) runs with a finite target", () => 
   assert.deepEqual(parameterImportance([...four, { params: { a: 9 }, target: NaN }]), []);
   assert.equal(parameterImportance([...four, { params: { a: 9 }, target: 9 }]).length, 1);
 });
+
+test("forest splits are the same whatever the column's number of distinct values (counting vs comparator sort)", () => {
+  // One feature with few levels (counting sort) and one with many (comparator
+  // sort at small nodes): the fitted importances match a plain reference fit.
+  const rand = mulberry32(7);
+  const rows = Array.from({ length: 60 }, (_, i) => ({
+    params: { few: i % 3, many: rand(), cat: ["a", "b"][i % 2] },
+    target: (i % 3) * 2 + rand(),
+  }));
+  const a = parameterImportance(rows, { seed: 3, trees: 20 });
+  // Golden values from the comparator-sort forest this one replaced: bit for bit.
+  assert.deepEqual(a.map((r) => [r.key, r.importance]), [
+    ["few", 0.8389560030977933],
+    ["many", 0.15203285857011112],
+    ["cat", 0.009011138332095506],
+  ]);
+});

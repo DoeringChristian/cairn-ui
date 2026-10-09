@@ -198,9 +198,22 @@ export interface Forest {
   features: number;
 }
 
+/** A column's dense value ranks (equal values, equal rank) and how many distinct values. */
+interface Ranks {
+  rank: Int32Array;
+  levels: number;
+}
+
+function ranksOf(col: Float64Array): Ranks {
+  const distinct = [...new Set(col)].sort((a, b) => a - b);
+  const at = new Map(distinct.map((v, r) => [v, r]));
+  return { rank: Int32Array.from(col, (v) => at.get(v)!), levels: distinct.length };
+}
+
 function buildTree(
-  X: readonly number[][],
-  y: readonly number[],
+  cols: readonly Float64Array[],
+  ranks: readonly Ranks[],
+  y: Float64Array,
   idx: number[],
   depth: number,
   maxDepth: number,
@@ -219,17 +232,34 @@ function buildTree(
   const features = Array.from({ length: gain.length }, (_, i) => i);
   shuffleInPlace(features, rand);
 
+  // Column-major typed columns: the per-node sort is the hot loop (a
+  // comparator over X[a][f] was ~0.8 s per 1000-run forest). Same stable
+  // order and arithmetic as before, so the same trees.
   let best: { feature: number; threshold: number; sse: number } | null = null;
+  const sorted = new Array<number>(idx.length);
   for (const f of features.slice(0, mtry)) {
-    const sorted = [...idx].sort((a, b) => X[a]![f]! - X[b]![f]!);
+    const col = cols[f]!;
+    const { rank, levels } = ranks[f]!;
+    if (levels <= 4 * idx.length) {
+      // A stable counting sort by the value's rank: the order the stable
+      // comparator sort gives, in O(rows + levels) (one-hot columns: 2),
+      // cheaper than the comparator until a node is small.
+      const counts = new Int32Array(levels + 1);
+      for (const i of idx) counts[rank[i]! + 1]!++;
+      for (let r = 1; r <= levels; r++) counts[r]! += counts[r - 1]!;
+      for (const i of idx) sorted[counts[rank[i]!]!++] = i;
+    } else {
+      for (let k = 0; k < idx.length; k++) sorted[k] = idx[k]!;
+      sorted.sort((a, b) => col[a]! - col[b]!);
+    }
     let leftSum = 0;
     let leftSq = 0;
     for (let k = 0; k < sorted.length - 1; k++) {
       const yi = y[sorted[k]!]!;
       leftSum += yi;
       leftSq += yi * yi;
-      const xa = X[sorted[k]!]![f]!;
-      const xb = X[sorted[k + 1]!]![f]!;
+      const xa = col[sorted[k]!]!;
+      const xb = col[sorted[k + 1]!]!;
       if (xa === xb) continue;
       const nl = k + 1;
       const nr = sorted.length - nl;
@@ -244,13 +274,14 @@ function buildTree(
   gain[best.feature]! += parentSse - best.sse;
   const left: number[] = [];
   const right: number[] = [];
-  for (const i of idx) (X[i]![best.feature]! <= best.threshold ? left : right).push(i);
+  const split = cols[best.feature]!;
+  for (const i of idx) (split[i]! <= best.threshold ? left : right).push(i);
   return {
     leaf: false,
     feature: best.feature,
     threshold: best.threshold,
-    left: buildTree(X, y, left, depth + 1, maxDepth, mtry, rand, gain),
-    right: buildTree(X, y, right, depth + 1, maxDepth, mtry, rand, gain),
+    left: buildTree(cols, ranks, y, left, depth + 1, maxDepth, mtry, rand, gain),
+    right: buildTree(cols, ranks, y, right, depth + 1, maxDepth, mtry, rand, gain),
   };
 }
 
@@ -274,12 +305,15 @@ export function fitForest(
   const n = X.length;
   const p = X[0]?.length ?? 0;
   const mtry = Math.max(1, Math.ceil(Math.sqrt(p)));
+  const cols = Array.from({ length: p }, (_, f) => Float64Array.from(X, (row) => row[f]!));
+  const ranks = cols.map(ranksOf);
+  const ys = Float64Array.from(y);
   const out: Tree[] = [];
   for (let t = 0; t < trees; t++) {
     const sample: number[] = [];
     for (let i = 0; i < n; i++) sample.push(Math.floor(rand() * n));
     const gain = new Array<number>(p).fill(0);
-    out.push({ root: buildTree(X, y, sample, 0, maxDepth, mtry, rand, gain), gain });
+    out.push({ root: buildTree(cols, ranks, ys, sample, 0, maxDepth, mtry, rand, gain), gain });
   }
   return { trees: out, features: p };
 }

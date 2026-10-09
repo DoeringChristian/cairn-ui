@@ -4,7 +4,7 @@
  * colour dot (the charts' colours: a run's, or its group's).
  */
 
-import { useContext, useMemo } from "react";
+import { useContext, useMemo, useRef } from "react";
 import { useRunsDetails } from "../../api/hooks";
 import type { RunDetailResponse } from "../../api/types";
 import { disambiguateRunLabels, useRunMetadataVersion } from "../../lib/run-label";
@@ -23,17 +23,28 @@ export interface SummaryRuns {
   colorOf: (u: Unit) => string | undefined;
 }
 
+const tableRuns = new WeakMap<RunDetailResponse, TableRun>();
+
+/** `tableRunOf`, once per details object. */
+function tableRunOfCached(d: RunDetailResponse): TableRun {
+  let r = tableRuns.get(d);
+  if (!r) tableRuns.set(d, (r = tableRunOf(d)));
+  return r;
+}
+
 export function useSummaryRuns(allRunIds: readonly string[]): SummaryRuns {
   const runIds = useVisibleRuns(allRunIds);
   const colors = useRunColors(runIds);
   const grouping = useContext(WorkspaceGroupingContext);
   const queries = useRunsDetails(runIds);
-  const dataKey = queries.map((q) => q.dataUpdatedAt).join("|");
-  const runs = useMemo(
-    () => queries.map((q) => q.data).filter((d): d is RunDetailResponse => d != null).map(tableRunOf),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dataKey, runIds.join("|")],
-  );
+  // Keyed on the details' identity, not their fetch time: a refetch that
+  // returns the same run keeps its object (structural sharing), so the cards'
+  // memos over `runs` (a forest, 1000 SVG paths) don't recompute.
+  const datas = queries.map((q) => q.data).filter((d): d is RunDetailResponse => d != null);
+  const last = useRef<{ datas: RunDetailResponse[]; runs: TableRun[] } | null>(null);
+  const same = last.current != null && last.current.datas.length === datas.length && datas.every((d, i) => d === last.current!.datas[i]);
+  if (!same) last.current = { datas, runs: datas.map(tableRunOfCached) };
+  const runs = last.current!.runs;
   const metaVersion = useRunMetadataVersion();
   const labels = useMemo(
     () => disambiguateRunLabels(runIds),

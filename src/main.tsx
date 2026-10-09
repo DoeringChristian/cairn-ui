@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, notifyManager } from "@tanstack/react-query";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { LiveUpdatesProvider } from "./api/live-updates";
 import { setSeriesSizeHint } from "./api/client";
@@ -26,10 +26,15 @@ import ReportViewPage, { ShareRedeemPage } from "./pages/ReportViewPage";
 import RouteError from "./components/RouteError";
 import { EmbedReportPage, EmbedRunPage, EmbedWorkspacePage } from "./pages/EmbedPages";
 import { installStaleBuildReload } from "./lib/stale-build";
+import { throttledScheduler } from "./api/notify-throttle";
 import "./index.css";
 
 // A page of an older build asks for chunks the server no longer has: reload once into the new build.
 installStaleBuildReload();
+
+// Query updates landing in a burst (hundreds of runs loading) render together,
+// at most every 50 ms, instead of one render per response.
+notifyManager.setScheduler(throttledScheduler(50));
 
 const queryClient = new QueryClient({
   defaultOptions: {
