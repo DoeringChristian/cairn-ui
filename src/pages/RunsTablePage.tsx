@@ -407,13 +407,13 @@ export default function RunsTablePage() {
           {depth === 0 && <RunSwatch color={colors.get(r.id)} />}
           <Link
             to={`/p/${projectId}/r/${r.id}`}
-            className={`mono flex min-h-[44px] min-w-0 flex-1 items-center py-2 leading-snug text-accent [overflow-wrap:anywhere] hover:underline ${hidden ? "opacity-50" : ""}`}
+            title={runRowName(r, plainNames) + (r.version != null ? ` v${r.version}` : "")}
+            className={`mono flex min-h-[44px] min-w-0 flex-1 items-center py-2 leading-snug text-accent hover:underline ${hidden ? "opacity-50" : ""}`}
           >
-            {/* Wraps instead of truncating: `exp-44 · train v2` is long for a phone. */}
-            <span>
-              {runRowName(r, plainNames)}
-              {r.version != null && <span className="ml-1 whitespace-nowrap text-xs text-fg-muted">v{r.version}</span>}
-            </span>
+            {/* Never breaks inside a name (`exp-44` must not wrap at the
+                hyphen): one line, truncated, the full name in the title. */}
+            <span className="min-w-0 truncate whitespace-nowrap">{runRowName(r, plainNames)}</span>
+            {r.version != null && <span className="ml-1 shrink-0 whitespace-nowrap text-xs text-fg-muted">v{r.version}</span>}
           </Link>
           {runControls(r)}
           <RunStatusBadge status={r.status} archived={r.archived} />

@@ -14,6 +14,7 @@ import type { RunStatus } from "../api/types";
 import { useCardSettings } from "../lib/card-settings";
 import { downloadCsv, safeName } from "../lib/download";
 import { isSystemMetric } from "../lib/metric-defs";
+import { formatSeconds } from "../lib/format";
 import { formatValue } from "../lib/plot-utils/format";
 import { bestWorst, MIXED, nextSort, scalarsTable, sortRows, type Cell, type Column, type Mark, type ScalarsRow } from "../lib/summary-tables";
 import { useMetricRules } from "../api/hooks";
@@ -40,18 +41,10 @@ const MARK_CLASS: Record<NonNullable<Mark> | "none", string> = { best: "bg-green
 
 const STATUSES = new Set<string>(["running", "completed", "failed", "crashed", "killed", "stopped"]);
 
-function seconds(s: number): string {
-  const t = Math.round(s);
-  if (t < 60) return `${t}s`;
-  const m = Math.floor(t / 60);
-  if (m < 60) return `${m}m ${t % 60}s`;
-  return `${Math.floor(m / 60)}h ${m % 60}m`;
-}
-
 function cellText(col: Column, v: Cell): string {
   if (v == null) return "";
   if (v === MIXED) return "mixed";
-  if (col.key === "info:duration" && typeof v === "number") return seconds(v);
+  if (col.key === "info:duration" && typeof v === "number") return formatSeconds(v);
   if (col.key === "info:created" && typeof v === "number") {
     return new Date(v).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
