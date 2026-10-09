@@ -74,7 +74,7 @@ export function deps(node: Node): Deps {
 /**
  * `"stats"` when the per-metric stats (`first/last/min/max/mean`) suffice:
  * every metric appears only as the bare argument of a 1-argument reducer and
- * no axis root (`step`, `wall_time`, `relative_time`) is used. Otherwise
+ * no axis root (`step`, `wall_time`, `relative_time`, `process_time`) is used. Otherwise
  * `"series"`: the full series must be fetched.
  */
 export function plan(node: Node): "stats" | "series" {

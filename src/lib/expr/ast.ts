@@ -13,7 +13,7 @@ export interface Span {
 export const RUN_FIELDS = ["name", "id", "status", "tags", "group", "job_type", "created_at"] as const;
 export type RunField = (typeof RUN_FIELDS)[number];
 
-export const AXES = ["step", "wall_time", "relative_time"] as const;
+export const AXES = ["step", "wall_time", "relative_time", "process_time"] as const;
 export type Axis = (typeof AXES)[number];
 
 export type ArithOp = "+" | "-" | "*" | "/" | "%" | "**";

@@ -48,7 +48,7 @@ export interface EvalResult {
 
 export interface EvalOptions {
   /**
-   * The steps `step` / `wall_time` / `relative_time` run over. Default: the
+   * The steps the axis roots (`step`, `wall_time`, …) run over. Default: the
    * first metric the expression references (source order).
    */
   domain?: SeriesData;
@@ -339,6 +339,8 @@ class Evaluator {
         const d = this.axisDomain(node.span, node.axis);
         if (node.axis === "step") return { kind: "series", steps: [...d.steps], values: [...d.steps] };
         if (node.axis === "wall_time") return { kind: "series", steps: [...d.steps], values: [...d.wall] };
+        // relative_time and process_time: seconds since the run was created
+        // (no resume times are recorded, so the process time has no pauses to drop).
         const created = parseTime(this.ctx.run("created_at"));
         return {
           kind: "series",

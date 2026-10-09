@@ -229,6 +229,7 @@ function nameNode(segments: NameSegment[], span: Span): Node {
       case "step":
       case "wall_time":
       case "relative_time":
+      case "process_time":
         if (rest.length > 0) {
           throw new ExprError(`'${head.text}' has no fields; quote a metric named like this: \`${[head.text, ...rest].join(".")}\``, span);
         }

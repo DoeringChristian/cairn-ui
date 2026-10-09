@@ -22,7 +22,9 @@
  * - `config.<key>`, `summary.<key>`: scalar<any> by flattened dotted key;
  * - `run.{name,id,status,tags,group,job_type,created_at}`: scalar;
  * - `step`, `wall_time` (epoch ms), `relative_time` (seconds since
- *   `run.created_at`): series<number> over the *domain*, which is
+ *   `run.created_at`), `process_time` (seconds the run's process ran:
+ *   cairn records no resume times yet, so it equals `relative_time`):
+ *   series<number> over the *domain*, which is
  *   `EvalOptions.domain` or else the first metric in the expression.
  * Any other name is a metric: series<number>.
  *
