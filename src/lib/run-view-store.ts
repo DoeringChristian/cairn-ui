@@ -1,6 +1,9 @@
 /**
- * The project-scoped run view (hidden, pinned, baseline) used by the runs
- * table and the run page, plus the pure edits every scope shares.
+ * The project-scoped run view (pinned, baseline) used by the Runs page, the
+ * workspace sidebar and the run page, plus the pure edits every scope
+ * shares. The project's hidden runs are the workspace view's eyes
+ * (lib/workspace-runs/state.ts), so its `hidden` is always empty;
+ * comparisons and report cells keep their own `hidden`.
  *
  * Per browser for now: it lives in localStorage under
  * `storageKeys.runView(projectId)`, and is not part of the server workspace
@@ -31,11 +34,6 @@ export function isEmptyRunView(v: RunView): boolean {
   return v.hidden.length === 0 && v.pinned.length === 0 && v.baseline === null;
 }
 
-export function toggleRunHidden(view: RunView, runId: string): RunView {
-  const hidden = view.hidden.includes(runId) ? view.hidden.filter((x) => x !== runId) : [...view.hidden, runId];
-  return { ...view, hidden };
-}
-
 export function toggleRunPinned(view: RunView, runId: string): RunView {
   const pinned = view.pinned.includes(runId) ? view.pinned.filter((x) => x !== runId) : [...view.pinned, runId];
   return { ...view, pinned };
@@ -62,7 +60,7 @@ const changed = new EventTarget();
 
 export function loadProjectRunView(projectId: string): RunView {
   if (typeof localStorage === "undefined") return EMPTY;
-  return parseRunView(loadJson<unknown>(localStorage, storageKeys.runView(projectId)));
+  return { ...parseRunView(loadJson<unknown>(localStorage, storageKeys.runView(projectId))), hidden: [] };
 }
 
 export function saveProjectRunView(projectId: string, view: RunView): void {

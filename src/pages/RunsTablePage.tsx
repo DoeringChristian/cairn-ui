@@ -7,7 +7,6 @@ import RunStatusBadge from "../components/RunStatusBadge";
 import { RunProgressLine, RunProgressPct } from "../components/RunProgress";
 import { formatDuration, formatRelative, safeJsonParse } from "../lib/format";
 import { formatValue } from "../lib/plot-utils/format";
-import { showInWorkspace } from "../lib/workspace-runs/show-in-workspace";
 import { downloadBlob } from "../lib/download";
 import { api } from "../api/client";
 import Popover from "../components/ui/Popover";
@@ -18,13 +17,7 @@ import CopyId from "../components/CopyId";
 import TagInput from "../components/TagInput";
 import { useWindowScrollRestore } from "../lib/use-scroll-restore";
 import { useProjectTags } from "../lib/use-project-tags";
-import {
-  EMPTY_RUNS_FILTER,
-  filterFieldsOf,
-  loadRunsFilter,
-  saveRunsFilter,
-  type RunsFilterState,
-} from "../lib/run-filter.ts";
+import { filterFieldsOf } from "../lib/run-filter.ts";
 import {
   RunFilterControl,
   RunGroupControl,
@@ -33,9 +26,11 @@ import {
   RunStatusSelect,
 } from "../components/RunFilterBar";
 import { GroupHeader, groupWorkspacePath } from "../components/runs-table/RunsTableParts";
-import RunsTable from "../components/runs-table/RunsTable";
+import RunsTable, { EyeButton } from "../components/runs-table/RunsTable";
+import ViewSwitcher from "../components/workspace/ViewSwitcher";
+import { useWorkspaceMetrics } from "../components/workspace/use-workspace-metrics";
 import { useRunsTable } from "../components/runs-table/use-runs-table";
-import { needsEveryRun, runRowName, sameGroup, toggleGroupSelection, type StatusFilter } from "../lib/runs-table/model.ts";
+import { firstGroupOpen, needsEveryRun, runRowName, sameGroup, toggleGroupSelection } from "../lib/runs-table/model.ts";
 import { olderInSeries } from "../lib/run-series.ts";
 import RunControls, { RunSwatch } from "../components/RunViewControls";
 import {
@@ -59,7 +54,33 @@ import { removeSortKey, toggleSort, type SortKey } from "../lib/runs-table/sort.
 import { deltaOf, formatDelta, goalFor, relativeDelta, toneOf, type Tone } from "../lib/runs-table/delta.ts";
 import type { Goal } from "../lib/metric-rules.ts";
 import { RunViewContext, usePageColors, type RunView } from "../lib/run-view";
-import { groupLineLabel, innermostLineOf } from "../lib/runs-table/group.ts";
+import { ops } from "../lib/workspace/doc";
+import { viewRef, WorkspaceRefContext } from "../lib/workspace/ref";
+import { useViews } from "../lib/workspace/use-views";
+import { useWorkspace } from "../lib/workspace/use-workspace";
+import {
+  setColumns as setColumnsOf,
+  setComputed as setComputedOf,
+  setFilter,
+  setLatestOnly,
+  setSearch,
+  setSort as setSortOf,
+  setStatus,
+  toggleGroupOpen,
+  type RunState,
+} from "../lib/workspace-runs/state";
+import {
+  allEye,
+  cardRuns,
+  groupEye,
+  regroup,
+  resolveVisibility,
+  showOnly,
+  toggleAllEyes,
+  toggleGroupEye,
+  toggleRunEye,
+} from "../lib/workspace-runs/visibility";
+import { aggregates, groupLineLabel, type RunGroupNode } from "../lib/runs-table/group.ts";
 import { useProjectRunView } from "../lib/run-view-store";
 import { newId } from "../lib/reports/ids";
 import "./runs-table.css";
@@ -70,22 +91,6 @@ const TONE_CLASS: Record<Tone, string> = {
   same: "text-fg-subtle",
   neutral: "text-fg-subtle",
 };
-
-/** The project's persisted table view (filter, grouping, sort, columns), reloaded when the project changes. */
-function useRunsFilterState(projectId: string | undefined) {
-  const load = (pid: string | undefined) => (pid ? loadRunsFilter(localStorage, pid) : EMPTY_RUNS_FILTER);
-  const [entry, setEntry] = useState(() => ({ projectId, state: load(projectId) }));
-  let current = entry;
-  if (entry.projectId !== projectId) {
-    current = { projectId, state: load(projectId) };
-    setEntry(current);
-  }
-  const update = useCallback((next: RunsFilterState) => {
-    if (projectId) saveRunsFilter(localStorage, projectId, next);
-    setEntry({ projectId, state: next });
-  }, [projectId]);
-  return [current.state, update] as const;
-}
 
 // One formatter each: `toLocale*String` with options builds a new
 // Intl.DateTimeFormat per call (a third of a second per 1000 rows).
@@ -101,16 +106,31 @@ function formatCreated(iso: string): string {
   }
 }
 
-/** The Runs page (`/p/:projectId`). */
+type RunStateEdit = (fn: (s: RunState) => RunState, label: string, mergeKey?: string) => void;
+
+/**
+ * The Runs page (`/p/:projectId`). Its toolbar, eyes, open groups and
+ * columns are the current workspace view's run state (lib/workspace-runs/state.ts),
+ * shared with the workspace sidebar (wandb: the Runs table belongs to the
+ * workspace view): changing one changes the other, and the view switcher in
+ * the header switches both.
+ */
 export default function RunsTablePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const q = useInfiniteRuns({ project: projectId, include: ["params", "stats"] });
   const { bulkDelete, bulkArchive, bulkStop } = useBulkRunMutation();
 
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [search, setSearch] = useState<string>("");
-  const [filterState, setFilterState] = useRunsFilterState(projectId);
+  // The current workspace view: its run state is this page's state.
+  const views = useViews(projectId ?? null);
+  const current = views.data?.current ?? null;
+  const wsRef = useMemo(() => (projectId && current ? viewRef(projectId, current) : null), [projectId, current]);
+  const { doc, update } = useWorkspace(wsRef);
+  const state = doc.runState;
+  const edit = useCallback<RunStateEdit>(
+    (fn, label, mergeKey) => update(ops.updateRunState(fn), { label, mergeKey }),
+    [update],
+  );
   const runViewCtl = useProjectRunView(projectId);
   const runView = runViewCtl.view;
   const setRunView = runViewCtl.set!;
@@ -120,7 +140,6 @@ export default function RunsTablePage() {
   const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
   const tagBtnRef = useRef<HTMLButtonElement | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [showLatestOnly, setShowLatestOnly] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [addingTagFor, setAddingTagFor] = useState<string | null>(null);
   const [menuColumn, setMenuColumn] = useState<string | null>(null);
@@ -152,14 +171,7 @@ export default function RunsTablePage() {
   // Filters, groups, search, status, "Latest only" and sorting apply to the
   // loaded runs, so while any is active load every page: a search over the
   // first 100 runs silently hides matches (see needsEveryRun).
-  const needsAllRuns = needsEveryRun({
-    filter: filterState.filter,
-    groupBy: filterState.groupBy,
-    search,
-    status: statusFilter,
-    latestOnly: showLatestOnly,
-    sort: filterState.sort,
-  });
+  const needsAllRuns = needsEveryRun(state);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = q;
   useEffect(() => {
     if (needsAllRuns && hasNextPage && !isFetchingNextPage) void fetchNextPage();
@@ -229,13 +241,13 @@ export default function RunsTablePage() {
 
   // Run label cache is seeded centrally in `useInfiniteRuns` (api/hooks.ts).
 
-  const { sort, columns, computed, groupBy } = filterState;
-  const setColumns = (next: ColumnsState) => setFilterState({ ...filterState, columns: next });
+  const { sort, columns, computed, groupBy } = state;
+  const setColumns = (next: ColumnsState) => edit((s) => setColumnsOf(s, next), "Change columns");
   // The width of the column being dragged, live; persisted once on release.
   const [dragWidth, setDragWidth] = useState<{ column: string; width: number } | null>(null);
   const widthOf = (col: string) => (dragWidth?.column === col ? dragWidth.width : columnWidth(columns, col));
-  const setSort = (next: SortKey[]) => setFilterState({ ...filterState, sort: next });
-  const setComputed = (next: ComputedColumn[]) => setFilterState({ ...filterState, computed: next });
+  const setSort = (next: SortKey[]) => edit((s) => setSortOf(s, next), "Sort runs");
+  const setComputed = (next: ComputedColumn[]) => edit((s) => setComputedOf(s, next), "Change computed columns");
 
   // The baseline may be filtered out of the table; deltas still compare against it.
   const baselineRun = useMemo(
@@ -243,18 +255,30 @@ export default function RunsTablePage() {
     [runs, runView.baseline],
   );
 
+  // As the workspace sidebar's (RunsWorkspace): pinned runs listed whatever the filters, the same
+  // groups open, so both list the same runs and their eyes and colours agree.
   const { runSearch, latestByName, filtered, computedValues, sorted, groups, collapsed, toggleGroup, rows } = useRunsTable({
     runs,
-    status: statusFilter,
-    search,
-    filter: filterState.filter,
-    latestOnly: showLatestOnly,
+    status: state.status,
+    search: state.search,
+    filter: state.filter,
+    latestOnly: state.latestOnly,
     groupBy,
     sort,
     computed,
     pinned: runView.pinned,
+    pinnedAlwaysListed: true,
     baseline: baselineRun,
+    defaultCollapsed: firstGroupOpen,
+    toggled: state.toggled,
+    onToggleGroup: (id) => edit((s) => toggleGroupOpen(s, id), "Expand or collapse a group", "toggle-group"),
   });
+  // The workspace's eyes and the page's colours (the workspace's: lib/run-color.ts `assignPageColors`).
+  const visibility = useMemo(() => resolveVisibility(sorted, groups, state.eyes), [sorted, groups, state.eyes]);
+  const visible = visibility.runs;
+  const cards = useMemo(() => cardRuns(sorted, groups, visible), [sorted, groups, visible]);
+  const pageColors = usePageColors(cards.runIds, cards.groupOf);
+  const viewMetrics = useWorkspaceMetrics(cards.runIds).metrics;
 
   // Metric and param columns are the UNION across the loaded runs, not the
   // intersection: a run that crashed before logging `val.acc` should show a
@@ -263,12 +287,17 @@ export default function RunsTablePage() {
   const layout = useMemo(() => layoutColumns(available, columns), [available, columns]);
   const shownColumns = useMemo(() => [...layout.frozen, ...layout.scroll], [layout]);
 
-  const pageColors = usePageColors(
-    useMemo(() => sorted.map((r) => r.id), [sorted]),
-    useMemo(() => (groups ? innermostLineOf(groups) : new Map<string, string>()), [groups]),
-  );
   const colors = pageColors.runs;
   const groupColors = pageColors.groups;
+  const runName = (r: Run) => r.display_name ?? r.id;
+  const eyes = {
+    runEye: (r: Run) => visible.has(r.id),
+    groupEye: (n: RunGroupNode) => groupEye(n, visible),
+    onRun: (r: Run) => edit((s) => toggleRunEye(s, r, visible), `Toggle ${runName(r)}`),
+    onGroup: (n: RunGroupNode) => edit((s) => toggleGroupEye(s, n, visible), `Toggle ${n.label ?? "(none)"}`),
+    all: allEye(sorted, visible),
+    onAll: () => edit((s) => toggleAllEyes(s, sorted, groups, visible), "Toggle every run"),
+  };
 
   // Which way is better per column: the project's metric rules (deltas).
   const ruleOf = useMetricRules(projectId);
@@ -363,9 +392,10 @@ export default function RunsTablePage() {
     }
   }, [selected]);
 
-  const onShowInWorkspace = async () => {
-    // Exactly the ticked runs visible in the project workspace (the current view).
-    await showInWorkspace(projectId!, new Set(selected));
+  const onShowInWorkspace = () => {
+    // Exactly the ticked runs visible: the shared eyes (the current view's), then the workspace.
+    const ticked = new Set(selected);
+    edit((s) => showOnly(s, runs.filter((r) => !r.archived), ticked), "Show in workspace");
     navigate(`/p/${projectId}/workspace`);
   };
 
@@ -401,7 +431,7 @@ export default function RunsTablePage() {
 
   const renderMobileRun = (r: Run, key: string, depth: number) => {
     const isSelected = selected.has(r.id);
-    const hidden = runView.hidden.includes(r.id);
+    const hidden = !visible.has(r.id);
     return (
       <li
         key={key}
@@ -419,7 +449,8 @@ export default function RunsTablePage() {
               onChange={(e) => toggleRow(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
             />
           </div>
-          {depth === 0 && <RunSwatch color={colors.get(r.id)} />}
+          <EyeButton eye={hidden ? "off" : "on"} label={runName(r)} onClick={() => eyes.onRun(r)} />
+          {depth === 0 && !hidden && !cards.groupOf.has(r.id) && <RunSwatch color={colors.get(r.id)} />}
           <Link
             to={`/p/${projectId}/r/${r.id}`}
             title={runRowName(r, plainNames) + (r.version != null ? ` v${r.version}` : "")}
@@ -539,38 +570,43 @@ export default function RunsTablePage() {
   };
 
   if (!projectId) return null;
-  if (q.isLoading) return <p className="text-fg-muted">Loading…</p>;
+  if (q.isLoading || !wsRef) return <p className="text-fg-muted">Loading…</p>;
   if (q.isError)
     return <p className="text-status-failed">Error: {String(q.error)}</p>;
 
   return (
+    <WorkspaceRefContext.Provider value={wsRef}>
     <RunViewContext.Provider value={runViewCtl}>
     <div>
-      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <h1 className="mono min-w-0 break-all text-xl font-semibold">{projectId} / runs</h1>
-        <p className="text-sm text-fg-muted">
-          {sorted.length} of {serverTotal} run{serverTotal === 1 ? "" : "s"}
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-fg-muted">
+            {sorted.length} of {serverTotal} run{serverTotal === 1 ? "" : "s"}
+          </p>
+          {/* The workspace's view switcher: this table is the view's (its run state). */}
+          <ViewSwitcher metrics={viewMetrics} />
+        </div>
       </div>
 
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <RunStatusSelect value={statusFilter} onChange={setStatusFilter} />
+        <RunStatusSelect value={state.status} onChange={(v) => edit((s) => setStatus(s, v), "Filter runs by status")} />
         <label className="flex items-center gap-1 text-xs text-fg-muted">
           Search
-          <RunSearchInput value={search} error={runSearch.error} onChange={setSearch} />
+          <RunSearchInput value={state.search} error={runSearch.error} onChange={(v) => edit((s) => setSearch(s, v), "Search runs", "search")} />
         </label>
         <RunFilterControl
           fields={filterFields}
-          filter={filterState.filter}
-          onChange={(filter) => setFilterState({ ...filterState, filter })}
+          filter={state.filter}
+          onChange={(filter) => edit((s) => setFilter(s, filter), "Filter runs")}
         />
         <RunGroupControl
           paramKeys={paramKeys}
-          levels={filterState.groupBy}
-          onChange={(groupBy) => setFilterState({ ...filterState, groupBy })}
+          levels={state.groupBy}
+          onChange={(levels) => edit((s) => regroup(s, levels, sorted, visible), "Group runs")}
         />
-        <RunLatestOnlyToggle value={showLatestOnly} onChange={setShowLatestOnly} />
+        <RunLatestOnlyToggle value={state.latestOnly} onChange={(v) => edit((s) => setLatestOnly(s, v), "Latest only")} />
         <button
           ref={columnsBtnRef}
           type="button"
@@ -639,7 +675,7 @@ export default function RunsTablePage() {
           <button
             type="button"
             className="btn gap-1 px-2 py-1 text-xs touch:min-h-[40px]"
-            onClick={() => void onShowInWorkspace()}
+            onClick={onShowInWorkspace}
             disabled={selectedCount === 0}
           >
             Show in workspace
@@ -718,10 +754,11 @@ export default function RunsTablePage() {
           <ul className="flex flex-col gap-2 md:hidden">
             {rows.map((row) =>
               row.kind === "group" ? (
-                <li key={row.node.id} style={{ marginLeft: row.node.depth * 12 }}>
+                <li key={row.node.id} className="flex items-center gap-1.5" style={{ marginLeft: row.node.depth * 12 }}>
+                  <EyeButton eye={eyes.groupEye(row.node)} label={row.node.label ?? "(none)"} onClick={() => eyes.onGroup(row.node)} />
                   <GroupHeader
                     node={row.node}
-                    color={row.node.children === null ? (groupColors.get(groupLineLabel(row.node.path)) ?? null) : null}
+                    color={aggregates(row.node) && eyes.groupEye(row.node) !== "off" ? (groupColors.get(groupLineLabel(row.node.path)) ?? null) : null}
                     collapsed={collapsed.has(row.node.id)}
                     onToggle={() => toggleGroup(row.node.id)}
                     name={row.node.by.source === "group" && row.node.label != null ? { to: groupWorkspacePath(projectId, row.node.label) } : null}
@@ -743,9 +780,10 @@ export default function RunsTablePage() {
               onToggleGroup={toggleGroup}
               grouped={plainNames}
               latestByName={latestByName}
-              colorOf={(r) => colors.get(r.id)}
+              colorOf={(r) => (visible.has(r.id) ? colors.get(r.id) : null)}
               groupColors={groupColors}
-              hidden={(r) => runView.hidden.includes(r.id)}
+              groupHidden={(n) => groupEye(n, visible) === "off"}
+              hidden={(r) => !visible.has(r.id)}
               lead={{
                 kind: "check",
                 selected,
@@ -753,6 +791,7 @@ export default function RunsTablePage() {
                 all: allVisibleSelected ? "all" : someVisibleSelected ? "some" : "none",
                 onToggleAll: onHeaderCheckbox,
                 onToggleGroup: (node) => setSelected((prev) => toggleGroupSelection(node.runs, prev)),
+                eyes,
               }}
               nameExtras={nameExtras}
               columns={{
@@ -862,6 +901,7 @@ export default function RunsTablePage() {
       <ImportRunsDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
     </RunViewContext.Provider>
+    </WorkspaceRefContext.Provider>
   );
 }
 
@@ -959,12 +999,11 @@ function RunTagCell({
   );
 }
 
-/** A compact summary of the project run view with a reset, shown only when something is set. */
+/** A compact summary of the project run view (pins, baseline) with a reset, shown only when something is set. */
 function RunViewSummary({ view, onChange, runs }: { view: RunView; onChange: (next: RunView) => void; runs: Run[] }) {
-  if (view.hidden.length === 0 && view.pinned.length === 0 && !view.baseline) return null;
+  if (view.pinned.length === 0 && !view.baseline) return null;
   const baseline = view.baseline ? runs.find((r) => r.id === view.baseline) : undefined;
   const parts = [
-    view.hidden.length > 0 ? `${view.hidden.length} hidden` : null,
     view.pinned.length > 0 ? `${view.pinned.length} pinned` : null,
     view.baseline ? `baseline ${baseline?.display_name ?? view.baseline}` : null,
   ].filter(Boolean);
@@ -975,7 +1014,7 @@ function RunViewSummary({ view, onChange, runs }: { view: RunView; onChange: (ne
         type="button"
         className="rounded px-1 hover:text-fg"
         onClick={() => onChange({ hidden: [], pinned: [], baseline: null })}
-        title="Show all runs, unpin all, clear the baseline"
+        title="Unpin all, clear the baseline"
       >
         reset
       </button>

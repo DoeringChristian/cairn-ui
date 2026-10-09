@@ -49,6 +49,31 @@ export const MAX_COLUMN_WIDTH = 1200;
 export const clampColumnWidth = (w: number) =>
   Math.round(Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, w)));
 
+const isObj = (v: unknown): v is Record<string, unknown> => v != null && typeof v === "object" && !Array.isArray(v);
+const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+
+/** A stored column setup, anything malformed dropped (widths clamped). */
+export function parseColumnsState(v: unknown): ColumnsState {
+  if (!isObj(v)) return { order: [], hidden: [], pinned: [], widths: {} };
+  const widths: Record<string, number> = {};
+  if (isObj(v.widths)) {
+    for (const [k, w] of Object.entries(v.widths)) if (typeof w === "number" && Number.isFinite(w)) widths[k] = clampColumnWidth(w);
+  }
+  return { order: strings(v.order), hidden: strings(v.hidden), pinned: strings(v.pinned), widths };
+}
+
+/** Stored computed columns, anything malformed dropped. */
+export function parseComputedColumns(v: unknown): ComputedColumn[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((c): c is Record<string, unknown> => isObj(c) && typeof c.id === "string" && typeof c.expr === "string")
+    .map((c) => ({
+      id: c.id as string,
+      expr: c.expr as string,
+      ...(typeof c.name === "string" && c.name ? { name: c.name } : {}),
+    }));
+}
+
 /**
  * A column's width: the user's, else Name's and a pinned column's default.
  * Undefined for an unresized scrolling column (it sizes to its content).

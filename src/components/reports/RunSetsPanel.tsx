@@ -36,7 +36,7 @@ import {
   type RunSet,
 } from "../../lib/run-sets";
 import { useRunColors } from "../../lib/run-view";
-import type { RunState } from "../../lib/workspace-runs/state";
+import { DEFAULT_RUN_STATE, type RunState } from "../../lib/workspace-runs/state";
 import { resolveVisibility } from "../../lib/workspace-runs/visibility";
 import { RunSwatch } from "../RunViewControls";
 import { useRunsTable } from "../runs-table/use-runs-table";
@@ -184,7 +184,7 @@ function RunSetEditor({
   // Status and Search only narrow the list: a run set has neither.
   const [status, setStatus] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
-  const state: RunState = { status, search, filter: set.filter, groupBy: set.groupBy, latestOnly: set.latestOnly, sort: set.sort, eyes: set.eyes };
+  const state: RunState = { ...DEFAULT_RUN_STATE, status, search, filter: set.filter, groupBy: set.groupBy, latestOnly: set.latestOnly, sort: set.sort, eyes: set.eyes };
 
   const filterFields = useMemo(() => filterFieldsOf(pool), [pool]);
   const paramKeys = useMemo(

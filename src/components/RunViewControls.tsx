@@ -1,12 +1,12 @@
 /**
- * Per-run run-view controls: a colour swatch, and the eye (hide from
- * charts), pin (listed and drawn first) and baseline toggles. Used by the
- * runs table and a report cell's `RunSetsPanel`; the toggles edit whichever run view the
- * caller passes (project or report cell).
+ * Per-run run-view controls: a colour swatch, and the pin (listed and drawn
+ * first) and baseline toggles of the project run view. Which runs the
+ * charts draw is the workspace view's eyes (lib/workspace-runs/visibility.ts),
+ * not a toggle here. Used by the Runs page and the workspace sidebar.
  */
 
 import type { RunView } from "../lib/run-view";
-import { toggleRunBaseline, toggleRunHidden, toggleRunPinned } from "../lib/run-view-store";
+import { toggleRunBaseline, toggleRunPinned } from "../lib/run-view-store";
 
 export function RunSwatch({ color }: { color: string | undefined }) {
   return (
@@ -18,13 +18,13 @@ export function RunSwatch({ color }: { color: string | undefined }) {
   );
 }
 
-export type RunViewToggle = "hide" | "pin" | "baseline";
-const ALL_TOGGLES: readonly RunViewToggle[] = ["hide", "pin", "baseline"];
+export type RunViewToggle = "pin" | "baseline";
+const ALL_TOGGLES: readonly RunViewToggle[] = ["pin", "baseline"];
 
 const CONTROL_BTN =
   "inline-flex h-5 w-5 items-center justify-center rounded text-[10px] hover:bg-bg-hover touch:h-9 touch:w-9";
 
-/** Eye (hide from charts), pin (first in charts and the table) and baseline toggles for one run. */
+/** Pin (first in charts and the table) and baseline toggles for one run. */
 export default function RunViewControls({
   runId,
   view,
@@ -37,10 +37,9 @@ export default function RunViewControls({
   onChange?: (next: RunView) => void;
   /** "hover": inactive toggles appear on row/chip hover; "all": always; "active": only the set ones. */
   show?: "hover" | "all" | "active";
-  /** Which toggles (default all three; the workspace sidebar: the pin only). */
+  /** Which toggles (default both). */
   toggles?: readonly RunViewToggle[];
 }) {
-  const hidden = toggles.includes("hide") && view.hidden.includes(runId);
   const pinned = toggles.includes("pin") && view.pinned.includes(runId);
   const baseline = toggles.includes("baseline") && view.baseline === runId;
   const idle =
@@ -48,19 +47,9 @@ export default function RunViewControls({
       ? "text-fg-subtle hover:text-fg"
       : "text-fg-subtle can-hover:opacity-0 can-hover:group-hover/row:opacity-100 can-hover:group-hover/chip:opacity-100 focus-visible:opacity-100";
   if (!onChange) return null;
-  if (show === "active" && !hidden && !pinned && !baseline) return null;
+  if (show === "active" && !pinned && !baseline) return null;
   return (
     <span className="run-controls inline-flex items-center">
-      {toggles.includes("hide") && (show !== "active" || hidden) && <button
-        type="button"
-        className={`${CONTROL_BTN} ${hidden ? "text-status-failed" : idle}`}
-        onClick={() => onChange(toggleRunHidden(view, runId))}
-        aria-pressed={hidden}
-        title={hidden ? "Hidden from charts: show" : "Hide from charts"}
-        aria-label={hidden ? "Show run in charts" : "Hide run from charts"}
-      >
-        <i className={`fa-solid ${hidden ? "fa-eye-slash" : "fa-eye"}`} aria-hidden="true" />
-      </button>}
       {toggles.includes("pin") && (show !== "active" || pinned) && <button
         type="button"
         className={`${CONTROL_BTN} ${pinned ? "text-accent" : idle}`}

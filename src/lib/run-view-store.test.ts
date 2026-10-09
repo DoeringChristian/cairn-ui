@@ -5,7 +5,6 @@ import {
   isEmptyRunView,
   parseRunView,
   toggleRunBaseline,
-  toggleRunHidden,
   toggleRunPinned,
 } from "./run-view-store.ts";
 
@@ -18,13 +17,12 @@ test("parseRunView drops malformed parts and duplicates", () => {
 test("toggles and applyRunView", () => {
   let v = parseRunView(null);
   assert.ok(isEmptyRunView(v));
-  v = toggleRunHidden(v, "b");
+  v = { ...v, hidden: ["b"] };
   v = toggleRunPinned(v, "d");
   v = toggleRunPinned(v, "c");
   v = toggleRunBaseline(v, "a");
   assert.deepEqual(v, { hidden: ["b"], pinned: ["d", "c"], baseline: "a" });
   assert.deepEqual(applyRunView(["a", "b", "c", "d"], v), ["c", "d", "a"]);
   assert.equal(toggleRunBaseline(v, "a").baseline, null);
-  assert.deepEqual(toggleRunHidden(v, "b").hidden, []);
   assert.ok(!isEmptyRunView(v));
 });

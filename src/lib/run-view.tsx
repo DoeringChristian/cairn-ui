@@ -9,7 +9,7 @@
  * labels, never stored), unless a colour-by is active in scope
  * (`RunColorByContext`, lib/run-color-by.ts): then each run's colour is its
  * value's bucket.
- * The pure edits (`toggleRunHidden`, `toggleRunPinned`, `toggleRunBaseline`,
+ * The pure edits (`toggleRunPinned`, `toggleRunBaseline`,
  * `applyRunView`) and the project store (`useProjectRunView`) live in
  * `lib/run-view-store.ts`.
  */

@@ -19,7 +19,6 @@ export const storageKeys = {
   /** A workspace document's last server-confirmed copy (`refKey`) — see lib/workspace/store.ts. */
   workspace: (key: string) => `cairn:workspace:${key}`,
   /** The runs table's filter chips and group-by — see lib/run-filter.ts. */
-  runsFilter: (projectId: string) => `cairn:runs-filter:${projectId}`,
   /** The project's run view (hidden, pinned, baseline) — see lib/run-view-store.ts. */
   runView: (projectId: string) => `cairn:run-view:${projectId}`,
   reportTemplates: (projectId: string) => `cairn:report-templates:${projectId}`,
@@ -28,7 +27,6 @@ export const storageKeys = {
   streamMode: "cairn:stream-mode",
   scroll: (key: string) => `cairn:scroll:${key}`, // sessionStorage
   /** The workspace sidebar's toggled (collapsed / expanded) groups — see components/runs-table/use-runs-table.ts. */
-  runsCollapsed: (key: string) => `cairn:runs-collapsed:${key}`, // sessionStorage
   // --- media (wave 2, agent C) ---
   /** A section's media sync value and key — see components/card-kit/media-sync.tsx. */
   mediaSync: (scopeKey: string) => `cairn:media-sync:${scopeKey}`,

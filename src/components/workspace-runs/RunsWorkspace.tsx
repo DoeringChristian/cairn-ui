@@ -14,8 +14,9 @@
  * lines. The page's colours are assigned once, over the visible runs and
  * innermost groups together (lib/run-color.ts `assignPageColors`), and
  * provided to the sidebar and every card (lib/page-colors-context.ts). A run opened from the sidebar shows a "← Workspace" link back
- * (lib/run-nav.ts); the sidebar's collapsed groups and scroll are kept for
- * the session, the run state is the view's.
+ * (lib/run-nav.ts); the sidebar's scroll is kept for the session; the run
+ * state (incl. the groups toggled open or closed) is the view's, shared
+ * with the Runs page.
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -35,6 +36,7 @@ import { PageColorsContext } from "../../lib/page-colors-context";
 import { useProjectRunView } from "../../lib/run-view-store";
 import { FROM_WORKSPACE } from "../../lib/run-nav";
 import { ops } from "../../lib/workspace/doc";
+import { toggleGroupOpen } from "../../lib/workspace-runs/state";
 import type { WorkspaceRef } from "../../lib/workspace/ref";
 import { useWorkspace } from "../../lib/workspace/use-workspace";
 
@@ -80,7 +82,8 @@ export default function RunsWorkspace({ wsRef, initialFilter = null }: { wsRef: 
     pinned: runView.view.pinned,
     pinnedAlwaysListed: true,
     defaultCollapsed: firstGroupOpen,
-    collapsedKey: `workspace:${projectId}`,
+    toggled: state.toggled,
+    onToggleGroup: (id) => edit((s) => toggleGroupOpen(s, id), "Expand or collapse a group", "toggle-group"),
   });
   const visibility = useMemo(() => resolveVisibility(table.sorted, table.groups, state.eyes), [table.sorted, table.groups, state.eyes]);
   const cards = useMemo(() => cardRuns(table.sorted, table.groups, visibility.runs), [table.sorted, table.groups, visibility.runs]);

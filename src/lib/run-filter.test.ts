@@ -8,7 +8,6 @@ import {
   evaluate,
   fieldValue,
   EMPTY_FILTER,
-  EMPTY_RUNS_FILTER,
   OP_BUILTINS,
   addChild,
   exprLeafError,
@@ -19,7 +18,6 @@ import {
   matchesFilters,
   nodeAt,
   opBuiltin,
-  parseRunsFilterState,
   updateAt,
   type FilterNode,
   type Operator,
@@ -164,45 +162,6 @@ test("tree edits: addChild / updateAt / nodeAt", () => {
   root = updateAt(root, [0, 0], () => null);
   assert.equal((nodeAt(root, [0]) as { children: unknown[] }).children.length, 1);
   assert.equal(nodeAt(root, [5]), null);
-});
-
-test("parseRunsFilterState: v2 only, malformed parts dropped", () => {
-  assert.deepEqual(parseRunsFilterState(null), EMPTY_RUNS_FILTER);
-  // v1 is not migrated.
-  assert.deepEqual(parseRunsFilterState({ version: 1, filters: [], groupBy: { source: "tag" } }), EMPTY_RUNS_FILTER);
-  const parsed = parseRunsFilterState({
-    version: 2,
-    filter: {
-      kind: "group",
-      op: "or",
-      children: [
-        { kind: "chip", field: "status", op: "exact", arg: "failed" },
-        { kind: "chip", field: "status", op: "bogus", arg: "x" },
-        { kind: "expr", expr: "min(loss) < 1" },
-        { kind: "group", op: "and", children: [{ kind: "expr" }] },
-      ],
-    },
-    groupBy: [{ source: "param", key: "lr" }, { source: "param" }, { source: "expr", expr: "config.a" }],
-    sort: [{ column: "value:acc", direction: "desc" }, { column: "x", direction: "sideways" }],
-    columns: { order: ["a", 1], hidden: ["b"], pinned: ["value:acc"], better: { "value:acc": "higher", x: "bad" }, widths: { name: 420, "value:acc": 10, y: "wide" } },
-    computed: [{ id: "c1", expr: "min(val.loss)", better: "lower" }, { id: 3 }],
-  });
-  assert.deepEqual(parsed, {
-    version: 2,
-    filter: {
-      kind: "group",
-      op: "or",
-      children: [
-        { kind: "chip", field: "status", op: "exact", arg: "failed" },
-        { kind: "expr", expr: "min(loss) < 1" },
-        { kind: "group", op: "and", children: [] },
-      ],
-    },
-    groupBy: [{ source: "param", key: "lr" }, { source: "expr", expr: "config.a" }],
-    sort: [{ column: "value:acc", direction: "desc" }],
-    columns: { order: ["a"], hidden: ["b"], pinned: ["value:acc"], widths: { name: 420, "value:acc": 60 } },
-    computed: [{ id: "c1", expr: "min(val.loss)" }],
-  });
 });
 
 test("NaN is unordered, like Python", () => {

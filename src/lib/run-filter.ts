@@ -1,8 +1,8 @@
 /**
  * The runs table's filter: a tree of and/or groups over builder chips
  * (field/operator/argument predicates) and expression leaves (lib/expr),
- * evaluated client-side over the loaded runs. Also the table's persisted
- * state (`RunsFilterState` v2).
+ * evaluated client-side over the loaded runs (the toolbar state lives in the
+ * workspace view's run state: lib/workspace-runs/state.ts).
  *
  * The operators are a TS port of the server's authoritative comparators
  * (cairn `cairn/server/_operators.py`), with Python's semantics: `==` that
@@ -17,14 +17,11 @@
  */
 
 import type { Run } from "../api/types.ts";
-import { loadJson, saveJson, storageKeys } from "./storage.ts";
 // lib/expr imports this module's Python semantics back (a cycle): nothing
 // below may use these imports at module top level, only inside functions.
 import { evaluate as evaluate_, matches } from "./expr/index.ts";
-import { clampColumnWidth, compileScalarExpr, type ColumnsState, type ComputedColumn } from "./runs-table/columns.ts";
+import { compileScalarExpr } from "./runs-table/columns.ts";
 import { parseTags, runContextOf } from "./runs-table/context.ts";
-import { isGroupBy, type GroupBy } from "./runs-table/group.ts";
-import { DEFAULT_SORT, type SortKey } from "./runs-table/sort.ts";
 
 export const OPERATORS = [
   "exact",
@@ -391,78 +388,4 @@ function parseNode(v: unknown, depth: number): FilterNode | null {
 export function parseFilter(raw: unknown): GroupNode {
   const n = parseNode(raw, 0);
   return n && n.kind === "group" ? n : EMPTY_FILTER;
-}
-
-// ---------------------------------------------------------------------------
-// Persistence
-// ---------------------------------------------------------------------------
-
-/** The runs table's persisted view: filter, nested grouping, multi-sort, columns and computed columns. */
-export interface RunsFilterState {
-  version: 2;
-  filter: GroupNode;
-  groupBy: GroupBy[];
-  sort: SortKey[];
-  columns: ColumnsState;
-  computed: ComputedColumn[];
-}
-
-export const EMPTY_RUNS_FILTER: RunsFilterState = {
-  version: 2,
-  filter: EMPTY_FILTER,
-  groupBy: [],
-  sort: DEFAULT_SORT,
-  // Not `EMPTY_COLUMNS`: see the import cycle note at the top.
-  columns: { order: [], hidden: [], pinned: [], widths: {} },
-  computed: [],
-};
-
-const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-
-function parseColumns(v: unknown): ColumnsState {
-  if (!isObj(v)) return EMPTY_RUNS_FILTER.columns;
-  const widths: Record<string, number> = {};
-  if (isObj(v.widths)) {
-    for (const [k, w] of Object.entries(v.widths)) if (typeof w === "number" && Number.isFinite(w)) widths[k] = clampColumnWidth(w);
-  }
-  return { order: strings(v.order), hidden: strings(v.hidden), pinned: strings(v.pinned), widths };
-}
-
-function parseSort(v: unknown): SortKey[] {
-  if (!Array.isArray(v)) return DEFAULT_SORT;
-  return v
-    .filter((k): k is SortKey => isObj(k) && typeof k.column === "string" && (k.direction === "asc" || k.direction === "desc"))
-    .map((k) => ({ column: k.column, direction: k.direction }));
-}
-
-function parseComputed(v: unknown): ComputedColumn[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .filter((c): c is Record<string, unknown> => isObj(c) && typeof c.id === "string" && typeof c.expr === "string")
-    .map((c) => ({
-      id: c.id as string,
-      expr: c.expr as string,
-      ...(typeof c.name === "string" && c.name ? { name: c.name } : {}),
-    }));
-}
-
-/** Parse a stored state, dropping anything malformed. Anything but v2 is empty (no migration). */
-export function parseRunsFilterState(raw: unknown): RunsFilterState {
-  if (!isObj(raw) || raw.version !== 2) return EMPTY_RUNS_FILTER;
-  return {
-    version: 2,
-    filter: parseFilter(raw.filter),
-    groupBy: Array.isArray(raw.groupBy) ? raw.groupBy.filter(isGroupBy) : [],
-    sort: parseSort(raw.sort),
-    columns: parseColumns(raw.columns),
-    computed: parseComputed(raw.computed),
-  };
-}
-
-export function loadRunsFilter(storage: Storage, projectId: string): RunsFilterState {
-  return parseRunsFilterState(loadJson<unknown>(storage, storageKeys.runsFilter(projectId)));
-}
-
-export function saveRunsFilter(storage: Storage, projectId: string, state: RunsFilterState): void {
-  saveJson(storage, storageKeys.runsFilter(projectId), state);
 }

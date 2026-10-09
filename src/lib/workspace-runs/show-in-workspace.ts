@@ -1,8 +1,7 @@
 /**
- * The runs table's "Show in workspace": write `showOnly` (visibility.ts)
- * into the project's current view, so the workspace opens with exactly the
- * ticked runs visible. `focusGroupInWorkspace`: the workspace filtered to
- * a group (visibility.ts `filterToGroup`), for a group's name outside it.
+ * `focusGroupInWorkspace`: the project's current view filtered to a group
+ * (visibility.ts `filterToGroup`), for a group's name outside the workspace
+ * (`/p/<project>/workspace?group=`).
  */
 
 import { api } from "../../api/client";
@@ -11,7 +10,7 @@ import { ops } from "../workspace/doc";
 import { viewRef } from "../workspace/ref";
 import { fetchWorkspace, flushWorkspace, updateWorkspace } from "../workspace/sync";
 import type { RunState } from "./state";
-import { filterToGroup, showOnly } from "./visibility";
+import { filterToGroup } from "./visibility";
 
 /** Edit the project's current view's run state, given the project's runs (archived too). */
 async function editWorkspaceRuns(projectId: string, fn: (s: RunState, runs: Run[]) => RunState): Promise<void> {
@@ -23,10 +22,6 @@ async function editWorkspaceRuns(projectId: string, fn: (s: RunState, runs: Run[
   await fetchWorkspace(ref, { force: true });
   updateWorkspace(ref, ops.updateRunState((s) => fn(s, runs)));
   await flushWorkspace(ref);
-}
-
-export function showInWorkspace(projectId: string, ticked: ReadonlySet<string>): Promise<void> {
-  return editWorkspaceRuns(projectId, (s, runs) => showOnly(s, runs.filter((r) => !r.archived), ticked));
 }
 
 export function focusGroupInWorkspace(projectId: string, group: string): Promise<void> {

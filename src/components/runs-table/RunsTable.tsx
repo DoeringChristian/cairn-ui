@@ -1,7 +1,8 @@
 /**
  * The runs table itself (`<table>`: header, group header rows, run rows),
- * rendered by the Runs page with every column and a checkbox column, and by
- * the workspace sidebar with the Name column only and an eye column. The
+ * rendered by the Runs page with every column and a leading column of
+ * checkboxes and the workspace's eyes, and by the workspace sidebar with
+ * the Name column only and eyes. The
  * rows come from `useRunsTable`; the frozen left block (lead column, Name,
  * pinned columns) is sticky (pages/runs-table.css, under a `.runs-table`
  * wrapper).
@@ -30,7 +31,22 @@ import {
 
 export type Eye = "on" | "off" | "mixed";
 
-/** The leading column: checkboxes (bulk selection) or eyes (what the workspace's cards draw). */
+/** The workspace's eyes (what its cards draw): per run, per group row, and every listed run. */
+export interface RunsTableEyes {
+  runEye: (run: Run) => boolean;
+  groupEye: (node: RunGroupNode) => Eye;
+  onRun: (run: Run) => void;
+  onGroup: (node: RunGroupNode) => void;
+  /** The header eye: every listed run. */
+  all: Eye;
+  onAll: () => void;
+}
+
+/**
+ * The leading column: checkboxes (bulk selection), with the eyes beside
+ * them (the Runs page), or eyes only (the sidebar: in the Name cell,
+ * indented with the name).
+ */
 export type RunsTableLead =
   | {
       kind: "check";
@@ -41,17 +57,10 @@ export type RunsTableLead =
       onToggleAll: () => void;
       /** A group header's checkbox: selects (or clears) every run beneath it. */
       onToggleGroup: (node: RunGroupNode) => void;
+      /** The workspace's eyes, after each checkbox. */
+      eyes?: RunsTableEyes;
     }
-  | {
-      kind: "eye";
-      runEye: (run: Run) => boolean;
-      groupEye: (node: RunGroupNode) => Eye;
-      onRun: (run: Run) => void;
-      onGroup: (node: RunGroupNode) => void;
-      /** The header eye: every listed run. */
-      all: Eye;
-      onAll: () => void;
-    };
+  | ({ kind: "eye" } & RunsTableEyes);
 
 /** The workspace's hover highlight: which rows are lit, and the row hovered. */
 export interface RunsTableHover {
@@ -110,8 +119,11 @@ interface Props {
 }
 
 const EYE_GLYPH: Record<Eye, string> = { on: "◉", off: "○", mixed: "◐" };
+/** The eye's share of the leading column (beside the checkbox). */
+const EYE_W = 24;
+const LEAD_CELL = "flex items-center gap-1.5";
 
-function EyeButton({ eye, label, onClick }: { eye: Eye; label: string; onClick: () => void }) {
+export function EyeButton({ eye, label, onClick }: { eye: Eye; label: string; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -164,7 +176,8 @@ export default function RunsTable({
   // Checkboxes have their own column; eyes sit in the Name cell, before the dot (or the group's caret),
   // so they indent with the name. Only the header's eye-all stays left of "Name".
   const leadCol = lead.kind === "check";
-  const leadW = leadCol ? CHECK_W : 0;
+  const leadEyes = lead.kind === "check" ? (lead.eyes ?? null) : null;
+  const leadW = leadCol ? CHECK_W + (leadEyes ? EYE_W : 0) : 0;
   const leadStyle = (extra?: CSSProperties): CSSProperties => ({ left: 0, width: leadW, minWidth: leadW, maxWidth: leadW, ...extra });
   const frozen = columns?.frozen ?? ["name"];
   const scroll = columns?.scroll ?? [];
@@ -216,12 +229,15 @@ export default function RunsTable({
   const leadCell = (r: Run) =>
     lead.kind === "check" ? (
       <td className={`frozen ${RUN_CELL_CLASS}`} style={leadStyle(highlightOf(r))}>
-        <input
-          type="checkbox"
-          aria-label={`select run ${runLabel(r)}`}
-          checked={lead.selected.has(r.id)}
-          onChange={(e) => lead.onToggle(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
-        />
+        <span className={LEAD_CELL}>
+          <input
+            type="checkbox"
+            aria-label={`select run ${runLabel(r)}`}
+            checked={lead.selected.has(r.id)}
+            onChange={(e) => lead.onToggle(r.id, (e.nativeEvent as MouseEvent).shiftKey ?? false)}
+          />
+          {leadEyes && <EyeButton eye={leadEyes.runEye(r) ? "on" : "off"} label={runLabel(r)} onClick={() => leadEyes.onRun(r)} />}
+        </span>
       </td>
     ) : null;
 
@@ -286,11 +302,14 @@ export default function RunsTable({
       >
         {lead.kind === "check" && (
           <td className={`frozen ${GROUP_CELL_CLASS}`} style={leadStyle()}>
-            <GroupCheckbox
-              state={groupSelection(node.runs, lead.selected)}
-              label={node.label ?? "(none)"}
-              onChange={() => lead.onToggleGroup(node)}
-            />
+            <span className={LEAD_CELL}>
+              <GroupCheckbox
+                state={groupSelection(node.runs, lead.selected)}
+                label={node.label ?? "(none)"}
+                onChange={() => lead.onToggleGroup(node)}
+              />
+              {leadEyes && <EyeButton eye={leadEyes.groupEye(node)} label={node.label ?? "(none)"} onClick={() => leadEyes.onGroup(node)} />}
+            </span>
           </td>
         )}
         <td
@@ -313,15 +332,18 @@ export default function RunsTable({
         <tr>
           {lead.kind === "check" && (
             <th className={`frozen ${RUNS_TH_CLASS}`} style={leadStyle()}>
-              <input
-                type="checkbox"
-                aria-label="select all visible rows"
-                checked={lead.all === "all"}
-                ref={(el) => {
-                  if (el) el.indeterminate = lead.all === "some";
-                }}
-                onChange={lead.onToggleAll}
-              />
+              <span className={LEAD_CELL}>
+                <input
+                  type="checkbox"
+                  aria-label="select all visible rows"
+                  checked={lead.all === "all"}
+                  ref={(el) => {
+                    if (el) el.indeterminate = lead.all === "some";
+                  }}
+                  onChange={lead.onToggleAll}
+                />
+                {leadEyes && <EyeButton eye={leadEyes.all} label="every listed run" onClick={leadEyes.onAll} />}
+              </span>
             </th>
           )}
           {columns ? (

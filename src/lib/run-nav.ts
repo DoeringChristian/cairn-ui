@@ -17,14 +17,3 @@ export function cameFromWorkspace(state: unknown): boolean {
 /** The project workspace. */
 export const workspacePath = (projectId: string) => `/p/${projectId}/workspace`;
 
-/**
- * Which groups the runs table toggled away from their default (collapsed or
- * expanded), as kept for a page (the workspace sidebar keeps them for the
- * session): only while the group-by they were toggled under is unchanged.
- */
-export function restoredToggles(stored: unknown, groupByKey: string): Set<string> {
-  if (stored == null || typeof stored !== "object") return new Set();
-  const s = stored as { groupBy?: unknown; toggled?: unknown };
-  if (s.groupBy !== groupByKey || !Array.isArray(s.toggled)) return new Set();
-  return new Set(s.toggled.filter((t): t is string => typeof t === "string"));
-}

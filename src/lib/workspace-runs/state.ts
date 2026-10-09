@@ -1,16 +1,19 @@
 /**
- * The workspace's run state (pure): the sidebar's runs table toolbar
- * (status, search, filter, group-by, latest only, sort, as on the Runs
- * page) and its eyes, which pick the runs the cards draw. Stored in the
- * current view's document (lib/workspace/doc.ts `runState`), so it saves
- * like layout edits and switching views switches it too; the run page
- * ignores it.
+ * The workspace view's run state (pure), shared by the workspace sidebar
+ * and the Runs page (wandb: the Runs table belongs to the workspace view):
+ * the runs table toolbar (status, search, filter, group-by, latest only,
+ * sort), the eyes, which pick the runs the cards draw, the groups toggled
+ * open or closed, and the Runs page's column setup (shown, pinned, ordered
+ * columns, widths, computed columns). Stored in the current view's document
+ * (lib/workspace/doc.ts `runState`), so it saves like layout edits and
+ * switching views switches it too; the run page ignores it.
  *
  * Eyes are explicit overrides (visibility.ts): `g:<top-level group>` and
  * `r:<run id>`.
  */
 
 import { EMPTY_FILTER, parseFilter, type GroupNode } from "../run-filter.ts";
+import { parseColumnsState, parseComputedColumns, type ColumnsState, type ComputedColumn } from "../runs-table/columns.ts";
 import { isGroupBy, type GroupBy } from "../runs-table/group.ts";
 import { isStatusFilter, type StatusFilter } from "../runs-table/model.ts";
 import { DEFAULT_SORT, type SortKey } from "../runs-table/sort.ts";
@@ -28,6 +31,16 @@ export interface RunState {
   sort: SortKey[];
   /** Explicit eyes by key (`g:` / `r:`), overriding the default. */
   eyes: Record<string, boolean>;
+  /**
+   * Group rows toggled away from their default (lib/runs-table/model.ts
+   * `firstGroupOpen`: collapsed or expanded), by node id; cleared when the
+   * group-by changes.
+   */
+  toggled: string[];
+  /** The Runs page's columns: order, hidden, pinned, widths. */
+  columns: ColumnsState;
+  /** The Runs page's computed (expression) columns. */
+  computed: ComputedColumn[];
 }
 
 export const DEFAULT_RUN_STATE: RunState = Object.freeze({
@@ -39,6 +52,10 @@ export const DEFAULT_RUN_STATE: RunState = Object.freeze({
   latestOnly: false,
   sort: DEFAULT_SORT,
   eyes: {},
+  toggled: [],
+  // A literal, not `EMPTY_COLUMNS` (lib/expr and run-filter import each other: no top-level use of columns.ts).
+  columns: { order: [], hidden: [], pinned: [], widths: {} },
+  computed: [],
 }) as RunState;
 
 const isObj = (v: unknown): v is Record<string, unknown> => v != null && typeof v === "object" && !Array.isArray(v);
@@ -61,6 +78,9 @@ export function parseRunState(raw: unknown): RunState {
     latestOnly: raw.latestOnly === true,
     sort: sort.length > 0 ? sort : defaults.sort,
     eyes,
+    toggled: Array.isArray(raw.toggled) ? [...new Set(raw.toggled.filter((t): t is string => typeof t === "string"))] : [],
+    columns: parseColumnsState(raw.columns),
+    computed: parseComputedColumns(raw.computed),
   };
 }
 
@@ -69,9 +89,17 @@ export function parseRunState(raw: unknown): RunState {
 export const setStatus = (s: RunState, status: StatusFilter): RunState => ({ ...s, status });
 export const setSearch = (s: RunState, search: string): RunState => ({ ...s, search });
 export const setFilter = (s: RunState, filter: GroupNode): RunState => ({ ...s, filter });
-export const setGroupBy = (s: RunState, groupBy: GroupBy[]): RunState => ({ ...s, groupBy });
+export const setGroupBy = (s: RunState, groupBy: GroupBy[]): RunState => ({ ...s, groupBy, toggled: [] });
 export const setLatestOnly = (s: RunState, latestOnly: boolean): RunState => ({ ...s, latestOnly });
 export const setSort = (s: RunState, sort: SortKey[]): RunState => ({ ...s, sort });
+export const setColumns = (s: RunState, columns: ColumnsState): RunState => ({ ...s, columns });
+export const setComputed = (s: RunState, computed: ComputedColumn[]): RunState => ({ ...s, computed });
+
+/** A group row's open/closed toggled (away from its default, or back). */
+export function toggleGroupOpen(s: RunState, id: string): RunState {
+  const toggled = s.toggled.includes(id) ? s.toggled.filter((t) => t !== id) : [...s.toggled, id];
+  return { ...s, toggled };
+}
 
 /** Explicit eyes for several keys (`on`), or back to their default (`null`). */
 export function setEyes(s: RunState, keys: readonly string[], on: boolean | null): RunState {
