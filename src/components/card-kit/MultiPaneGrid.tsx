@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import SplitPane from "../SplitPane";
 import { LabelledPane } from "./pane-label";
 import { useCompactLayout } from "../../lib/use-media-query";
@@ -51,7 +51,7 @@ export default function MultiPaneGrid({
         widths={paneWidths ?? Array(paneKeys.length).fill(1 / paneKeys.length)}
         onWidthsChange={onPaneWidthsChange}
       >
-        {paneKeys.map((key, i) => renderPane(key, i))}
+        {paneKeys.map((key, i) => <Fragment key={key}>{renderPane(key, i)}</Fragment>)}
       </SplitPane>
     );
   }
