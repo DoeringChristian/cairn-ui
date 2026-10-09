@@ -1,26 +1,32 @@
 /**
  * A stable colour per run, derived from the run id (nothing is stored).
  *
- * The palette is 10 hues, each in a light and a dark shade. Each run hashes
- * (FNV-1a) to a preferred slot. Within one page (`assignPageColors`), runs
- * and group lines are placed oldest first;
- * a run whose hue an older run already took probes onward to a free hue (a
- * second hash picks the stride), so the first 10 lines of a page always get 10
- * different hues. Only then are the second shades used; beyond 20 runs colours
- * repeat. A run keeps its colour everywhere it is not displaced.
+ * The palette is 10 hues, each in a light and a dark shade. The first 8
+ * light hues are the core: mutually far apart (blue, orange, green, red,
+ * purple, brown, pink, olive); cyan and grey come next, then the dark
+ * shades. Each run hashes (FNV-1a) to a preferred core hue. Within one page
+ * (`assignPageColors`), runs and group lines are placed oldest first; a line
+ * whose hue an older line already took probes onward to a free one (a second
+ * hash picks the stride), so the first 8 lines of a page always get the 8
+ * core hues, the next 2 cyan and grey, and only then the dark shades; beyond
+ * 20 lines colours repeat. A run keeps its colour everywhere it is not
+ * displaced.
  */
 
-/** Slot i and slot i + HUES are the same hue (light, then dark). */
+/** Slot i and slot i + HUES are the same hue (light, then dark). Slots 0–7 are the core hues. */
 export const RUN_PALETTE = [
-  "#1f77b4", "#d62728", "#2ca02c", "#ff7f0e", "#9467bd",
-  "#17becf", "#8c564b", "#e377c2", "#bcbd22", "#393b79",
-  "#0b4f8a", "#9e1b1b", "#1b6e1b", "#b35900", "#5e3c99",
-  "#0f7f8a", "#5c3a2e", "#a8457f", "#7d7e10", "#6b6ecf",
+  "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+  "#8c564b", "#e377c2", "#bcbd22", "#17becf", "#7f7f7f",
+  "#0b4f8a", "#b35900", "#1b6e1b", "#9e1b1b", "#5e3c99",
+  "#5c3a2e", "#a8457f", "#7d7e10", "#0f7f8a", "#4d4d4d",
 ] as const;
 
 const HUES = RUN_PALETTE.length / 2;
 
-/** Strides coprime with the number of hues, so a probe visits every hue. */
+/** The core hues: handed out before cyan, grey and the dark shades. */
+const CORE = 8;
+
+/** Strides coprime with 8 (core), 2 (extra hues) and 20 (all slots), so a probe visits every candidate. */
 const STRIDES = [1, 3, 7, 9];
 
 export function fnv1a(s: string): number {
@@ -32,9 +38,9 @@ export function fnv1a(s: string): number {
   return h >>> 0;
 }
 
-/** The run's preferred palette slot. */
+/** The run's preferred palette slot (a core hue). */
 export function runColorSlot(runId: string): number {
-  return fnv1a(runId) % RUN_PALETTE.length;
+  return fnv1a(runId) % CORE;
 }
 
 /** The run's colour when nothing displaces it. */
@@ -50,14 +56,14 @@ interface Entry {
 }
 
 /**
- * The palette handed out in order, oldest first (ties by key): a free hue
- * first (keeping the entry's preferred shade), then any free slot; beyond 20
- * entries colours repeat. Continues over every `take` call, so entries taken
- * later never collide with earlier ones while the palette lasts.
+ * The palette handed out in order, oldest first (ties by key): a free core
+ * hue, then a free extra hue (cyan, grey), then any free slot (the dark
+ * shades); beyond 20 entries colours repeat. Continues over every `take`
+ * call, so entries taken later never collide with earlier ones while the
+ * palette lasts.
  */
 class Assigner {
   private readonly taken = new Set<number>();
-  private readonly hueTaken = new Set<number>();
 
   take(entries: readonly Entry[], out: Map<string, string>): void {
     const n = RUN_PALETTE.length;
@@ -66,22 +72,27 @@ class Assigner {
       const tb = b.time ?? Infinity;
       return ta !== tb ? ta - tb : a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
     });
+    const freeIn = (from: number, to: number) => {
+      for (let s = from; s < to; s++) if (!this.taken.has(s)) return true;
+      return false;
+    };
+    // Probe [from, to) from the preferred position with the entry's stride.
+    const probe = (from: number, to: number, start: number, stride: number) => {
+      const size = to - from;
+      let i = start % size;
+      while (this.taken.has(from + i)) i = (i + stride) % size;
+      return from + i;
+    };
     for (const e of order) {
       if (out.has(e.key)) continue;
-      let slot = runColorSlot(e.seed);
+      const h = runColorSlot(e.seed);
       const stride = STRIDES[fnv1a(`${e.seed}#`) % STRIDES.length]!;
-      if (this.hueTaken.size < HUES) {
-        // A free hue first, keeping the preferred shade.
-        const shade = slot >= HUES ? HUES : 0;
-        let hue = slot % HUES;
-        while (this.hueTaken.has(hue)) hue = (hue + stride) % HUES;
-        slot = shade + hue;
-      } else if (this.taken.size < n) {
-        // All hues used: any free slot.
-        while (this.taken.has(slot)) slot = (slot + stride) % n;
-      }
+      let slot: number;
+      if (freeIn(0, CORE)) slot = probe(0, CORE, h, stride);
+      else if (freeIn(CORE, HUES)) slot = probe(CORE, HUES, h, stride);
+      else if (this.taken.size < n) slot = probe(0, n, h + HUES, stride);
+      else slot = h;
       this.taken.add(slot);
-      this.hueTaken.add(slot % HUES);
       out.set(e.key, RUN_PALETTE[slot]!);
     }
   }

@@ -92,3 +92,11 @@ test("page: a group is placed by its oldest run", () => {
   const p = page([ids[0]!, ids[1]!, ids[2]!], groupOf);
   assert.equal(p.groups.get("L"), runColor("L"));
 });
+
+test("page: the first 8 lines get the 8 core hues (light, far apart), then cyan and grey, then dark shades", () => {
+  const p = page(ids.slice(0, 20));
+  const slot = (id: string) => RUN_PALETTE.indexOf(p.runs.get(id) as (typeof RUN_PALETTE)[number]);
+  assert.deepEqual(ids.slice(0, 8).map(slot).sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(ids.slice(8, 10).map(slot).sort((a, b) => a - b), [8, 9]);
+  for (const id of ids.slice(10, 20)) assert.ok(slot(id) >= 10);
+});
