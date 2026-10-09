@@ -40,15 +40,17 @@ interface Hover {
  * strip as small bars.
  */
 export function HistogramStrips({
-  strips, edges, colormap, logColor, xAxis,
+  strips, edges, colormap, logColor, xAxis, labelled,
 }: {
   strips: Strip[];
+  /** Label every strip (run or group name and colour dot); default: when there are several. */
+  labelled?: boolean;
   edges: number[];
   colormap: Colormap;
   logColor: boolean;
   xAxis: HistogramXAxis;
 }) {
-  const labels = strips.length > 1;
+  const labels = labelled ?? strips.length > 1;
   const scale = logColor ? "log" : "density";
   const zTitle = logColor ? "log₁₀(1+count)" : "density";
   const { data, layout } = useMemo(() => {
@@ -104,7 +106,7 @@ export function HistogramStrips({
         zeroline: false,
         title: n === 1 ? { text: "value" } : undefined,
         tickfont: { size: 10 },
-        nticks: n > 2 ? 3 : 5,
+        nticks: n > 2 ? 4 : 6,
       };
     });
     return { data, layout };
@@ -131,7 +133,8 @@ export function HistogramStrips({
       strip: i,
       tip,
       left: mx + 14 + w > r.width ? Math.max(0, mx - 14 - w) : mx + 14,
-      top: Math.max(0, Math.min(my - 20, r.height - 120)),
+      // Below the cursor, or above it where the tooltip would overflow the plot.
+      top: my + 12 + TIP_H > r.height ? Math.max(0, my - 12 - TIP_H) : my + 12,
     });
   };
 
@@ -151,6 +154,9 @@ export function HistogramStrips({
     </div>
   );
 }
+
+/** The tooltip's height (about), for placing it inside the plot. */
+const TIP_H = 150;
 
 const centre = (edges: readonly number[], b: number) =>
   Number.isFinite(b) && b >= 0 && b < edges.length - 1 ? (edges[b]! + edges[b + 1]!) / 2 : null;

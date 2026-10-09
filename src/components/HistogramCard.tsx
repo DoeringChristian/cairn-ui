@@ -220,11 +220,11 @@ export default function HistogramCard({
 
   const nStrips = strips.strips.length;
   const nSteps = new Set(pointsByRun.flatMap((pts) => pts.map((p) => p.step))).size;
-  const stripsWord = wsGrouping ? "lines" : "runs";
+  const stripsWord = wsGrouping ? (nStrips === 1 ? "line" : "lines") : nStrips === 1 ? "run" : "runs";
   const subtitle = summary
     ? "summary"
     : heatmap
-      ? `${nStrips > 1 ? `${nStrips} ${stripsWord} · ` : ""}${nSteps} step${nSteps === 1 ? "" : "s"}${lists ? ` · index ${index}` : ""}`
+      ? `${series.length > 1 ? `${nStrips} ${stripsWord} · ` : ""}${nSteps} step${nSteps === 1 ? "" : "s"}${lists ? ` · index ${index}` : ""}`
       : nSteps > 0
         ? `step ${currentStep} (${safeIdx + 1}/${nSteps})`
         : `${metric.count} pts`;
@@ -259,6 +259,7 @@ export default function HistogramCard({
                 colormap={settings.colormap}
                 logColor={settings.logY}
                 xAxis={xAxis}
+                labelled={nStrips > 1 || series.length > 1}
               />
             ) : (
               <div className="text-xs text-fg-muted">could not read the histograms</div>
