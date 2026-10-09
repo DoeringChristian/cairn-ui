@@ -34,7 +34,8 @@ export const DEFAULT_RUN_STATE: RunState = Object.freeze({
   status: "all",
   search: "",
   filter: EMPTY_FILTER,
-  groupBy: [{ source: "group" }],
+  // Not grouped, as wandb's default workspace: one line per run.
+  groupBy: [],
   latestOnly: false,
   sort: DEFAULT_SORT,
   eyes: {},

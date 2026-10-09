@@ -45,3 +45,9 @@ test("parseRunState: a stored per-group state (the removed group pages) is ignor
   assert.equal(s.search, "p");
   assert.equal("groups" in s, false);
 });
+
+test("default run state: not grouped (one line per run, as wandb's default workspace); a stored grouping is kept", () => {
+  assert.deepEqual(DEFAULT_RUN_STATE.groupBy, []);
+  assert.deepEqual(parseRunState({}).groupBy, []);
+  assert.deepEqual(parseRunState({ groupBy: [{ source: "group" }] }).groupBy, [{ source: "group" }]);
+});
