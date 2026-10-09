@@ -1,0 +1,1 @@
+import{j as e,H as o,C as i,J as t}from"./index-0uLt5byo.js";function u({ctl:a,ctx:s,mode:n}){return e.jsx(o,{tabs:{values:e.jsx(t,{ctl:a,ctx:s}),display:e.jsx(i,{ctl:a,modes:!0,ctx:s,mode:n,paneKeys:s==null?void 0:s.paneKeys})}})}export{u as default};
