@@ -420,10 +420,11 @@ export default function RunsTablePage() {
           <Link
             to={`/p/${projectId}/r/${r.id}`}
             title={runRowName(r, plainNames) + (r.version != null ? ` v${r.version}` : "")}
-            className={`mono flex min-h-[44px] min-w-0 flex-1 items-center py-2 leading-snug text-accent hover:underline ${hidden ? "opacity-50" : ""}`}
+            className={`mono flex min-h-[44px] min-w-0 flex-1 basis-40 items-center py-2 leading-snug text-accent hover:underline ${hidden ? "opacity-50" : ""}`}
           >
             {/* Never breaks inside a name (`exp-44` must not wrap at the
-                hyphen): one line, truncated, the full name in the title. */}
+                hyphen): one line, truncated, the full name in the title. At
+                least 10rem wide: the eye/pin/badge wrap under it first. */}
             <span className="min-w-0 truncate whitespace-nowrap">{runRowName(r, plainNames)}</span>
             {r.version != null && <span className="ml-1 shrink-0 whitespace-nowrap text-xs text-fg-muted">v{r.version}</span>}
           </Link>
