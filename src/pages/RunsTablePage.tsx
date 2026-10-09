@@ -58,8 +58,7 @@ import {
 import { removeSortKey, toggleSort, type SortKey } from "../lib/runs-table/sort.ts";
 import { deltaOf, formatDelta, goalFor, relativeDelta, toneOf, type Tone } from "../lib/runs-table/delta.ts";
 import type { Goal } from "../lib/metric-rules.ts";
-import { RunViewContext, useRunColors, type RunView } from "../lib/run-view";
-import { groupLineColors } from "../lib/run-color";
+import { RunViewContext, usePageColors, type RunView } from "../lib/run-view";
 import { groupLineLabel, innermostLineOf } from "../lib/runs-table/group.ts";
 import { useProjectRunView } from "../lib/run-view-store";
 import { newId } from "../lib/reports/ids";
@@ -264,8 +263,12 @@ export default function RunsTablePage() {
   const layout = useMemo(() => layoutColumns(available, columns), [available, columns]);
   const shownColumns = useMemo(() => [...layout.frozen, ...layout.scroll], [layout]);
 
-  const colors = useRunColors(useMemo(() => sorted.map((r) => r.id), [sorted]));
-  const groupColors = useMemo(() => groupLineColors(groups ? [...new Set(innermostLineOf(groups).values())] : []), [groups]);
+  const pageColors = usePageColors(
+    useMemo(() => sorted.map((r) => r.id), [sorted]),
+    useMemo(() => (groups ? innermostLineOf(groups) : new Map<string, string>()), [groups]),
+  );
+  const colors = pageColors.runs;
+  const groupColors = pageColors.groups;
 
   // Which way is better per column: the project's metric rules (deltas).
   const ruleOf = useMetricRules(projectId);

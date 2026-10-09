@@ -56,7 +56,7 @@ interface Props {
   colors: ReadonlyMap<string, string>;
   /** Grouped: each drawn run's innermost group line (its line is the group's); null: one line per run. */
   groupOf: ReadonlyMap<string, string> | null;
-  /** The innermost groups' colours (lib/run-color.ts `groupLineColors`). */
+  /** The innermost groups' colours (the page's colours: lib/run-color.ts `assignPageColors`). */
   groupColors: ReadonlyMap<string, string>;
   /** The project run view: its pinned runs (a pin toggle per row); absent: none. */
   runView?: RunViewContextValue;

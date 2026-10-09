@@ -17,7 +17,7 @@ import { createContext } from "react";
 export interface WorkspaceGrouping {
   /** run id → its innermost group line; runs not in it stay their own lines. */
   groupOf: ReadonlyMap<string, string>;
-  /** Each innermost group line's colour (lib/run-color.ts `groupLineColors`). */
+  /** Each innermost group line's colour (the page's colours: lib/run-color.ts `assignPageColors`). */
   colorOf: ReadonlyMap<string, string>;
 }
 

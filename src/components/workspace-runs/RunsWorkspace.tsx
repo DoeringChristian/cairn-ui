@@ -11,7 +11,9 @@
  * (lib/workspace-runs/grouping-context.ts): scalar cards draw one line per
  * innermost group (`group: exp-44, jobType: train`). A run
  * hover store (lib/workspace-runs/hover.ts) links sidebar rows and chart
- * lines. A run opened from the sidebar shows a "← Workspace" link back
+ * lines. The page's colours are assigned once, over the visible runs and
+ * innermost groups together (lib/run-color.ts `assignPageColors`), and
+ * provided to the sidebar and every card (lib/page-colors-context.ts). A run opened from the sidebar shows a "← Workspace" link back
  * (lib/run-nav.ts); the sidebar's collapsed groups and scroll are kept for
  * the session, the run state is the view's.
  */
@@ -27,10 +29,9 @@ import { RunHoverContext, RunHoverStore } from "../../lib/workspace-runs/hover";
 import { cardRuns, resolveVisibility } from "../../lib/workspace-runs/visibility";
 import { filterFieldsOf, type GroupNode } from "../../lib/run-filter";
 import { availableColumns } from "../../lib/runs-table/columns";
-import { innermostLineOf } from "../../lib/runs-table/group";
 import { firstGroupOpen } from "../../lib/runs-table/model";
-import { useRunColors } from "../../lib/run-view";
-import { groupLineColors } from "../../lib/run-color";
+import { usePageColors } from "../../lib/run-view";
+import { PageColorsContext } from "../../lib/page-colors-context";
 import { useProjectRunView } from "../../lib/run-view-store";
 import { FROM_WORKSPACE } from "../../lib/run-nav";
 import { ops } from "../../lib/workspace/doc";
@@ -85,15 +86,12 @@ export default function RunsWorkspace({ wsRef, initialFilter = null }: { wsRef: 
   const cards = useMemo(() => cardRuns(table.sorted, table.groups, visibility.runs), [table.sorted, table.groups, visibility.runs]);
   // Grouped: scalar cards draw one line per innermost group; not grouped: one per run.
   const grouped = state.groupBy.length > 0;
-  const groupColors = useMemo(
-    () => groupLineColors(table.groups ? [...new Set(innermostLineOf(table.groups).values())] : []),
-    [table.groups],
-  );
+  // One colour assignment for the page: the sidebar's dots and every card (lib/page-colors-context.ts).
+  const colors = usePageColors(cards.runIds, cards.groupOf);
   const grouping = useMemo<WorkspaceGrouping | null>(
-    () => (grouped ? { groupOf: cards.groupOf, colorOf: groupColors } : null),
-    [grouped, cards.groupOf, groupColors],
+    () => (grouped ? { groupOf: cards.groupOf, colorOf: colors.groups } : null),
+    [grouped, cards.groupOf, colors.groups],
   );
-  const colors = useRunColors(cards.runIds);
   const [hover] = useState(() => new RunHoverStore());
 
   const edit = useCallback<RunStateEdit>(
@@ -115,6 +113,7 @@ export default function RunsWorkspace({ wsRef, initialFilter = null }: { wsRef: 
 
   return (
     <RunHoverContext.Provider value={hover}>
+      <PageColorsContext.Provider value={colors}>
       <div>
         <div className="mb-3 md:hidden">
           <button type="button" onClick={() => setSidebarOpen((v) => !v)} className="btn text-xs" aria-expanded={sidebarOpen}>
@@ -134,9 +133,9 @@ export default function RunsWorkspace({ wsRef, initialFilter = null }: { wsRef: 
               fields={filterFields}
               paramKeys={paramKeys}
               sortColumns={sortColumns}
-              colors={colors}
+              colors={colors.runs}
               groupOf={grouping ? cards.groupOf : null}
-              groupColors={groupColors}
+              groupColors={colors.groups}
               runView={runView}
               runLinkState={FROM_WORKSPACE}
               runs={runs}
@@ -150,6 +149,7 @@ export default function RunsWorkspace({ wsRef, initialFilter = null }: { wsRef: 
           </main>
         </div>
       </div>
+      </PageColorsContext.Provider>
     </RunHoverContext.Provider>
   );
 }

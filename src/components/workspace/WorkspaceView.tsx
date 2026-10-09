@@ -60,6 +60,8 @@ import { sendCardsToReport } from "../../lib/workspace/send-to-report";
 import { layoutCards } from "../../lib/workspace/layout-cards";
 import { getWorkspace, subscribeWorkspace } from "../../lib/workspace/store";
 import { useWorkspace } from "../../lib/workspace/use-workspace";
+import { PageColorsContext } from "../../lib/page-colors-context";
+import { usePageColors } from "../../lib/run-view";
 
 /** What "+ New section" names a section (made unique: `New section 2`, …). */
 const NEW_SECTION_NAME = "New section";
@@ -95,10 +97,18 @@ export function ViewerGate({ children }: { children: ReactNode }) {
   return <CardMutationContext.Provider value={outer && !viewer}>{children}</CardMutationContext.Provider>;
 }
 
+const NO_RUNS: readonly string[] = [];
+
 export default function WorkspaceView(props: Props) {
+  // The page's colours: the project workspace provides its own (runs + groups);
+  // elsewhere (the run page) they are assigned here over the bound runs.
+  const outer = useContext(PageColorsContext);
+  const own = usePageColors(outer ? NO_RUNS : props.runIds);
   return (
     <ViewerGate>
-      <WorkspaceViewInner {...props} />
+      <PageColorsContext.Provider value={outer ?? own}>
+        <WorkspaceViewInner {...props} />
+      </PageColorsContext.Provider>
     </ViewerGate>
   );
 }

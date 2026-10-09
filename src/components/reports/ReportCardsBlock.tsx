@@ -34,7 +34,8 @@ import { recompileDecision, recompileFailedBlock } from "../../lib/reports/recom
 import { resolveRunSet, runSetColors, unionOfSets, type RunSet } from "../../lib/run-sets";
 import { RunColorByContext, type RunColorByValue } from "../../lib/run-color-by-context";
 import { useRunSetPool } from "../../api/hooks";
-import { EMPTY_RUN_VIEW, RunViewContext, type RunView } from "../../lib/run-view";
+import { EMPTY_RUN_VIEW, RunViewContext, usePageColors, type RunView } from "../../lib/run-view";
+import { PageColorsContext } from "../../lib/page-colors-context";
 import { isEmptyRunView } from "../../lib/run-view-store";
 import { MediaSyncProvider, SectionMediaBar } from "../card-kit/media-sync";
 
@@ -69,6 +70,8 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
   const runIdsKey = runIds.join("|");
 
   // Several sets: each its own colour family (as a colour-by would).
+  // One colour assignment for the cell's cards (lib/page-colors-context.ts).
+  const pageColors = usePageColors(runIds);
   const familyColors = useMemo(() => (resolvedSets ? runSetColors(resolvedSets) : null), [resolvedSets]);
   const colorCtx = useMemo<RunColorByValue | null>(
     () => (familyColors ? { runIds, colorBy: null, colors: familyColors, legend: [], error: null, loading: false } : null),
@@ -239,6 +242,7 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
     <CascadeScopeContext.Provider value="builtin-only">
     <CardSettingsChangeContext.Provider value={readOnly ? undefined : handleSettingsTouched}>
     <RunViewContext.Provider value={runViewCtx}>
+    <PageColorsContext.Provider value={pageColors}>
     <RunColorByContext.Provider value={colorCtx}>
     <div>
       {!readOnly && toolbar(
@@ -340,6 +344,7 @@ export default function ReportCardsBlock({ projectId, reportId, block: parsedBlo
       )}
     </div>
     </RunColorByContext.Provider>
+    </PageColorsContext.Provider>
     </RunViewContext.Provider>
     </CardSettingsChangeContext.Provider>
     </CascadeScopeContext.Provider>

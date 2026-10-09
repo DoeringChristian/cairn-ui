@@ -89,7 +89,7 @@ interface Props {
   latestByName: ReadonlySet<string>;
   /** A run's dot (its own line: not grouped, or under a `(none)`; runs averaged into a group line have none); null: hollow. */
   colorOf: (run: Run) => string | null | undefined;
-  /** The innermost groups' dots: their chart lines' colours (lib/run-color.ts `groupLineColors`). */
+  /** The innermost groups' dots: their chart lines' colours (the page's colours: lib/run-color.ts `assignPageColors`). */
   groupColors: ReadonlyMap<string, string>;
   /** An innermost group drawn in no chart (its dot hollow). */
   groupHidden?: (node: RunGroupNode) => boolean;

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { aggregates, flattenGroups, groupLineLabel, groupRowModel, groupRunsNested, hasGroupLevel, innermostLineOf, type GroupBy } from "./group.ts";
-import { groupLineColors } from "../run-color.ts";
+import { assignPageColors } from "../run-color.ts";
 import { sortBy } from "./sort.ts";
 import { makeRun as run, stats } from "./test-run.ts";
 
@@ -156,7 +156,8 @@ test("innermostLineOf / groupLineLabel: a run's innermost group path (wandb's le
   assert.equal(of.size, 6);
   assert.equal(groupLineLabel([]), "");
   // Every innermost group a colour, distinct while the palette lasts.
-  const colors = groupLineColors([...new Set(of.values())]);
+  const colors = assignPageColors([...of.keys()], of, () => undefined).groups;
+  assert.equal(colors.size, new Set(of.values()).size);
   assert.equal(new Set(colors.values()).size, colors.size);
 });
 
