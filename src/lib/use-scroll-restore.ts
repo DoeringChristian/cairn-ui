@@ -43,19 +43,24 @@ export function useWindowScrollRestore(key: string, ready: boolean): void {
 
   useEffect(() => {
     let raf = 0;
+    let last = window.scrollY;
     const onScroll = () => {
+      last = window.scrollY;
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
-        write(key, window.scrollY);
+        write(key, last);
       });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("scroll", onScroll);
-      if (raf) cancelAnimationFrame(raf);
-      // Final flush so the most recent position is saved.
-      write(key, window.scrollY);
+      // The last position scrolled to: on unmount the page is already the next
+      // one, whose (shorter) height has clamped `window.scrollY`.
+      if (raf) {
+        cancelAnimationFrame(raf);
+        write(key, last);
+      }
     };
   }, [key]);
 }

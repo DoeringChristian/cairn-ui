@@ -1,7 +1,7 @@
 /**
  * Pure core of the runs list's live poll — no React, no react-query.
  *
- * The runs table loads its runs in pages of 100 (an infinite query). While
+ * The runs table loads its runs in pages (an infinite query: 100, then 500). While
  * some of them are running, their values, stats and status must stay live.
  * Refetching every loaded page for that would re-read every run on screen
  * every few seconds, finished runs included. Instead each tick asks for:

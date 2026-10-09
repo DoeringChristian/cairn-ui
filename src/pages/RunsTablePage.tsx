@@ -30,6 +30,9 @@ import RunsTable, { EyeButton } from "../components/runs-table/RunsTable";
 import ViewSwitcher from "../components/workspace/ViewSwitcher";
 import { useWorkspaceMetrics } from "../components/workspace/use-workspace-metrics";
 import { useRunsTable } from "../components/runs-table/use-runs-table";
+import { ROW_INDEX_ATTR, useRowWindow } from "../components/runs-table/use-window";
+import { ROW_OVERSCAN, ROW_WINDOW_MIN } from "../lib/runs-table/window";
+import { useMediaQuery } from "../lib/use-media-query";
 import { firstGroupOpen, needsEveryRun, runRowName, sameGroup, toggleGroupSelection } from "../lib/runs-table/model.ts";
 import { olderInSeries } from "../lib/run-series.ts";
 import RunControls, { RunSwatch } from "../components/RunViewControls";
@@ -429,12 +432,13 @@ export default function RunsTablePage() {
     />
   );
 
-  const renderMobileRun = (r: Run, key: string, depth: number) => {
+  const renderMobileRun = (r: Run, key: string, depth: number, index: number) => {
     const isSelected = selected.has(r.id);
     const hidden = !visible.has(r.id);
     return (
       <li
         key={key}
+        {...{ [ROW_INDEX_ATTR]: index }}
         style={depth > 0 ? { marginLeft: depth * 12 } : undefined}
         className={`rounded-lg border border-border bg-bg-elevated p-3 ${
           isSelected ? "border-accent/50 bg-accent/5" : ""
@@ -568,6 +572,50 @@ export default function RunsTablePage() {
       </span>
     );
   };
+
+  // One of the two renders: the phone list below `md`, the table from `md` up.
+  const wide = useMediaQuery("(min-width: 768px)");
+  const phoneKeys = useMemo(() => rows.map((r) => (r.kind === "group" ? `g:${r.node.id}` : `r:${r.key}`)), [rows]);
+  const phoneRows = useRowWindow({
+    keys: phoneKeys,
+    kindOf: (i) => rows[i]?.kind ?? "run",
+    estimate: (kind) => (kind === "group" ? 40 : 120),
+    enabled: !wide && rows.length > ROW_WINDOW_MIN,
+    overscan: ROW_OVERSCAN,
+    gap: 8,
+  });
+
+  /** A cell's text length, roughly as `renderCell` shows it (a windowed table measures each column's longest cells). */
+  const textLength = useCallback(
+    (r: Run, col: string): number => {
+      const { kind, key } = columnKind(col);
+      if (kind === "builtin") {
+        switch (key) {
+          case "status":
+            return r.status.length + (r.progress ? 5 : 0) + (r.archived ? 9 : 0);
+          case "group":
+            return r.group?.length ?? 0;
+          case "job_type":
+            return r.job_type?.length ?? 0;
+          case "created_at":
+            return formatCreated(r.created_at).length;
+          case "duration":
+            return formatDuration(r.created_at, r.ended_at).length;
+          case "tags":
+            return (safeJsonParse<string[]>(r.tags) ?? []).reduce((n, t) => n + t.length + 3, 1);
+        }
+      }
+      const v = cellValue(r, col, computedValues);
+      let n = formatValue(v, { empty: "" }).length;
+      if (n > 0 && baselineRun && baselineRun.id !== r.id && goalByColumn.has(col)) {
+        const d = deltaOf(v, cellValue(baselineRun, col, computedValues));
+        if (d !== null) n += formatDelta(d).length + 1;
+      }
+      return n;
+    },
+    [computedValues, baselineRun, goalByColumn],
+  );
+  const measureKey = JSON.stringify([sort, computed]);
 
   if (!projectId) return null;
   if (q.isLoading || !wsRef) return <p className="text-fg-muted">Loading…</p>;
@@ -751,10 +799,12 @@ export default function RunsTablePage() {
         <p className="text-fg-muted">No runs match the filters.</p>
       ) : (
         <>
-          <ul className="flex flex-col gap-2 md:hidden">
-            {rows.map((row) =>
+          {!wide && (
+          <ul ref={phoneRows.ref} className="flex flex-col gap-2 md:hidden">
+            {phoneRows.before > 0 && <li aria-hidden="true" style={{ height: phoneRows.before }} />}
+            {rows.slice(phoneRows.start, phoneRows.end).map((row, i) =>
               row.kind === "group" ? (
-                <li key={row.node.id} className="flex items-center gap-1.5" style={{ marginLeft: row.node.depth * 12 }}>
+                <li key={row.node.id} {...{ [ROW_INDEX_ATTR]: phoneRows.start + i }} className="flex items-center gap-1.5" style={{ marginLeft: row.node.depth * 12 }}>
                   <EyeButton eye={eyes.groupEye(row.node)} label={row.node.label ?? "(none)"} onClick={() => eyes.onGroup(row.node)} />
                   <GroupHeader
                     node={row.node}
@@ -765,13 +815,16 @@ export default function RunsTablePage() {
                   />
                 </li>
               ) : (
-                renderMobileRun(row.run, row.key, row.depth)
+                renderMobileRun(row.run, row.key, row.depth, phoneRows.start + i)
               ),
             )}
+            {phoneRows.after > 0 && <li aria-hidden="true" style={{ height: phoneRows.after }} />}
           </ul>
+          )}
           {/* overflow-x-auto, not -hidden: metric and param columns are
               unbounded in number and must stay reachable. The checkbox,
               Name and pinned columns stay frozen on the left. */}
+          {wide && (
           <div className="runs-table hidden overflow-x-auto overflow-y-hidden rounded-lg border border-border md:block">
             <RunsTable
               projectId={projectId}
@@ -799,6 +852,9 @@ export default function RunsTablePage() {
                 scroll: layout.scroll,
                 widthOf,
                 cell: renderCell,
+                textLength,
+                measureRuns: filtered,
+                measureKey,
                 header: (col, frozen, style) => {
                   const sortIdx = sort.findIndex((k) => k.column === col);
                   return (
@@ -838,6 +894,7 @@ export default function RunsTablePage() {
               }}
             />
           </div>
+          )}
         </>
       )}
       <Popover

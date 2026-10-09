@@ -6,13 +6,24 @@
  * rows come from `useRunsTable`; the frozen left block (lead column, Name,
  * pinned columns) is sticky (pages/runs-table.css, under a `.runs-table`
  * wrapper).
+ *
+ * Big tables are windowed (lib/runs-table/window.ts): past `ROW_WINDOW_MIN`
+ * rows only those near the viewport are rendered, and past
+ * `COL_WINDOW_MIN` scrolling columns (the Runs page) only those near the
+ * horizontal viewport, spacers standing in for the rest. A windowed
+ * table's scrolling columns keep the widths the whole table would give
+ * them: a hidden copy of the table with only each column's longest cells
+ * (`ColumnMeasure`) is laid out by the browser and its widths are set on
+ * the real one. Smaller tables render exactly as before.
  */
 
-import type { CSSProperties, ReactNode } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Run } from "../../api/types";
 import { isNumericColumn } from "../../lib/runs-table/columns";
 import { aggregates, groupLineLabel, type RunGroupNode, type TableRow } from "../../lib/runs-table/group";
 import { groupSelection, runRowName } from "../../lib/runs-table/model";
+import { COL_OVERSCAN, COL_WINDOW_MIN, longest, ROW_OVERSCAN, ROW_WINDOW_MIN } from "../../lib/runs-table/window";
+import { ROW_INDEX_ATTR, useColumnWindow, useRowWindow } from "./use-window";
 import {
   CHECK_W,
   DEPTH_INDENT,
@@ -85,6 +96,15 @@ export interface RunsTableColumns {
   header: (col: string, frozen: FrozenProps | null, style: CSSProperties | undefined) => ReactNode;
   /** A cell's content, Name excepted. */
   cell: (run: Run, col: string) => ReactNode;
+  /**
+   * A windowed table's column widths: a cell's text length (its longest
+   * cells are measured), over `measureRuns` (the listed runs: unchanged by
+   * a sort); `measureKey` changes with anything that widens a header (the
+   * sort arrows, labels).
+   */
+  textLength: (run: Run, col: string) => number;
+  measureRuns: readonly Run[];
+  measureKey: string;
 }
 
 interface Props {
@@ -204,6 +224,54 @@ export default function RunsTable({
     return w === undefined ? undefined : { width: w, minWidth: w, maxWidth: w, overflow: "hidden", textOverflow: "ellipsis" };
   };
 
+  // Windowing (big tables only).
+  const tableRef = useRef<HTMLTableElement>(null);
+  const windowRows = rows.length > ROW_WINDOW_MIN;
+  const windowCols = !!columns && scroll.length > COL_WINDOW_MIN;
+  const measured = !!columns && (windowRows || windowCols);
+  const auto = useMeasuredWidths(measured ? columns : undefined, {
+    tableRef,
+    lead: lead.kind === "check" ? leadW : null,
+    frozen,
+    frozenProps,
+    scroll,
+    scrollCellStyle,
+  });
+  /** A windowed table's scrolling column: its set width, else the measured one. */
+  const scrollStyle = (col: string): CSSProperties | undefined => {
+    if (!measured || widthOf(col) !== undefined) return scrollCellStyle(col);
+    const w = auto.get(col) ?? AUTO_WIDTH_FALLBACK;
+    return { width: w, minWidth: w, maxWidth: w };
+  };
+  const scrollKey = scroll.join("\n");
+  const scrollWidths = useMemo(
+    () => (measured ? scroll.map((col) => widthOf(col) ?? auto.get(col) ?? AUTO_WIDTH_FALLBACK) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [measured, scrollKey, auto, columns?.widthOf],
+  );
+  const scroller = useCallback(() => tableRef.current?.parentElement ?? null, []);
+  const cols = useColumnWindow({ widths: scrollWidths, scroller, frozen: frozenTotal, enabled: windowCols, overscan: COL_OVERSCAN });
+  const shownScroll = windowCols ? scroll.slice(cols.start, cols.end) : scroll;
+  const spacerTh = (w: number) => <th aria-hidden="true" style={{ width: w, minWidth: w, maxWidth: w, padding: 0 }} />;
+  const spacerTd = (w: number) => <td aria-hidden="true" style={{ width: w, minWidth: w, maxWidth: w, padding: 0 }} />;
+  const colsBefore = windowCols && cols.before > 0 ? cols.before : 0;
+  const colsAfter = windowCols && cols.after > 0 ? cols.after : 0;
+  const scrollSpan = shownScroll.length + (colsBefore ? 1 : 0) + (colsAfter ? 1 : 0);
+  const rowKeys = useMemo(() => rows.map((r) => (r.kind === "group" ? `g:${r.node.id}` : `r:${r.key}`)), [rows]);
+  const rowWin = useRowWindow({
+    keys: rowKeys,
+    kindOf: (i) => rows[i]?.kind ?? "run",
+    estimate: (kind) => (kind === "group" ? GROUP_ROW_ESTIMATE : RUN_ROW_ESTIMATE),
+    enabled: windowRows,
+    overscan: ROW_OVERSCAN,
+  });
+  const allCols = (lead.kind === "check" ? 1 : 0) + frozen.length + scrollSpan + (columns ? 1 : 0);
+  const spacerRow = (h: number) => (
+    <tr aria-hidden="true">
+      <td colSpan={allCols} style={{ height: h, padding: 0 }} />
+    </tr>
+  );
+
   const nameCell = (r: Run, depth: number, own: boolean) => (
     <RunNameCell
       before={
@@ -241,7 +309,7 @@ export default function RunsTable({
       </td>
     ) : null;
 
-  const runRow = (r: Run, key: string, depth: number, own: boolean) => {
+  const runRow = (r: Run, key: string, depth: number, own: boolean, index: number | undefined) => {
     const isSelected = lead.kind === "check" && lead.selected.has(r.id);
     const rowClass = [
       RUN_ROW_CLASS,
@@ -254,6 +322,7 @@ export default function RunsTable({
         key={key}
         className={rowClass}
         data-run-id={r.id}
+        {...(index === undefined ? {} : { [ROW_INDEX_ATTR]: index })}
         onMouseEnter={hover ? () => hover.onRun(r) : undefined}
         onMouseLeave={hover ? () => hover.onRun(null) : undefined}
       >
@@ -267,17 +336,19 @@ export default function RunsTable({
             </td>
           );
         })}
-        {scroll.map((col) => (
-          <td key={col} className={`px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`} style={scrollCellStyle(col)}>
+        {colsBefore > 0 && spacerTd(colsBefore)}
+        {shownScroll.map((col) => (
+          <td key={col} className={`px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`} style={scrollStyle(col)}>
             {columns!.cell(r, col)}
           </td>
         ))}
+        {colsAfter > 0 && spacerTd(colsAfter)}
         {columns && <td aria-hidden="true" />}
       </tr>
     );
   };
 
-  const groupRow = (node: RunGroupNode) => {
+  const groupRow = (node: RunGroupNode, index: number | undefined) => {
     const eye =
       lead.kind === "eye" ? <EyeButton eye={lead.groupEye(node)} label={node.label ?? "(none)"} onClick={() => lead.onGroup(node)} /> : null;
     const header = (
@@ -297,6 +368,7 @@ export default function RunsTable({
         key={node.id}
         className={`is-group ${hover?.groupHot(node) ? "is-hot" : ""}`}
         data-group={node.label ?? ""}
+        {...(index === undefined ? {} : { [ROW_INDEX_ATTR]: index })}
         onMouseEnter={hover ? () => hover.onGroup(node) : undefined}
         onMouseLeave={hover ? () => hover.onGroup(null) : undefined}
       >
@@ -319,15 +391,16 @@ export default function RunsTable({
         >
           {header}
         </td>
-        {scroll.length > 0 && <td colSpan={scroll.length} className="border-t border-border-subtle bg-bg-elevated" />}
+        {scroll.length > 0 && <td colSpan={scrollSpan} className="border-t border-border-subtle bg-bg-elevated" />}
         {columns && <td className="border-t border-border-subtle bg-bg-elevated" aria-hidden="true" />}
       </tr>
     );
   };
 
-  return (
+  const shownRows = windowRows ? rows.slice(rowWin.start, rowWin.end) : rows;
+  const table = (
     // Name only: fixed layout, so long names truncate instead of widening the table.
-    <table className={`${RUNS_TABLE_CLASS} ${columns ? "" : "table-fixed"}`}>
+    <table ref={tableRef} className={`${RUNS_TABLE_CLASS} ${columns ? "" : "table-fixed"}`}>
       <thead className={RUNS_THEAD_CLASS}>
         <tr>
           {lead.kind === "check" && (
@@ -347,10 +420,12 @@ export default function RunsTable({
             </th>
           )}
           {columns ? (
-            [...frozen, ...scroll].map((col) => {
-              const fi = frozen.indexOf(col);
-              return columns.header(col, fi >= 0 ? frozenProps(fi) : null, fi >= 0 ? undefined : scrollCellStyle(col));
-            })
+            <>
+              {frozen.map((col, fi) => columns.header(col, frozenProps(fi), undefined))}
+              {colsBefore > 0 && spacerTh(colsBefore)}
+              {shownScroll.map((col) => columns.header(col, null, scrollStyle(col)))}
+              {colsAfter > 0 && spacerTh(colsAfter)}
+            </>
           ) : (
             <th className={`${frozenProps(0).className} ${RUNS_TH_CLASS}`} style={frozenProps(0).style}>
               {lead.kind === "eye" ? (
@@ -368,7 +443,186 @@ export default function RunsTable({
           {columns && <th aria-hidden="true" />}
         </tr>
       </thead>
-      <tbody>{rows.map((row) => (row.kind === "group" ? groupRow(row.node) : runRow(row.run, row.key, row.depth, row.own)))}</tbody>
+      <tbody ref={rowWin.ref}>
+        {windowRows && rowWin.before > 0 && spacerRow(rowWin.before)}
+        {shownRows.map((row, i) => {
+          const index = windowRows ? rowWin.start + i : undefined;
+          return row.kind === "group" ? groupRow(row.node, index) : runRow(row.run, row.key, row.depth, row.own, index);
+        })}
+        {windowRows && rowWin.after > 0 && spacerRow(rowWin.after)}
+      </tbody>
     </table>
   );
+  return measured ? (
+    <>
+      {auto.measure}
+      {table}
+    </>
+  ) : (
+    table
+  );
 }
+
+/** A windowed column's width before it is measured (never painted: measured before paint). */
+const AUTO_WIDTH_FALLBACK = 120;
+/** Row heights before any is measured (text-sm rows, px). */
+const RUN_ROW_ESTIMATE = 37;
+const GROUP_ROW_ESTIMATE = 33;
+
+/**
+ * The widths the browser gives a windowed table's scrolling columns that
+ * have no set width: a hidden copy of the table (same width, same frozen
+ * block, every header) with, per column, only its longest cells
+ * (`WIDTH_CANDIDATES`) is laid out, and its header cells' widths read.
+ * Re-measured when the columns, the runs, a header or the table's width
+ * change.
+ */
+function useMeasuredWidths(
+  columns: RunsTableColumns | undefined,
+  {
+    tableRef,
+    lead,
+    frozen,
+    frozenProps,
+    scroll,
+    scrollCellStyle,
+  }: {
+    tableRef: React.RefObject<HTMLTableElement | null>;
+    /** The lead column's width (checkboxes); null: none. */
+    lead: number | null;
+    frozen: string[];
+    frozenProps: (i: number) => FrozenProps;
+    scroll: string[];
+    scrollCellStyle: (col: string) => CSSProperties | undefined;
+  },
+): { get: (col: string) => number | undefined; measure: ReactNode } {
+  const [widths, setWidths] = useState<ReadonlyMap<string, number>>(new Map());
+  const scrollKey = scroll.join("\n");
+  const candidates = useMemo(() => {
+    if (!columns) return null;
+    const out = new Map<string, Run[]>();
+    for (const col of scroll) out.set(col, longest(columns.measureRuns, (r) => columns.textLength(r, col)));
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns?.measureRuns, columns?.textLength, scrollKey, !!columns]);
+  const sizeKey = columns ? [...frozen, ...scroll].map((c) => columns.widthOf(c) ?? "").join(",") : "";
+  const host = useRef<HTMLDivElement>(null);
+  const measure = useMemo(
+    () =>
+      columns && candidates ? (
+        <ColumnMeasure
+          hostRef={host}
+          columns={columns}
+          lead={lead}
+          frozen={frozen}
+          frozenProps={frozenProps}
+          scroll={scroll}
+          scrollCellStyle={scrollCellStyle}
+          candidates={candidates}
+        />
+      ) : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [candidates, lead, frozen.join("\n"), scrollKey, sizeKey, columns?.measureKey],
+  );
+  const read = useCallback(() => {
+    const row = host.current?.querySelector("thead tr");
+    if (!row) return;
+    const first = (lead === null ? 0 : 1) + frozen.length;
+    const next = new Map<string, number>();
+    scroll.forEach((col, j) => {
+      const th = row.children[first + j];
+      if (th) next.set(col, th.getBoundingClientRect().width);
+    });
+    setWidths((prev) => (prev.size === next.size && [...next].every(([c, w]) => prev.get(c) === w) ? prev : next));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead, frozen.join("\n"), scrollKey]);
+  useLayoutEffect(() => {
+    if (measure) read();
+  }, [measure, read]);
+  // The table's width changes how spare width is shared out; fonts change text widths.
+  useLayoutEffect(() => {
+    const scroller = tableRef.current?.parentElement;
+    if (!measure || !scroller) return;
+    let width = scroller.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (scroller.clientWidth !== width) {
+        width = scroller.clientWidth;
+        read();
+      }
+    });
+    ro.observe(scroller);
+    let live = true;
+    void document.fonts?.ready.then(() => live && read());
+    return () => {
+      live = false;
+      ro.disconnect();
+    };
+  }, [!!measure, read, tableRef]);
+  const get = useCallback((col: string) => widths.get(col), [widths]);
+  return { get, measure };
+}
+
+/** The hidden copy `useMeasuredWidths` reads (inert, invisible, no height). */
+const ColumnMeasure = memo(function ColumnMeasure({
+  hostRef,
+  columns,
+  lead,
+  frozen,
+  frozenProps,
+  scroll,
+  scrollCellStyle,
+  candidates,
+}: {
+  hostRef: React.MutableRefObject<HTMLDivElement | null>;
+  columns: RunsTableColumns;
+  lead: number | null;
+  frozen: string[];
+  frozenProps: (i: number) => FrozenProps;
+  scroll: string[];
+  scrollCellStyle: (col: string) => CSSProperties | undefined;
+  candidates: ReadonlyMap<string, Run[]>;
+}) {
+  const depth = Math.max(0, ...[...candidates.values()].map((c) => c.length));
+  const leadStyle = lead === null ? undefined : { width: lead, minWidth: lead, maxWidth: lead };
+  return (
+    <div aria-hidden="true" style={{ position: "relative", height: 0, overflow: "hidden" }}>
+      <div
+        ref={(el) => {
+          hostRef.current = el;
+          el?.setAttribute("inert", "");
+        }}
+        style={{ position: "absolute", top: 0, left: 0, right: 0, visibility: "hidden", pointerEvents: "none" }}
+      >
+        <table className={RUNS_TABLE_CLASS}>
+          <thead className={RUNS_THEAD_CLASS}>
+            <tr>
+              {leadStyle && <th className={RUNS_TH_CLASS} style={leadStyle} />}
+              {frozen.map((col, i) => columns.header(col, frozenProps(i), undefined))}
+              {scroll.map((col) => columns.header(col, null, scrollCellStyle(col)))}
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: depth }, (_, k) => (
+              <tr key={k}>
+                {leadStyle && <td style={leadStyle} />}
+                {frozen.map((col, i) => (
+                  <td key={col} style={frozenProps(i).style} />
+                ))}
+                {scroll.map((col) => {
+                  const run = candidates.get(col)?.[k];
+                  return (
+                    <td key={col} className={`px-3 py-2 ${isNumericColumn(col) ? "mono num" : ""}`} style={scrollCellStyle(col)}>
+                      {run ? columns.cell(run, col) : null}
+                    </td>
+                  );
+                })}
+                <td />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+});

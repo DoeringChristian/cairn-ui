@@ -63,7 +63,9 @@ export function useRuns(params: Parameters<typeof api.runs>[0], { enabled = true
   return q;
 }
 
-const INFINITE_PAGE_SIZE = 100;
+/** The runs table's first page (a quick first paint), then the next pages (the table is windowed, so a big page renders as fast). */
+const INFINITE_FIRST_PAGE = 100;
+const INFINITE_PAGE_SIZE = 500;
 
 export function useInfiniteRuns(params: Omit<RunsQuery, "limit" | "offset">) {
   const qc = useQueryClient();
@@ -71,7 +73,7 @@ export function useInfiniteRuns(params: Omit<RunsQuery, "limit" | "offset">) {
   const q = useInfiniteQuery<RunsListResponse>({
     queryKey: key,
     queryFn: ({ pageParam }) =>
-      api.runs({ ...params, limit: INFINITE_PAGE_SIZE, offset: pageParam as number }),
+      api.runs({ ...params, limit: pageParam === 0 ? INFINITE_FIRST_PAGE : INFINITE_PAGE_SIZE, offset: pageParam as number }),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => {
       const next = lastPage.offset + lastPage.limit;
