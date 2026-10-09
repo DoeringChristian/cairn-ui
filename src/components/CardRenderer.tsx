@@ -343,7 +343,7 @@ function BuiltinSeriesCard(props: SeriesDescriptor) {
     case "video":
       return <VideoPlayerCard {...baseProps} extraSeries={extraSeries} controlledSeries={controlledSeries} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
     case "histogram":
-      return <HistogramCard {...baseProps} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
+      return <HistogramCard {...baseProps} extraSeries={extraSeries} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
     case "tensor":
       return <TensorCard {...baseProps} onRemove={onRemove} settingsKeyOverride={settingsKeyOverride} />;
     case "text":

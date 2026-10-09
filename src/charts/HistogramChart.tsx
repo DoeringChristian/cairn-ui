@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { rebinHistograms, type HistogramData } from "../lib/plot-utils/histogram.ts";
+import type { HistogramData } from "../lib/plot-utils/histogram.ts";
 import { seriesColor } from "../lib/plot-utils/types.ts";
 import { colorscale, type Colormap } from "./colormaps.ts";
 import PlotlyChart, { type PlotlyData, type PlotlyLayout } from "./PlotlyChart.tsx";
@@ -32,38 +32,6 @@ export function HistogramBars({ counts, edges, logY }: HistogramData & { logY: b
     xaxis: { title: { text: "value" } },
     yaxis: { title: { text: "count" }, type: logY ? "log" : "linear" },
   }), [logY]);
-  return <PlotlyChart data={data} layout={layout} />;
-}
-
-/** Histograms over steps: x = step, y = value (rebinned onto one grid), color = count. */
-export function StepHistogramHeatmap({
-  perStep, colormap, logColor,
-}: {
-  perStep: Array<{ step: number } & HistogramData>;
-  colormap: Colormap;
-  logColor: boolean;
-}) {
-  const data = useMemo<PlotlyData>(() => {
-    const { edges, matrix } = rebinHistograms(perStep);
-    const bins = edges.length - 1;
-    const z: number[][] = [];
-    for (let b = 0; b < bins; b++) {
-      z.push(matrix.map((row) => (logColor ? Math.log10(1 + row[b]!) : row[b]!)));
-    }
-    return [{
-      type: "heatmap",
-      x: perStep.map((s) => s.step),
-      y: Array.from({ length: bins }, (_, b) => (edges[b]! + edges[b + 1]!) / 2),
-      z,
-      colorscale: colorscale(colormap),
-      colorbar: colorbar(logColor ? "log₁₀(1+count)" : "count"),
-      hovertemplate: `step %{x}<br>value %{y:.4g}<br>${logColor ? "log₁₀(1+count)" : "count"} %{z:.4g}<extra></extra>`,
-    }];
-  }, [perStep, colormap, logColor]);
-  const layout = useMemo<PlotlyLayout>(() => ({
-    xaxis: { title: { text: "step" } },
-    yaxis: { title: { text: "value" } },
-  }), []);
   return <PlotlyChart data={data} layout={layout} />;
 }
 

@@ -1,5 +1,5 @@
 /** Heatmap colormaps. Plotly.js lacks turbo/magma/plasma, so those carry their stops. */
-export type Colormap = "turbo" | "magma" | "plasma" | "viridis" | "greys";
+export type Colormap = "blues" | "turbo" | "magma" | "plasma" | "viridis" | "greys";
 
 export type Colorscale = string | Array<[number, string]>;
 
@@ -8,6 +8,8 @@ function stops(rgb: Array<[number, number, number]>): Array<[number, string]> {
 }
 
 const COLORSCALES: Record<Colormap, Colorscale> = {
+  // Light grey (low) to blue (high): the histogram heatmap's default, as wandb's.
+  blues: stops([[226, 229, 234], [158, 186, 228], [84, 135, 217], [37, 90, 196], [16, 52, 140]]),
   turbo: stops([
     [48, 18, 59], [69, 92, 207], [62, 155, 254], [24, 215, 202], [70, 248, 132], [164, 252, 60],
     [225, 221, 55], [254, 164, 49], [240, 91, 18], [195, 37, 3], [122, 4, 3],
@@ -22,6 +24,7 @@ const COLORSCALES: Record<Colormap, Colorscale> = {
 };
 
 export const COLORMAP_OPTIONS: Array<{ value: Colormap; label: string }> = [
+  { value: "blues", label: "Blues" },
   { value: "turbo", label: "Turbo" },
   { value: "magma", label: "Magma" },
   { value: "plasma", label: "Plasma" },

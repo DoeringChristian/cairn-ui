@@ -120,7 +120,7 @@ const INDEX_OPTIONS = [
 ] as const satisfies ReadonlyArray<{ value: IndexMode; label: string }>;
 
 /** Which items of each logged list the card shows. Cards with lists only (the indices are the card's). */
-function IndexControls({ ctl }: { ctl: SettingsController<MediaLayoutSettings> }) {
+export function IndexControls({ ctl }: { ctl: SettingsController<MediaLayoutSettings> }) {
   const m = ctl.value.indexMode;
   return (
     <>
