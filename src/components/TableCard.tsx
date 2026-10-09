@@ -16,7 +16,7 @@ import StepSlider from "./StepSlider";
 import { computeTableDiff, type CellComparison } from "../lib/table-diff";
 import type { TableData } from "../lib/table/types";
 import { applyTableOps, type TableOpsResult } from "../lib/table/pipeline";
-import { concatTables, defaultJoinKey, joinTables, suffixedPairs } from "../lib/table/combine";
+import { concatTables, defaultJoinKey, joinTables, rowsParts, suffixedPairs } from "../lib/table/combine";
 import { alignReference } from "../lib/table/text-diff";
 import DataTable from "./table/DataTable";
 import { tableBlobQuery } from "./viewers/TableViewer";
@@ -204,6 +204,15 @@ export default function TableCard({
     const parts = fetchList.map((_, i) => one(i));
     // Rows of one series: its table as is.
     if (combine.mode === "panes" || (combine.mode === "rows" && parts.length <= 1)) return parts;
+    if (combine.mode === "rows") {
+      // Rows of several runs: the runs that logged a table at the step, stacked.
+      const pick = rowsParts(parts.map((p) => p.status));
+      if (pick.kind === "show") return [parts[pick.index]!];
+      if (pick.kind === "none") return [{ status: "empty", message: `no table logged at step ${currentStep}` }];
+      const okTables = pick.indices.map((i) => (parts[i] as Extract<Raw, { status: "ok" }>).table);
+      const table = concatTables(okTables, { labels: pick.indices.map((i) => fetchList[i]!.label), sourceColumn: RUN_COLUMN });
+      return [{ status: "ok", table }];
+    }
     const notOk = parts.find((p) => p.status === "loading") ?? parts.find((p) => p.status !== "ok");
     if (notOk) return [notOk];
     const tables = parts.map((p) => (p as Extract<Raw, { status: "ok" }>).table);
@@ -211,9 +220,7 @@ export default function TableCard({
     if (combine.mode === "join" && tables.length < 2) return [{ status: "empty", message: "a join needs two sources" }];
     try {
       const table =
-        combine.mode === "rows"
-          ? concatTables(tables, { labels: fetchList.map((f) => f.label), sourceColumn: RUN_COLUMN })
-          : combine.mode === "concat"
+        combine.mode === "concat"
           ? concatTables(tables, { labels: fetchList.map((f) => f.label) })
           : joinTables(tables[0]!, tables[1]!, { on: combine.on, how: combine.how });
       return [{ status: "ok", table }];
@@ -221,7 +228,7 @@ export default function TableCard({
       return [{ status: "error", message: e instanceof Error ? e.message : String(e) }];
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [combine.mode, combine.on, combine.how, fetchList, blobKey, seqLoading]);
+  }, [combine.mode, combine.on, combine.how, fetchList, blobKey, seqLoading, currentStep]);
 
   const shown = useMemo<Shown[]>(
     () => raw.map((r) => (r.status === "ok" ? { ...r, result: applyTableOps(r.table, ops) } : r)),

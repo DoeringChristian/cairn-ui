@@ -38,6 +38,23 @@ function freeName(name: string, taken: Set<string>, suffix = "_"): string {
   return out;
 }
 
+export type PartStatus = "loading" | "empty" | "error" | "ok";
+
+/**
+ * Which per-run tables the "Rows" mode stacks: every run that logged one
+ * (`concat`, their indices). A run without a table at the step is left out,
+ * as the line plot leaves out a run without the metric. While one is loading,
+ * or one failed, that part shows (`show`); no run with a table is `none`.
+ */
+export function rowsParts(statuses: readonly PartStatus[]): { kind: "show"; index: number } | { kind: "concat"; indices: number[] } | { kind: "none" } {
+  const loading = statuses.indexOf("loading");
+  if (loading >= 0) return { kind: "show", index: loading };
+  const error = statuses.indexOf("error");
+  if (error >= 0) return { kind: "show", index: error };
+  const indices = statuses.flatMap((s, i) => (s === "ok" ? [i] : []));
+  return indices.length > 0 ? { kind: "concat", indices } : { kind: "none" };
+}
+
 /**
  * Stack tables row-wise. Columns are unioned by name in first-seen order; a
  * table without a column gets null there. With `labels`, a leading column

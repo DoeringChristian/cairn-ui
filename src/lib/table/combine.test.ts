@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { concatTables, defaultJoinKey, joinTables, suffixedPairs } from "./combine.ts";
+import { concatTables, defaultJoinKey, joinTables, rowsParts, suffixedPairs } from "./combine.ts";
 import type { TableData } from "./types.ts";
 
 const img = (h: string) => ({ $media: { hash: h, mime_type: "image/png" } });
@@ -104,4 +104,11 @@ test("a suffixed name that is already taken is made free", () => {
 test("suffixedPairs finds joined twins", () => {
   const j = joinTables(L, R);
   assert.deepEqual(suffixedPairs(j), [[2, 3]]);
+});
+
+test("rowsParts: runs without a table at the step are left out of Rows", () => {
+  assert.deepEqual(rowsParts(["empty", "ok", "empty", "ok"]), { kind: "concat", indices: [1, 3] });
+  assert.deepEqual(rowsParts(["empty", "empty"]), { kind: "none" });
+  assert.deepEqual(rowsParts(["ok", "loading", "empty"]), { kind: "show", index: 1 });
+  assert.deepEqual(rowsParts(["ok", "error"]), { kind: "show", index: 1 });
 });
