@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 interface Props {
   /** The committed query (an expression over the table's columns; see lib/table/pipeline.ts). */
@@ -12,6 +12,8 @@ interface Props {
   /** Column names, offered as completions. */
   columns?: readonly string[];
   disabled?: boolean;
+  /** Controls after the row count (the table card's Columns and Reset). */
+  trailing?: ReactNode;
 }
 
 /**
@@ -19,7 +21,7 @@ interface Props {
  * `score > 0.5 and label == 'cat'`. Commits on Enter or blur; Escape
  * reverts the draft.
  */
-export default function QueryBar({ value, onChange, error, shown, total, columns = [], disabled }: Props) {
+export default function QueryBar({ value, onChange, error, shown, total, columns = [], disabled, trailing }: Props) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   const commit = () => {
@@ -69,6 +71,7 @@ export default function QueryBar({ value, onChange, error, shown, total, columns
           {shown}
           {shown !== total ? `/${total}` : ""} rows
         </span>
+        {trailing}
       </div>
       {error && <div className="mono mt-1 truncate text-[11px] text-status-failed" title={error}>{error}</div>}
     </div>

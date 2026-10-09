@@ -14,13 +14,15 @@ import CardShell from "./CardShell";
 import SeriesChipStrip from "./SeriesChipStrip";
 import StepSlider from "./StepSlider";
 import { computeTableDiff, type CellComparison } from "../lib/table-diff";
-import { cellText, type TableData } from "../lib/table/types";
+import type { TableData } from "../lib/table/types";
 import { applyTableOps, type TableOpsResult } from "../lib/table/pipeline";
 import { concatTables, defaultJoinKey, joinTables, suffixedPairs } from "../lib/table/combine";
 import { alignReference } from "../lib/table/text-diff";
 import DataTable from "./table/DataTable";
 import { tableBlobQuery } from "./viewers/TableViewer";
 import QueryBar from "./table/QueryBar";
+import ColumnsPicker from "./table/ColumnsPicker";
+import { shownCsv, sortRows, visibleColumns } from "../lib/table/view";
 import TableSettingsPanel, { type TablePanelCtx } from "./settings-panels/TableSettingsPanel";
 
 // The grid is intentionally hand-rolled — no grid dependency.
@@ -42,6 +44,9 @@ interface Series {
 
 const skey = (s: Series) => `${s.runId}::${s.name}`;
 
+/** The leading column naming each row's run when several runs' tables show as rows. */
+const RUN_COLUMN = "run";
+
 /**
  * The parsed `table` blobs of `hashes`, cached by artifact hash (immutable
  * content, so never stale).
@@ -55,12 +60,6 @@ function useTableBlobs(hashes: Array<string | null | undefined>) {
       placeholderData: keepPreviousData,
     })),
   });
-}
-
-/** CSV-friendly cell (string | number) for downloadCsv; a media cell is its hash. */
-function csvCell(v: unknown): string | number {
-  if (typeof v === "number") return v;
-  return cellText(v);
 }
 
 const SKELETON = <div className="h-48 motion-safe:animate-pulse rounded bg-bg-hover" />;
@@ -132,7 +131,7 @@ export default function TableCard({
 
   // Combine sources (none set = every series at the slider's step).
   const combineSources = useMemo<TableCombineSource[]>(() => {
-    if (combine.mode === "none") return [];
+    if (combine.mode === "rows" || combine.mode === "panes") return [];
     const all = combine.sources.length > 0 ? combine.sources : series.map((s) => ({ ...s, step: "slider" as const }));
     return combine.mode === "join" ? all.slice(0, 2) : all;
   }, [combine.mode, combine.sources, series]);
@@ -174,16 +173,17 @@ export default function TableCard({
   // What to fetch: one table per pane, or one per combine source (a fixed
   // step resolves as-of that step; the slider's also falls forward to a
   // run's first table).
+  const byPane = combine.mode === "rows" || combine.mode === "panes";
   const fetchList = useMemo(() => {
     const list: TableCombineSource[] =
-      combine.mode === "none" ? series.map((s) => ({ ...s, step: "slider" })) : combineSources;
+      byPane ? series.map((s) => ({ ...s, step: "slider" })) : combineSources;
     return list.map((s) => {
       const step = s.step === "slider" ? currentStep : s.step;
       const point = resolveAtStep(pointsByKey.get(skey(s)) ?? [], step, { nearest: s.step === "slider" });
       const label = labelOf(s) + (s.step === "slider" ? "" : ` @ ${s.step}`);
       return { series: s, step, hash: point?.artifact_hash ?? null, label, color: runColors.get(s.runId) };
     });
-  }, [combine.mode, series, combineSources, currentStep, pointsByKey, labelOf, runColors]);
+  }, [byPane, series, combineSources, currentStep, pointsByKey, labelOf, runColors]);
   const blobQueries = useTableBlobs(fetchList.map((f) => f.hash));
   const blobKey = blobQueries.map((q) => `${q.dataUpdatedAt}:${q.status}`).join("|");
 
@@ -195,14 +195,15 @@ export default function TableCard({
       if (!f.hash) {
         return seqLoading
           ? { status: "loading" }
-          : { status: "empty", message: `no table logged${combine.mode === "none" ? "" : ` for ${f.label}`} at step ${f.step}` };
+          : { status: "empty", message: `no table logged${fetchList.length > 1 ? ` for ${f.label}` : ""} at step ${f.step}` };
       }
       if (!q || q.isLoading) return { status: "loading" };
       if (q.isError || !q.data) return { status: "error", message: "failed to load table" };
       return { status: "ok", table: q.data };
     };
     const parts = fetchList.map((_, i) => one(i));
-    if (combine.mode === "none") return parts;
+    // Rows of one series: its table as is.
+    if (combine.mode === "panes" || (combine.mode === "rows" && parts.length <= 1)) return parts;
     const notOk = parts.find((p) => p.status === "loading") ?? parts.find((p) => p.status !== "ok");
     if (notOk) return [notOk];
     const tables = parts.map((p) => (p as Extract<Raw, { status: "ok" }>).table);
@@ -210,7 +211,9 @@ export default function TableCard({
     if (combine.mode === "join" && tables.length < 2) return [{ status: "empty", message: "a join needs two sources" }];
     try {
       const table =
-        combine.mode === "concat"
+        combine.mode === "rows"
+          ? concatTables(tables, { labels: fetchList.map((f) => f.label), sourceColumn: RUN_COLUMN })
+          : combine.mode === "concat"
           ? concatTables(tables, { labels: fetchList.map((f) => f.label) })
           : joinTables(tables[0]!, tables[1]!, { on: combine.on, how: combine.how });
       return [{ status: "ok", table }];
@@ -225,7 +228,15 @@ export default function TableCard({
     [raw, ops],
   );
 
-  const isMulti = combine.mode === "none" && series.length > 1;
+  const isMulti = combine.mode === "panes" && series.length > 1;
+  // Rows of several runs: the run column's colours (label → run colour).
+  const runColumn = useMemo(
+    () =>
+      combine.mode === "rows" && fetchList.length > 1
+        ? { name: RUN_COLUMN, colors: new Map(fetchList.map((f) => [f.label, f.color ?? ""])) }
+        : undefined,
+    [combine.mode, fetchList],
+  );
   const firstOk = shown.find((l): l is Extract<Shown, { status: "ok" }> => l.status === "ok");
   const first = firstOk?.result;
 
@@ -280,15 +291,21 @@ export default function TableCard({
     return dims;
   }, [first, metric.count, globalSteps.length, currentStep, safeIdx, summary]);
 
+  // Export: what the (first) table shows — its columns in order, every row sorted (all pages).
   const downloadCurrentCsv = () => {
     if (!first) return;
     const table = first.table;
-    downloadCsv(
-      table.columns.map((c) => c.name),
-      table.data.map((row) => row.map(csvCell)),
-      `${safeName(metric.name)}_step${currentStep}.csv`,
-    );
+    const csv = shownCsv(table, sortRows(table, settings.sort ?? null), visibleColumns(table, settings.columnOrder, settings.hiddenColumns));
+    downloadCsv(csv.header, csv.rows, `${safeName(metric.name)}_step${currentStep}.csv`);
   };
+
+  // wandb's "Reset table": the filter, sort, columns and page size back to the defaults.
+  const resetTable = () => {
+    ctl.set({ ops: { ...ops, query: undefined } });
+    for (const k of ["sort", "hiddenColumns", "columnOrder", "rowsPerPage"] as const) ctl.reset(k);
+  };
+  const tableTouched =
+    !!ops.query || !!settings.sort || settings.hiddenColumns.length > 0 || settings.columnOrder.length > 0 || ctl.isOverridden("rowsPerPage");
 
   // Row counts for the query bar (before group-by), across panes.
   const rowCounts = useMemo(() => {
@@ -336,7 +353,12 @@ export default function TableCard({
       <DataTable
         table={l.result.table}
         rowsPerPage={settings.rowsPerPage}
+        onRowsPerPageChange={ctl.locked ? undefined : (n) => ctl.set({ rowsPerPage: n })}
         hiddenColumns={settings.hiddenColumns}
+        columnOrder={settings.columnOrder}
+        sort={settings.sort ?? null}
+        onSortChange={(sort) => ctl.set({ sort: sort ?? undefined })}
+        runColumn={runColumn}
         diffStatuses={paneDiffStatuses[i]}
         invertDiff={invertDiffColors}
         textRefs={paneTextRefs[i]}
@@ -360,6 +382,27 @@ export default function TableCard({
         shown={rowCounts.after}
         total={rowCounts.total}
         columns={panelCtx.inputColumns}
+        trailing={
+          <>
+            <ColumnsPicker
+              names={panelCtx.outputColumns}
+              hidden={settings.hiddenColumns}
+              order={settings.columnOrder}
+              onChange={(patch) => ctl.set(patch)}
+              disabled={ctl.locked}
+            />
+            <button
+              type="button"
+              className="inline-flex h-6 shrink-0 items-center gap-1 rounded border border-border bg-bg px-2 text-[11px] text-fg-muted hover:border-accent hover:text-fg disabled:opacity-40"
+              disabled={ctl.locked || !tableTouched}
+              onClick={resetTable}
+              title="Reset the filter, sort, columns and page size"
+            >
+              <i className="fa-solid fa-rotate-left text-[10px]" aria-hidden="true" />
+              Reset
+            </button>
+          </>
+        }
       />
       {opsError && <div className="mono mb-1 truncate text-[11px] text-status-failed" title={opsError}>{opsError}</div>}
     </>
@@ -377,11 +420,11 @@ export default function TableCard({
   );
 
   const renderContent = (inModal: boolean) => {
-    if (series.length === 0 && combine.mode === "none") {
+    if (series.length === 0 && byPane) {
       return <div className="text-sm text-fg-muted">every run of this card is hidden</div>;
     }
     if (!isMulti) {
-      const legend = combine.mode !== "none" && (
+      const legend = (combine.mode === "concat" || combine.mode === "join") && (
         <div className="flex flex-wrap gap-x-3">
           {fetchList.map((f, i) => (
             <PaneLabel
@@ -398,6 +441,15 @@ export default function TableCard({
           {legend}
           <div className="flex-1 min-h-0">{renderTable(shown[0], 0)}</div>
           {slider}
+          {runColumn && (
+            <SeriesChipStrip
+              metrics={effectiveMetrics}
+              controlledSeries={controlledSeries}
+              runId={runId}
+              allRunIds={allRunIds}
+              onMetricsChange={(next) => ctl.set({ metrics: next })}
+            />
+          )}
         </>
       );
     }

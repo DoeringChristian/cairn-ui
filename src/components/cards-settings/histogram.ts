@@ -1,7 +1,7 @@
 import type { BaseCardSettings } from "../card-kit/base-settings";
 import type { Colormap } from "../../charts/colormaps";
 import type { CardSettingsMeta } from "./meta";
-import { mediaIndexBuiltin, type MediaIndexSettings } from "./media";
+import { mediaIndexBuiltin, type MediaIndexSettings } from "./media.ts";
 
 export interface HistogramSettings extends BaseCardSettings, MediaIndexSettings {
   /**
@@ -14,7 +14,7 @@ export interface HistogramSettings extends BaseCardSettings, MediaIndexSettings 
   colormap: Colormap;
   sliderStep?: number;
   /** The heatmap's x axis, and the slider's labels. */
-  xAxis?: "step" | "relative_time" | "wall_time";
+  xAxis: "step" | "relative_time" | "wall_time";
 }
 
 export const builtin: HistogramSettings = {
@@ -23,6 +23,7 @@ export const builtin: HistogramSettings = {
   viewMode: "heatmap",
   logY: false,
   colormap: "blues",
+  xAxis: "step",
 };
 
 export function instanceDefaults(_seed: { name: string }): Partial<HistogramSettings> {

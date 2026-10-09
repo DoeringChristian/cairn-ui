@@ -4,13 +4,23 @@ import { formatNum } from "../../lib/plot-utils/format";
 import { mediaOf } from "../../lib/table-media";
 import { cellText, type TableData } from "../../lib/table/types";
 import { isTextCell, type TextDiffMode } from "../../lib/table/text-diff";
+import { nextSort, pageOf, pageSizeOptions, sortRows, visibleColumns, type TableSort } from "../../lib/table/view";
 import MediaCellView from "./MediaCellView";
 import TextDiffCell from "./TextDiffCell";
 
 interface Props {
   table: TableData;
   rowsPerPage: number;
+  /** A new page size from the footer; none: no page size picker. */
+  onRowsPerPageChange?: (n: number) => void;
   hiddenColumns: string[];
+  /** Column display order (see lib/table/view.ts `orderedColumns`). */
+  columnOrder?: string[];
+  /** The sort (by a header click); `onSortChange` makes it the card's, else it is local. */
+  sort?: TableSort;
+  onSortChange?: (sort: TableSort) => void;
+  /** A column naming each row's run: its cells get the run's colour dot. */
+  runColumn?: { name: string; colors: ReadonlyMap<string, string> };
   /** [rowIdx][colIdx] status, same row/col order as `table`. No diff coloring when omitted. */
   diffStatuses?: CellComparison[][];
   invertDiff?: boolean;
@@ -22,8 +32,6 @@ interface Props {
   textDiffMode?: TextDiffMode;
 }
 
-type Sort = { column: string; direction: "asc" | "desc" } | null;
-
 /** Displayed text: non-integer numbers are shortened; integers stay exact. */
 function cellDisplay(v: unknown): string {
   if (typeof v === "number" && !Number.isInteger(v)) return formatNum(v);
@@ -33,51 +41,38 @@ function cellDisplay(v: unknown): string {
 /**
  * Display of one (already processed) table: sortable, paginated, with a
  * sticky header. Filtering and every other operation happen upstream
- * (lib/table/pipeline.ts, `QueryBar`); sort and page are local state.
+ * (lib/table/pipeline.ts, `QueryBar`); the sort is the card's (or local), the page local.
  */
 export default function DataTable({
   table,
   rowsPerPage,
+  onRowsPerPageChange,
   hiddenColumns,
+  columnOrder,
+  sort: sortProp,
+  onSortChange,
+  runColumn,
   diffStatuses,
   invertDiff = false,
   textRefs,
   textDiffMode = "words",
 }: Props) {
-  const [sort, setSort] = useState<Sort>(null);
+  const [localSort, setLocalSort] = useState<TableSort>(null);
+  const sort = onSortChange ? (sortProp ?? null) : localSort;
+  const setSort = onSortChange ?? setLocalSort;
   const [page, setPage] = useState(0);
 
   const columns = table.columns ?? [];
   const rows = table.data ?? [];
 
   const visibleCols = useMemo(
-    () => columns.map((_, i) => i).filter((i) => !hiddenColumns.includes(columns[i]!.name)),
-    [columns, hiddenColumns],
+    () => visibleColumns(table, columnOrder ?? [], hiddenColumns),
+    [table, columnOrder, hiddenColumns],
   );
 
   // Original row indices travel through sort/page so diff colors (keyed by
   // original index) stay on their row.
-  const all = useMemo(() => rows.map((_, i) => i), [rows]);
-
-  const sorted = useMemo(() => {
-    if (!sort) return all;
-    const col = columns.findIndex((column) => column.name === sort.column);
-    if (col < 0) return all;
-    const numeric = columns[col]!.type === "number";
-    const factor = sort.direction === "asc" ? 1 : -1;
-    return all.slice().sort((ia, ib) => {
-      const a = rows[ia]![col];
-      const b = rows[ib]![col];
-      // Nulls sort last in either direction.
-      const aNull = a === null || a === undefined;
-      const bNull = b === null || b === undefined;
-      if (aNull && bNull) return 0;
-      if (aNull) return 1;
-      if (bNull) return -1;
-      if (numeric) return (Number(a) - Number(b)) * factor;
-      return cellText(a).localeCompare(cellText(b), undefined, { sensitivity: "base", numeric: true }) * factor;
-    });
-  }, [all, sort, columns, rows]);
+  const sorted = useMemo(() => sortRows(table, sort), [table, sort]);
 
   // `table-layout: fixed` + a <colgroup> give header and body one width per
   // column, so the sticky header never drifts. Widths are hinted from the
@@ -95,15 +90,12 @@ export default function DataTable({
     return hints.map((w) => (w / total) * 100);
   }, [visibleCols, columns, rows]);
 
-  const perPage = Math.max(1, rowsPerPage);
-  const pageCount = Math.max(1, Math.ceil(sorted.length / perPage));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageRows = sorted.slice(safePage * perPage, safePage * perPage + perPage);
+  const pg = pageOf(sorted.length, page, rowsPerPage);
+  const pageRows = sorted.slice(pg.from, pg.to);
+  const runCol = runColumn ? columns.findIndex((c) => c.name === runColumn.name) : -1;
 
   const toggleSort = (column: string) => {
-    setSort(!sort || sort.column !== column
-      ? { column, direction: "asc" }
-      : sort.direction === "asc" ? { column, direction: "desc" } : null);
+    setSort(nextSort(sort, column));
     setPage(0);
   };
 
@@ -161,7 +153,12 @@ export default function DataTable({
                         title={textDiff ? `${ref}\n→\n${cellText(row[c])}` : cellText(row[c])}
                         className={`${textDiff ? "whitespace-pre-wrap break-words" : "truncate"} border-b border-border px-2 py-1 text-fg ${align} ${status ? diffCellClassName(status, invertDiff) : ""}`}
                       >
-                        {media ? (
+                        {c === runCol && runColumn ? (
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ background: runColumn.colors.get(cellText(row[c])) }} />
+                            <span className="truncate">{cellText(row[c])}</span>
+                          </span>
+                        ) : media ? (
                           <MediaCellView media={media} />
                         ) : textDiff ? (
                           <TextDiffCell before={ref} after={row[c]} mode={textDiffMode} />
@@ -187,27 +184,43 @@ export default function DataTable({
         <div className="mono mt-1 text-[10px] text-fg-subtle">table truncated to first 10,000 rows at log time</div>
       )}
 
-      {pageCount > 1 && (
-        <div className="mono mt-2 flex items-center justify-center gap-3 text-xs text-fg-muted">
-          <button
-            type="button"
-            className="rounded px-2 py-0.5 hover:bg-bg-hover disabled:opacity-40"
-            disabled={safePage <= 0}
-            onClick={() => setPage(safePage - 1)}
-          >
-            {"← prev"}
-          </button>
-          <span>{safePage + 1} / {pageCount}</span>
-          <button
-            type="button"
-            className="rounded px-2 py-0.5 hover:bg-bg-hover disabled:opacity-40"
-            disabled={safePage >= pageCount - 1}
-            onClick={() => setPage(safePage + 1)}
-          >
-            {"next →"}
-          </button>
-        </div>
-      )}
+      <div className="mono mt-1.5 flex items-center justify-end gap-2 text-[11px] text-fg-muted" data-table-pager>
+        {onRowsPerPageChange && (
+          <label className="inline-flex items-center gap-1">
+            <span>Rows</span>
+            <select
+              aria-label="Rows per page"
+              className="input py-0 text-[11px]"
+              value={rowsPerPage}
+              onChange={(e) => {
+                onRowsPerPageChange(Number(e.target.value));
+                setPage(0);
+              }}
+            >
+              {pageSizeOptions(rowsPerPage).map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+        )}
+        <span className="tabular-nums">{pg.label}</span>
+        <button
+          type="button"
+          aria-label="Previous page"
+          className="rounded px-1.5 py-0.5 hover:bg-bg-hover disabled:opacity-40"
+          disabled={pg.page <= 0}
+          onClick={() => setPage(pg.page - 1)}
+        >
+          <i className="fa-solid fa-chevron-left text-[9px]" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          aria-label="Next page"
+          className="rounded px-1.5 py-0.5 hover:bg-bg-hover disabled:opacity-40"
+          disabled={pg.page >= pg.pages - 1}
+          onClick={() => setPage(pg.page + 1)}
+        >
+          <i className="fa-solid fa-chevron-right text-[9px]" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   );
 }

@@ -99,8 +99,10 @@ function CombineEditor({ ctl, ctx }: { ctl: SettingsController<TableSettings>; c
       <Segmented
         label="Tables"
         description={
-          combine.mode === "none"
-            ? "One pane per series."
+          combine.mode === "rows"
+            ? "One table: every run's rows, a run column says whose."
+            : combine.mode === "panes"
+            ? "One pane per series, side by side."
             : combine.mode === "concat"
               ? "Stacked into one table; a source column says where each row came from."
               : "The first two sources joined on a key column; clashing columns get _1 / _2."
@@ -111,12 +113,13 @@ function CombineEditor({ ctl, ctx }: { ctl: SettingsController<TableSettings>; c
         onReset={() => ctl.reset("combine")}
         disabled={disabled}
         options={[
-          { value: "none", label: "Panes" },
+          { value: "rows", label: "Rows" },
+          { value: "panes", label: "Panes" },
           { value: "concat", label: "Concat" },
           { value: "join", label: "Join" },
         ]}
       />
-      {combine.mode !== "none" && (
+      {(combine.mode === "concat" || combine.mode === "join") && (
         <>
           {shown.map((s, i) => {
             const opt = byKey.get(sourceKey(s));

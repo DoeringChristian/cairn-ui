@@ -4,6 +4,7 @@ import type { CardSettingsMeta } from "./meta";
 import type { JoinHow } from "../../lib/table/combine.ts";
 import type { TableOps } from "../../lib/table/pipeline.ts";
 import type { TextDiffMode } from "../../lib/table/text-diff.ts";
+import type { TableSort } from "../../lib/table/view.ts";
 
 export const DEFAULT_ROWS_PER_PAGE = 100;
 
@@ -15,13 +16,16 @@ export interface TableCombineSource {
 }
 
 /**
- * Show one table built from several: stacked (`concat`, a leading `source`
- * column says where each row came from) or joined on a key (`join`, the first
- * two sources; see lib/table/combine.ts). No sources = the card's series, each
- * at the slider's step.
+ * How the card's tables show: `rows` (default, wandb's table panel) stacks
+ * every series' table at the slider's step into one, a leading `run` column
+ * (with the run's colour) saying where each row came from; `panes` shows them
+ * side by side (diff colours); `concat` stacks chosen sources (a leading
+ * `source` column) and `join` joins the first two on a key (see
+ * lib/table/combine.ts). No sources = the card's series, each at the slider's
+ * step.
  */
 export interface TableCombine {
-  mode: "none" | "concat" | "join";
+  mode: "rows" | "panes" | "concat" | "join";
   sources: TableCombineSource[];
   /** Join key column; absent = the shared id-like first column, else by position. */
   on?: string;
@@ -37,6 +41,10 @@ export interface TableSettings extends BaseCardSettings {
   rowsPerPage: number;
   /** Column names hidden by the visibility toggles. */
   hiddenColumns: string[];
+  /** Column display order: these first, the rest as logged (lib/table/view.ts). */
+  columnOrder: string[];
+  /** The sort, set by clicking a column header. */
+  sort?: TableSort;
   /**
    * Show red/green diff colors on numeric cells vs the other compared runs.
    * Optional — defaults (computed at render time, not persisted until the
@@ -57,8 +65,9 @@ export const builtin: TableSettings = {
   metrics: [],
   rowsPerPage: DEFAULT_ROWS_PER_PAGE,
   hiddenColumns: [],
+  columnOrder: [],
   ops: {},
-  combine: { mode: "none", sources: [] },
+  combine: { mode: "rows", sources: [] },
   textDiff: "off",
 };
 
