@@ -19,7 +19,7 @@ import { useRunColors, useVisibleRuns } from "../lib/run-view";
 import { WorkspaceGroupingContext } from "../lib/workspace-runs/grouping-context";
 import { galleryCount, isGalleryPoint, type GalleryItem } from "../lib/media/gallery";
 import { galleryQuery } from "../lib/media/gallery-query";
-import { primaryIndex } from "../lib/media/media-plan";
+import { primaryIndex, stepIndex } from "../lib/media/media-plan";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
 import HistogramSettingsPanel from "./settings-panels/HistogramSettingsPanel";
@@ -72,6 +72,9 @@ function HistogramItem({ hash, logY }: { hash: string; logY: boolean }) {
   if (!data) return <div className="text-xs text-fg-muted">could not read histogram blob</div>;
   return <HistogramBars counts={data.counts} edges={data.edges} logY={logY} />;
 }
+
+const STEP_BTN =
+  "inline-flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:bg-bg-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40";
 
 /** A point to read, the step it stands for (bars: the slider's), and its run. */
 interface Need {
@@ -229,6 +232,21 @@ export default function HistogramCard({
         ? `step ${currentStep} (${safeIdx + 1}/${nSteps})`
         : `${metric.count} pts`;
 
+  // The heatmap shows one index at a time: a stepper over the list.
+  const heatIndexBar = lists && (
+    <div className="flex shrink-0 items-center gap-1 pb-1 text-[11px] text-fg-muted" data-index-stepper>
+      <span>Index</span>
+      <button type="button" className={STEP_BTN} aria-label="Previous index" disabled={index <= 0}
+        onClick={() => ctl.set({ indexMode: "one", indexOne: stepIndex(index, -1, listCount) })}>
+        <i className="fa-solid fa-chevron-left text-[9px]" aria-hidden="true" />
+      </button>
+      <span className="mono tabular-nums">{index} / {listCount}</span>
+      <button type="button" className={STEP_BTN} aria-label="Next index" disabled={index >= listCount - 1}
+        onClick={() => ctl.set({ indexMode: "one", indexOne: stepIndex(index, 1, listCount) })}>
+        <i className="fa-solid fa-chevron-right text-[9px]" aria-hidden="true" />
+      </button>
+    </div>
+  );
   const indexBar = lists && (
     <IndexBar
       settings={settings as unknown as MediaLayoutSettings}
@@ -250,7 +268,7 @@ export default function HistogramCard({
     if (heatmap) {
       return (
         <>
-          {indexBar}
+          {heatIndexBar}
           <div className="flex-1 min-h-0">
             {pending && nStrips === 0 ? waiting : nStrips > 0 ? (
               <HistogramStrips
