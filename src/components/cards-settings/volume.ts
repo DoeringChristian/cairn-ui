@@ -1,27 +1,20 @@
-import type { BaseCardSettings } from "../card-kit/base-settings";
-import type { SeriesRef } from "../card-kit/use-card-series";
 import type { CardSettingsMeta } from "./meta";
 import {
-  MEDIA_COLUMNS_CASCADE,
-  MEDIA_SLIDER_CASCADE,
-  mediaColumnsBuiltin,
-  mediaSliderBuiltin,
-  type MediaColumnsSettings,
-  type MediaSliderSettings,
-} from "./media.ts";
+  STEPPED_MEDIA_CASCADE,
+  steppedMediaBuiltin,
+  steppedMediaInstanceDefaults,
+  type SteppedMediaSettings,
+} from "./stepped-media.ts";
 
-export interface VolumeSettings extends BaseCardSettings, MediaSliderSettings, MediaColumnsSettings {
-  metrics: SeriesRef[];
-}
+/** The volume card's fallback renderer (no WebGL2): the stepped media shell's settings only. */
+export type VolumeSettings = SteppedMediaSettings;
 
-export const builtin: VolumeSettings = { version: 1, ...mediaSliderBuiltin, ...mediaColumnsBuiltin, metrics: [] };
+export const builtin: VolumeSettings = { ...steppedMediaBuiltin, version: 1, metrics: [] };
 
-export function instanceDefaults(seed: { name: string }): Partial<VolumeSettings> {
-  return { metrics: [seed] };
-}
+export const instanceDefaults = steppedMediaInstanceDefaults as (seed: { name: string }) => Partial<VolumeSettings>;
 
 export const meta: CardSettingsMeta<VolumeSettings> = {
   builtin,
-  cascadeKeys: [...MEDIA_SLIDER_CASCADE, ...MEDIA_COLUMNS_CASCADE],
+  cascadeKeys: [...STEPPED_MEDIA_CASCADE],
   tabs: ["values", "display"],
 };

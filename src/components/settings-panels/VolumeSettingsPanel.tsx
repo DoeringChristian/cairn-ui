@@ -1,7 +1,8 @@
 import type { SettingsController } from "../../lib/card-settings";
 import type { VolumeSettings } from "../cards-settings/volume";
+import type { SteppedMediaPanelCtx } from "../media/SteppedMediaCard";
 import { SettingsTabs } from "../settings/palette";
-import { LayoutSection, SliderSection, type MediaPanelCtx, type PanelSurface } from "./media-panel-kit";
+import { LayoutSection, SliderSection, type PanelSurface } from "./media-panel-kit";
 
 export default function VolumeSettingsPanel({
   ctl,
@@ -9,14 +10,14 @@ export default function VolumeSettingsPanel({
   mode,
 }: {
   ctl: SettingsController<VolumeSettings>;
-  ctx?: MediaPanelCtx;
+  ctx?: SteppedMediaPanelCtx;
   mode: PanelSurface;
 }) {
   return (
     <SettingsTabs
       tabs={{
         values: <SliderSection ctl={ctl} ctx={ctx} />,
-        display: <LayoutSection ctl={ctl} ctx={ctx} mode={mode} />,
+        display: <LayoutSection ctl={ctl} modes ctx={ctx} mode={mode} paneKeys={ctx?.paneKeys} />,
       }}
     />
   );
