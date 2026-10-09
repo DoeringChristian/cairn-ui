@@ -509,12 +509,13 @@ export default function ScalarSettingsPanel({ ctl, ctx, mode }: Props) {
         />
         <Segmented<StackMode>
           {...bind(ctl, "stack")}
-          label="Stack"
+          label="Chart type"
           options={[
-            { value: "none", label: "None" },
-            { value: "stacked", label: "Stacked" },
-            { value: "percent", label: "100 %" },
+            { value: "none", label: "Line" },
+            { value: "stacked", label: "Area" },
+            { value: "percent", label: "Percentage area" },
           ]}
+          description="Area stacks the lines and fills under each; percentage area stacks their shares of the total."
         />
         <Switch
           {...bind(ctl, "showOriginal")}
