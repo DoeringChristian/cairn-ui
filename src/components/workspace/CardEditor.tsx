@@ -17,8 +17,7 @@
  *   the cards); Data starts collapsed, so the settings are not pushed down.
  *   Every change applies at once (card-builder `changedPanel`) and is
  *   undoable; while a new type is being chosen the left shows the tiles
- *   instead of the card. The card's width (Full · 1/2 · 1/3 · 1/4 of the
- *   row) sits above every tab.
+ *   instead of the card.
  *
  * Cards own their content and settings panel (each card component builds
  * them), so the editor hosts them: a workspace card's CardShell portals its
@@ -38,8 +37,6 @@ import CardPreview from "./CardPreview";
 import CardDataPicker from "./CardDataPicker";
 import CardTypePicker, { CardTypeTiles, Hint, MAX_PREVIEWS } from "./CardTypePicker";
 import { SettingsTabBar } from "../settings/palette/SettingsTabs";
-import Segmented from "../settings/palette/Segmented";
-import { CARD_WIDTHS, WIDTH_LABEL, type CardWidth } from "../../lib/cards/card-width";
 import { SETTINGS_TABS, landingTab, type SettingsTabId } from "../settings/palette/logic";
 import { useViewerDefaults, useViewerList } from "../../lib/custom/hooks";
 import { useProjectId } from "../../lib/project-context";
@@ -219,8 +216,6 @@ export function CardEditorHost({
           onTab={setTab}
           cardTabs={cardTabs}
           onClose={close}
-          width={mode === "edit" ? info?.width : undefined}
-          onWidth={info?.onWidth}
           onPrev={mode === "edit" ? step(info?.onPrev) : undefined}
           onNext={mode === "edit" ? step(info?.onNext) : undefined}
           section={adding}
@@ -254,9 +249,6 @@ type EditorTab = "data" | "type" | SettingsTabId;
 
 const NO_VIEWERS: ViewerInfo[] = [];
 
-/** Full · 1/2 · 1/3 · 1/4 of the row (lib/cards/card-width.ts). */
-const WIDTH_OPTIONS = CARD_WIDTHS.map((w) => ({ value: w, label: WIDTH_LABEL[w] }));
-
 function CardEditor({
   mode,
   title,
@@ -264,8 +256,6 @@ function CardEditor({
   onTab,
   cardTabs,
   onClose,
-  width,
-  onWidth,
   onPrev,
   onNext,
   section,
@@ -285,9 +275,6 @@ function CardEditor({
   /** The card's own settings tabs. */
   cardTabs: SettingsTabId[];
   onClose: () => void;
-  /** The edited card's width (its width setting shows above every tab). */
-  width?: CardWidth;
-  onWidth?: (width: CardWidth) => void;
   onPrev?: () => void;
   onNext?: () => void;
   section: string | null;
@@ -377,16 +364,6 @@ function CardEditor({
 
   const column = (
     <div data-testid="card-editor" data-mode={mode} data-tab={tab} data-section={section ?? undefined}>
-      {width && onWidth && (
-        <div className="mb-3 border-b border-border pb-3" data-testid="card-editor-width">
-          <Segmented<CardWidth>
-            label="Width"
-            value={width}
-            onChange={onWidth}
-            options={WIDTH_OPTIONS}
-          />
-        </div>
-      )}
       {tab === "data" && (
           <CardDataPicker
             key={adding ? "new" : (panel?.panel.id ?? "")}
