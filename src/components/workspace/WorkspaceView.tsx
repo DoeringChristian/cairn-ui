@@ -47,6 +47,7 @@ import {
   deriveLayout,
   uniqueSectionName,
   materializeOp as materializePanelOp,
+  hiddenCardsNote,
   withoutEmptyPanels,
   type RenderedPanel,
   type RenderedSection,
@@ -79,10 +80,11 @@ interface Props {
   /** Only these of the runs' metrics (a module-level function: it is a memo dependency). */
   metricFilter?: (name: string) => boolean;
   /**
-   * The run page: cards showing nothing the run logs, and sections left
-   * without cards, are not rendered (lib/workspace/layout.ts `withoutEmptyPanels`).
+   * The run page: cards showing nothing the run logs are not rendered
+   * (lib/workspace/layout.ts `withoutEmptyPanels`); `"note"` (the Workspace
+   * tab) keeps a section whose cards are all hidden, noting how many.
    */
-  hideEmpty?: boolean;
+  hideEmpty?: boolean | "note";
   /** Shown when the runs log none of the metrics (default "No metrics logged yet."). */
   emptyText?: string;
 }
@@ -135,8 +137,8 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
   // Unfiltered (edits resolve against it) and as shown (search applied).
   const derived = useMemo(() => {
     const secs = deriveLayout(doc, layoutMetrics);
-    return hideEmpty ? withoutEmptyPanels(secs) : secs;
-  }, [doc, layoutMetrics, hideEmpty]);
+    return hideEmpty ? withoutEmptyPanels(secs, { noteHidden: hideEmpty === "note", metricFilter }) : secs;
+  }, [doc, layoutMetrics, hideEmpty, metricFilter]);
   // An empty workspace still shows one section, with its ghost card (written on the first add).
   const all = useMemo<RenderedSection[]>(
     () =>
@@ -148,8 +150,8 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
   const shown = useMemo(() => {
     if (!query.trim()) return all;
     const secs = deriveLayout(doc, layoutMetrics, { query });
-    return hideEmpty ? withoutEmptyPanels(secs) : secs;
-  }, [doc, layoutMetrics, query, all, hideEmpty]);
+    return hideEmpty ? withoutEmptyPanels(secs, { noteHidden: hideEmpty === "note", metricFilter }) : secs;
+  }, [doc, layoutMetrics, query, all, hideEmpty, metricFilter]);
 
   // `?card=<series>` (the Overview summary's "show in Workspace"): mount the
   // first card showing that series, scroll to it and highlight it briefly,
@@ -483,13 +485,18 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
               onRename={(name) => update(sectionOp(ops.renameSection(section.name, name)), { label: `Rename section to ${name}` })}
               onSendToReport={section.panels.length > 0 ? () => sendSection(section) : undefined}
               onDelete={
-                section.inDoc && (full?.panels.length ?? 0) === 0
+                section.inDoc && (full?.panels.length ?? 0) === 0 && !full?.hiddenCards
                   ? () => update(ops.removeSection(section.name), { label: `Delete section ${section.name}` })
                   : undefined
               }
             >
+              {hiddenCardsNote(section) && (
+                <p className="mb-2 text-xs text-fg-subtle" data-testid="hidden-cards-note">
+                  {hiddenCardsNote(section)}
+                </p>
+              )}
               {section.panels.length === 0 && !mutable ? (
-                <p className="text-sm text-fg-muted">No panels.</p>
+                hiddenCardsNote(section) ? null : <p className="text-sm text-fg-muted">No panels.</p>
               ) : (
                 <ReorderableCardGrid
                   cards={section.panels.map((rp) => ({

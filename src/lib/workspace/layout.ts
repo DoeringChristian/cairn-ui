@@ -63,6 +63,8 @@ export interface RenderedSection {
   collapsed: boolean;
   sort: boolean;
   panels: RenderedPanel[];
+  /** The run page (`withoutEmptyPanels`): the section's cards hidden for showing nothing the run logs. */
+  hiddenCards?: number;
 }
 
 /** Anchored, case-sensitive: metric names are identifiers. Null for an invalid regex. */
@@ -229,17 +231,40 @@ export function addToSectionOp(sections: readonly RenderedSection[], name: strin
 
 /**
  * The run page's layout (as wandb's run page): a panel that shows no metric
- * the run logs renders nowhere, and a section left without panels neither.
- * Multi-run cards select no metric and stay, except the Summary cards: they
- * show while the run has scalars / summary values or config (their
- * pseudo-series). The order is untouched.
+ * the run logs renders nowhere. Multi-run cards select no metric and stay,
+ * except the Summary cards: they show while the run has scalars / summary
+ * values or config (their pseudo-series). The order is untouched.
+ *
+ * A section with no cards at all (a new one) always stays, with its
+ * add-card entry. With `noteHidden` (the Workspace tab), a section whose
+ * cards are all hidden stays too, and `hiddenCards` counts its cards hidden
+ * for lack of data; without it (the System tab, a slice of the same view)
+ * such a section is not shown. A card naming only metrics `metricFilter`
+ * leaves to the other tab (the System tab's `system.*`) is not counted.
  */
-export function withoutEmptyPanels(sections: readonly RenderedSection[]): RenderedSection[] {
+export function withoutEmptyPanels(
+  sections: readonly RenderedSection[],
+  opts: { noteHidden?: boolean; metricFilter?: (name: string) => boolean } = {},
+): RenderedSection[] {
+  const { noteHidden = false, metricFilter } = opts;
   const keep = (p: RenderedPanel) =>
     p.metrics.length > 0 || (isMultiRunCardType(p.panel.type) && !isSummaryCardType(p.panel.type));
-  return sections
-    .map((s) => ({ ...s, panels: s.panels.filter(keep) }))
-    .filter((s) => s.panels.length > 0);
+  const otherTab = (p: RenderedPanel) =>
+    metricFilter !== undefined && "names" in p.panel.selector && p.panel.selector.names.length > 0 && p.panel.selector.names.every((n) => !metricFilter(n));
+  const out: RenderedSection[] = [];
+  for (const s of sections) {
+    const panels = s.panels.filter(keep);
+    const hiddenCards = s.panels.filter((p) => !keep(p) && !otherTab(p)).length;
+    if (s.panels.length > 0 && panels.length === 0 && (!noteHidden || hiddenCards === 0)) continue;
+    out.push({ ...s, panels, hiddenCards: noteHidden ? hiddenCards : 0 });
+  }
+  return out;
+}
+
+/** A section's note for its cards hidden on the run page (`withoutEmptyPanels`), or null. */
+export function hiddenCardsNote(section: Pick<RenderedSection, "hiddenCards">): string | null {
+  const n = section.hiddenCards ?? 0;
+  return n === 0 ? null : `${n} card${n === 1 ? "" : "s"} without data for this run`;
 }
 
 /** `base`, else `base 2`, `base 3`, … — the first not in `taken`. */

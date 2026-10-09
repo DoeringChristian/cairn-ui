@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EMPTY_WORKSPACE, ops, type Panel } from "./doc.ts";
-import { addToSectionOp, autoPanelsOp, deriveLayout, materializeOp, uniqueSectionName, withoutEmptyPanels, type MetricInfo } from "./layout.ts";
+import { addToSectionOp, autoPanelsOp, deriveLayout, hiddenCardsNote, materializeOp, uniqueSectionName, withoutEmptyPanels, type MetricInfo } from "./layout.ts";
 
 const M = (name: string, object_type = "scalar", runIds = ["r1"]): MetricInfo => ({ name, object_type, count: 5, runIds });
 const P = (id: string, sel: Panel["selector"], type: Panel["type"] = "scalar", settings = {}): Panel => ({ id, type, selector: sel, settings });
@@ -77,21 +77,45 @@ test("duplicating a materialized card keeps the automatic cards around it in pla
   assert.deepEqual(shape(deriveLayout(doc, ms)), ["a:auto:a.1,auto:a.2,copy,auto:a.3"]);
 });
 
-test("the run page hides cards showing nothing the run logs, and sections left empty", () => {
+test("the run page hides cards showing nothing the run logs; their sections stay, with a note", () => {
   const doc = ops.seq(
     ops.addPanels("mine", [P("gone", { names: ["nope"] }), P("re", { regex: "zz.*" })]),
     ops.addPanels("val", [P("v", { names: ["val.loss"] }), P("x", { names: ["other.run.only"] }), P("bar", { names: [] }, "bar")]),
+    ops.ensureSections(["New section"]),
   )(EMPTY_WORKSPACE);
   const secs = deriveLayout(doc, METRICS);
-  assert.deepEqual(shape(withoutEmptyPanels(secs)), [
+  const shown = withoutEmptyPanels(secs, { noteHidden: true });
+  assert.deepEqual(shape(shown), [
+    "New section:",
+    "mine:",
     "val:v,bar",
     "Charts*:auto:loss",
     "train*:auto:train.acc,auto:train.loss",
     "Media*:auto:samples",
     "system*:auto:system.cpu",
   ]);
+  // Every card hidden: the section stays (its header, its add-card entry) with a note.
+  assert.deepEqual(shown.map((s) => hiddenCardsNote(s)), [
+    null,
+    "2 cards without data for this run",
+    "1 card without data for this run",
+    null,
+    null,
+    null,
+    null,
+  ]);
+  // A section with no cards at all (a new one) is never hidden, and has no note.
+  assert.equal(shown.find((s) => s.name === "New section")!.hiddenCards, 0);
+  // Without notes (the System tab): a section whose cards are all hidden is not shown; an empty one is.
+  assert.deepEqual(shape(withoutEmptyPanels(secs)).slice(0, 2), ["New section:", "val:v,bar"]);
+  assert.deepEqual(withoutEmptyPanels(secs).map((s) => s.hiddenCards), [0, 0, 0, 0, 0, 0]);
+  // Cards naming only the other tab's metrics are not "without data": a section of them only is not shown.
+  const sys = ops.addPanels("hw", [P("cpu", { names: ["system.cpu"] })])(EMPTY_WORKSPACE);
+  const notSystem = (n: string) => !n.startsWith("system.");
+  const ws = withoutEmptyPanels(deriveLayout(sys, [M("loss")]), { noteHidden: true, metricFilter: notSystem });
+  assert.deepEqual(shape(ws), ["Charts*:auto:loss"]);
   // The same view on a run logging the other metric: the card is back at its place.
-  assert.deepEqual(shape(withoutEmptyPanels(deriveLayout(doc, [...METRICS, M("other.run.only")])))[0], "val:v,x,bar");
+  assert.deepEqual(shape(withoutEmptyPanels(deriveLayout(doc, [...METRICS, M("other.run.only")]), { noteHidden: true }))[2], "val:v,x,bar");
 });
 
 test("multi-run panels are labelled by type", () => {

@@ -14,19 +14,20 @@ const notSystem = (name: string) => !isSystemMetric(name);
  * to this run, without its `system.*` series (the System tab's). Every
  * layout edit here is saved into that view and applies to every run of the
  * project; the toolbar's view switcher changes which view is current (for
- * every browser). Cards showing nothing this run logs, and sections left
- * without cards, are not shown (as wandb's run page).
+ * every browser). Cards showing nothing this run logs are not shown (as
+ * wandb's run page); their section stays, noting `N cards without data for
+ * this run`, and a section without cards stays with its add-card entry.
  */
 export default function RunWorkspaceTab() {
-  return <RunView metricFilter={notSystem} emptyText="No metrics logged yet." />;
+  return <RunView metricFilter={notSystem} emptyText="No metrics logged yet." hideEmpty="note" />;
 }
 
-/** The run page's System tab: the same view over the run's `system.*` series only. */
+/** The run page's System tab: the same view over the run's `system.*` series only (sections left without cards not shown). */
 export function RunSystemTab() {
-  return <RunView metricFilter={isSystemMetric} emptyText="No system metrics logged." />;
+  return <RunView metricFilter={isSystemMetric} emptyText="No system metrics logged." hideEmpty />;
 }
 
-function RunView({ metricFilter, emptyText }: { metricFilter: (name: string) => boolean; emptyText: string }) {
+function RunView({ metricFilter, emptyText, hideEmpty }: { metricFilter: (name: string) => boolean; emptyText: string; hideEmpty: true | "note" }) {
   const { runId } = useParams<{ runId: string }>();
   const projectId = useProjectId();
   const current = useViews(projectId ?? null).data?.current ?? null;
@@ -42,7 +43,7 @@ function RunView({ metricFilter, emptyText }: { metricFilter: (name: string) => 
       runIds={runIds}
       reportLabel={`run ${shortRunLabel(runId)}`}
       metricFilter={metricFilter}
-      hideEmpty
+      hideEmpty={hideEmpty}
       emptyText={emptyText}
     />
   );
