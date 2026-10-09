@@ -131,7 +131,7 @@ function IndexControls({ ctl }: { ctl: SettingsController<MediaLayoutSettings> }
         label="Index"
         info="Which items of each logged list to show (0-based): all of them, one (step through it with ‹ › over the media), a range, or the first N."
       />
-      {m === "one" && <Stepper {...bind(ctl, "indexOne")} min={0} label="Index" />}
+      {m === "one" && <Stepper {...bind(ctl, "indexOne")} min={0} label="One" />}
       {m === "range" && (
         <RangeInput
           value={{ min: ctl.value.indexFrom, max: ctl.value.indexTo, log: false }}

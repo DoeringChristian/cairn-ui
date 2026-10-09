@@ -149,6 +149,7 @@ export default function StepSlider({
   return (
     <div className={`relative z-10 ${className ?? ""}`}>
       <div className="flex items-center gap-2">
+        {metricKey && <span className="mono shrink-0 text-[10px] text-fg-muted" data-slider-key>{keyName}</span>}
         <input
           type="range"
           min={0}

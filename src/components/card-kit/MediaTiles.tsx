@@ -213,7 +213,10 @@ export default function MediaTiles(props: Props) {
   const { layout, settings, update } = props;
   return (
     <>
-      {layout.lists && <IndexBar settings={settings} count={layout.listCount} update={update} />}
+      {/* Compare slots with their own index don't take the card's. */}
+      {layout.lists && !(layout.compare && settings.compareIndex === "individual") && (
+        <IndexBar settings={settings} count={layout.listCount} update={update} />
+      )}
       <TilesBody {...props} />
     </>
   );

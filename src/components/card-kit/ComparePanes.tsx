@@ -89,7 +89,7 @@ export default function ComparePanes({
               {links.compareStep === "individual" && (
                 <select
                   aria-label={`Slot ${i + 1} ${keyName}`}
-                  className={`${PICKER} w-24 shrink-0`}
+                  className={`${PICKER} w-auto shrink-0`}
                   value={String(tile.value)}
                   disabled={disabled || values.length < 2}
                   onChange={(e) => patch(i, { ...slot, value: Number(e.target.value) })}
@@ -103,7 +103,7 @@ export default function ComparePanes({
               {lists && links.compareIndex === "individual" && (
                 <select
                   aria-label={`Slot ${i + 1} index`}
-                  className={`${PICKER} w-20 shrink-0`}
+                  className={`${PICKER} w-auto shrink-0`}
                   value={String(slot.index ?? 0)}
                   disabled={disabled || listCount < 2}
                   onChange={(e) => patch(i, { ...slot, index: Number(e.target.value) })}

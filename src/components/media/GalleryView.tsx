@@ -125,7 +125,9 @@ export default function GalleryView({ point, frame: given, renderItem, columns =
   const frame = given ?? own;
   // One item of the list is a tile of its own: no gallery caption over it.
   const caption = frame && (!indices || indices.length > 1) ? pointCaption(frame.point.metadata) : null;
-  const run = usePaneLabelInline(!!caption);
+  // A tile of text or charts (corners hold content) takes the run chip into a header line.
+  const header = !!caption || (!!indices && !captionOverlay);
+  const run = usePaneLabelInline(header);
   if (!frame) return <div className={`${fill ? "h-full" : "h-32"} motion-safe:animate-pulse rounded bg-bg-hover`} />;
   if (frame.items.length === 0) {
     return <div className="text-xs text-fg-subtle">empty gallery</div>;
@@ -140,10 +142,10 @@ export default function GalleryView({ point, frame: given, renderItem, columns =
       data-gallery-step={frame.point.step}
       data-gallery-count={count}
     >
-      {caption && (
+      {header && (caption || run) && (
         <div className="flex min-w-0 items-center gap-2 px-1 pb-1 text-xs text-fg-muted" data-pane-header>
           {run && <RunChip {...run} className="shrink-0" />}
-          <span className="min-w-0 flex-1 truncate text-center" title={caption}>{caption}</span>
+          <span className="min-w-0 flex-1 truncate text-center" title={caption ?? undefined}>{caption}</span>
           {/* Balances the chip so the caption stays centred over the grid. */}
           {run && <span aria-hidden="true" className="invisible shrink-0"><RunChip {...run} /></span>}
         </div>
