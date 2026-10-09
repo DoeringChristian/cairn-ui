@@ -70,15 +70,18 @@ Use the established libraries; don't write a renderer.
   via `readChartTheme` (`src/charts/theme.ts`). UI chrome uses the Tailwind
   tokens (`text-fg-muted`, `bg-bg-elevated`, `border-border`, `text-accent`) —
   no hardcoded hex. Identifiers and values render in the `mono` class.
-- Media cards that show one artifact per pane (image, and the stepped media
-  cards) lay their panes out in one of three panel modes
-  (`lib/media/panel-layout.ts`): `gallery` (one pane per run, all at the
-  slider's value, in `columns` columns), `grid` (runs as rows × slider values
-  as columns) and `compare` (2–4 slots, each picking its own run and, unless
-  linked to the slider, its own value). The shared settings fragments
-  (`panelMode`, `columns`, `maxRuns`, `compareSlots`, `compareLinked`) live
-  in `components/cards-settings/media.ts`; the panes in card-kit's
-  `MultiPaneGrid`, `GridPanes` and `ComparePanes`.
+- Media cards that show one artifact per tile (image, the stepped media
+  cards, text and the 3D cards) plan their tiles in
+  `lib/media/media-plan.ts` (the Index over lists, gallery column content
+  run / index / step, a grid of two of step / index / run with a steps range
+  and a rows cap, compare slots with per-variable links, the media limit) and
+  lay them out through card-kit's `MediaTiles` (`useMediaLayout` +
+  the Index bar, `GridPanes`, `ComparePanes`; the gallery's per-run panes stay
+  the card's own `MultiPaneGrid`). A card only renders one tile: a run's point
+  at a value and the list items (`tile.items`) it shows. The settings
+  (`panelMode`, `columns`, `maxRuns`, `index*`, `galleryContent`, `grid*`,
+  `compareSlots`, `compareRun/Step/Index`, `limitMedia`, `mediaLimit`) live in
+  `components/cards-settings/media.ts`; their controls in the media panel kit.
 - Gallery points (a list of media of one kind tracked under one name and
   step; `lib/media/gallery.ts`): the point's artifact is a manifest of item
   artifacts and its `object_type` is the items' kind, so the kind's card
