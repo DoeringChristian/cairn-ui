@@ -12,7 +12,8 @@
 // `.catch`/error boundary ever sees it.
 
 import { seedRunCursor, seedRunEpoch } from "./live-updates-core";
-import { SeriesBatcher, type SeriesBatchResponse } from "./series-batch";
+import { SeriesBatcher, type SeriesBatchResponse, type SeriesManyResponse } from "./series-batch";
+import { RunBatcher, type RunPart, type RunsBatchResponse } from "./run-batch";
 import { refUrl } from "../lib/workspace/ref";
 import { createLimiter } from "./fetch-limit";
 
@@ -95,6 +96,17 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** A read sent as a POST (its body too big for a query string): limited like `get`. */
+async function postRead<T>(path: string, body: unknown): Promise<T> {
+  return limitReads(async () => {
+    const res = await checkOk(
+      await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+      path,
+    );
+    return (await res.json()) as T;
+  });
+}
+
 async function put<T>(path: string, body: unknown): Promise<T> {
   const res = await checkOk(
     await fetch(path, {
@@ -124,6 +136,13 @@ async function del_<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** What a per-run route answers for a run a batch read reports `missing` (404) or `forbidden` (403). */
+function runError(status: 403 | 404, runId: string): ApiError {
+  return status === 404
+    ? new ApiError(404, `404 Not Found: /api/runs/${runId}`, `run ${runId} not found`)
+    : new ApiError(403, `403 Forbidden: /api/runs/${runId}`, "not available through a share link");
+}
+
 /** Estimated points of a series; set by the app from the run catalogues it holds. */
 let seriesSize: (runId: string, name: string) => number = () => 0;
 export function setSeriesSizeHint(fn: (runId: string, name: string) => number): void {
@@ -136,7 +155,22 @@ const seriesBatcher = new SeriesBatcher({
     for (const n of names) q.append("name", n);
     return get<SeriesBatchResponse>(`/api/runs/${runId}/series?${q.toString()}`);
   },
+  fetchMany: (runs) => postRead<SeriesManyResponse>("/api/runs/series", { runs }),
+  error: (status, runId) => runError(status, runId),
   size: (runId, name) => seriesSize(runId, name),
+});
+
+/** A run's part from its per-run route, as `POST /api/runs/batch` returns it. */
+function runPart(runId: string, part: RunPart): Promise<unknown> {
+  if (part === "run") return get(`/api/runs/${runId}`);
+  if (part === "sequences") return get<{ sequences: unknown[] }>(`/api/runs/${runId}/sequences`).then((r) => r.sequences);
+  return get<{ outputs: unknown[] }>(`/api/runs/${runId}/outputs?include=files`).then((r) => r.outputs);
+}
+
+const runBatcher = new RunBatcher({
+  fetchBatch: (ids, include) => postRead<RunsBatchResponse>("/api/runs/batch", { ids, include }),
+  fetchOne: runPart,
+  error: (status, runId) => runError(status, runId),
 });
 
 export const api = {
@@ -164,12 +198,11 @@ export const api = {
       `/api/runs${qs ? `?${qs}` : ""}`,
     );
   },
-  run: (runId: string) =>
-    get<import("./types").RunDetailResponse>(`/api/runs/${runId}`),
+  /** A run's details, read through the run batcher (run-batch.ts): the runs asked for in the same task share requests. */
+  run: (runId: string) => runBatcher.load(runId, "run") as Promise<import("./types").RunDetailResponse>,
+  /** A run's series catalogue, through the run batcher. */
   sequences: async (runId: string) => {
-    const res = await get<{ sequences: import("./types").SequenceMeta[] }>(
-      `/api/runs/${runId}/sequences`,
-    );
+    const res = { sequences: (await runBatcher.load(runId, "sequences")) as import("./types").SequenceMeta[] };
     // A series' object_type picks its card; a `pickle` series renders as the
     // artifact card (the card kind keeps its name).
     for (const s of res.sequences) if (s.object_type === "pickle") s.object_type = "artifact";
@@ -495,10 +528,10 @@ export const api = {
     get<{ inputs: import("./types").RunArtifactInput[] }>(`/api/runs/${runId}/inputs`),
   /** The runs and artifact versions a run used, and the runs that used it. */
   runRelations: (runId: string) => get<import("./types").RunRelations>(`/api/runs/${runId}/relations`),
-  runOutputArtifacts: (runId: string) =>
-    get<{ outputs: import("./types").ArtifactVersionInfo[] }>(
-      `/api/runs/${runId}/outputs?include=files`,
-    ),
+  /** The artifact versions a run logged (with their files), through the run batcher. */
+  runOutputArtifacts: async (runId: string) => ({
+    outputs: (await runBatcher.load(runId, "outputs")) as import("./types").ArtifactVersionInfo[],
+  }),
   /** The project's lineage (`familyId`: one artifact's versions). */
   lineage: (projectId: string, familyId?: string | null) =>
     get<import("./types").LineageGraph>(

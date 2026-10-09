@@ -1,7 +1,10 @@
 /**
  * Batched sequence reads: every `api.sequence(runId, name)` asked for in the
  * same task goes out as one `GET /api/runs/{id}/series?name=…&name=…` per run
- * (split into chunks), instead of one request per series.
+ * (split into chunks), instead of one request per series; when the task
+ * asks about several runs, their chunks are packed into
+ * `POST /api/runs/series` requests (`{runs: {id: [name]}}`, a workspace's
+ * charts over a thousand runs) instead of one request per run.
  *
  * The server sends each series column-wise (`columns`, plus `constant` for a
  * field equal at every point); `expandSeries` turns that back into exactly the
@@ -45,17 +48,75 @@ export function expandSeries(runId: string, s: WireSeries, dataEpoch: number): S
   return { run_id: runId, name: s.name, points, cursor: s.cursor, data_epoch: dataEpoch };
 }
 
+/** A `POST /api/runs/series` response. */
+export interface SeriesManyResponse {
+  runs: Record<string, SeriesBatchResponse>;
+  /** Ids of no run (the per-run route's 404). */
+  missing: string[];
+  /** Through a share link: ids outside the shared report (the per-run route's 403). */
+  forbidden: string[];
+}
+
 /** Limits of one request. */
 export interface BatchLimits {
-  /** Names per request (the server's cap is 200). */
+  /** Names per run per request (the server's cap is 200). */
   maxNames: number;
   /** Estimated points per request: keeps one response's parse short. */
   maxPoints: number;
   /** Characters of the query string (URL length). */
   maxQueryChars: number;
+  /** Runs per `POST /api/runs/series` (several requests answer in parallel). */
+  maxRuns: number;
+  /** Names over every run of a `POST /api/runs/series` (the server's cap is 5000). */
+  maxTotalNames: number;
 }
 
-export const DEFAULT_LIMITS: BatchLimits = { maxNames: 100, maxPoints: 150_000, maxQueryChars: 6_000 };
+export const DEFAULT_LIMITS: BatchLimits = {
+  maxNames: 100,
+  maxPoints: 150_000,
+  maxQueryChars: 6_000,
+  maxRuns: 100,
+  maxTotalNames: 2_000,
+};
+
+/** One run's names in one request, with their estimated points. */
+export interface RunChunk {
+  runId: string;
+  names: string[];
+  points: number;
+}
+
+/**
+ * Pack run chunks into `POST /api/runs/series` requests, in order: a new
+ * request when the next chunk's run is already in the current one, or the
+ * run, point or name budget would be exceeded (a chunk over the point
+ * budget goes alone, never dropped).
+ */
+export function packRuns(chunks: readonly RunChunk[], limits: BatchLimits = DEFAULT_LIMITS): RunChunk[][] {
+  const out: RunChunk[][] = [];
+  let cur: RunChunk[] = [];
+  let runs = new Set<string>();
+  let points = 0;
+  let names = 0;
+  for (const c of chunks) {
+    if (
+      cur.length > 0 &&
+      (runs.has(c.runId) || cur.length >= limits.maxRuns || points + c.points > limits.maxPoints || names + c.names.length > limits.maxTotalNames)
+    ) {
+      out.push(cur);
+      cur = [];
+      runs = new Set();
+      points = 0;
+      names = 0;
+    }
+    cur.push(c);
+    runs.add(c.runId);
+    points += c.points;
+    names += c.names.length;
+  }
+  if (cur.length > 0) out.push(cur);
+  return out;
+}
 
 /**
  * Split one run's names into requests. `size(name)` estimates a series'
@@ -94,11 +155,15 @@ interface Waiter {
 
 export interface SeriesBatcherOptions {
   fetchBatch: (runId: string, names: string[]) => Promise<SeriesBatchResponse>;
+  /** `POST /api/runs/series`; absent: one `fetchBatch` per run. */
+  fetchMany?: (runs: Record<string, string[]>) => Promise<SeriesManyResponse>;
+  /** The error a run's `missing` (404) or `forbidden` (403) answer rejects with. */
+  error?: (status: 403 | 404, runId: string) => unknown;
   /** Estimated points of a series (e.g. from the run's catalogue); 0 when unknown. */
   size?: (runId: string, name: string) => number;
   /** Schedules the flush; defaults to a macrotask, so one render's queries share it. */
   schedule?: (fn: () => void) => void;
-  limits?: BatchLimits;
+  limits?: Partial<BatchLimits>;
 }
 
 /** Collects `load` calls and answers them from as few `/series` requests as it can. */
@@ -130,31 +195,69 @@ export class SeriesBatcher {
     this.scheduled = false;
     const queue = this.queue;
     this.queue = new Map();
+    const limits = { ...DEFAULT_LIMITS, ...this.opts.limits };
+    const chunks: RunChunk[] = [];
     for (const [runId, byName] of queue) {
       const size = (n: string) => this.opts.size?.(runId, n) ?? 0;
-      for (const names of chunkNames([...byName.keys()], size, this.opts.limits)) {
-        void this.send(runId, names, byName);
+      for (const names of chunkNames([...byName.keys()], size, limits)) {
+        chunks.push({ runId, names, points: names.reduce((a, n) => a + size(n), 0) });
       }
     }
+    const fetchMany = this.opts.fetchMany;
+    if (!fetchMany || queue.size === 1) {
+      for (const c of chunks) void this.send(c.runId, c.names, queue.get(c.runId)!);
+      return;
+    }
+    for (const req of packRuns(chunks, limits)) void this.sendMany(fetchMany, req, queue);
   }
 
   private async send(runId: string, names: string[], byName: Map<string, Waiter[]>): Promise<void> {
     try {
-      const res = await this.opts.fetchBatch(runId, names);
-      const got = new Map(res.series.map((s) => [s.name, s]));
-      for (const n of names) {
-        const s = got.get(n);
-        const waiters = byName.get(n) ?? [];
-        if (!s) {
-          for (const w of waiters) w.reject(new Error(`series ${n} missing from the response`));
-          continue;
-        }
-        // Each waiter gets its own copy: react-query owns what it is given.
-        for (const w of waiters) w.resolve(expandSeries(runId, s, res.data_epoch));
-      }
+      answer(runId, names, byName, await this.opts.fetchBatch(runId, names));
     } catch (e) {
       for (const n of names) for (const w of byName.get(n) ?? []) w.reject(e);
     }
+  }
+
+  private async sendMany(
+    fetchMany: NonNullable<SeriesBatcherOptions["fetchMany"]>,
+    req: RunChunk[],
+    queue: Map<string, Map<string, Waiter[]>>,
+  ): Promise<void> {
+    let res: SeriesManyResponse;
+    try {
+      res = await fetchMany(Object.fromEntries(req.map((c) => [c.runId, c.names])));
+    } catch (e) {
+      for (const c of req) for (const n of c.names) for (const w of queue.get(c.runId)!.get(n) ?? []) w.reject(e);
+      return;
+    }
+    for (const c of req) {
+      const byName = queue.get(c.runId)!;
+      const got = res.runs[c.runId];
+      if (got) {
+        answer(c.runId, c.names, byName, got);
+        continue;
+      }
+      const status = res.forbidden.includes(c.runId) ? 403 : 404;
+      const known = status === 403 || res.missing.includes(c.runId);
+      const err = known && this.opts.error ? this.opts.error(status, c.runId) : new Error(`run ${c.runId} missing from the response`);
+      for (const n of c.names) for (const w of byName.get(n) ?? []) w.reject(err);
+    }
+  }
+}
+
+/** Resolve `names`' waiters from one run's `/series` body. */
+function answer(runId: string, names: string[], byName: Map<string, Waiter[]>, res: SeriesBatchResponse): void {
+  const got = new Map(res.series.map((s) => [s.name, s]));
+  for (const n of names) {
+    const s = got.get(n);
+    const waiters = byName.get(n) ?? [];
+    if (!s) {
+      for (const w of waiters) w.reject(new Error(`series ${n} missing from the response`));
+      continue;
+    }
+    // Each waiter gets its own copy: react-query owns what it is given.
+    for (const w of waiters) w.resolve(expandSeries(runId, s, res.data_epoch));
   }
 }
 

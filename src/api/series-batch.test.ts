@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SeriesBatcher, chunkNames, expandSeries, type SeriesBatchResponse, type WireSeries } from "./series-batch.ts";
+import { SeriesBatcher, chunkNames, expandSeries, packRuns, DEFAULT_LIMITS, type SeriesBatchResponse, type SeriesManyResponse, type WireSeries } from "./series-batch.ts";
 
 const wire = (name: string, steps: number[]): WireSeries => ({
   name,
@@ -27,7 +27,7 @@ test("expandSeries restores the per-name endpoint's point objects", () => {
 });
 
 test("chunkNames respects the name, point and URL budgets", () => {
-  const lim = { maxNames: 3, maxPoints: 100, maxQueryChars: 1000 };
+  const lim = { ...DEFAULT_LIMITS, maxNames: 3, maxPoints: 100, maxQueryChars: 1000 };
   assert.deepEqual(chunkNames(["a", "b", "c", "d"], () => 0, lim), [["a", "b", "c"], ["d"]]);
   assert.deepEqual(chunkNames(["a", "b", "c"], (n) => (n === "b" ? 90 : 20), lim), [["a"], ["b"], ["c"]]);
   // A series over the budget goes alone, never dropped.
@@ -92,4 +92,66 @@ test("a failed request rejects exactly its series", async () => {
   pending.splice(0).forEach((f) => f());
   assert.equal((await ok).name, "a");
   await assert.rejects(bad, /404/);
+});
+
+test("packRuns: one run once per request, within the run, point and name budgets", () => {
+  const c = (runId: string, names: string[], points = 0) => ({ runId, names, points });
+  const lim = { ...DEFAULT_LIMITS, maxRuns: 2, maxPoints: 100, maxTotalNames: 4 };
+  const ids = (reqs: ReturnType<typeof packRuns>) => reqs.map((r) => r.map((x) => `${x.runId}:${x.names.join("+")}`));
+  assert.deepEqual(ids(packRuns([c("a", ["x"]), c("b", ["x"]), c("c", ["x"])], lim)), [["a:x", "b:x"], ["c:x"]]);
+  // A run's second chunk goes to the next request.
+  assert.deepEqual(ids(packRuns([c("a", ["x"]), c("a", ["y"]), c("b", ["x"])], lim)), [["a:x"], ["a:y", "b:x"]]);
+  assert.deepEqual(ids(packRuns([c("a", ["x"], 60), c("b", ["x"], 60)], lim)), [["a:x"], ["b:x"]]);
+  assert.deepEqual(ids(packRuns([c("a", ["x", "y", "z"]), c("b", ["x", "y"])], lim)), [["a:x+y+z"], ["b:x+y"]]);
+  assert.deepEqual(ids(packRuns([c("a", ["x"], 1e6)], lim)), [["a:x"]]);
+  assert.deepEqual(packRuns([], lim), []);
+});
+
+function manyHarness(respond?: (runs: Record<string, string[]>) => SeriesManyResponse) {
+  const single: string[] = [];
+  const many: Array<Record<string, string[]>> = [];
+  const pending: Array<() => void> = [];
+  const body = (runId: string, names: string[]): SeriesBatchResponse => ({ run_id: runId, data_epoch: 2, cursor: 0, series: names.map((n) => wire(n, [1])) });
+  const b = new SeriesBatcher({
+    fetchBatch: async (runId, names) => {
+      single.push(runId);
+      return body(runId, names);
+    },
+    fetchMany: async (runs) => {
+      many.push(runs);
+      if (respond) return respond(runs);
+      return { runs: Object.fromEntries(Object.entries(runs).map(([id, names]) => [id, body(id, names)])), missing: [], forbidden: [] };
+    },
+    error: (status, runId) => new Error(`${status} ${runId}`),
+    schedule: (fn) => pending.push(fn),
+    limits: { maxRuns: 2 },
+  });
+  return { b, single, many, flush: () => pending.splice(0).forEach((f) => f()) };
+}
+
+test("several runs' loads share POST /api/runs/series requests; one run alone keeps its GET", async () => {
+  const h = manyHarness();
+  const ps = [h.b.load("r1", "a"), h.b.load("r2", "a"), h.b.load("r2", "b"), h.b.load("r3", "a")];
+  h.flush();
+  const res = await Promise.all(ps);
+  assert.deepEqual(h.many, [{ r1: ["a"], r2: ["a", "b"] }, { r3: ["a"] }]);
+  assert.deepEqual(h.single, []);
+  assert.deepEqual(res.map((r) => `${r.run_id}/${r.name}/${r.data_epoch}`), ["r1/a/2", "r2/a/2", "r2/b/2", "r3/a/2"]);
+  const lone = h.b.load("r9", "a");
+  h.flush();
+  assert.equal((await lone).run_id, "r9");
+  assert.deepEqual(h.single, ["r9"]);
+});
+
+test("missing and forbidden runs reject with their status", async () => {
+  const h = manyHarness((runs) => ({
+    runs: { ok: { run_id: "ok", data_epoch: 0, cursor: 0, series: (runs.ok ?? []).map((n) => wire(n, [])) } },
+    missing: ["gone"],
+    forbidden: ["theirs"],
+  }));
+  const ps = [h.b.load("ok", "a"), h.b.load("gone", "a"), h.b.load("theirs", "a")];
+  h.flush();
+  assert.equal((await ps[0]!).name, "a");
+  await assert.rejects(ps[1]!, /404 gone/);
+  await assert.rejects(ps[2]!, /403 theirs/);
 });
