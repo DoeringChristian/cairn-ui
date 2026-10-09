@@ -14,9 +14,12 @@ import {
   sequenceData,
   xAxisKind,
   xMetricChoices,
+  compileSeriesLabel,
+  renderLabelParts,
   X_AXIS_CHOICES,
   NOT_MONOTONIC,
 } from "./scalar-data.ts";
+import { renderSeriesLabel } from "../lib/plot-utils/scalar-legend.ts";
 import type { Series } from "../lib/plot-utils/types.ts";
 
 const T0 = Date.parse("2024-01-01T00:00:00Z");
@@ -194,4 +197,20 @@ test("process_time formats as seconds, like relative_time; time axes evaluate on
   }
   const wall = metricLine("loss", compileSeriesExpr("wall_time").value!, ctx);
   assert.deepEqual(wall.points.map((p) => p.x), [T0 + 10_000, T0 + 25_000]);
+});
+
+
+test("series label: run template outside [[ ]], ${x}/${y} inside; errors point into the source", () => {
+  const c = compileSeriesLabel("[[ ${x}: ${y} ]] ${run.group} loss");
+  assert.equal(c.error, null);
+  const ctx = makeRunContext({ series: new Map(), run: { id: "r1", group: "g-a" } });
+  const parts = renderLabelParts(c.value!, ctx);
+  assert.equal(renderSeriesLabel(parts), "g-a loss");
+  assert.equal(renderSeriesLabel(parts, { hover: { x: "4", y: "0.25" } }), "4: 0.25 g-a loss");
+  // A group's line has no run: its fields read as empty.
+  assert.equal(renderSeriesLabel(renderLabelParts(c.value!, undefined)), "loss");
+
+  const bad = compileSeriesLabel("[[ ${x} ]] ${run.nmae}");
+  assert.ok(bad.error);
+  assert.equal("[[ ${x} ]] ${run.nmae}".slice(bad.error!.span.start, bad.error!.span.end).includes("nmae"), true);
 });

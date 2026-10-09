@@ -3,6 +3,7 @@ import { filterOutliers } from "../lib/plot-utils/outlier.ts";
 import { bucketPoints } from "../lib/plot-utils/bucket.ts";
 import { stackColumns, type StackMode } from "../lib/plot-utils/stack.ts";
 import { asOfLookup } from "../lib/plot-utils/x-axis.ts";
+import { parseSeriesLabel, type LabelPart } from "../lib/plot-utils/scalar-legend.ts";
 import type { AxisScale, Series, SeriesPoint } from "../lib/plot-utils/types.ts";
 import {
   ExprError,
@@ -260,6 +261,33 @@ export function compileTemplate(src: string): Compiled<Template> {
   } catch (e) {
     return fail(e, src);
   }
+}
+
+/**
+ * Parse and check a series label (lib/plot-utils/scalar-legend.ts): its
+ * plain parts are `${…}` run templates; `[[ … ]]` parts are free text with
+ * `${x}` / `${y}`. Error spans are offsets in `src`.
+ */
+export function compileSeriesLabel(src: string): Compiled<LabelPart[]> {
+  const parts = parseSeriesLabel(src);
+  for (const p of parts) {
+    if (p.hover) continue;
+    const c = compileTemplate(p.src);
+    if (c.error) {
+      const { start, end } = c.error.span;
+      return { value: null, error: { message: c.error.message, span: { start: start + p.start, end: end + p.start } } };
+    }
+  }
+  return { value: parts, error: null };
+}
+
+/**
+ * A series label with its plain parts rendered for one run (`ctx`; none for
+ * a group's line, whose run fields read as empty); the hover parts stay.
+ */
+export function renderLabelParts(parts: readonly LabelPart[], ctx: RunContext | undefined): LabelPart[] {
+  const runCtx = ctx ?? makeRunContext({ series: new Map() });
+  return parts.map((p) => (p.hover ? p : { ...p, src: renderLabel(compileTemplate(p.src).value, runCtx, p.src) }));
 }
 
 /** A template's text for one run; `fallback` when it fails or renders empty. */

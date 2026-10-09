@@ -22,6 +22,12 @@ export type SeriesStyle = {
   color?: string;
   width?: number;
   dash?: LineDash;
+  /**
+   * The line's label (metric and group lines): a `${…}` run template, with
+   * `[[ … ]]` sections shown in the legend only while hovering, `${x}` and
+   * `${y}` there being the hovered point (wandb's `[[ ${x}: ${y} ]] name`).
+   */
+  label?: string;
 };
 
 /** A series computed from the run's metrics with an expression (`loss / step`). */

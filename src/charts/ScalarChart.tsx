@@ -11,7 +11,13 @@ import { onPrintLayout } from "../lib/print-layout.ts";
 import { readChartTheme, withAlpha } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
 import { lineMatches, targetOfLine, useRunHover } from "../lib/workspace-runs/hover.ts";
-import { legendFontPx, showPointMarkers, type LegendFontSize } from "../lib/plot-utils/scalar-legend.ts";
+import {
+  legendFontPx,
+  renderSeriesLabel,
+  showPointMarkers,
+  type LabelPart,
+  type LegendFontSize,
+} from "../lib/plot-utils/scalar-legend.ts";
 
 export type LineType = "linear" | "monotone" | "step" | "stepBefore" | "stepAfter";
 
@@ -56,6 +62,8 @@ export interface ScalarChartProps {
   tooltip: { showWallTime: boolean };
   /** Tooltip label per line key (the tooltip template); else the line's label. */
   tooltipLabels?: ReadonlyMap<string, string>;
+  /** Per line key: a label with `[[ … ]]` parts, shown in the legend while hovering. */
+  hoverLabels?: ReadonlyMap<string, readonly LabelPart[]>;
   axisTitles: { x: string; y: string };
   /** Width / dash per line key. */
   styles?: Readonly<Record<string, LineStyle>>;
@@ -535,6 +543,14 @@ export default function ScalarChart(props: ScalarChartProps) {
       items={legendItems}
       side={legend.position === "right" || legend.position === "left" ? legend.position : null}
       fontPx={legendFontPx(legend.fontSize ?? "auto", plotWidth)}
+      labelOf={(l) => {
+        const parts = props.hoverLabels?.get(l.key);
+        if (!parts) return l.label;
+        const p = hover ? nearestPoint(l.points, hover.idx) : null;
+        return p
+          ? renderSeriesLabel(parts, { hover: { x: formatX(p.x, xKind), y: formatNum(p.y) } }) || l.label
+          : l.label;
+      }}
       highlight={hl}
       isolated={iso}
       onHighlight={(k) => setHighlight((cur) => (cur === k ? null : k))}
@@ -581,9 +597,11 @@ export default function ScalarChart(props: ScalarChartProps) {
  * Alt-click to show only that line (again to show all).
  */
 function ChartLegend({
-  items, side, fontPx, highlight, isolated, onHighlight, onIsolate,
+  items, side, fontPx, labelOf, highlight, isolated, onHighlight, onIsolate,
 }: {
   items: DrawnSeries[];
+  /** An item's text (its hover parts filled in while hovering). */
+  labelOf: (l: DrawnSeries) => string;
   /** Beside the plot (a column), else above / below it (wrapping rows). */
   side: "left" | "right" | null;
   fontPx: number;
@@ -616,7 +634,7 @@ function ChartLegend({
             } ${active ? "font-semibold text-fg" : ""}`}
           >
             <span className="inline-block h-0.5 w-3 shrink-0 rounded" style={{ background: s.color }} />
-            <span className="truncate max-w-[16rem]">{s.label}</span>
+            <span className="truncate max-w-[16rem]">{labelOf(s)}</span>
           </button>
         );
       })}

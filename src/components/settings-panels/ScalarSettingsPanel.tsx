@@ -31,6 +31,7 @@ import type { ScalarGroupMode } from "../../lib/plot-utils/scalar-grouping";
 import {
   X_AXIS_CHOICES,
   compileSeriesExpr,
+  compileSeriesLabel,
   compileTemplate,
   metricRef,
   xMetricChoices,
@@ -583,17 +584,35 @@ export default function ScalarSettingsPanel({ ctl, ctx, mode }: Props) {
               else delete styles[l.key];
               ctl.set({ styles }, { mergeKey: `style:${l.key}` });
             };
+            const setLabel = (label: string) => {
+              const { label: _old, ...rest } = own ?? {};
+              const next: SeriesStyle = label.trim() ? { ...rest, label } : rest;
+              setStyle(Object.keys(next).length > 0 ? next : null);
+            };
             return (
-              <SettingRow
-                key={l.key}
-                label={<span className="mono text-xs">{l.label}</span>}
-                layout="stacked"
-                overridden={own != null}
-                onReset={() => setStyle(null)}
-                disabled={ro}
-              >
-                <StyleControls style={own ?? {}} fallbackColor={l.color} onChange={setStyle} disabled={ro} />
-              </SettingRow>
+              <div key={l.key} className="border-b border-border-subtle pb-1 last:border-b-0">
+                <SettingRow
+                  label={<span className="mono text-xs">{l.label}</span>}
+                  layout="stacked"
+                  overridden={own != null}
+                  onReset={() => setStyle(null)}
+                  disabled={ro}
+                >
+                  <StyleControls style={own ?? {}} fallbackColor={l.color} onChange={setStyle} disabled={ro} />
+                </SettingRow>
+                <CheckedText
+                  label="Label"
+                  bound={{ value: own?.label ?? "", onChange: setLabel, disabled: ro }}
+                  compile={compileSeriesLabel}
+                  placeholder={`[[ \${x}: \${y} ]] ${l.label}`}
+                  description={
+                    <>
+                      A run template; <code className="mono">[[ … ]]</code> shows in the legend while hovering, with{" "}
+                      <code className="mono">{"${x}"}</code> and <code className="mono">{"${y}"}</code> the hovered point.
+                    </>
+                  }
+                />
+              </div>
             );
           })}
         </SettingsSection>

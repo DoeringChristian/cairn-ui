@@ -25,6 +25,7 @@ import { downloadCsv, safeName } from "../lib/download";
 import ScalarChart, { type LineStyle, type ScalarView } from "../charts/ScalarChart";
 import {
   compileSeriesExpr,
+  compileSeriesLabel,
   compileTemplate,
   derivedLine,
   exprMetrics,
@@ -33,12 +34,14 @@ import {
   metricLine,
   metricRef,
   renderLabel,
+  renderLabelParts,
   sequenceData,
   xAxisKind,
   type LineResult,
 } from "../charts/scalar-data";
 import { xMetricFor } from "../lib/metric-defs";
 import { SERIES_COLORS, type Series } from "../lib/plot-utils/types";
+import { renderSeriesLabel, type LabelPart } from "../lib/plot-utils/scalar-legend";
 import { SMOOTHING_KINDS, formatSmoothing } from "../lib/plot-utils/smooth";
 import { groupSeries } from "../lib/plot-utils/aggregate";
 import { RUN_PALETTE } from "../lib/run-color";
@@ -257,6 +260,7 @@ export default function ScalarPlotCard({
     let lines: Series[] = [];
     const styles: Record<string, LineStyle> = {};
     const tooltipLabels = new Map<string, string>();
+    const hoverLabels = new Map<string, LabelPart[]>();
     let asOf = false;
     const note = (r: LineResult) => {
       if (r.warnings.some((w) => w.kind === "asof-join")) asOf = true;
@@ -264,7 +268,7 @@ export default function ScalarPlotCard({
     };
     const runLabel = (rid: string, ctx: RunContext | undefined) =>
       renderLabel(legendTpl, ctx, shortRunLabel(rid, drawnRuns));
-    if (!xNode) return { lines, styles, tooltipLabels, asOf, groups: 0 };
+    if (!xNode) return { lines, styles, tooltipLabels, hoverLabels, asOf, groups: 0 };
 
     const metricNames = new Set(drawnMetrics.map((m) => m.name));
     drawnMetrics.forEach((m, idx) => {
@@ -344,14 +348,22 @@ export default function ScalarPlotCard({
     }
 
     // Per-series styles (metric and group lines): colour for the line and its
-    // band, width and dash for the line.
+    // band, width, dash and label for the line.
     lines = lines.map((s) => {
       const own = settings.styles[s.key];
       if (!own || s.role === "member") return s;
-      if ((s.role ?? "line") === "line") styles[s.key] = own;
-      return own.color ? { ...s, color: own.color } : s;
+      const isLine = (s.role ?? "line") === "line";
+      if (isLine) styles[s.key] = own;
+      let out = own.color ? { ...s, color: own.color } : s;
+      const parts = isLine && own.label?.trim() ? compileSeriesLabel(own.label).value : null;
+      if (parts) {
+        const rendered = renderLabelParts(parts, s.runId ? contexts.get(s.runId) : undefined);
+        out = { ...out, label: renderSeriesLabel(rendered) || s.label };
+        if (rendered.some((p) => p.hover)) hoverLabels.set(s.key, rendered);
+      }
+      return out;
     });
-    return { lines, styles, tooltipLabels, asOf, groups };
+    return { lines, styles, tooltipLabels, hoverLabels, asOf, groups };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     xCompiled,
@@ -492,6 +504,7 @@ export default function ScalarPlotCard({
     legend: settings.legend,
     tooltip: settings.tooltip,
     tooltipLabels: built.tooltipLabels.size > 0 ? built.tooltipLabels : undefined,
+    hoverLabels: built.hoverLabels.size > 0 ? built.hoverLabels : undefined,
     axisTitles: settings.axisTitles,
     styles: built.styles,
     baselineRunId: runView.baseline,
