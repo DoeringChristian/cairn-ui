@@ -51,6 +51,11 @@ export default function CustomCard(props: SteppedMediaCardProps) {
   const list = useViewerList(project).data;
   const defaults = useViewerDefaults(project).data;
   const bus = useMemo(() => new ZoomViewSync<unknown>(), []);
+  // A WebGL viewer's gallery tiles are a context each (browsers allow only a
+  // few): its gallery shows one tile per run, as the 3D cards do.
+  const autoViewer = list ? defaultViewerName(defaults, list, series[0]!) : null;
+  const webgl = !!list?.find((v) => v.name === autoViewer)?.webgl;
+  const instance = useMemo<Partial<CustomSettings>>(() => (webgl ? { galleryContent: "run" } : {}), [webgl]);
 
   return (
     <SteppedMediaCard<CustomSettings>
@@ -60,6 +65,7 @@ export default function CustomCard(props: SteppedMediaCardProps) {
       defaultMime="application/octet-stream"
       defaultHeight={360}
       nearest
+      instanceDefaults={instance}
       settingsPanel={(ctl, ctx) => <CustomSettingsPanel ctl={ctl} ctx={{ ...ctx, series }} mode="card" />}
       prefetch={(qc, point) => qc.prefetchQuery(artifactBytesQuery(point.artifact_hash!))}
       peek={(qc, point) => qc.getQueryData(artifactBytesQuery(point.artifact_hash!).queryKey) !== undefined}

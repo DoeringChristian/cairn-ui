@@ -87,7 +87,7 @@ export interface SteppedMediaPanelCtx extends MediaPanelCtx, ReferencePanelCtx {
 
 interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
   /** Card kind, used for CardShell sizing and as the comparison card type. */
-  kind: "markdown" | "html" | "audio" | "video" | "text" | "custom";
+  kind: "markdown" | "html" | "audio" | "video" | "text" | "custom" | "volume" | "tensor";
   /** Word in the empty state: "no {noun} logged yet". */
   noun: string;
   /** Gallery item captions as chips over the items (pictures: video, audio) rather than a line above. */
@@ -122,6 +122,11 @@ interface Props<S extends SteppedMediaSettings> extends SteppedMediaCardProps {
    * A zoom/pan the card's panes share: the header's reset-view button; or a
    * function of the card's settings when the view lives in them.
    */
+  /**
+   * Instance defaults over the shell's (a seed series): what this card starts
+   * from, e.g. a WebGL custom viewer's gallery content Run.
+   */
+  instanceDefaults?: Partial<S>;
   viewReset?:
     | { modified: boolean; reset: () => void }
     | ((settings: S, update: (patch: Partial<S>) => void) => { modified: boolean; reset: () => void } | undefined);
@@ -153,6 +158,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   reference: referenceOf,
   viewReset,
   captionOverlay,
+  instanceDefaults,
 }: Props<S>) {
   const { ctl, effectiveMetrics, allRunIds } =
     useCardSeries<S>({
@@ -162,7 +168,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
       controlledSeries,
       settingsKeyOverride,
       type: kind,
-      instanceDefaults: steppedMediaInstanceDefaults as (seed: { name: string }) => Partial<S>,
+      instanceDefaults: (seed) => ({ ...instanceDefaults, ...(steppedMediaInstanceDefaults(seed) as Partial<S>) }),
     });
   const settings = ctl.value;
   const reset = typeof viewReset === "function" ? viewReset(settings, (patch) => ctl.set(patch)) : viewReset;

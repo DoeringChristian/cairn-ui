@@ -113,10 +113,13 @@ export function useCardSeries<
   const instanceDefaultsRef = useRef(instanceDefaults);
   instanceDefaultsRef.current = instanceDefaults;
 
+  // The factory's result may change after mount (a custom card learns its
+  // viewer once the project's viewer list loads), so its JSON is a dependency.
+  const instanceJson = JSON.stringify(instanceDefaults?.(seed) ?? {});
   const defaults = useMemo<Partial<TSettings>>(
     () => ({ ...instanceDefaultsRef.current?.(seed), metrics: defaultMetrics }) as Partial<TSettings>,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [seed, extraSeriesKey],
+    [seed, extraSeriesKey, instanceJson],
   );
 
   const settingsKey = useMemo<CardSettingsKey>(
