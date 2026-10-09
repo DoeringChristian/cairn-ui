@@ -464,6 +464,7 @@ function WorkspaceViewInner({ wsRef, runIds, reportLabel, metricFilter, hideEmpt
               scope={key}
               sectionName={section.name}
               itemCount={section.panels.length}
+              hiddenCount={section.hiddenCards ?? 0}
               collapsed={section.collapsed}
               sorted={section.sort}
               first={i === 0}

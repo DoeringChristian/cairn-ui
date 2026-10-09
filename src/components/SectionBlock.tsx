@@ -16,6 +16,7 @@ import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { CardMutationContext } from "../lib/card-settings";
 import type { CardType } from "../lib/cards/card-spec";
 import { SectionDefaultsProvider, type CardDefaults } from "../lib/settings-scope";
+import { sectionCountLabel } from "../lib/workspace/layout";
 import { useWorkspaceRef } from "../lib/workspace/ref";
 import { useWorkspace } from "../lib/workspace/use-workspace";
 import { HeaderToggle } from "./card-header";
@@ -41,6 +42,8 @@ export interface SectionBlockProps extends SectionActions {
   /** Where this section's shared media slider persists; unique per page (e.g. `run:<id>`). */
   scope?: string;
   itemCount: number;
+  /** Cards the run page hides for lack of data: the count reads `k of N shown`. */
+  hiddenCount?: number;
   collapsed: boolean;
   sorted: boolean;
   /** First / last section: no move up / down. */
@@ -59,6 +62,7 @@ export default function SectionBlock({
   sectionName,
   scope,
   itemCount,
+  hiddenCount = 0,
   collapsed,
   sorted,
   first,
@@ -244,7 +248,7 @@ export default function SectionBlock({
               </>
             )}
             <span className="ml-1 text-xs text-fg-subtle">
-              {collapsed ? `${itemCount} card(s) hidden` : `${itemCount} card(s)`}
+              {sectionCountLabel(itemCount, hiddenCount, collapsed)}
             </span>
           </div>
         </header>

@@ -267,6 +267,17 @@ export function hiddenCardsNote(section: Pick<RenderedSection, "hiddenCards">): 
   return n === 0 ? null : `${n} card${n === 1 ? "" : "s"} without data for this run`;
 }
 
+/**
+ * A section header's card count: `N card(s)`, or `k of N shown` when the run page hides
+ * `hidden` of its cards for lack of data (`0 of 3 shown` when it hides them all).
+ * Collapsed: `N card(s) hidden`, N counting every card of the section.
+ */
+export function sectionCountLabel(shown: number, hidden: number, collapsed: boolean): string {
+  const total = shown + hidden;
+  if (collapsed) return `${total} card(s) hidden`;
+  return hidden > 0 ? `${shown} of ${total} shown` : `${total} card(s)`;
+}
+
 /** `base`, else `base 2`, `base 3`, … — the first not in `taken`. */
 export function uniqueSectionName(base: string, taken: readonly string[]): string {
   const set = new Set(taken);

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EMPTY_WORKSPACE, ops, type Panel } from "./doc.ts";
-import { addToSectionOp, autoPanelsOp, deriveLayout, hiddenCardsNote, materializeOp, uniqueSectionName, withoutEmptyPanels, type MetricInfo } from "./layout.ts";
+import { addToSectionOp, autoPanelsOp, deriveLayout, hiddenCardsNote, materializeOp, sectionCountLabel, uniqueSectionName, withoutEmptyPanels, type MetricInfo } from "./layout.ts";
 
 const M = (name: string, object_type = "scalar", runIds = ["r1"]): MetricInfo => ({ name, object_type, count: 5, runIds });
 const P = (id: string, sel: Panel["selector"], type: Panel["type"] = "scalar", settings = {}): Panel => ({ id, type, selector: sel, settings });
@@ -197,4 +197,12 @@ test("adding to a section puts the cards after its automatic ones; other section
   const withNew = ops.addSection("New section")(doc);
   const added = addToSectionOp(deriveLayout(withNew, SM), "New section", [P("n", { names: ["lr"] })])(withNew);
   assert.deepEqual(shape(deriveLayout(added, SM)).slice(0, 2), ["mine:m", "New section:n"]);
+});
+
+test("sectionCountLabel: k of N shown when the run page hides cards", () => {
+  assert.equal(sectionCountLabel(3, 0, false), "3 card(s)");
+  assert.equal(sectionCountLabel(0, 0, false), "0 card(s)");
+  assert.equal(sectionCountLabel(0, 2, false), "0 of 2 shown");
+  assert.equal(sectionCountLabel(1, 2, false), "1 of 3 shown");
+  assert.equal(sectionCountLabel(1, 2, true), "3 card(s) hidden");
 });
