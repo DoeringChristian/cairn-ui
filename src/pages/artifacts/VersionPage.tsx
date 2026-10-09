@@ -109,12 +109,17 @@ function VersionView({
   return (
     <div data-testid="version-view">
       <header className="mb-3 flex flex-wrap items-start gap-x-3 gap-y-2">
-        <div className="min-w-0 flex-1">
+        {/* A basis, not `flex-1` (basis 0): on a phone the actions wrap below
+            instead of squeezing the title to one letter per line. */}
+        <div className="min-w-0 flex-[1_1_18rem]">
           <div className="flex flex-wrap items-center gap-2">
             <TypeBadge type={version.type} />
-            <h1 className="mono min-w-0 break-all text-xl font-semibold" data-testid="version-title">
+            {/* Wraps at its segments (after the project's `/`, before `:v`, at hyphens). */}
+            <h1 className="mono min-w-0 break-words text-xl font-semibold" data-testid="version-title">
               <span className="text-fg-muted">{version.project_id}/</span>
+              <wbr />
               {version.name}
+              <wbr />
               <span className="text-fg-muted">:v{version.version}</span>
             </h1>
             <CopyButton text={version.qualified_ref} />
