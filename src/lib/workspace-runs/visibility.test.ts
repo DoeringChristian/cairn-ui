@@ -102,7 +102,7 @@ test("a nested group eye sets its runs' eyes", () => {
   assert.deepEqual(s.eyes, { "r:b": false, "r:a": false });
 });
 
-test("cardRuns: visible runs in table order; grouped, each with its innermost group line ((none) included)", () => {
+test("cardRuns: visible runs in table order; grouped, each with its innermost group line, (none) runs their own lines", () => {
   const { sorted, groups } = fixture(2);
   const vis = resolveVisibility(sorted, groups, { "r:g1-a": false }).runs;
   const c = cardRuns(sorted, groups, vis);
@@ -111,8 +111,9 @@ test("cardRuns: visible runs in table order; grouped, each with its innermost gr
     ["g1-b", "group: exp-1"],
     ["g0-b", "group: exp-0"],
     ["g0-a", "group: exp-0"],
-    ["loose", "group: (none)"],
   ]);
+  // Runs without a value are never averaged: `loose` (Group: (none)) is listed but has no group line.
+  assert.equal(c.groupOf.has("loose"), false);
   const flat = cardRuns(sorted, null, resolveVisibility(sorted, null, {}).runs);
   assert.deepEqual(flat.runIds, sorted.map((r) => r.id));
   assert.equal(flat.groupOf.size, 0);
@@ -187,7 +188,7 @@ test("withGroupCondition: adds `group = g`, replaces an earlier one, keeps the o
 test("filterToGroup: filters, keeps the eyes, shows the group's runs hidden by a group eye", () => {
   const { sorted, groups } = fixture(3);
   const exp1 = groups.find((g) => g.label === "exp-1")!;
-  const s0: RunState = { ...DEFAULT_RUN_STATE, eyes: { [groupKey(exp1)]: false, "r:g2-a": false } };
+  const s0: RunState = { ...DEFAULT_RUN_STATE, groupBy: BY_GROUP, eyes: { [groupKey(exp1)]: false, "r:g2-a": false } };
   const s = filterToGroup(s0, "exp-1", sorted);
   assert.deepEqual(s.filter.children, [chip("group", "exp-1")]);
   // exp-1's off eye goes back to its default (visible); the other group's eyes stay.
@@ -213,21 +214,22 @@ test("filterToGroup: archived runs only count under the archived status", () => 
   assert.equal(s.eyes["r:old"], false);
 });
 
-test("cardRuns: nested, each run maps to its innermost group path", () => {
+test("cardRuns: nested, each run maps to its innermost group path; under a (none) at any level, none", () => {
   const runs = sortNewest([
     makeRun("t", { group: "exp-44", job_type: "train", created_at: at(3) }),
     makeRun("e", { group: "exp-44", job_type: "eval", created_at: at(2) }),
     makeRun("x", { group: "exp-44", created_at: at(1) }),
     makeRun("b", { created_at: at(0) }),
+    makeRun("n", { job_type: "train", created_at: at(-1) }),
   ]);
   const groups = groupRunsNested(runs, [{ source: "group" }, { source: "job_type" }])!;
   const c = cardRuns(runs, groups, new Set(runs.map((r) => r.id)));
   assert.deepEqual(Object.fromEntries(c.groupOf), {
     t: "group: exp-44, jobType: train",
     e: "group: exp-44, jobType: eval",
-    x: "group: exp-44, jobType: (none)",
-    b: "group: (none), jobType: (none)",
   });
+  // Job Type: (none) under exp-44, Group: (none) (with or without a job type): each run its own line.
+  assert.deepEqual([...c.runIds].sort(), ["b", "e", "n", "t", "x"]);
 });
 
 test("regroup: what is visible stays visible when the Group by changes", () => {

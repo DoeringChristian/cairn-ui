@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { flattenGroups, groupLineLabel, groupRowModel, groupRunsNested, hasGroupLevel, innermostLineOf, type GroupBy } from "./group.ts";
+import { aggregates, flattenGroups, groupLineLabel, groupRowModel, groupRunsNested, hasGroupLevel, innermostLineOf, type GroupBy } from "./group.ts";
 import { groupLineColors } from "../run-color.ts";
 import { sortBy } from "./sort.ts";
 import { makeRun as run, stats } from "./test-run.ts";
@@ -151,8 +151,9 @@ test("innermostLineOf / groupLineLabel: a run's innermost group path (wandb's le
   const groups = groupRunsNested(nested(), [{ source: "group" }, { source: "job_type" }])!;
   const of = innermostLineOf(groups);
   assert.equal(of.get("t1"), "group: exp-44, jobType: train");
-  assert.equal(of.get("b2"), "group: (none), jobType: (none)");
-  assert.equal(of.size, 8);
+  // Runs under a (none) at any level are their own lines: no group line.
+  assert.equal(of.get("b2"), undefined);
+  assert.equal(of.size, 6);
   assert.equal(groupLineLabel([]), "");
   // Every innermost group a colour, distinct while the palette lasts.
   const colors = groupLineColors([...new Set(of.values())]);
@@ -166,4 +167,30 @@ test("hasGroupLevel: the same field is a duplicate level, another field or param
   assert.equal(hasGroupLevel(levels, { source: "param", key: "lr" }), true);
   assert.equal(hasGroupLevel(levels, { source: "param", key: "seed" }), false);
   assert.equal(hasGroupLevel(levels, { source: "expr", expr: "group" }), false);
+});
+
+test("runs without a value are never averaged: a (none) at any level is hollow, has no line, and its runs keep their dots", () => {
+  const groups = groupRunsNested(nested(), [{ source: "group" }, { source: "job_type" }])!;
+  const none = groups[2]!;
+  // Group: (none) → Job Type: eval / (none): both innermost, both under a (none).
+  assert.deepEqual(
+    none.children!.map((n) => [groupRowModel(n).text, groupRowModel(n).dot, groupRowModel(n).line, aggregates(n)]),
+    [
+      ["Job Type: eval", "hollow", null, false],
+      ["Job Type: (none)", "hollow", null, false],
+    ],
+  );
+  // One level: Group: (none) is innermost but hollow, without a line.
+  const flat = groupRunsNested(nested(), [{ source: "group" }])!;
+  assert.deepEqual([groupRowModel(flat[2]!).text, groupRowModel(flat[2]!).dot, groupRowModel(flat[2]!).line], ["Group: (none)", "hollow", null]);
+  assert.equal(aggregates(flat[0]!), true);
+  // Tag and param (none) too.
+  const tag = groupRunsNested([run("a", { tags: JSON.stringify(["x"]) }), run("b")], [{ source: "tag" }])!;
+  assert.deepEqual(tag.map((n) => [groupRowModel(n).text, groupRowModel(n).dot]), [["Tag: x", "filled"], ["Tag: (none)", "hollow"]]);
+  const param = groupRunsNested([run("a", { params: { lr: 0.1 } }), run("b")], [{ source: "param", key: "lr" }])!;
+  assert.deepEqual(param.map((n) => aggregates(n)), [true, false]);
+  // Rows: runs averaged into a group line have no dot of their own (`own` false); runs under a (none) do.
+  const rows = flattenGroups(groups, new Set());
+  const own = Object.fromEntries(rows.flatMap((r) => (r.kind === "run" ? [[r.run.id, r.own]] : [])));
+  assert.deepEqual(own, { t2: false, t1: false, e1: false, p1: false, p2: false, s0: false, b1: true, b2: true });
 });

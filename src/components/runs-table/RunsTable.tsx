@@ -10,7 +10,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { Run } from "../../api/types";
 import { isNumericColumn } from "../../lib/runs-table/columns";
-import { groupLineLabel, type RunGroupNode, type TableRow } from "../../lib/runs-table/group";
+import { aggregates, groupLineLabel, type RunGroupNode, type TableRow } from "../../lib/runs-table/group";
 import { groupSelection, runRowName } from "../../lib/runs-table/model";
 import {
   CHECK_W,
@@ -87,7 +87,7 @@ interface Props {
   grouped: boolean;
   /** The newest run of a series with several runs: highlighted. */
   latestByName: ReadonlySet<string>;
-  /** A run's dot (not grouped; runs inside groups have none); null: hollow. */
+  /** A run's dot (its own line: not grouped, or under a `(none)`; runs averaged into a group line have none); null: hollow. */
   colorOf: (run: Run) => string | null | undefined;
   /** The innermost groups' dots: their chart lines' colours (lib/run-color.ts `groupLineColors`). */
   groupColors: ReadonlyMap<string, string>;
@@ -191,7 +191,7 @@ export default function RunsTable({
     return w === undefined ? undefined : { width: w, minWidth: w, maxWidth: w, overflow: "hidden", textOverflow: "ellipsis" };
   };
 
-  const nameCell = (r: Run, depth: number) => (
+  const nameCell = (r: Run, depth: number, own: boolean) => (
     <RunNameCell
       before={
         lead.kind === "eye" ? <EyeButton eye={lead.runEye(r) ? "on" : "off"} label={runLabel(r)} onClick={() => lead.onRun(r)} /> : null
@@ -199,7 +199,7 @@ export default function RunsTable({
       name={runRowName(r, grouped)}
       to={`/p/${projectId}/r/${r.id}`}
       linkState={runLinkState}
-      color={depth > 0 ? false : colorOf(r)}
+      color={own ? colorOf(r) : false}
       depth={depth}
       version={r.version != null ? <RunVersion version={r.version} /> : null}
     >
@@ -225,7 +225,7 @@ export default function RunsTable({
       </td>
     ) : null;
 
-  const runRow = (r: Run, key: string, depth: number) => {
+  const runRow = (r: Run, key: string, depth: number, own: boolean) => {
     const isSelected = lead.kind === "check" && lead.selected.has(r.id);
     const rowClass = [
       RUN_ROW_CLASS,
@@ -247,7 +247,7 @@ export default function RunsTable({
           const style = !leadCol && i === 0 ? { ...fp.style, ...highlightOf(r) } : fp.style;
           return (
             <td key={col} className={fp.className} style={style}>
-              {col === "name" ? nameCell(r, depth) : <div className="truncate">{columns!.cell(r, col)}</div>}
+              {col === "name" ? nameCell(r, depth, own) : <div className="truncate">{columns!.cell(r, col)}</div>}
             </td>
           );
         })}
@@ -269,7 +269,7 @@ export default function RunsTable({
         {eye}
         <GroupHeader
           node={node}
-          color={node.children === null && !groupHidden?.(node) ? (groupColors.get(groupLineLabel(node.path)) ?? null) : null}
+          color={aggregates(node) && !groupHidden?.(node) ? (groupColors.get(groupLineLabel(node.path)) ?? null) : null}
           collapsed={collapsed.has(node.id)}
           onToggle={() => onToggleGroup(node.id)}
           name={node.by.source === "group" && node.label != null ? groupName(node.label) : null}
@@ -346,7 +346,7 @@ export default function RunsTable({
           {columns && <th aria-hidden="true" />}
         </tr>
       </thead>
-      <tbody>{rows.map((row) => (row.kind === "group" ? groupRow(row.node) : runRow(row.run, row.key, row.depth)))}</tbody>
+      <tbody>{rows.map((row) => (row.kind === "group" ? groupRow(row.node) : runRow(row.run, row.key, row.depth, row.own)))}</tbody>
     </table>
   );
 }

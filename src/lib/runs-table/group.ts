@@ -94,9 +94,20 @@ export function groupLineLabel(path: readonly GroupStep[]): string {
 }
 
 /**
+ * Whether a group's runs are averaged into one chart line: an innermost
+ * group none of whose levels is `(none)`. Runs without a value are never
+ * averaged: under a `(none)` at any level each run stays its own line.
+ */
+export function aggregates(node: Pick<RunGroupNode, "children" | "path">): boolean {
+  return node.children === null && node.path.every((s) => s.label !== null);
+}
+
+/**
  * A group header row: `Field: value`; an outer group (sub-groups below it)
  * has a hollow circle and two counts (sub-groups, runs); an innermost group
- * has the filled dot of its chart line (`line`) and its run count.
+ * has the filled dot of its chart line (`line`) and its run count, unless
+ * it is (under) a `(none)` (`aggregates`): its runs are their own lines,
+ * so its dot is hollow and it has no line.
  */
 export interface GroupRowModel {
   field: string;
@@ -108,7 +119,7 @@ export interface GroupRowModel {
   dot: "hollow" | "filled";
   /** Outer: [sub-groups, runs]; innermost: [runs]. */
   counts: number[];
-  /** Innermost: its chart line's label (groupLineLabel); outer: null. */
+  /** An aggregated innermost group (`aggregates`): its chart line's label (groupLineLabel); else null. */
   line: string | null;
 }
 
@@ -116,21 +127,23 @@ export function groupRowModel(node: RunGroupNode): GroupRowModel {
   const field = groupFieldLabel(node.by);
   const value = node.label ?? NO_VALUE;
   const innermost = node.children === null;
+  const line = aggregates(node) ? groupLineLabel(node.path) : null;
   return {
     field,
     value,
     none: node.label === null,
     text: `${field}: ${value}`,
     innermost,
-    dot: innermost ? "filled" : "hollow",
+    dot: line != null ? "filled" : "hollow",
     counts: innermost ? [node.runs.length] : [node.children!.length, node.runs.length],
-    line: innermost ? groupLineLabel(node.path) : null,
+    line,
   };
 }
 
 /**
- * Each run's innermost group line (groupLineLabel), in table order; a run
- * under several groups (tags) takes its first.
+ * Each aggregated run's innermost group line (groupLineLabel), in table
+ * order; a run under several groups (tags) takes its first. Runs under a
+ * `(none)` (`aggregates`) have none: they are their own lines.
  */
 export function innermostLineOf(nodes: readonly RunGroupNode[]): Map<string, string> {
   const out = new Map<string, string>();
@@ -140,6 +153,7 @@ export function innermostLineOf(nodes: readonly RunGroupNode[]): Map<string, str
         walk(n.children);
         continue;
       }
+      if (!aggregates(n)) continue;
       const line = groupLineLabel(n.path);
       for (const r of n.runs) if (!out.has(r.id)) out.set(r.id, line);
     }
@@ -230,7 +244,8 @@ export function groupRunsNested(runs: readonly Run[], levels: readonly GroupBy[]
 
 export type TableRow =
   | { kind: "group"; node: RunGroupNode }
-  | { kind: "run"; run: Run; key: string; depth: number };
+  /** `own`: the run is its own chart line (not grouped, or under a `(none)`: `aggregates`), so its row has its dot. */
+  | { kind: "run"; run: Run; key: string; depth: number; own: boolean };
 
 /** The on-screen rows: group headers, then (when expanded) their children or runs. */
 export function flattenGroups(nodes: readonly RunGroupNode[], collapsed: ReadonlySet<string>): TableRow[] {
@@ -240,7 +255,10 @@ export function flattenGroups(nodes: readonly RunGroupNode[], collapsed: Readonl
       out.push({ kind: "group", node: n });
       if (collapsed.has(n.id)) continue;
       if (n.children) walk(n.children);
-      else for (const r of n.runs) out.push({ kind: "run", run: r, key: `${n.id}:${r.id}`, depth: n.depth + 1 });
+      else {
+        const own = !aggregates(n);
+        for (const r of n.runs) out.push({ kind: "run", run: r, key: `${n.id}:${r.id}`, depth: n.depth + 1, own });
+      }
     }
   };
   walk(nodes);

@@ -12,7 +12,7 @@
 
 import type { Run } from "../../api/types.ts";
 import { EMPTY_FILTER, type ChipNode, type FilterNode, type GroupNode } from "../run-filter.ts";
-import { groupByLabel, groupLineLabel, groupRunsNested, type RunGroupNode } from "../runs-table/group.ts";
+import { aggregates, groupByLabel, groupLineLabel, groupRunsNested, type RunGroupNode } from "../runs-table/group.ts";
 import { setEyes, type RunState } from "./state.ts";
 
 /** How many of the newest groups (runs) are visible by default. */
@@ -133,13 +133,14 @@ export interface CardRuns {
   runIds: string[];
   /**
    * Grouped: a run's innermost group line (`group: exp-44, jobType: train`,
-   * lib/runs-table/group.ts `groupLineLabel`); every grouped run has one, a
-   * run without a value in the `(none)` group of its level.
+   * lib/runs-table/group.ts `groupLineLabel`). Runs without a value are
+   * never averaged: a run under a `(none)` at any level (`aggregates`) has
+   * none and stays its own line.
    */
   groupOf: Map<string, string>;
 }
 
-/** The runs given to the cards and, grouped, the innermost group line each one aggregates into. */
+/** The runs given to the cards and, grouped, the innermost group line each one aggregates into (none under a `(none)`). */
 export function cardRuns(sorted: readonly Run[], groups: readonly RunGroupNode[] | null, visible: ReadonlySet<string>): CardRuns {
   const groupOf = new Map<string, string>();
   if (!groups) return { runIds: sorted.filter((r) => visible.has(r.id)).map((r) => r.id), groupOf };
@@ -151,12 +152,12 @@ export function cardRuns(sorted: readonly Run[], groups: readonly RunGroupNode[]
         walk(n.children);
         continue;
       }
-      const line = groupLineLabel(n.path);
+      const line = aggregates(n) ? groupLineLabel(n.path) : null;
       for (const r of n.runs) {
         if (!visible.has(r.id) || seen.has(r.id)) continue;
         seen.add(r.id);
         runIds.push(r.id);
-        groupOf.set(r.id, line);
+        if (line != null) groupOf.set(r.id, line);
       }
     }
   };

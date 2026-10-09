@@ -90,7 +90,7 @@ export function useRunsTable(q: RunsTableQuery) {
   const collapsed = useMemo(() => collapsedGroups(groups, toggled, defaultCollapsed), [groups, toggled, defaultCollapsed]);
 
   const rows = useMemo<TableRow[]>(
-    () => (groups ? flattenGroups(groups, collapsed) : sorted.map((run) => ({ kind: "run", run, key: run.id, depth: 0 }))),
+    () => (groups ? flattenGroups(groups, collapsed) : sorted.map((run) => ({ kind: "run", run, key: run.id, depth: 0, own: true }))),
     [groups, collapsed, sorted],
   );
 

@@ -31,7 +31,7 @@ const SIDEBAR_TOGGLES: readonly RunViewToggle[] = ["pin", "baseline"];
 import RunsTable from "../runs-table/RunsTable";
 import type { useRunsTable } from "../runs-table/use-runs-table";
 import { columnKind, columnLabel } from "../../lib/runs-table/columns";
-import { groupLineLabel, type RunGroupNode } from "../../lib/runs-table/group";
+import { aggregates, groupLineLabel, type RunGroupNode } from "../../lib/runs-table/group";
 import { sameGroup } from "../../lib/runs-table/model";
 import { DEFAULT_SORT, initialDirection, type SortKey } from "../../lib/runs-table/sort";
 import type { RunViewContextValue } from "../../lib/run-view";
@@ -127,8 +127,8 @@ export default function RunsSidebar({
   const hover = useRunHover();
   const target = hover.target;
   const grouped = state.groupBy.length > 0;
-  /** An innermost group header's line (outer groups have none). */
-  const groupLine = (n: RunGroupNode) => (n.children === null ? groupLineLabel(n.path) : null);
+  /** An aggregated innermost group header's line (outer and `(none)` groups have none: lib/runs-table/group.ts `aggregates`). */
+  const groupLine = (n: RunGroupNode) => (aggregates(n) ? groupLineLabel(n.path) : null);
   return (
     <div className="flex flex-col" data-testid="runs-sidebar">
       <div className="flex flex-col gap-1.5 px-3 pb-2 pt-3">
