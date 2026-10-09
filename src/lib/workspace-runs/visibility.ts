@@ -94,20 +94,44 @@ export function allEye(sorted: readonly Pick<Run, "id">[], visible: ReadonlySet<
 }
 
 /**
- * The header eye clicked: every listed run hidden (all visible) or shown
- * (otherwise). Grouped, as every top-level group's eye (its runs back to
+ * The header eye menu's "Show all" / "Hide all": every listed run shown or
+ * hidden. Grouped, as every top-level group's eye (its runs back to
  * following it); not grouped, every run's.
  */
+export function setAllEyes(s: RunState, sorted: readonly Run[], groups: readonly RunGroupNode[] | null, on: boolean): RunState {
+  const runKeys = sorted.map((r) => runKey(r.id));
+  if (!groups) return setEyes(s, runKeys, on);
+  return setEyes(setEyes(s, runKeys, null), groups.map(groupKey), on);
+}
+
+/** The header eye clicked: every listed run hidden (all visible) or shown (otherwise), as `setAllEyes`. */
 export function toggleAllEyes(
   s: RunState,
   sorted: readonly Run[],
   groups: readonly RunGroupNode[] | null,
   visible: ReadonlySet<string>,
 ): RunState {
-  const on = allEye(sorted, visible) !== "on";
-  const runKeys = sorted.map((r) => runKey(r.id));
-  if (!groups) return setEyes(s, runKeys, on);
-  return setEyes(setEyes(s, runKeys, null), groups.map(groupKey), on);
+  return setAllEyes(s, sorted, groups, allEye(sorted, visible) !== "on");
+}
+
+/**
+ * The header eye menu's "Show latest only", once (not a mode): every listed
+ * run's own eye on when it is the latest version of its series
+ * (`latestIds`: lib/runs-table/model.ts `latestRuns`), off otherwise; the
+ * older versions stay listed, hidden. Grouped, a top-level group's eye
+ * follows too (on when it has a latest version), so a group with older
+ * versions shows ◐. A run's eye clicked afterwards overrides it as usual.
+ */
+export function showLatestOnly(
+  s: RunState,
+  sorted: readonly Run[],
+  groups: readonly RunGroupNode[] | null,
+  latestIds: ReadonlySet<string>,
+): RunState {
+  const eyes = { ...s.eyes };
+  for (const r of sorted) eyes[runKey(r.id)] = latestIds.has(r.id);
+  for (const g of groups ?? []) eyes[groupKey(g)] = g.runs.some((r) => latestIds.has(r.id));
+  return { ...s, eyes };
 }
 
 /**

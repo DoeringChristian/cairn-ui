@@ -38,7 +38,7 @@ import { DEFAULT_SORT, initialDirection, type SortKey } from "../../lib/runs-tab
 import type { RunViewContextValue } from "../../lib/run-view";
 import { targetOfRun, useRunHover } from "../../lib/workspace-runs/hover";
 import { setFilter, setSearch, setSort, setStatus, type RunState } from "../../lib/workspace-runs/state";
-import { allEye, filterToGroup, groupEye, regroup, toggleAllEyes, toggleGroupEye, toggleRunEye, type Visibility } from "../../lib/workspace-runs/visibility";
+import { allEye, filterToGroup, groupEye, regroup, setAllEyes, showLatestOnly, toggleAllEyes, toggleGroupEye, toggleRunEye, type Visibility } from "../../lib/workspace-runs/visibility";
 import "../../pages/runs-table.css";
 
 export type RunStateEdit = (fn: (s: RunState) => RunState, label: string, mergeKey?: string) => void;
@@ -184,6 +184,8 @@ export default function RunsSidebar({
               onGroup: (n) => onEdit((s) => toggleGroupEye(s, n, visible), `Toggle ${n.label ?? "(none)"}`),
               all: allEye(table.sorted, visible),
               onAll: () => onEdit((s) => toggleAllEyes(s, table.sorted, table.groups, visible), "Toggle every run"),
+              onSetAll: (on) => onEdit((s) => setAllEyes(s, table.sorted, table.groups, on), on ? "Show every run" : "Hide every run"),
+              onShowLatest: () => onEdit((s) => showLatestOnly(s, table.sorted, table.groups, table.latestIds), "Show latest versions only"),
             }}
             groupName={(g) => ({ onClick: () => onEdit((s) => filterToGroup(s, g, runs), `Filter to ${g}`) })}
             runLinkState={runLinkState}

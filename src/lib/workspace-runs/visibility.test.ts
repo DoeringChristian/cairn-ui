@@ -3,12 +3,15 @@ import assert from "node:assert/strict";
 import type { Run } from "../../api/types.ts";
 import { groupRunsNested, type GroupBy } from "../runs-table/group.ts";
 import { makeRun } from "../runs-table/test-run.ts";
+import { latestRuns } from "../runs-table/model.ts";
 import { DEFAULT_RUN_STATE, type RunState } from "./state.ts";
 import { EMPTY_FILTER, matchesFilter, type GroupNode } from "../run-filter.ts";
 import {
   DEFAULT_VISIBLE,
   allEye,
   toggleAllEyes,
+  setAllEyes,
+  showLatestOnly,
   cardRuns,
   filterToGroup,
   groupEye,
@@ -168,6 +171,71 @@ test("header eye: on / off / mixed over the listed runs; a click shows all, or h
   assert.equal(Object.keys(s4.eyes).length, sorted.length);
   assert.equal(resolveVisibility(sorted, null, s4.eyes).runs.size, 0);
   assert.equal(allEye([], new Set()), "off");
+});
+
+test("setAllEyes: the eye menu's Show all / Hide all, grouped or not, whatever is shown now", () => {
+  const { sorted, groups } = fixture(3);
+  const hidden = setAllEyes(withEyes({ "r:g0-a": true }), sorted, groups, false);
+  assert.equal(hidden.eyes["r:g0-a"], undefined, "grouped: run eyes back to following their group");
+  assert.equal(resolveVisibility(sorted, groups, hidden.eyes).runs.size, 0);
+  // Show all also when everything is shown already (no toggle).
+  const shown = setAllEyes(withEyes({}), sorted, groups, true);
+  assert.equal(resolveVisibility(sorted, groups, shown.eyes).runs.size, sorted.length);
+  const flat = setAllEyes(withEyes({}), sorted, null, false);
+  assert.deepEqual(Object.values(flat.eyes), sorted.map(() => false));
+});
+
+/** Versions of three series: exp-0 · train v1..v2, exp-0 · eval v1, exp-1 · train v1..v3, and a loose run. */
+function versioned() {
+  const v = (id: string, group: string | null, name: string, version: number, i: number) =>
+    makeRun(id, { group, display_name: name, version, created_at: at(i) });
+  const runs = sortNewest([
+    v("t0v1", "exp-0", "train", 1, 1),
+    v("t0v2", "exp-0", "train", 2, 2),
+    v("e0v1", "exp-0", "eval", 1, 3),
+    v("t1v1", "exp-1", "train", 1, 4),
+    v("t1v2", "exp-1", "train", 2, 5),
+    v("t1v3", "exp-1", "train", 3, 6),
+    v("old0", "exp-2", "train", 1, 7),
+    v("loose", null, "baseline", 1, 8),
+  ]);
+  return { runs, latest: latestRuns(runs).latestIds };
+}
+
+test("showLatestOnly: not grouped, the latest version of every series shown, older ones listed but hidden; a run eye overrides after", () => {
+  const { runs, latest } = versioned();
+  const s = showLatestOnly(withEyes({ "r:t0v1": true, "r:t1v3": false, "r:unlisted": true }), runs, null, latest);
+  const vis = resolveVisibility(runs, null, s.eyes).runs;
+  assert.deepEqual([...vis].sort(), ["e0v1", "loose", "old0", "t0v2", "t1v3"]);
+  assert.equal(s.eyes["r:unlisted"], true, "runs not listed keep their eyes");
+  assert.equal(allEye(runs, vis), "mixed");
+  // An older version shown again by its own eye.
+  const o = toggleRunEye(s, runs.find((r) => r.id === "t1v1")!, vis);
+  assert.equal(resolveVisibility(runs, null, o.eyes).runs.has("t1v1"), true);
+  // The header eye still toggles every listed run.
+  assert.equal(resolveVisibility(runs, null, toggleAllEyes(s, runs, null, vis).eyes).runs.size, runs.length);
+});
+
+test("showLatestOnly: grouped, a group with older versions shows ◐, one without stays ◉; group eyes follow", () => {
+  const { runs, latest } = versioned();
+  const groups = groupRunsNested(runs, BY_GROUP)!;
+  // exp-1 hidden by its group eye before: its latest version comes back.
+  const s = showLatestOnly(withEyes({ [groupKey(groups.find((g) => g.label === "exp-1")!)]: false }), runs, groups, latest);
+  const vis = resolveVisibility(runs, groups, s.eyes).runs;
+  assert.deepEqual([...vis].sort(), ["e0v1", "loose", "old0", "t0v2", "t1v3"]);
+  const eye = (label: string | null) => groupEye(groups.find((g) => g.label === label)!, vis);
+  assert.deepEqual([eye("exp-0"), eye("exp-1"), eye("exp-2"), eye(null)], ["mixed", "mixed", "on", "on"]);
+  assert.equal(s.eyes[groupKey(groups.find((g) => g.label === "exp-1")!)], true);
+  // A run's eye overrides it afterwards; a group's eye sets all its runs.
+  const o = toggleRunEye(s, runs.find((r) => r.id === "t0v1")!, vis);
+  const vo = resolveVisibility(runs, groups, o.eyes).runs;
+  assert.equal(groupEye(groups.find((g) => g.label === "exp-0")!, vo), "on");
+  const g1 = toggleGroupEye(s, groups.find((g) => g.label === "exp-1")!, vis);
+  assert.equal(groupEye(groups.find((g) => g.label === "exp-1")!, resolveVisibility(runs, groups, g1.eyes).runs), "on");
+  // Nested groups: the same eyes (run eyes win), the nested headers ◐ accordingly.
+  const nested = groupRunsNested(runs, [{ source: "group" }, { source: "job_type" }])!;
+  const sn = showLatestOnly(withEyes({}), runs, nested, latest);
+  assert.deepEqual([...resolveVisibility(runs, nested, sn.eyes).runs].sort(), ["e0v1", "loose", "old0", "t0v2", "t1v3"]);
 });
 
 const chip = (field: string, arg: string, op: "exact" | "gt" = "exact") => ({ kind: "chip" as const, field, op, arg });

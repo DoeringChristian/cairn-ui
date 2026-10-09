@@ -78,6 +78,8 @@ import {
   resolveVisibility,
   showOnly,
   toggleAllEyes,
+  setAllEyes,
+  showLatestOnly,
   toggleGroupEye,
   toggleRunEye,
 } from "../lib/workspace-runs/visibility";
@@ -258,7 +260,7 @@ export default function RunsTablePage() {
 
   // As the workspace sidebar's (RunsWorkspace): pinned runs listed whatever the filters, the same
   // groups open, so both list the same runs and their eyes and colours agree.
-  const { runSearch, latestByName, filtered, computedValues, sorted, groups, collapsed, toggleGroup, rows } = useRunsTable({
+  const { runSearch, latestIds, latestByName, filtered, computedValues, sorted, groups, collapsed, toggleGroup, rows } = useRunsTable({
     runs,
     status: state.status,
     search: state.search,
@@ -297,6 +299,8 @@ export default function RunsTablePage() {
     onGroup: (n: RunGroupNode) => edit((s) => toggleGroupEye(s, n, visible), `Toggle ${n.label ?? "(none)"}`),
     all: allEye(sorted, visible),
     onAll: () => edit((s) => toggleAllEyes(s, sorted, groups, visible), "Toggle every run"),
+    onSetAll: (on: boolean) => edit((s) => setAllEyes(s, sorted, groups, on), on ? "Show every run" : "Hide every run"),
+    onShowLatest: () => edit((s) => showLatestOnly(s, sorted, groups, latestIds), "Show latest versions only"),
   };
 
   // Which way is better per column: the project's metric rules (deltas).

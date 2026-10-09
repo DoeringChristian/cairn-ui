@@ -24,6 +24,7 @@ import { aggregates, groupLineLabel, type RunGroupNode, type TableRow } from "..
 import { groupSelection, runRowName } from "../../lib/runs-table/model";
 import { COL_OVERSCAN, COL_WINDOW_MIN, longest, ROW_OVERSCAN, ROW_WINDOW_MIN } from "../../lib/runs-table/window";
 import { ROW_INDEX_ATTR, useColumnWindow, useRowWindow } from "./use-window";
+import Popover from "../ui/Popover";
 import {
   CHECK_W,
   DEPTH_INDENT,
@@ -51,6 +52,10 @@ export interface RunsTableEyes {
   /** The header eye: every listed run. */
   all: Eye;
   onAll: () => void;
+  /** The header eye's ▾ menu: "Show all" / "Hide all" (every listed run). */
+  onSetAll: (on: boolean) => void;
+  /** The header eye's ▾ menu: "Show latest only" (lib/workspace-runs/visibility.ts `showLatestOnly`). */
+  onShowLatest: () => void;
 }
 
 /**
@@ -157,6 +162,55 @@ export function EyeButton({ eye, label, onClick }: { eye: Eye; label: string; on
     >
       {EYE_GLYPH[eye]}
     </button>
+  );
+}
+
+const EYE_MENU_ITEM = "min-h-[32px] w-full rounded px-2 text-left text-xs text-fg hover:bg-bg-hover touch:min-h-10";
+
+/**
+ * The header eye (every listed run: click toggles them all) with a ▾ beside
+ * it opening `Show all` · `Hide all` · `Show latest only`.
+ */
+export function AllEyesControl({ eyes }: { eyes: RunsTableEyes }) {
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const pick = (fn: () => void) => () => {
+    setOpen(false);
+    fn();
+  };
+  return (
+    <span className="inline-flex items-center">
+      <EyeButton eye={eyes.all} label="every listed run" onClick={eyes.onAll} />
+      <button
+        ref={btnRef}
+        type="button"
+        className="run-controls inline-flex h-5 w-3.5 items-center justify-center rounded text-[11px] leading-none text-fg-muted hover:bg-bg-hover hover:text-fg touch:h-9 touch:w-6"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Eye options"
+        title="Show or hide runs"
+      >
+        ▾
+      </button>
+      <Popover open={open} onClose={() => setOpen(false)} anchorRef={btnRef} title="Eyes" width={180} align="start" role="menu" bodyClassName="flex flex-col p-1">
+        <button type="button" role="menuitem" className={EYE_MENU_ITEM} onClick={pick(() => eyes.onSetAll(true))}>
+          Show all
+        </button>
+        <button type="button" role="menuitem" className={EYE_MENU_ITEM} onClick={pick(() => eyes.onSetAll(false))}>
+          Hide all
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={EYE_MENU_ITEM}
+          onClick={pick(eyes.onShowLatest)}
+          title="Show the latest version of every run series and hide the older ones"
+        >
+          Show latest only
+        </button>
+      </Popover>
+    </span>
   );
 }
 
@@ -415,7 +469,7 @@ export default function RunsTable({
                   }}
                   onChange={lead.onToggleAll}
                 />
-                {leadEyes && <EyeButton eye={leadEyes.all} label="every listed run" onClick={leadEyes.onAll} />}
+                {leadEyes && <AllEyesControl eyes={leadEyes} />}
               </span>
             </th>
           )}
@@ -430,7 +484,7 @@ export default function RunsTable({
             <th className={`${frozenProps(0).className} ${RUNS_TH_CLASS}`} style={frozenProps(0).style}>
               {lead.kind === "eye" ? (
                 <span className="flex items-center gap-1.5">
-                  <EyeButton eye={lead.all} label="every listed run" onClick={lead.onAll} />
+                  <AllEyesControl eyes={lead} />
                   Name
                   {listed !== undefined && <span className="ml-1 normal-case tracking-normal text-fg-subtle">{listed} listed</span>}
                 </span>
