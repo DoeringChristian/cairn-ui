@@ -11,6 +11,7 @@ import { onPrintLayout } from "../lib/print-layout.ts";
 import { readChartTheme, withAlpha } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
 import { lineMatches, targetOfLine, useRunHover } from "../lib/workspace-runs/hover.ts";
+import { showPointMarkers } from "../lib/plot-utils/scalar-legend.ts";
 
 export type LineType = "linear" | "monotone" | "step" | "stepBefore" | "stepAfter";
 
@@ -151,6 +152,8 @@ interface LiveStyle {
   strokes: string[];
   bandFills: string[];
   firstFill: string | null;
+  /** Per line: draw point markers (a line of one or two points). */
+  markers: boolean[];
 }
 
 /**
@@ -262,7 +265,13 @@ export default function ScalarChart(props: ScalarChartProps) {
     return pairs;
   }, [lines, stack]);
 
-  const liveStyle = useRef<LiveStyle>({ strokes: [], bandFills: [], firstFill: null });
+  // A line of one or two points draws (almost) nothing as a line: mark its points.
+  const markers = useMemo(
+    () => lines.map((l, i) => !isEdge(l) && showPointMarkers(aligned.ys[i] ?? [])),
+    [lines, aligned],
+  );
+
+  const liveStyle = useRef<LiveStyle>({ strokes: [], bandFills: [], firstFill: null, markers: [] });
   liveStyle.current = {
     strokes: style.map((s) => s.stroke),
     bandFills: bandPairs.map((b) => {
@@ -274,6 +283,7 @@ export default function ScalarChart(props: ScalarChartProps) {
       stack !== "none" && lines[0]
         ? withAlpha(lines[0].color, 0.35 * (hot != null && !hot.has(lines[0].key) ? 0.3 : 1))
         : null,
+    markers,
   };
 
   // Anything that changes the uPlot options (not just data or style) rebuilds the chart.
@@ -363,7 +373,13 @@ export default function ScalarChart(props: ScalarChartProps) {
             show: st.show,
             spanGaps: true,
             paths: pathsFor(lineType),
-            points: { show: false },
+            points: {
+              show: (_u, si) => liveStyle.current.markers[si - 1] ?? false,
+              size: 6,
+              width: 1,
+              stroke: (_u, si) => liveStyle.current.strokes[si - 1] ?? "transparent",
+              fill: (_u, si) => liveStyle.current.strokes[si - 1] ?? "transparent",
+            },
             // A stacked chart's bottom area fills down to zero.
             ...(stack !== "none" && i === 0
               ? { fill: () => liveStyle.current.firstFill ?? "transparent", fillTo: 0 }
