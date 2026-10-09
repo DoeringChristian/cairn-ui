@@ -197,7 +197,7 @@ export default function RunsSidebar({
                       <span className="ml-auto shrink-0">
                         <RunViewControls runId={r.id} view={runView.view} onChange={runView.set} toggles={SIDEBAR_TOGGLES} show="active" />
                       </span>
-                      <span className="absolute inset-y-0 right-0 hidden items-center gap-1 bg-bg-elevated pl-2 group-hover/row:flex touch:flex">
+                      <span className="row-overlay absolute inset-y-0 right-0 hidden items-center gap-1 pl-2 group-hover/row:flex touch:flex">
                         <CopyId id={r.id} className="text-xs" />
                         <RunViewControls runId={r.id} view={runView.view} onChange={runView.set} toggles={SIDEBAR_TOGGLES} show="all" />
                       </span>

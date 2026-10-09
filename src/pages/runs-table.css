@@ -63,3 +63,24 @@
     linear-gradient(rgb(var(--color-accent-rgb) / 0.12), rgb(var(--color-accent-rgb) / 0.12)),
     rgb(var(--color-bg-elevated-rgb));
 }
+
+/*
+ * The hover bar over the end of a row's Name cell (copyable id, run view
+ * toggles): opaque, in exactly the row's own background for its state, so it
+ * reads as part of the row (hover, selected, hot from a chart hover).
+ */
+.runs-table tbody tr .row-overlay {
+  background: rgb(var(--color-bg-elevated-rgb));
+}
+
+.runs-table tbody tr.is-selected .row-overlay {
+  background:
+    linear-gradient(rgb(var(--color-accent-rgb) / 0.08), rgb(var(--color-accent-rgb) / 0.08)),
+    rgb(var(--color-bg-elevated-rgb));
+}
+
+.runs-table tbody tr.is-hot .row-overlay {
+  background:
+    linear-gradient(rgb(var(--color-accent-rgb) / 0.12), rgb(var(--color-accent-rgb) / 0.12)),
+    rgb(var(--color-bg-elevated-rgb));
+}

@@ -463,7 +463,7 @@ export default function RunsTablePage() {
         <RunControls runId={r.id} view={runView} onChange={setRunView} show="active" />
       </span>
       {/* On hover, every toggle overlays the end of the cell (no layout shift). */}
-      <span className="absolute inset-y-0 right-0 hidden items-center gap-1 bg-bg-elevated pl-2 group-hover/row:flex touch:flex">
+      <span className="row-overlay absolute inset-y-0 right-0 hidden items-center gap-1 pl-2 group-hover/row:flex touch:flex">
         <CopyId id={r.id} className="text-xs" />
         <RunControls runId={r.id} view={runView} onChange={setRunView} show="all" />
       </span>
