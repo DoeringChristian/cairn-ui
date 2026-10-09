@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   alignSeries,
+  legendLines,
   compileSeriesExpr,
   compileTemplate,
   derivedLine,
@@ -213,4 +214,10 @@ test("series label: run template outside [[ ]], ${x}/${y} inside; errors point i
   const bad = compileSeriesLabel("[[ ${x} ]] ${run.nmae}");
   assert.ok(bad.error);
   assert.equal("[[ ${x} ]] ${run.nmae}".slice(bad.error!.span.start, bad.error!.span.end).includes("nmae"), true);
+});
+
+test("legendLines: only lines that draw; a run or group without the metric is left out", () => {
+  const empty = S("none", []);
+  const aligned = alignSeries([S("a", [[0, 1], [2, 3]]), empty, S("b", [[1, 5]])], base);
+  assert.deepEqual(legendLines(aligned).map((l) => l.key), ["a", "b"]);
 });

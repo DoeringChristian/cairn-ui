@@ -69,6 +69,18 @@ export interface AlignOptions {
   bucket?: { lo: number | null; hi: number | null; buckets: number } | null;
 }
 
+/**
+ * The legend's entries: one per line (members and band edges belong to
+ * their group's centre), only lines that draw something in this chart; a
+ * run or group that does not log the metric (all its y null) is left out,
+ * like wandb's legend.
+ */
+export function legendLines(aligned: Pick<AlignedData, "lines" | "ys">): DrawnSeries[] {
+  return aligned.lines.filter(
+    (l, i) => l.role === "line" && (aligned.ys[i] ?? []).some((y) => y != null && Number.isFinite(y)),
+  );
+}
+
 const isBand = (role: DrawnRole) => role === "bandHi" || role === "bandLo";
 
 /**

@@ -4,7 +4,7 @@ import "uplot/dist/uPlot.min.css";
 
 import { type AxisScale, type Series, type SeriesPoint } from "../lib/plot-utils/types.ts";
 import { axisTickLabel, formatNum } from "../lib/plot-utils/format.ts";
-import { alignSeries, type DrawnSeries } from "./scalar-data.ts";
+import { alignSeries, legendLines, type DrawnSeries } from "./scalar-data.ts";
 import type { SmoothingKind } from "../lib/plot-utils/smooth.ts";
 import type { StackMode } from "../lib/plot-utils/stack.ts";
 import { onPrintLayout } from "../lib/print-layout.ts";
@@ -218,8 +218,8 @@ export default function ScalarChart(props: ScalarChartProps) {
 
   const data = useMemo<uPlot.AlignedData>(() => [aligned.xs, ...aligned.ys], [aligned]);
 
-  // One legend entry per line: members and band edges belong to their group's centre.
-  const legendItems = useMemo(() => lines.filter((l) => l.role === "line"), [lines]);
+  // One legend entry per drawn line (members and band edges belong to their group's centre).
+  const legendItems = useMemo(() => legendLines(aligned), [aligned]);
   // A highlight or isolation of a line that is gone lapses.
   const keys = useMemo(() => new Set(legendItems.map((l) => l.key)), [legendItems]);
   const hl = highlight && keys.has(highlight) ? highlight : null;
