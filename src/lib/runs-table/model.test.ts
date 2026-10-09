@@ -8,6 +8,7 @@ import {
   filterRunsKeeping,
   isStatusFilter,
   latestRuns,
+  needsEveryRun,
   groupSelection,
   toggleGroupSelection,
   pinnedFirst,
@@ -159,4 +160,17 @@ test("group header click: selects all its runs, keeps other selections; clears t
   // Two headers ticked: the union of their runs.
   const other = [run("c")];
   assert.deepEqual([...toggleGroupSelection(other, toggleGroupSelection(rs, new Set()))].sort(), ["a", "b", "c"]);
+});
+
+test("needsEveryRun: only the default view pages lazily", () => {
+  const base = { filter: EMPTY_FILTER, groupBy: [], search: "", status: "all" as const, latestOnly: false, sort: [{ column: "created_at", direction: "desc" as const }] };
+  assert.equal(needsEveryRun(base), false);
+  assert.equal(needsEveryRun({ ...base, sort: [] }), false);
+  assert.equal(needsEveryRun({ ...base, search: "train-1" }), true);
+  assert.equal(needsEveryRun({ ...base, search: "  " }), false);
+  assert.equal(needsEveryRun({ ...base, status: "failed" }), true);
+  assert.equal(needsEveryRun({ ...base, latestOnly: true }), true);
+  assert.equal(needsEveryRun({ ...base, groupBy: [{ source: "group" }] }), true);
+  assert.equal(needsEveryRun({ ...base, sort: [{ column: "name", direction: "asc" }] }), true);
+  assert.equal(needsEveryRun({ ...base, sort: [{ column: "created_at", direction: "asc" }] }), true);
 });

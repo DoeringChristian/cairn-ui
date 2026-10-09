@@ -41,12 +41,15 @@ const MARK_CLASS: Record<NonNullable<Mark> | "none", string> = { best: "bg-green
 
 const STATUSES = new Set<string>(["running", "completed", "failed", "crashed", "killed", "stopped"]);
 
+/** One formatter for every row (`toLocaleString` with options builds one per call). */
+const CREATED = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
 function cellText(col: Column, v: Cell): string {
   if (v == null) return "";
   if (v === MIXED) return "mixed";
   if (col.key === "info:duration" && typeof v === "number") return formatSeconds(v);
   if (col.key === "info:created" && typeof v === "number") {
-    return new Date(v).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return CREATED.format(new Date(v));
   }
   return formatValue(v);
 }

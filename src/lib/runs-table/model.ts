@@ -6,7 +6,8 @@
  */
 
 import type { Run, RunStatus } from "../../api/types.ts";
-import { matchesFilter, type GroupNode } from "../run-filter.ts";
+import { isEmptyFilter, matchesFilter, type GroupNode } from "../run-filter.ts";
+import { DEFAULT_SORT, type SortKey } from "./sort.ts";
 import type { RunGroupNode } from "./group.ts";
 import { matchesRunSearch, type RunSearch } from "./search.ts";
 import { bySeries, newerInSeries } from "../run-series.ts";
@@ -93,6 +94,27 @@ export function filterRunsKeeping(
 }
 
 /** Pinned runs first, both parts in their sorted order. */
+/**
+ * Whether the Runs page must load every page of runs: anything that picks
+ * or orders rows from the whole project (filter, grouping, search, status,
+ * "Latest only", a sort other than the server's newest-first) is wrong over
+ * just the first pages: it silently hides matches, or puts rows from the
+ * first 100 at the top. Only the default view pages lazily.
+ */
+export function needsEveryRun(q: {
+  filter: GroupNode;
+  groupBy: readonly unknown[];
+  search: string;
+  status: StatusFilter;
+  latestOnly: boolean;
+  sort: readonly SortKey[];
+}): boolean {
+  const defaultSort =
+    q.sort.length === 0 ||
+    (q.sort.length === 1 && q.sort[0]!.column === DEFAULT_SORT[0]!.column && q.sort[0]!.direction === DEFAULT_SORT[0]!.direction);
+  return !isEmptyFilter(q.filter) || q.groupBy.length > 0 || q.search.trim() !== "" || q.status !== "all" || q.latestOnly || !defaultSort;
+}
+
 export function pinnedFirst(sorted: Run[], pinned: readonly string[]): Run[] {
   if (pinned.length === 0) return sorted;
   const set = new Set(pinned);

@@ -21,7 +21,6 @@ import { useProjectTags } from "../lib/use-project-tags";
 import {
   EMPTY_RUNS_FILTER,
   filterFieldsOf,
-  isEmptyFilter,
   loadRunsFilter,
   saveRunsFilter,
   type RunsFilterState,
@@ -36,7 +35,7 @@ import {
 import { GroupHeader, groupWorkspacePath } from "../components/runs-table/RunsTableParts";
 import RunsTable from "../components/runs-table/RunsTable";
 import { useRunsTable } from "../components/runs-table/use-runs-table";
-import { runRowName, sameGroup, toggleGroupSelection, type StatusFilter } from "../lib/runs-table/model.ts";
+import { needsEveryRun, runRowName, sameGroup, toggleGroupSelection, type StatusFilter } from "../lib/runs-table/model.ts";
 import { olderInSeries } from "../lib/run-series.ts";
 import RunControls, { RunSwatch } from "../components/RunViewControls";
 import {
@@ -89,10 +88,15 @@ function useRunsFilterState(projectId: string | undefined) {
   return [current.state, update] as const;
 }
 
+// One formatter each: `toLocale*String` with options builds a new
+// Intl.DateTimeFormat per call (a third of a second per 1000 rows).
+const CREATED_DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const CREATED_TIME = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
 function formatCreated(iso: string): string {
   try {
     const d = new Date(iso);
-    return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+    return `${CREATED_DATE.format(d)} ${CREATED_TIME.format(d)}`;
   } catch {
     return formatRelative(iso);
   }
@@ -146,9 +150,17 @@ export default function RunsTablePage() {
   });
   const allTags = useProjectTags(runs);
 
-  // Filters and groups apply to the loaded runs, so while either is active
-  // load every page: a filter over the first 100 runs silently hides matches.
-  const needsAllRuns = !isEmptyFilter(filterState.filter) || filterState.groupBy.length > 0;
+  // Filters, groups, search, status, "Latest only" and sorting apply to the
+  // loaded runs, so while any is active load every page: a search over the
+  // first 100 runs silently hides matches (see needsEveryRun).
+  const needsAllRuns = needsEveryRun({
+    filter: filterState.filter,
+    groupBy: filterState.groupBy,
+    search,
+    status: statusFilter,
+    latestOnly: showLatestOnly,
+    sort: filterState.sort,
+  });
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = q;
   useEffect(() => {
     if (needsAllRuns && hasNextPage && !isFetchingNextPage) void fetchNextPage();
