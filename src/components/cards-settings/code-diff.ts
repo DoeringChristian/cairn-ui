@@ -25,7 +25,6 @@ export const builtin: CodeDiffSettings = {
   layout: "split",
   onlyChanged: true,
   context: 3,
-  colSpan: 6,
 };
 
 export function instanceDefaults(): Partial<CodeDiffSettings> {

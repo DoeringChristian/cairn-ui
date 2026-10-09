@@ -1,5 +1,4 @@
 import type { BaseCardSettings } from "../card-kit/base-settings";
-import { plotCardPolicy } from "../card-kit/plot-card-policy.ts";
 import type { CardSettingsMeta } from "./meta";
 import {
   MEDIA_COMPARE_CASCADE,
@@ -25,7 +24,6 @@ export interface ImageCardSettings extends BaseCardSettings, MediaSliderSettings
 
 export const builtin: ImageCardSettings = {
   version: 1,
-  colSpan: plotCardPolicy("image").colSpan,
   ...mediaSliderBuiltin,
   ...mediaLayoutBuiltin,
   ...mediaCompareBuiltin,

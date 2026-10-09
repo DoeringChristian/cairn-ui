@@ -13,10 +13,14 @@ import { createContext, useContext, useLayoutEffect, useMemo, useRef, useSyncExt
 import { createPortal } from "react-dom";
 import { SettingsTabsHostContext } from "../settings/palette/SettingsTabs";
 import type { SettingsTabId } from "../settings/palette/logic";
+import type { CardWidth } from "../../lib/cards/card-width";
 
 /** What the card under the editor tells it. */
 export interface CardEditorClaim {
   title: string;
+  /** The card's width, and how the editor's width setting changes it. */
+  width: CardWidth;
+  onWidth: (width: CardWidth) => void;
   /** Close the card's detail state (the editor closes with it). */
   onClose: () => void;
   onPrev?: () => void;
@@ -35,7 +39,7 @@ export interface Host {
   claim: (id: string, info: MutableRefObject<CardEditorClaim>) => void;
   /** Its detail state closed (`close`), or the card unmounted while open (`unmount`). */
   release: (id: string, how: "close" | "unmount") => void;
-  /** The claim's info changed (title, neighbours). */
+  /** The claim's info changed (title, width, neighbours). */
   touch: () => void;
   getSlots: () => Slots;
   /** The card's settings panel shows these tabs (the editor draws them in its one tab row). */
@@ -59,6 +63,8 @@ export function CardEditorSlots({
   id,
   open,
   title,
+  width,
+  onWidth,
   onClose,
   onPrev,
   onNext,
@@ -66,8 +72,8 @@ export function CardEditorSlots({
   settings,
 }: CardEditorClaim & { id: string; open: boolean; content: ReactNode; settings: ReactNode }) {
   const host = useContext(CardEditorHostContext)!;
-  const info = useRef<CardEditorClaim>({ title, onClose, onPrev, onNext });
-  info.current = { title, onClose, onPrev, onNext };
+  const info = useRef<CardEditorClaim>({ title, width, onWidth, onClose, onPrev, onNext });
+  info.current = { title, width, onWidth, onClose, onPrev, onNext };
   // Read at cleanup: still true there when the card unmounts while open.
   const openRef = useRef(open);
   openRef.current = open;
@@ -80,7 +86,7 @@ export function CardEditorSlots({
   const hasNext = !!onNext;
   useLayoutEffect(() => {
     if (open) host.touch();
-  }, [open, host, title, hasPrev, hasNext]);
+  }, [open, host, title, width, hasPrev, hasNext]);
   const slots = useSyncExternalStore(host.subscribeSlots, host.getSlots);
   const tabs = useMemo(() => ({ active: slots.tab, report: host.reportTabs }), [slots.tab, host]);
   if (!open) return null;

@@ -34,7 +34,7 @@ export interface Panel {
   type: CardType;
   selector: MetricSelector;
   /**
-   * The card's own setting overrides (title, height, colSpan, smoothing, …).
+   * The card's own setting overrides (title, height, width, smoothing, …).
    * Multi-run cards (bar, value tile, scatter, …) keep the series they show
    * here too (their expressions), with an empty selector.
    */

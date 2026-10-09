@@ -2,6 +2,7 @@ import { useContext, useEffect, type CSSProperties, type ReactNode, type RefObje
 import { CardMutationContext, resolveCardHeight, type SetOptions } from "../lib/card-settings";
 import { InteractContext, useInteractState } from "../lib/use-interact";
 import { cardMinSize } from "./card-kit/card-min-sizes";
+import { resolveCardWidth, widthOfSpan, widthSpan, type CardWidth } from "../lib/cards/card-width";
 import type { BaseCardSettings } from "./card-kit";
 import CardHeader from "./CardHeader";
 import CardResizeHandle from "./CardResizeHandle";
@@ -99,6 +100,9 @@ export default function CardShell({
   // A report export shows every card, collapsed or not (nothing is saved).
   const exporting = useReportExporting();
   const collapsed = !!settings.collapsed && !exporting;
+  // Full, 1/2, 1/3 or 1/4 of the row (useCardSettings already resolved an invalid one to the default).
+  const cardWidth = resolveCardWidth(settings.width);
+  const setWidth = (w: CardWidth) => updateSettings({ width: w }, { mergeKey: "resize", label: "Resize card" });
 
   // Tap-to-interact (touch devices): content that captures gestures registers
   // through `useInteract`; the detail modal is always interactive.
@@ -134,7 +138,7 @@ export default function CardShell({
         height: clampedHeight,
         "--cairn-card-h": clampedHeight != null ? `${clampedHeight}px` : undefined,
         position: "relative",
-        gridColumn: `span ${settings.colSpan ?? 3}`,
+        gridColumn: `span ${widthSpan(cardWidth)}`,
       } as CSSProperties}
       {...dropProps}
     >
@@ -179,6 +183,8 @@ export default function CardShell({
                   open={!!modalOpen}
                   onClose={onModalClose ?? (() => {})}
                   title={shownTitle}
+                  width={cardWidth}
+                  onWidth={setWidth}
                   onPrev={step(nav.prev)}
                   onNext={step(nav.next)}
                   content={<CardErrorBoundary label={shownTitle}>{modalContent}</CardErrorBoundary>}
@@ -202,8 +208,8 @@ export default function CardShell({
       {mutable && (
         <CardResizeHandle
           onHeightChange={(h) => updateSettings({ height: h }, { mergeKey: "resize", label: "Resize card" })}
-          colSpan={settings.colSpan ?? 3}
-          onColSpanChange={(s) => updateSettings({ colSpan: s }, { mergeKey: "resize", label: "Resize card" })}
+          colSpan={widthSpan(cardWidth)}
+          onColSpanChange={(s) => setWidth(widthOfSpan(s))}
           minHeight={minSize.minHeight}
         />
       )}

@@ -15,7 +15,6 @@ export const builtin: ScalarsSettings = {
   showRunInfo: true,
   sort: null,
   hidden: [],
-  colSpan: 6,
 };
 
 export function instanceDefaults(): Partial<ScalarsSettings> {

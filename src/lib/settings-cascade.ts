@@ -7,7 +7,7 @@
  *   card overrides → instance defaults → section → workspace → builtin
  *
  * Only a card type's `cascadeKeys` read the section and workspace layers;
- * every other key (metrics, title, height, colSpan, viewport, collapsed, …)
+ * every other key (metrics, title, height, width, viewport, collapsed, …)
  * resolves card → instance → builtin. Instance defaults are what a card was
  * created with (its seed metric, a sweep's axes, a metric's tracked x-axis),
  * so they sit above the shared defaults. The card layer stores overrides

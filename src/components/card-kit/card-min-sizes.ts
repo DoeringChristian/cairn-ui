@@ -6,13 +6,16 @@
  * The resize handle then reads those attributes off sibling cards to enforce
  * "no smaller than the largest minimum in the collection" — row-scoped for
  * height (cards sharing a visual row adopt one height) and section-scoped for
- * column span (colSpan syncs across the whole grid section).
+ * column span (a width syncs across the whole grid section).
  */
 
-export type CardMinSize = { minHeight: number; minSpan: 1 | 2 | 3 | 4 | 6 };
+import { snapSpanUp } from "../../lib/cards/card-width";
+
+/** `minSpan`: columns of the 12-column grid (a width's span: 3, 4, 6 or 12; lib/cards/card-width.ts). */
+export type CardMinSize = { minHeight: number; minSpan: 3 | 4 | 6 | 12 };
 
 /** Fallback when a card kind isn't in the table (or none is declared). */
-const DEFAULT_MIN_SIZE: CardMinSize = { minHeight: 150, minSpan: 1 };
+const DEFAULT_MIN_SIZE: CardMinSize = { minHeight: 150, minSpan: 3 };
 
 /**
  * Minimum height (px) and column span each card type stays usable at. Values
@@ -20,46 +23,39 @@ const DEFAULT_MIN_SIZE: CardMinSize = { minHeight: 150, minSpan: 1 };
  * enough that controls (sliders, legends, axes, settings rows) don't collapse.
  */
 const CARD_MIN_SIZES: Record<string, CardMinSize> = {
-  scalar: { minHeight: 200, minSpan: 1 },
-  image: { minHeight: 220, minSpan: 1 },
-  figure: { minHeight: 300, minSpan: 2 },
-  table: { minHeight: 220, minSpan: 2 },
-  parallel: { minHeight: 250, minSpan: 2 },
-  scatter: { minHeight: 220, minSpan: 1 },
-  histogram: { minHeight: 180, minSpan: 1 },
-  preset: { minHeight: 240, minSpan: 1 },
-  tensor: { minHeight: 200, minSpan: 1 },
-  pointcloud: { minHeight: 280, minSpan: 2 },
-  mesh: { minHeight: 280, minSpan: 2 },
-  boxes3d: { minHeight: 280, minSpan: 2 },
-  volume: { minHeight: 280, minSpan: 2 },
-  bar: { minHeight: 200, minSpan: 1 },
-  tile: { minHeight: 120, minSpan: 1 },
-  importance: { minHeight: 220, minSpan: 1 },
-  "run-compare": { minHeight: 200, minSpan: 2 },
-  "code-diff": { minHeight: 280, minSpan: 3 },
-  scalars: { minHeight: 140, minSpan: 2 },
-  config: { minHeight: 140, minSpan: 2 },
-  html: { minHeight: 150, minSpan: 1 },
-  markdown: { minHeight: 150, minSpan: 1 },
-  text: { minHeight: 150, minSpan: 1 },
-  audio: { minHeight: 120, minSpan: 1 },
-  video: { minHeight: 180, minSpan: 1 },
-  artifact: { minHeight: 120, minSpan: 1 },
-  custom: { minHeight: 220, minSpan: 1 },
+  scalar: { minHeight: 200, minSpan: 3 },
+  image: { minHeight: 220, minSpan: 3 },
+  figure: { minHeight: 300, minSpan: 4 },
+  table: { minHeight: 220, minSpan: 4 },
+  parallel: { minHeight: 250, minSpan: 4 },
+  scatter: { minHeight: 220, minSpan: 3 },
+  histogram: { minHeight: 180, minSpan: 3 },
+  preset: { minHeight: 240, minSpan: 3 },
+  tensor: { minHeight: 200, minSpan: 3 },
+  pointcloud: { minHeight: 280, minSpan: 4 },
+  mesh: { minHeight: 280, minSpan: 4 },
+  boxes3d: { minHeight: 280, minSpan: 4 },
+  volume: { minHeight: 280, minSpan: 4 },
+  bar: { minHeight: 200, minSpan: 3 },
+  tile: { minHeight: 120, minSpan: 3 },
+  importance: { minHeight: 220, minSpan: 3 },
+  "run-compare": { minHeight: 200, minSpan: 4 },
+  "code-diff": { minHeight: 280, minSpan: 6 },
+  scalars: { minHeight: 140, minSpan: 4 },
+  config: { minHeight: 140, minSpan: 4 },
+  html: { minHeight: 150, minSpan: 3 },
+  markdown: { minHeight: 150, minSpan: 3 },
+  text: { minHeight: 150, minSpan: 3 },
+  audio: { minHeight: 120, minSpan: 3 },
+  video: { minHeight: 180, minSpan: 3 },
+  artifact: { minHeight: 120, minSpan: 3 },
+  custom: { minHeight: 220, minSpan: 3 },
 };
 
 export function cardMinSize(kind?: string): CardMinSize {
   return (kind ? CARD_MIN_SIZES[kind] : undefined) ?? DEFAULT_MIN_SIZE;
 }
 
-export const VALID_CARD_SPANS = [1, 2, 3, 4, 6] as const;
-
-/** Round a raw minimum span up to the nearest valid span value. */
-function snapSpanUp(minSpan: number): number {
-  for (const v of VALID_CARD_SPANS) if (v >= minSpan) return v;
-  return VALID_CARD_SPANS[VALID_CARD_SPANS.length - 1];
-}
 
 function readMinHeight(el: Element): number {
   const v = Number((el as HTMLElement).getAttribute("data-cairn-min-h"));
@@ -86,9 +82,9 @@ export function rowMinHeight(card: HTMLElement, gridEl: HTMLElement, epsilonPx =
   return min;
 }
 
-/** The largest per-card minimum span among all cards in the grid section (colSpan syncs section-wide). */
+/** The largest per-card minimum span among all cards in the grid section (widths sync section-wide). */
 export function sectionMinSpan(gridEl: HTMLElement): number {
-  let min = 1;
+  let min = DEFAULT_MIN_SIZE.minSpan as number;
   for (const el of gridEl.querySelectorAll("[data-cairn-card]")) {
     min = Math.max(min, readMinSpan(el));
   }

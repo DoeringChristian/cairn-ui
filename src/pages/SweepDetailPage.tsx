@@ -109,12 +109,12 @@ export default function SweepDetailPage() {
 
       {runIds.length > 0 && (
         <Suspense fallback={<div className="mb-6 h-64 motion-safe:animate-pulse rounded bg-bg-hover" />}>
-          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-6">
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-12">
             <ParallelCoordsCard
               runIds={runIds}
               settingsKey={settingsKey("__sweep_parallel")}
               defaults={{
-                colSpan: 4,
+                width: "1/2",
                 title: "Params → metric",
                 metric: sweep.metric ?? null,
                 axes: [
@@ -127,7 +127,7 @@ export default function SweepDetailPage() {
               runIds={runIds}
               settingsKey={settingsKey("__sweep_scatter")}
               defaults={{
-                colSpan: 2,
+                width: "1/3",
                 x: firstParam ? { src: paramExpr(firstParam) } : null,
                 xRange: { min: null, max: null, log: firstParam ? isLogParam(sweep.space, firstParam) : false },
                 y: metricSrc ? { src: metricSrc } : null,

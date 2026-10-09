@@ -133,7 +133,7 @@ function Grid({
     <div
       ref={gridRef}
       data-cairn-grid
-      className={`grid grid-cols-1 gap-4 md:grid-cols-6 ${className ?? ""}`}
+      className={`grid grid-cols-1 gap-4 md:grid-cols-12 ${className ?? ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
