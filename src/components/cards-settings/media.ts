@@ -54,7 +54,11 @@ export const mediaIndexBuiltin: MediaIndexSettings = {
  */
 export interface MediaLayoutSettings extends MediaColumnsSettings, MediaIndexSettings, CompareLinks {
   panelMode: PanelMode;
-  /** Gallery: what one tile is — a list item, a step, or a run. */
+  /**
+   * Gallery: what one tile is — a list item, a step, or a run. Default: a
+   * list item (wandb's Index); 3D cards default to a run (each tile is a
+   * WebGL context, and browsers allow only a few).
+   */
   galleryContent: GalleryContent;
   /** Grid: the two axes (distinct). */
   gridX: MediaAxis;
@@ -75,7 +79,7 @@ export const mediaLayoutBuiltin: MediaLayoutSettings = {
   ...mediaColumnsBuiltin,
   ...mediaIndexBuiltin,
   panelMode: "gallery",
-  galleryContent: "run",
+  galleryContent: "index",
   gridX: "step",
   gridY: "run",
   gridStepFrom: null,

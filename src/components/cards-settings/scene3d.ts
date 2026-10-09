@@ -20,7 +20,7 @@ export interface Scene3DSettings<V = Record<string, unknown>>
 
 export function scene3dMeta(): CardSettingsMeta<Scene3DSettings> {
   return {
-    builtin: { version: 1, ...mediaSliderBuiltin, ...mediaLayoutBuiltin, metrics: [], syncCameras: true, view: {} },
+    builtin: { version: 1, ...mediaSliderBuiltin, ...mediaLayoutBuiltin, galleryContent: "run", metrics: [], syncCameras: true, view: {} },
     cascadeKeys: ["syncCameras", ...MEDIA_SLIDER_CASCADE, ...MEDIA_LAYOUT_CASCADE],
     tabs: ["values", "display"],
   };
