@@ -1,6 +1,5 @@
 import type { BaseCardSettings } from "../card-kit/base-settings";
 import type { SeriesRef } from "../card-kit/use-card-series";
-import { plotCardPolicy } from "../card-kit/plot-card-policy.ts";
 import type { CardSettingsMeta } from "./meta";
 import {
   MEDIA_LAYOUT_CASCADE,
@@ -46,7 +45,6 @@ export interface FigureSettings extends BaseCardSettings, MediaSliderSettings, M
 
 export const builtin: FigureSettings = {
   version: 1,
-  colSpan: plotCardPolicy("figure").colSpan,
   ...mediaSliderBuiltin,
   ...mediaLayoutBuiltin,
   metrics: [],

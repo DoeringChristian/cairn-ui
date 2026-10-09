@@ -20,7 +20,6 @@ export const builtin: RunCompareSettings = {
   onlyDiffs: true,
   filter: "",
   pinnedKeys: [],
-  colSpan: 6,
 };
 
 export function instanceDefaults(): Partial<RunCompareSettings> {

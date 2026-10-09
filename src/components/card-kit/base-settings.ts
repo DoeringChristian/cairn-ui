@@ -7,11 +7,14 @@
  * resolveCardHeight) — that module keeps its own structural types to avoid
  * an import cycle (card-kit imports from lib, not vice versa).
  */
+import type { CardWidth } from "../../lib/cards/card-width";
+
 export interface BaseCardSettings {
   version: 1;
   title?: string;
   collapsed?: boolean;
   /** Persisted card height in px; undefined = the card's default. */
   height?: number;
-  colSpan?: number;
+  /** Share of the row (lib/cards/card-width.ts); undefined = the card's default. */
+  width?: CardWidth;
 }

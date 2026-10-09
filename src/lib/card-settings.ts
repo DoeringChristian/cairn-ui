@@ -25,6 +25,7 @@ import { createContext, useCallback, useContext, useMemo, useRef, useSyncExterna
 import { loadJson, storageKeys } from "./storage";
 import type { CardType } from "./cards/card-spec";
 import { metaFor } from "./cards/settings-registry";
+import { defaultCardWidth, isCardWidth, resolveCardWidth } from "./cards/card-width";
 import {
   isOverridden as layerIsOverridden,
   jsonEqual,
@@ -269,10 +270,12 @@ export function useCardSettings<T extends object>(
   );
   const overrides = useSyncExternalStore(sub, read);
 
-  const value = useMemo(
-    () => resolveSettings<T>({ ...layers, card: overrides as Partial<T> }, cascadeKeys),
-    [layers, overrides, cascadeKeys],
-  );
+  const value = useMemo(() => {
+    const v = resolveSettings<T>({ ...layers, card: overrides as Partial<T> }, cascadeKeys) as Record<string, unknown>;
+    // A stored width that isn't one of the four: the card's default width.
+    if (!isCardWidth(v.width)) v.width = resolveCardWidth(parentValue(layers, "width", cascadeKeys), defaultCardWidth(type));
+    return v as T;
+  }, [layers, overrides, cascadeKeys, type]);
 
   const write = useCallback(
     (next: CardOverrides) => {

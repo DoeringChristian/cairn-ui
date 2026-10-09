@@ -9,7 +9,6 @@ export interface ConfigSettings extends BaseCardSettings {
 export const builtin: ConfigSettings = {
   version: 1,
   onlyDiffs: false,
-  colSpan: 6,
 };
 
 export function instanceDefaults(): Partial<ConfigSettings> {

@@ -92,6 +92,9 @@ const OLD_DEFAULT_SPAN6: Readonly<Record<string, number>> = {
   tile: 1,
 };
 
+/** A scalar card showing a single value (ScalarValueCard): a value tile, like `tile`. */
+export const VALUE_CARD_DEFAULTS: { width: CardWidth } = { width: widthOfSpan6(1) };
+
 /** A card type's default width. */
 export function defaultCardWidth(type: string): CardWidth {
   return widthOfSpan6(OLD_DEFAULT_SPAN6[type] ?? 3);

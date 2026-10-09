@@ -13,7 +13,7 @@ test("every card type has settings metadata", () => {
 });
 
 test("cascadeKeys ⊆ keys(builtin), without duplicates or per-card keys", () => {
-  const PER_CARD = ["version", "metrics", "title", "height", "colSpan", "viewport", "collapsed", "sliderStep"];
+  const PER_CARD = ["version", "metrics", "title", "height", "width", "viewport", "collapsed", "sliderStep"];
   for (const type of CARD_TYPES) {
     const { builtin, cascadeKeys } = metaFor(type);
     const keys = new Set(Object.keys(builtin));

@@ -145,7 +145,7 @@ function EmbedApp() {
 
   // Single-column CSS grid: a card's `gridColumn: span N` (from CardShell)
   // is clamped to the available track count, so one column makes the card
-  // full-width regardless of its persisted colSpan.
+  // full-width regardless of its persisted width.
   return (
     <div
       ref={containerRef}

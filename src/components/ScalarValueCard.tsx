@@ -25,8 +25,8 @@ import TypeSettingsPanel from "./card-kit/TypeSettingsPanel";
 import type { SequenceMeta } from "../api/types";
 import { type BaseCardSettings } from "./card-kit";
 import CardShell from "./CardShell";
+import { VALUE_CARD_DEFAULTS } from "../lib/cards/card-width";
 
-const VALUE_INSTANCE_DEFAULTS: Partial<BaseCardSettings> = { colSpan: 1 };
 
 interface Props {
   runId: string;
@@ -53,7 +53,7 @@ export default function ScalarValueCard({
     [settingsKeyOverride, runId, metric.name],
   );
   // Shares the scalar plot's key: the card becomes a plot once the series grows.
-  const ctl = useCardSettings<BaseCardSettings>(settingsKey, "scalar", VALUE_INSTANCE_DEFAULTS);
+  const ctl = useCardSettings<BaseCardSettings>(settingsKey, "scalar", VALUE_CARD_DEFAULTS);
   const settings = ctl.value;
 
   const [open, setOpen] = useState(autoOpenSettings ?? false);

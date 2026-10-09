@@ -17,7 +17,6 @@ export const builtin: TileSettings = {
   metric: null,
   reduce: "best",
   bestDir: "max",
-  colSpan: 1,
 };
 
 export function instanceDefaults(): Partial<TileSettings> {

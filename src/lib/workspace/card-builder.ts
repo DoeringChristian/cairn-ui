@@ -633,7 +633,7 @@ export function autoSectionOfPanel(panel: Panel, metrics: readonly MetricInfo[])
 // ---------------------------------------------------------------------------
 
 /** Settings a type change keeps (the card's frame, not its content). */
-export const FRAME_KEYS = ["title", "height", "colSpan", "collapsed"] as const;
+export const FRAME_KEYS = ["title", "height", "width", "collapsed"] as const;
 
 const pickKeys = (o: Record<string, unknown>, keys: readonly string[]) =>
   Object.fromEntries(Object.entries(o).filter(([k]) => keys.includes(k)));

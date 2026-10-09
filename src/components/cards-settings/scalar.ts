@@ -6,7 +6,6 @@ import type { AggKind, BandKind } from "../../lib/plot-utils/aggregate";
 import type { StackMode } from "../../lib/plot-utils/stack";
 import type { ScalarGroupMode } from "../../lib/plot-utils/scalar-grouping";
 import type { LegendFontSize } from "../../lib/plot-utils/scalar-legend";
-import { plotCardPolicy } from "../card-kit/plot-card-policy.ts";
 import type { CardSettingsMeta } from "./meta";
 
 export interface ScalarGroupBy {
@@ -98,7 +97,6 @@ export interface ScalarSettings extends BaseCardSettings {
 
 export const builtin: ScalarSettings = {
   version: 1,
-  colSpan: plotCardPolicy("scalar").colSpan,
   metrics: [],
   x: "step",
   xScale: "linear",

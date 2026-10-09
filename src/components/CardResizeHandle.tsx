@@ -4,15 +4,16 @@ import {
   ownMinSpan,
   rowMinHeight,
   sectionMinSpan,
-  VALID_CARD_SPANS,
 } from "./card-kit/card-min-sizes";
+import { GRID_COLUMNS, snapSpan } from "../lib/cards/card-width";
 
 interface Props {
   onHeightChange: (h: number | undefined) => void;
-  /** Column span (1 = single column, 2 = double, etc.). */
+  /** Columns of the 12-column grid the card spans (a width's span: 12, 6, 4 or 3; lib/cards/card-width.ts). */
   colSpan: number;
+  /** Called with the span the drag snapped to (always a width's span). */
   onColSpanChange: (span: number) => void;
-  /** Total grid columns available (default 6). */
+  /** Total grid columns available (default 12). */
   gridCols?: number;
   /** Minimum height in px (default 150). */
   minHeight?: number;
@@ -21,20 +22,6 @@ interface Props {
 const MAX_HEIGHT = 2000;
 /** Max px gap between two cards' top edges to still count as "same row". */
 const ROW_TOP_EPSILON_PX = 2;
-
-/** Snap a raw column-span value to the nearest valid span. */
-function snapToValidSpan(raw: number): number {
-  let best: number = VALID_CARD_SPANS[0];
-  let bestDist = Math.abs(raw - best);
-  for (const v of VALID_CARD_SPANS) {
-    const d = Math.abs(raw - v);
-    if (d < bestDist) {
-      best = v;
-      bestDist = d;
-    }
-  }
-  return best;
-}
 
 /**
  * Follow the size changes a sibling card's resize handle broadcasts on the
@@ -82,15 +69,16 @@ export function useGridSizeSync(
 }
 
 /**
- * Corner resize handle for cards. Drag to resize both width (column span)
- * and height simultaneously. ColSpan changes are broadcast to all sibling
- * cards in the same grid (section) via a custom DOM event.
+ * Corner resize handle for cards. Drag to resize both width and height
+ * simultaneously; the width snaps to full, 1/2, 1/3 or 1/4 of the row.
+ * Span changes are broadcast to all sibling cards in the same grid
+ * (section) via a custom DOM event.
  */
 export default function CardResizeHandle({
   onHeightChange,
   colSpan,
   onColSpanChange,
-  gridCols = 6,
+  gridCols = GRID_COLUMNS,
   minHeight = 150,
 }: Props) {
   const handleRef = useRef<HTMLDivElement>(null);
@@ -199,7 +187,7 @@ export default function CardResizeHandle({
         if (actualCols > 1) {
           const targetWidth = startWidth + (lastClientX - startX);
           const rawSpan = Math.max(1, Math.min(actualCols, Math.round(targetWidth / colWidth)));
-          currentSpan = Math.max(spanFloor, snapToValidSpan(rawSpan));
+          currentSpan = Math.max(spanFloor, snapSpan(rawSpan));
           preview.style.width = `${spanWidth(currentSpan)}px`;
         }
       };

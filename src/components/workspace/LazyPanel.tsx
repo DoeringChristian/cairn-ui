@@ -19,6 +19,7 @@ import type { CardType } from "../../lib/cards/card-spec";
 import { OpenOnMountContext, useCardNavRegistration } from "../../lib/card-nav";
 import { whenNearViewport } from "../../lib/near-viewport";
 import { cardMinSize } from "../card-kit/card-min-sizes";
+import { resolveCardWidth, widthOfSpan, widthSpan, VALUE_CARD_DEFAULTS, type CardWidth } from "../../lib/cards/card-width";
 import { useGridSizeSync } from "../CardResizeHandle";
 
 /** Height a card of `type` takes when its settings set none (what the card passes CardShell). */
@@ -90,7 +91,11 @@ function Placeholder({
   onMount,
 }: Omit<Props, "children" | "eager"> & { onMount: (open: boolean) => void }) {
   const ref = useRef<HTMLDivElement>(null);
-  const ctl = useCardSettings<{ colSpan?: number; height?: number; collapsed?: boolean; title?: string }>(settingsKey, type);
+  const ctl = useCardSettings<{ width?: CardWidth; height?: number; collapsed?: boolean; title?: string }>(
+    settingsKey,
+    type,
+    valueCard ? VALUE_CARD_DEFAULTS : undefined,
+  );
   const s = ctl.value;
   const min = cardMinSize(valueCard ? "scalar-value" : type);
   const collapsed = !!s.collapsed;
@@ -109,7 +114,7 @@ function Placeholder({
   // A sibling's resize applies to this card too (as CardShell's handle would).
   const setRef = useRef(ctl.set);
   setRef.current = ctl.set;
-  const spanCb = useRef((span: number) => setRef.current({ colSpan: span }, { mergeKey: "resize", label: "Resize card" }));
+  const spanCb = useRef((span: number) => setRef.current({ width: widthOfSpan(span) }, { mergeKey: "resize", label: "Resize card" }));
   const heightCb = useRef((h: number | undefined) => setRef.current({ height: h }, { mergeKey: "resize", label: "Resize card" }));
   // Only where CardShell would have a resize handle (an editable card).
   useGridSizeSync(ref, spanCb, heightCb, useContext(CardMutationContext));
@@ -126,7 +131,7 @@ function Placeholder({
       data-cairn-min-span={min.minSpan}
       data-cairn-fixed-h=""
       className="card flex min-w-0 flex-col p-4"
-      style={{ gridColumn: `span ${s.colSpan ?? 3}`, height, "--cairn-card-h": `${height}px` } as React.CSSProperties}
+      style={{ gridColumn: `span ${widthSpan(resolveCardWidth(s.width))}`, height, "--cairn-card-h": `${height}px` } as React.CSSProperties}
       aria-busy="true"
     >
       <h3 className="mono truncate text-sm font-semibold text-fg-muted">{s.title ?? title}</h3>

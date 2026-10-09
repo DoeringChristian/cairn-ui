@@ -7,6 +7,7 @@
  */
 
 import type { CardType } from "./card-spec";
+import { defaultCardWidth } from "./card-width.ts";
 import type { CardSettingsMeta } from "../../components/cards-settings/meta";
 import { meta as artifact } from "../../components/cards-settings/artifact.ts";
 import { meta as audio } from "../../components/cards-settings/audio.ts";
@@ -40,7 +41,7 @@ export type { CardSettingsMeta, SettingsTab } from "../../components/cards-setti
 export { SETTINGS_TABS } from "../../components/cards-settings/meta.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const REGISTRY: Record<CardType, CardSettingsMeta<any>> = {
+const TYPES: Record<CardType, CardSettingsMeta<any>> = {
   scalar,
   image,
   figure,
@@ -69,6 +70,12 @@ const REGISTRY: Record<CardType, CardSettingsMeta<any>> = {
   markdown,
   artifact,
 };
+
+/** Every type's builtin defaults carry its default width (lib/cards/card-width.ts). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const REGISTRY = Object.fromEntries(
+  Object.entries(TYPES).map(([type, meta]) => [type, { ...meta, builtin: { ...meta.builtin, width: defaultCardWidth(type) } }]),
+) as Record<CardType, CardSettingsMeta<any>>;
 
 /** A card type's settings metadata. */
 export function metaFor(type: CardType): CardSettingsMeta<Record<string, unknown>> {
