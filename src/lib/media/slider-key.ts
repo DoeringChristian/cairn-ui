@@ -11,6 +11,14 @@
  * arriving and means the same thing in every pane and every card of a
  * section.
  *
+ * **The rule.** At slider value `x`, each run shows the media logged at the
+ * step whose key value (as of that step) is the largest value ≤ `x`; when
+ * several of the run's media steps share that value, the latest of them. A
+ * run whose key is missing (not logged, or not logged by any media step yet)
+ * shows nothing at `x` (or, with `nearest`, its first media). With the `step`
+ * key the value IS the step, so this is "the media at step ≤ x, latest".
+ * `sliderTrack` + `resolveAtValue` implement it.
+ *
  * Pure: tested in `slider-key.test.ts`.
  */
 

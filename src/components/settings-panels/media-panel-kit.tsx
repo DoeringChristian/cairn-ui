@@ -8,6 +8,14 @@
 import type { ReactNode } from "react";
 import type { SettingsController } from "../../lib/card-settings";
 import { clampSlots, normalizeSlots, type Columns, type PanelMode } from "../../lib/media/panel-layout";
+import {
+  primaryIndex,
+  relinkSlots,
+  type GalleryContent,
+  type IndexMode,
+  type LinkMode,
+  type MediaAxis,
+} from "../../lib/media/media-plan";
 import { STEP_KEY } from "../../lib/media/slider-key";
 import type { PixelRendering } from "../../lib/media/split-geometry";
 import type { MediaColumnsSettings, MediaCompareSettings, MediaLayoutSettings, MediaSliderSettings } from "../cards-settings/media";
@@ -18,6 +26,7 @@ import {
   Select,
   SettingRow,
   SettingsSection,
+  RangeInput,
   Slider,
   Stepper,
   Switch,
@@ -49,6 +58,12 @@ export interface MediaPanelCtx {
   multi?: boolean;
   /** Following a section slider right now (the card's own key is then unused). */
   following?: boolean;
+  /** The card's points are lists (gallery points): the Index shows. */
+  lists?: boolean;
+  /** Items of the widest list at the slider's value. */
+  listCount?: number;
+  /** The slider's value (compare slots freeze at it when a variable goes individual). */
+  sliderValue?: number;
 }
 
 export type PanelSurface = "card" | "defaults";
@@ -91,8 +106,47 @@ export function SliderSection<T extends MediaSliderSettings>({
         label="Follow section slider"
         description="Where the section has a media slider, it drives this card."
       />
+      {ctx?.lists && <IndexControls ctl={ctl as unknown as SettingsController<MediaLayoutSettings>} />}
       {children}
     </SettingsSection>
+  );
+}
+
+const INDEX_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "one", label: "One" },
+  { value: "range", label: "Range" },
+  { value: "first", label: "First N" },
+] as const satisfies ReadonlyArray<{ value: IndexMode; label: string }>;
+
+/** Which items of each logged list the card shows. Cards with lists only (the indices are the card's). */
+function IndexControls({ ctl }: { ctl: SettingsController<MediaLayoutSettings> }) {
+  const m = ctl.value.indexMode;
+  return (
+    <>
+      <Segmented<IndexMode>
+        {...bind(ctl, "indexMode")}
+        options={INDEX_OPTIONS}
+        layout="stacked"
+        label="Index"
+        info="Which items of each logged list to show (0-based): all of them, one (step through it with ‹ › over the media), a range, or the first N."
+      />
+      {m === "one" && <Stepper {...bind(ctl, "indexOne")} min={0} label="Index" />}
+      {m === "range" && (
+        <RangeInput
+          value={{ min: ctl.value.indexFrom, max: ctl.value.indexTo, log: false }}
+          onChange={(r) => ctl.set({ indexFrom: Math.max(0, Math.round(r.min ?? 0)), indexTo: Math.max(0, Math.round(r.max ?? r.min ?? 0)) })}
+          overridden={ctl.isOverridden("indexFrom") || ctl.isOverridden("indexTo")}
+          onReset={() => { ctl.reset("indexFrom"); ctl.reset("indexTo"); }}
+          disabled={ctl.locked}
+          showLog={false}
+          autoMin="0"
+          autoMax="0"
+          label="Range"
+        />
+      )}
+      {m === "first" && <Stepper {...bind(ctl, "indexFirst")} min={1} label="First N" />}
+    </>
   );
 }
 
@@ -107,9 +161,24 @@ const COLUMN_OPTIONS = [
   ...[1, 2, 3, 4, 5, 6, 8].map((n) => ({ value: String(n), label: String(n) })),
 ];
 
+const CONTENT_OPTIONS = [
+  { value: "index", label: "Index" },
+  { value: "step", label: "Step" },
+  { value: "run", label: "Run" },
+] as const satisfies ReadonlyArray<{ value: GalleryContent; label: string }>;
+
+const AXIS_LABEL: Record<MediaAxis, string> = { step: "Step", index: "Index", run: "Run" };
+
+const LINK_OPTIONS = [
+  { value: "linked", label: "Linked" },
+  { value: "individual", label: "Individual" },
+] as const satisfies ReadonlyArray<{ value: LinkMode; label: string }>;
+
 /**
- * Pane layout: mode (when the card has modes), columns, max runs, compare
- * slots. Display tab. `children` go at the end of the section.
+ * Pane layout: mode (when the card has modes) and its options — gallery
+ * columns and column content, grid axes, steps and rows, compare slots and
+ * links — then the media limit and max runs. Display tab. `children` go at
+ * the end of the section.
  */
 export function LayoutSection<T extends MediaColumnsSettings>({
   ctl,
@@ -133,6 +202,33 @@ export function LayoutSection<T extends MediaColumnsSettings>({
   const cols = bind(c, "columns");
   const panelMode = modes ? m.value.panelMode : "gallery";
   const showMulti = mode === "defaults" || ctx?.multi !== false || panelMode === "compare";
+  // The index is a variable only for lists (every option shows in the defaults editor).
+  const lists = mode === "defaults" || !!ctx?.lists;
+  const axisOptions = (other: MediaAxis) =>
+    (["step", "index", "run"] as const)
+      .filter((a) => lists || a !== "index")
+      .map((a) => ({ value: a, label: AXIS_LABEL[a], disabled: a === other }));
+  const link = (key: "compareRun" | "compareStep" | "compareIndex", label: string, variable?: "step" | "index") => {
+    const b = bind(m, key);
+    return (
+      <Segmented<LinkMode>
+        {...b}
+        onChange={(v) => {
+          if (!variable || mode !== "card") return b.onChange(v);
+          const slots = normalizeSlots(m.value.compareSlots, paneKeys ?? []);
+          m.set({
+            [key]: v,
+            compareSlots: relinkSlots(slots, variable, v, {
+              value: ctx?.sliderValue ?? 0,
+              index: primaryIndex(m.value, ctx?.listCount ?? 0),
+            }),
+          } as Partial<MediaLayoutSettings>);
+        }}
+        options={LINK_OPTIONS}
+        label={label}
+      />
+    );
+  };
   return (
     <SettingsSection name="Layout">
       {modes && (
@@ -141,8 +237,62 @@ export function LayoutSection<T extends MediaColumnsSettings>({
           options={MODE_OPTIONS}
           layout="stacked"
           label="Mode"
-          info="Gallery: every run at the slider's value. Grid: runs as rows, slider values as columns. Compare: 2–4 slots, each with its own run and value."
+          info="Gallery: tiles at the slider's value (or over steps). Grid: two of step, index and run as columns and rows. Compare: 2–4 slots; run, step and index each linked or picked per slot."
         />
+      )}
+      {(modes ? panelMode === "gallery" : showMulti) && (
+        <Select<string>
+          {...cols}
+          value={String(cols.value)}
+          onChange={(v) => cols.onChange((v === "auto" ? "auto" : Number(v)) as Columns)}
+          options={COLUMN_OPTIONS}
+          label="Columns"
+        />
+      )}
+      {modes && panelMode === "gallery" && (
+        <Segmented<GalleryContent>
+          {...bind(m, "galleryContent")}
+          options={CONTENT_OPTIONS}
+          label="Column content"
+          info="What one tile is. Index: each list item at the slider's value. Step: the steps (sampled like the grid's columns), for the first selected item. Run: each run, with its selected items."
+        />
+      )}
+      {modes && panelMode === "grid" && (
+        <>
+          <Select<MediaAxis>
+            {...bind(m, "gridX")}
+            options={axisOptions(m.value.gridY)}
+            label="X-axis"
+          />
+          <Select<MediaAxis>
+            {...bind(m, "gridY")}
+            options={axisOptions(m.value.gridX)}
+            label="Y-axis"
+          />
+          <Select<string>
+            {...cols}
+            value={String(cols.value)}
+            onChange={(v) => cols.onChange((v === "auto" ? "auto" : Number(v)) as Columns)}
+            options={COLUMN_OPTIONS}
+            label="Grid columns"
+            description="Steps sampled along a step X-axis."
+          />
+          {mode === "card" && (
+            <RangeInput
+              value={{ min: m.value.gridStepFrom, max: m.value.gridStepTo, log: false }}
+              onChange={(r) => m.set({ gridStepFrom: r.min, gridStepTo: r.max })}
+              overridden={m.isOverridden("gridStepFrom") || m.isOverridden("gridStepTo")}
+              onReset={() => { m.reset("gridStepFrom"); m.reset("gridStepTo"); }}
+              disabled={m.locked}
+              showLog={false}
+              autoMin="first"
+              autoMax="last"
+              label="Steps"
+              description="Limits the step axis (in slider-key values)."
+            />
+          )}
+          <Stepper {...bind(m, "gridRows")} min={1} max={500} label="Rows" />
+        </>
       )}
       {modes && mode === "card" && panelMode === "compare" && (
         <Stepper
@@ -153,16 +303,34 @@ export function LayoutSection<T extends MediaColumnsSettings>({
           label="Slots"
         />
       )}
-      {showMulti && (
+      {modes && panelMode === "compare" && (
+        <>
+          {link("compareRun", "Run")}
+          {link("compareStep", "Step", "step")}
+          {lists && link("compareIndex", "Index", "index")}
+        </>
+      )}
+      {modes && panelMode === "compare" && (
         <Select<string>
           {...cols}
           value={String(cols.value)}
           onChange={(v) => cols.onChange((v === "auto" ? "auto" : Number(v)) as Columns)}
           options={COLUMN_OPTIONS}
-          label={panelMode === "grid" ? "Grid columns" : "Columns"}
-          description={panelMode === "grid" ? "Slider values shown side by side." : undefined}
+          label="Columns"
         />
       )}
+      {modes && (
+      <Segmented<"all" | "limit">
+        value={m.value.limitMedia ? "limit" : "all"}
+        onChange={(v) => m.set({ limitMedia: v === "limit" } as Partial<MediaLayoutSettings>)}
+        overridden={m.isOverridden("limitMedia")}
+        onReset={() => m.reset("limitMedia")}
+        disabled={m.locked}
+        options={[{ value: "all", label: "Show all" }, { value: "limit", label: "Limit" }]}
+        label="Media limit"
+      />
+      )}
+      {modes && m.value.limitMedia && <Stepper {...bind(m, "mediaLimit")} min={1} max={1000} label="Limit" description="Tiles at most." />}
       {showMulti && (
         <Stepper {...bind(c, "maxRuns")} min={0} max={50} label="Max runs" description="Show only the first N runs; 0 shows all." />
       )}

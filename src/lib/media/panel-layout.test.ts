@@ -6,8 +6,6 @@ import {
   limitRuns,
   normalizeSlots,
   sampleValues,
-  setLinked,
-  slotValue,
 } from "./panel-layout.ts";
 
 test("gallery columns: auto is up to two, phones and single panes one, a count is capped", () => {
@@ -61,16 +59,4 @@ test("normalizeSlots fills, clamps and repairs slots", () => {
 
 test("one pane: every slot shows it (same run at different values)", () => {
   assert.deepEqual(normalizeSlots(undefined, ["only"], 3).map((s) => s.pane), ["only", "only", "only"]);
-});
-
-test("linked slots follow the card; unlinked keep their own value", () => {
-  assert.equal(slotValue({ pane: "a", value: 3 }, true, 7), 7);
-  assert.equal(slotValue({ pane: "a", value: 3 }, false, 7), 3);
-  assert.equal(slotValue({ pane: "a" }, false, 7), 7);
-});
-
-test("unlinking freezes slots at the current value; linking drops their values", () => {
-  const slots = [{ pane: "a" }, { pane: "b", value: 2 }];
-  assert.deepEqual(setLinked(slots, false, 9), [{ pane: "a", value: 9 }, { pane: "b", value: 2 }]);
-  assert.deepEqual(setLinked(slots, true, 9), [{ pane: "a" }, { pane: "b" }]);
 });

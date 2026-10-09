@@ -65,10 +65,15 @@ export function gridValues(values: readonly number[], columns: Columns): number[
   return sampleValues(values, columns === "auto" ? AUTO_GRID_COLUMNS : columns);
 }
 
-/** One compare slot: which pane (series key) it shows, and its own value when unlinked. */
+/**
+ * One compare slot: which pane (series key) it shows, and its own slider
+ * value and list item while those variables are individual (see
+ * media-plan.ts `resolveSlot`).
+ */
 export interface CompareSlot {
   pane: string;
   value?: number;
+  index?: number;
 }
 
 /**
@@ -96,7 +101,7 @@ export function normalizeSlots(
   for (const s of kept) {
     const pane = known.has(s.pane) ? s.pane : nextFree();
     used.add(pane);
-    out.push(s.value != null ? { pane, value: s.value } : { pane });
+    out.push({ ...s, pane });
   }
   while (out.length < want) {
     const pane = nextFree();
@@ -108,17 +113,4 @@ export function normalizeSlots(
 
 export function clampSlots(n: number): number {
   return Math.min(MAX_SLOTS, Math.max(MIN_SLOTS, Math.round(n)));
-}
-
-/** The value a slot shows: the card's when linked (or the slot has none), else its own. */
-export function slotValue(slot: CompareSlot, linked: boolean, current: number): number {
-  return linked || slot.value == null ? current : slot.value;
-}
-
-/**
- * Unlinking freezes every slot at the value it showed; linking drops the
- * slots' own values so they follow the card's slider again.
- */
-export function setLinked(slots: readonly CompareSlot[], linked: boolean, current: number): CompareSlot[] {
-  return slots.map((s) => (linked ? { pane: s.pane } : { pane: s.pane, value: s.value ?? current }));
 }

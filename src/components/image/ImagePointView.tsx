@@ -43,6 +43,11 @@ interface Props {
   /** Reports the overlays this point's images carry (for the card's overlay settings). */
   onOverlays?: (summary: OverlaySummary) => void;
   rendering?: ImageRendering;
+  /**
+   * The list items shown (the card's Index, see lib/media/media-plan.ts), by
+   * position; omitted: all. One item shows alone, as a plain image does.
+   */
+  indices?: readonly number[] | null;
 }
 
 /**
@@ -86,7 +91,7 @@ function useItemOverlays(items: ImageItem[], onOverlays?: (summary: OverlaySumma
  */
 export default function ImagePointView({
   metricName, frame, refLabel, split, onSplitChange, view, onViewChange, viewSync, loadingHint,
-  overlayView, onOverlays, rendering,
+  overlayView, onOverlays, rendering, indices,
 }: Props) {
   const items = frame?.items ?? EMPTY_ITEMS;
   const overlays = useItemOverlays(items, onOverlays);
@@ -104,8 +109,9 @@ export default function ImagePointView({
   const refs = { items: frame.refItems };
 
   const gallery = items.length > 1;
+  const picked = (indices ?? items.map((_, i) => i)).filter((i) => i < items.length);
   // A gallery's own caption heads the grid; each image shows its entry's.
-  const galleryCaption = gallery ? pointCaption(shown.metadata) : null;
+  const galleryCaption = picked.length > 1 ? pointCaption(shown.metadata) : null;
   const cell = (item: ImageItem, i: number) => (
     <ArtifactMark key={i} hash={item.hash} name={gallery ? `${metricName}_${i}` : metricName} step={shown.step} mime={item.mime}>
       {cellBody(item, i)}
@@ -156,17 +162,20 @@ export default function ImagePointView({
     );
   };
 
-  if (!gallery) return cell(items[0]!, 0);
+  if (picked.length === 0) {
+    return <div className="flex h-full items-center justify-center text-xs text-fg-subtle">No image at this index</div>;
+  }
+  if (picked.length === 1) return cell(items[picked[0]!]!, picked[0]!);
   // Near-square grid of equal cells (the layout every gallery shares).
-  const cols = galleryGridColumns(items.length);
+  const cols = galleryGridColumns(picked.length);
   const grid = (
     <div
       className="grid min-h-0 w-full flex-1 gap-1"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: "minmax(0, 1fr)" }}
     >
-      {items.map((item, i) => (
+      {picked.map((i) => (
         <div key={i} className="relative min-h-0 min-w-0 overflow-hidden">
-          {cell(item, i)}
+          {cell(items[i]!, i)}
         </div>
       ))}
     </div>

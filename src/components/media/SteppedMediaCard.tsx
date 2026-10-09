@@ -22,7 +22,6 @@ import { useSequencesForRuns } from "../../api/hooks";
 import { cardOverridesStorageKey, type CardSettingsKey, type SettingsController } from "../../lib/card-settings";
 import { useCardDrop } from "../../lib/use-series-drop";
 import type { ComparisonSeriesRef } from "../../lib/comparisons";
-import { gridValues, normalizeSlots, slotValue } from "../../lib/media/panel-layout";
 import { formatNum } from "../../lib/plot-utils/format";
 import { STEP_KEY } from "../../lib/media/slider-key";
 import { useNeighbourPrefetch } from "../../lib/media/use-settled-frame";
@@ -32,8 +31,7 @@ import GalleryView, { useSettledGalleries } from "./GalleryView";
 import type { SequenceMeta, SequencePoint } from "../../api/types";
 import { useCardSeries, useStepSlider, resolveAtStep, MultiPaneGrid } from "../card-kit";
 import { resolveReference } from "../card-kit/resolve-at-step";
-import ComparePanes from "../card-kit/ComparePanes";
-import GridPanes from "../card-kit/GridPanes";
+import MediaTiles, { useMediaLayout, type LayoutTile } from "../card-kit/MediaTiles";
 import { useMediaPanes, useScalarMetricNames } from "../card-kit/use-media-panes";
 import { steppedMediaInstanceDefaults, type SteppedMediaSettings } from "../cards-settings/stepped-media";
 import type { MediaPanelCtx, ReferencePanelCtx } from "../settings-panels/media-panel-kit";
@@ -218,7 +216,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
   const qc = useQueryClient();
   const prefetchItem = prefetch ? (p: SequencePoint, signal: AbortSignal) => prefetch(qc, p, signal) : undefined;
   const peekItem = peek ? (p: SequencePoint) => peek(qc, p) : undefined;
-  useNeighbourPrefetch(settings.panelMode !== "grid" ? values.length : 0, safeIdx, (j) =>
+  useNeighbourPrefetch(settings.panelMode === "gallery" ? values.length : 0, safeIdx, (j) =>
     shown.flatMap((_, i) => {
       const p = pointAt(i, values[j]!, nearest);
       return [p, refAt(i, p)].flatMap((q) => {
@@ -239,7 +237,6 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
 
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const mode = settings.panelMode;
   const paneOptions = useMemo(
     () => paneKeys.map((k, i) => ({
       key: k,
@@ -248,31 +245,27 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
     })),
     [paneKeys, panes, shown],
   );
-  const compareSlots = useMemo(() => normalizeSlots(settings.compareSlots, paneKeys), [settings.compareSlots, paneKeys]);
-  const gridCols = mode === "grid" ? gridValues(values, settings.columns) : [];
-  // Every pane on screen with its point (ids as `view` gets them below).
-  const paneRequests: Array<{ id: string; index: number; point: SequencePoint | null }> = mode === "grid"
-    ? shown.flatMap((_, i) => gridCols.map((v, col) => ({ id: `grid:${i}:${col}`, index: i, point: pointAt(i, v, false) })))
-    : mode === "compare"
-      ? compareSlots.map((slot, i) => {
-          const idx = paneKeys.indexOf(slot.pane);
-          return { id: `compare:${i}`, index: idx, point: idx < 0 ? null : pointAt(idx, slotValue(slot, settings.compareLinked, currentValue), nearest) };
-        })
-      : shown.length <= 1
-        ? [{ id: paneKeys[0] ?? "single", index: 0, point: pointAt(0, currentValue, false) }]
-        : paneKeys.map((key, i) => ({ id: key, index: i, point: pointAt(i, currentValue, nearest) }));
-  const panePoints = paneRequests.map((r) => r.point);
+  const layout = useMediaLayout({
+    settings,
+    values,
+    currentValue,
+    stepFor,
+    seriesPoints,
+    paneKeys,
+    nearest: nearest && shown.length > 1,
+  });
   // Gallery panes (and reference galleries) swap steps together (runs side by side never differ).
   const galleryFrames = useSettledGalleries(
     [
-      ...paneRequests,
-      ...(reference ? paneRequests.map((r) => ({ id: `${r.id}~ref`, point: r.index < 0 ? null : refAt(r.index, r.point) })) : []),
+      ...layout.tiles,
+      ...(reference ? layout.tiles.map((t) => ({ id: `${t.id}~ref`, point: t.run < 0 ? null : refAt(t.run, t.point) })) : []),
     ],
     { prefetchItem, peekItem },
   );
-  const paneCount = panePoints.reduce((n, p) => n + Math.max(1, galleryCount(p)), 0);
+  const paneCount = layout.tiles.reduce((n, t) => n + Math.max(1, t.items?.length ?? galleryCount(t.point)), 0);
 
-  const view = (i: number, point: SequencePoint | null, paneId: string, single: boolean, inModal: boolean) => {
+  const view = (tile: LayoutTile, single: boolean, inModal: boolean) => {
+    const { run: i, point, id: paneId } = tile;
     if (!point?.artifact_hash) return <Placeholder loading={loadingAt(i)} noun={noun} />;
     const name = shown[i]?.name ?? metric.name;
     const ref = refAt(i, point);
@@ -289,6 +282,7 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
           captionOverlay={captionOverlay}
           prefetchItem={prefetchItem}
           peekItem={peekItem}
+          indices={tile.items ?? undefined}
           renderItem={(item, j) => renderArtifact({
             ...common,
             point: item,
@@ -315,60 +309,37 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
     );
   };
 
-  const renderPanes = (inModal: boolean) => {
-    if (mode === "grid") {
-      return (
-        <GridPanes
-          rows={paneOptions}
-          columns={gridCols.map((v) => ({ value: v, label: `${keyName} ${formatNum(v)}` }))}
-          current={currentValue}
-          onColumnClick={slider.setValue}
-          rowHeight={inModal ? 220 : 140}
-          renderCell={(row, col) => (
-            <div className="h-full overflow-auto">
-              {view(row, pointAt(row, gridCols[col]!, false), `grid:${row}:${col}`, false, inModal)}
-            </div>
-          )}
-        />
-      );
-    }
-    if (mode === "compare") {
-      return (
-        <ComparePanes
-          slots={compareSlots}
-          onSlotsChange={(slots) => updateShared({ compareSlots: slots })}
-          linked={settings.compareLinked}
-          onLinkedChange={(linked, slots) => updateShared({ compareLinked: linked, compareSlots: slots })}
-          panes={paneOptions}
-          values={values}
-          keyName={keyName}
-          current={currentValue}
-          columns={settings.columns}
-          renderSlot={(slot, _value, i) => {
-            const idx = paneKeys.indexOf(slot.pane);
-            if (idx < 0) return null;
-            const v = slotValue(slot, settings.compareLinked, currentValue);
-            return <div className="h-full overflow-auto">{view(idx, pointAt(idx, v, nearest), `compare:${i}`, false, inModal)}</div>;
-          }}
-        />
-      );
-    }
-    if (shown.length <= 1) {
-      return view(0, pointAt(0, currentValue, false), paneKeys[0] ?? "single", true, inModal);
-    }
-    return (
-      <MultiPaneGrid
-        paneKeys={paneKeys}
-        labels={panes.labels}
-        colors={panes.paneColors}
-        inModal={inModal}
-        columns={settings.columns}
-        paneWidths={settings.paneWidths}
-        onPaneWidthsChange={(w) => updateShared({ paneWidths: w })}
-        renderPane={(key, i) => view(i, pointAt(i, currentValue, nearest), key, false, inModal)}
-      />
-    );
-  };
+  const renderPanes = (inModal: boolean) => (
+    <MediaTiles
+      layout={layout}
+      settings={settings}
+      update={updateShared}
+      panes={paneOptions}
+      multiRun={panes.multiRun}
+      keyName={keyName}
+      values={values}
+      currentValue={currentValue}
+      onValue={slider.setValue}
+      inModal={inModal}
+      renderTile={(tile, { single }) => view(tile, single, inModal)}
+      renderPanes={(tiles) => {
+        if (tiles.length <= 1) return tiles[0] ? view(tiles[0], true, inModal) : <Placeholder loading={loadingAt(0)} noun={noun} />;
+        const keys = tiles.map((t) => paneKeys[t.run]!);
+        return (
+          <MultiPaneGrid
+            paneKeys={keys}
+            labels={panes.labels}
+            colors={panes.paneColors}
+            inModal={inModal}
+            columns={settings.columns}
+            paneWidths={settings.paneWidths}
+            onPaneWidthsChange={(w) => updateShared({ paneWidths: w })}
+            renderPane={(_key, k) => view(tiles[k]!, false, inModal)}
+          />
+        );
+      }}
+    />
+  );
 
   const renderContent = (inModal: boolean) => (
     <>
@@ -418,6 +389,9 @@ export default function SteppedMediaCard<S extends SteppedMediaSettings>({
         multi: panes.visibleCount > 1,
         following,
         scalarMetrics,
+        lists: layout.lists,
+        listCount: layout.listCount,
+        sliderValue: currentValue,
       })}
       modalOpen={expanded}
       onModalClose={() => setExpanded(false)}

@@ -31,6 +31,20 @@ test("a metric key is looked up as of each step; shared values resolve to their 
   ]);
 });
 
+test("the rule: the largest key value <= the slider's, ties to the latest step, missing key shows nothing", () => {
+  // Media at steps 0..9, epoch = step // 2 (steps 0-1 epoch 0, 2-3 epoch 1, ...).
+  const epoch = kp(Array.from({ length: 10 }, (_, s) => [s, Math.floor(s / 2)] as [number, number]));
+  const track = sliderTrack([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "epoch", epoch);
+  assert.deepEqual(track.map((p) => p.value), [0, 1, 2, 3, 4]);
+  assert.equal(resolveAtValue(track, 2), 5); // epoch 2 at steps 4 and 5: the latest
+  assert.equal(resolveAtValue(track, 2.7), 5); // between values: the largest value below
+  assert.equal(resolveAtValue(track, 99), 9);
+  // A run that never logs the key: an empty track, nothing (or its first media with nearest).
+  const missing = sliderTrack([0, 1, 2], "epoch", []);
+  assert.equal(resolveAtValue(missing, 2), null);
+  assert.equal(resolveAtValue(sliderTrack([0, 1, 2], "epoch", null), 2, { nearest: true }), null);
+});
+
 test("steps before the key's first point have no value and are dropped", () => {
   const epoch = kp([[100, 1]]);
   assert.deepEqual(sliderTrack([10, 50, 100], "epoch", epoch), [{ value: 1, step: 100 }]);

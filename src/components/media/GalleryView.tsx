@@ -112,19 +112,28 @@ interface Props extends GalleryItemLoaders {
   minItemHeight?: number;
   /** Item captions as chips over the items' corner (pictures), not a line above them. */
   captionOverlay?: boolean;
+  /**
+   * The items shown (the card's Index, see lib/media/media-plan.ts), by
+   * position in the list; omitted: all. `renderItem` still gets each item's
+   * position in the whole list.
+   */
+  indices?: readonly number[];
 }
 
-export default function GalleryView({ point, frame: given, renderItem, columns = "auto", fill = false, minItemHeight = 0, captionOverlay = false, prefetchItem, peekItem }: Props) {
+export default function GalleryView({ point, frame: given, renderItem, columns = "auto", fill = false, minItemHeight = 0, captionOverlay = false, prefetchItem, peekItem, indices }: Props) {
   const own = useGalleryFrame(given ? null : point, { prefetchItem, peekItem });
   const frame = given ?? own;
-  const caption = frame ? pointCaption(frame.point.metadata) : null;
+  // One item of the list is a tile of its own: no gallery caption over it.
+  const caption = frame && (!indices || indices.length > 1) ? pointCaption(frame.point.metadata) : null;
   const run = usePaneLabelInline(!!caption);
   if (!frame) return <div className={`${fill ? "h-full" : "h-32"} motion-safe:animate-pulse rounded bg-bg-hover`} />;
   if (frame.items.length === 0) {
     return <div className="text-xs text-fg-subtle">empty gallery</div>;
   }
   const count = frame.items.length;
-  const cols = galleryGridColumns(count, columns);
+  const shown = (indices ?? frame.items.map((_, i) => i)).filter((i) => i < count);
+  if (shown.length === 0) return <div className="text-xs text-fg-subtle">no item at this index</div>;
+  const cols = galleryGridColumns(shown.length, columns);
   return (
     <div
       className={`flex min-w-0 flex-col${fill ? " h-full min-h-0" : ""}`}
@@ -146,7 +155,8 @@ export default function GalleryView({ point, frame: given, renderItem, columns =
           gridAutoRows: fill ? `minmax(${minItemHeight}px, 1fr)` : undefined,
         }}
       >
-        {frame.itemPoints.map((item, i) => {
+        {shown.map((i) => {
+          const item = frame.itemPoints[i]!;
           const itemCaption = frame.items[i]!.caption;
           return (
             <div key={i} className="group/item relative flex min-h-0 min-w-0 flex-col" data-gallery-item={i}>

@@ -12,14 +12,12 @@ import {
   type OverlaySummary,
   type OverlayView,
 } from "../lib/overlays";
-import { gridValues, normalizeSlots, slotValue } from "../lib/media/panel-layout";
 import { formatNum } from "../lib/plot-utils/format";
 import { STEP_KEY } from "../lib/media/slider-key";
 import { useNeighbourPrefetch, useSettledFrame } from "../lib/media/use-settled-frame";
 import CardShell from "./CardShell";
 import StepSlider from "./StepSlider";
-import ComparePanes from "./card-kit/ComparePanes";
-import GridPanes from "./card-kit/GridPanes";
+import MediaTiles, { useMediaLayout, type LayoutTile } from "./card-kit/MediaTiles";
 import MultiPaneGrid from "./card-kit/MultiPaneGrid";
 import { plotCardPolicy } from "./card-kit/plot-card-policy";
 import { resolveAtStep, resolveReference } from "./card-kit/resolve-at-step";
@@ -155,7 +153,7 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
   // Warm the frames around the slider (every pane's image + reference), so
   // stepping finds them decoded. Grid columns sit at fixed values: nothing to warm.
   const qc = useQueryClient();
-  useNeighbourPrefetch(settings.panelMode === "grid" ? 0 : values.length, safeIdx, (j) =>
+  useNeighbourPrefetch(settings.panelMode === "gallery" ? values.length : 0, safeIdx, (j) =>
     series.flatMap((_, index) => {
       const point = pointAt(index, values[j]!, true);
       const ref = refAt(index, point);
@@ -164,34 +162,21 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
     }),
   );
 
-  const mode = settings.panelMode;
-  const compareSlots = useMemo(
-    () => normalizeSlots(settings.compareSlots, paneKeys),
-    [settings.compareSlots, paneKeys],
+  const paneOptions = useMemo(
+    () => paneKeys.map((k, i) => ({
+      key: k,
+      label: labels.get(k) ?? series[i]!.name,
+      color: panes.multiRun ? panes.colors.get(panes.runIds[i]!) : undefined,
+    })),
+    [paneKeys, labels, series, panes],
   );
-  const gridCols = mode === "grid" ? gridValues(values, settings.columns) : [];
-
-  /** Every pane the card shows right now: its id, series and point (mirrors renderPanes). */
-  const paneRequests = (): Array<{ id: string; index: number; point: SequencePoint | null }> => {
-    if (mode === "grid") {
-      return series.flatMap((_, row) =>
-        gridCols.map((v, col) => ({ id: `grid:${row}:${col}`, index: row, point: pointAt(row, v, false) })));
-    }
-    if (mode === "compare") {
-      return compareSlots.flatMap((slot, i) => {
-        const index = paneKeys.indexOf(slot.pane);
-        const v = slotValue(slot, settings.compareLinked, currentValue);
-        return index < 0 ? [] : [{ id: `compare:${i}`, index, point: pointAt(index, v, true) }];
-      });
-    }
-    return paneKeys.map((key, index) => ({ id: key, index, point: pointAt(index, currentValue, true) }));
-  };
+  const layout = useMediaLayout({ settings, values, currentValue, stepFor, seriesPoints: points, paneKeys, nearest: true });
 
   // The card swaps ALL its panes in one commit, once every pane's frame
   // (image, reference, gallery entries, masks) is decoded: runs compared
   // side by side never show different steps, an image never shows its
   // reference's step, and until then the previous frame stays on screen.
-  const requests = paneRequests().map((r) => ({ ...r, ref: refAt(r.index, r.point) }));
+  const requests = layout.tiles.map((t) => ({ id: t.id, point: t.point, ref: t.run < 0 ? null : refAt(t.run, t.point) }));
   const cardKey = requests.map((r) => `${r.id}=${imageFrameKey(r.point, r.ref) ?? "-"}`).join(" ");
   const frames = useSettledFrame<Map<string, ImageFrame | null>>(
     cardKey,
@@ -209,10 +194,10 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       [r.id, r.point ? await resolveImageFrame(qc, r.point, r.ref, signal) : null] as const))),
   ).frame;
 
-  const renderView = (index: number, id: string) => (
+  const renderView = (tile: LayoutTile) => (
     <ImagePointView
-      metricName={series[index]?.name ?? metric.name}
-      frame={frames ? frames.get(id) ?? null : undefined}
+      metricName={series[tile.run]?.name ?? metric.name}
+      frame={frames ? frames.get(tile.id) ?? null : undefined}
       refLabel={reference?.name}
       split={split}
       onSplitChange={onSplitChange}
@@ -221,63 +206,38 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
       viewSync={viewSync}
       loadingHint={anyLoading}
       overlayView={overlayView}
-      onOverlays={reporterFor(id)}
+      onOverlays={reporterFor(tile.id)}
       rendering={settings.rendering}
+      indices={tile.items}
     />
   );
 
-  const paneOptions = useMemo(
-    () => paneKeys.map((k, i) => ({
-      key: k,
-      label: labels.get(k) ?? series[i]!.name,
-      color: panes.multiRun ? panes.colors.get(panes.runIds[i]!) : undefined,
-    })),
-    [paneKeys, labels, series, panes],
-  );
-
-  const renderPanes = () => {
-    if (mode === "grid") {
-      return (
-        <GridPanes
-          rows={paneOptions}
-          columns={gridCols.map((v) => ({ value: v, label: `${keyName} ${formatNum(v)}` }))}
-          current={currentValue}
-          onColumnClick={slider.setValue}
-          renderCell={(row, col) => renderView(row, `grid:${row}:${col}`)}
-        />
-      );
-    }
-    if (mode === "compare") {
-      return (
-        <ComparePanes
-          slots={compareSlots}
-          onSlotsChange={(slots) => ctl.set({ compareSlots: slots })}
-          linked={settings.compareLinked}
-          onLinkedChange={(linked, slots) => ctl.set({ compareLinked: linked, compareSlots: slots })}
-          panes={paneOptions}
-          values={values}
-          keyName={keyName}
-          current={currentValue}
+  const renderPanes = () => (
+    <MediaTiles
+      layout={layout}
+      settings={settings}
+      update={ctl.set}
+      panes={paneOptions}
+      multiRun={panes.multiRun}
+      keyName={keyName}
+      values={values}
+      currentValue={currentValue}
+      onValue={slider.setValue}
+      inModal={false}
+      renderTile={(tile) => renderView(tile)}
+      renderPanes={(tiles) => (
+        <MultiPaneGrid
+          paneKeys={tiles.map((t) => paneKeys[t.run]!)}
+          labels={settings.showLabels ? labels : new Map()}
+          colors={panes.paneColors}
+          inModal={false}
           columns={settings.columns}
-          renderSlot={(slot, _value, i) => {
-            const index = paneKeys.indexOf(slot.pane);
-            return index < 0 ? null : renderView(index, `compare:${i}`);
-          }}
+          onPaneWidthsChange={() => {}}
+          renderPane={(_key, k) => renderView(tiles[k]!)}
         />
-      );
-    }
-    return (
-      <MultiPaneGrid
-        paneKeys={paneKeys}
-        labels={settings.showLabels ? labels : new Map()}
-        colors={panes.paneColors}
-        inModal={false}
-        columns={settings.columns}
-        onPaneWidthsChange={() => {}}
-        renderPane={(key, index) => renderView(index, key)}
-      />
-    );
-  };
+      )}
+    />
+  );
 
   const settingsPanel = (
     <ImageSettingsPanel
@@ -293,6 +253,9 @@ export default function ImageCard({ runId, metric, extraSeries = [], settingsKey
         multi: panes.visibleCount > 1,
         following: slider.sync != null,
         scalarMetrics,
+        lists: layout.lists,
+        listCount: layout.listCount,
+        sliderValue: currentValue,
       }}
     />
   );
