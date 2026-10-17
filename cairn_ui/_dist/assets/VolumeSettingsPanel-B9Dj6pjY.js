@@ -1,1 +1,0 @@
-import{j as e,v as o,t,w as i}from"./index-CZIVrCpQ.js";function u({ctl:a,ctx:s,mode:n}){return e.jsx(o,{tabs:{values:e.jsx(i,{ctl:a,ctx:s}),display:e.jsx(t,{ctl:a,modes:!0,ctx:s,mode:n,paneKeys:s==null?void 0:s.paneKeys})}})}export{u as default};
