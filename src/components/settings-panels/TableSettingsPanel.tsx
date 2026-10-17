@@ -53,6 +53,7 @@ interface Props {
   ctl: SettingsController<TableSettings>;
   ctx?: TablePanelCtx;
   mode: "card" | "defaults";
+  singleTable?: boolean;
 }
 
 function bind<K extends keyof TableSettings & string>(
@@ -298,7 +299,7 @@ function GroupByEditor({ ctl, ctx }: { ctl: SettingsController<TableSettings>; c
 }
 
 /** Settings of the table card (also the defaults editor's, with `mode="defaults"`). */
-export default function TableSettingsPanel({ ctl, ctx, mode }: Props) {
+export default function TableSettingsPanel({ ctl, ctx, mode, singleTable = false }: Props) {
   const s = ctl.value;
   const card = mode === "card" && ctx !== undefined;
 
@@ -332,7 +333,7 @@ export default function TableSettingsPanel({ ctl, ctx, mode }: Props) {
           />
         )}
       </SettingsSection>
-      <SettingsSection name="Compare">
+      {!singleTable && <SettingsSection name="Compare">
         {card && ctx.multi && (
           <>
             <Switch
@@ -362,7 +363,7 @@ export default function TableSettingsPanel({ ctl, ctx, mode }: Props) {
           {...bind(ctl, "textDiff")}
           options={[{ value: "off", label: "Off" }, ...TEXT_DIFF_MODES.map((m) => ({ value: m, label: m[0]!.toUpperCase() + m.slice(1) }))]}
         />
-      </SettingsSection>
+      </SettingsSection>}
     </>
   );
 
@@ -371,7 +372,7 @@ export default function TableSettingsPanel({ ctl, ctx, mode }: Props) {
   return (
     <SettingsTabs
       tabs={{
-        values: (
+        values: singleTable ? undefined : (
           <SettingsSection name="Compare">
             <CombineEditor ctl={ctl} ctx={ctx} />
           </SettingsSection>

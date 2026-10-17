@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useModalBehavior } from "../lib/use-modal-behavior";
+import "./card-detail-modal.css";
 import { isTypingTarget } from "../lib/shortcuts";
 
 interface Props {
@@ -14,7 +16,7 @@ interface Props {
   /** The settings column's heading and phone tab (default "Settings"); the card side's phone tab (default "Card"). */
   settingsLabel?: string;
   cardLabel?: string;
-  /** The phone tab it opens on (default the card). */
+  /** The phone tab it opens on (default settings). */
   initialTab?: "card" | "settings";
   /** Shown in place of the title text (the card editor's inline title edit). */
   titleNode?: ReactNode;
@@ -30,18 +32,9 @@ function isControl(t: EventTarget | null): boolean {
   return isTypingTarget(el) || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA";
 }
 
-/**
- * The card at full size beside its settings panel. A workspace's card
- * editor (workspace/CardEditor.tsx) is this shell too, while adding a card
- * (previews where the card is, the data and type pickers where its settings
- * are) and while editing one. Below `md` it fills the
- * screen instead: a sticky header (title, close, Card / Settings tabs) over
- * one of the two panels. The inactive panel is hidden, not unmounted, so the
- * card's content keeps its state across tab switches.
- *
- * Content promoted into this modal by `card-kit/use-overlay-slot` is
- * positioned `fixed`; nothing here may set `transform` (or anything else that
- * makes a containing block for fixed elements) on the content's ancestors.
+/** Shared preview-left/settings-right panel for ordinary cards and published reports.
+ * Mobile tabs keep both panes mounted. Promoted viewer overlays are fixed-positioned,
+ * so this shell must never create a transformed containing block.
  */
 export default function CardDetailModal({
   open,
@@ -53,7 +46,7 @@ export default function CardDetailModal({
   onNext,
   settingsLabel = "Settings",
   cardLabel = "Card",
-  initialTab = "card",
+  initialTab = "settings",
   titleNode,
   settingsHeader,
 }: Props) {
@@ -100,75 +93,27 @@ export default function CardDetailModal({
     </button>
   );
 
-  return (
-    <div className="fixed inset-0 z-50 flex">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Modal content */}
-      <div className="relative z-10 flex flex-1 flex-col overflow-hidden bg-bg md:m-4 md:flex-row md:rounded-lg md:border md:border-border">
-        {/* Phone header: title, close, tabs */}
-        <div className="sticky top-0 z-10 shrink-0 border-b border-border bg-bg md:hidden">
-          <div className="flex items-center gap-2 pl-4 pr-1">
-            {hasNav && <NavButtons onPrev={onPrev} onNext={onNext} size="h-11 w-11" />}
-            <h2 className="mono min-w-0 flex-1 truncate text-base font-semibold">{titleNode ?? title}</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-11 w-11 shrink-0 inline-flex items-center justify-center rounded text-2xl text-fg-muted hover:bg-bg-hover hover:text-fg"
-              aria-label="Close"
-            >
-              {"×"}
-            </button>
+  return createPortal(
+    <div className="card-detail-overlay">
+      <div className="card-detail-backdrop" onClick={onClose} aria-hidden="true" />
+      <div role="dialog" aria-modal="true" aria-label={title} className="card-detail-dialog">
+        <header className="card-detail-heading">
+          {hasNav && <NavButtons onPrev={onPrev} onNext={onNext} size="h-7 w-7" />}
+          <h2>{titleNode ?? title}</h2>
+          <button type="button" onClick={onClose} className="card-detail-close" aria-label="Close">×</button>
+        </header>
+        {hasSettings && <div role="tablist" className="card-detail-mobile-tabs">{tabButton("card", cardLabel)}{tabButton("settings", settingsLabel)}</div>}
+        <div className="card-detail-layout">
+          <div className={`card-detail-preview ${showSettings ? "" : "mobile-active"}`}>
+            <div className="card-detail-preview-content">{children}</div>
           </div>
-          {hasSettings && (
-            <div role="tablist" className="flex">
-              {tabButton("card", cardLabel)}
-              {tabButton("settings", settingsLabel)}
-            </div>
-          )}
-        </div>
-
-        {/* Card at full size; its header and the settings column's are one row that never scrolls */}
-        <div className={`min-h-0 min-w-0 flex-1 flex-col md:flex ${showSettings ? "hidden" : "flex"}`}>
-          <div className="hidden h-12 shrink-0 items-center gap-2 border-b border-border px-6 md:flex">
-            {hasNav && <NavButtons onPrev={onPrev} onNext={onNext} size="h-7 w-7" />}
-            <h2 className="mono min-w-0 flex-1 truncate text-lg font-semibold">{titleNode ?? title}</h2>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-auto p-3 md:p-6">
-            <div className="flex-1 min-h-0">{children}</div>
-          </div>
-        </div>
-
-        {/* Settings panel */}
-        <div
-          className={`min-h-0 flex-1 flex-col bg-bg-elevated md:flex md:w-96 md:flex-none md:shrink-0 md:border-l md:border-border ${
-            showSettings ? "flex" : "hidden"
-          }`}
-        >
-          <div className={`h-12 shrink-0 items-stretch gap-2 border-b border-border px-4 ${settingsHeader ? "flex" : "hidden md:flex"}`}>
-            <div className="flex min-w-0 flex-1 items-stretch">
-              {settingsHeader ?? (
-                <h3 className="self-center text-xs font-semibold uppercase tracking-wide text-fg-muted">{settingsLabel}</h3>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="hidden h-6 w-6 shrink-0 items-center justify-center self-center rounded text-lg text-fg-muted hover:bg-bg-hover hover:text-fg md:inline-flex"
-              aria-label="Close"
-            >
-              {"×"}
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">{settingsContent}</div>
+          {hasSettings && <aside className={`card-detail-settings ${showSettings ? "mobile-active" : ""}`}>
+            {settingsHeader && <div className="card-detail-settings-heading">{settingsHeader}</div>}
+            <div className="card-detail-settings-content">{settingsContent}</div>
+          </aside>}
         </div>
       </div>
-    </div>
+    </div>, document.body
   );
 }
 

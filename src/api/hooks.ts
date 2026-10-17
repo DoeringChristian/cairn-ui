@@ -425,7 +425,7 @@ export function useReportCommentMutations(projectId: string, reportId: string) {
 export function useDeleteReport(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (reportId: string) => api.deleteReport(projectId, reportId),
+    mutationFn: ({reportId, expectedVersion}: {reportId: string; expectedVersion: string}) => api.deleteReport(projectId, reportId, expectedVersion),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.reports(projectId) }),
   });
 }

@@ -1,113 +1,52 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-
-/**
- * Full-page login screen (deliberately outside <App>'s Outlet — it must
- * render usefully even when every /api/* route except /api/auth/* and
- * /api/health 401s).
- *
- * Two paths in:
- *   1. `/login?otp=...` — the one-time bootstrap link `cairn ui`/`cairn
- *      server` prints on first auth-enabled start. Exchanged immediately
- *      for a session cookie; the otp itself is never written to
- *      localStorage/sessionStorage and the query param is stripped from
- *      the URL bar the moment we're done with it (single-use server-side
- *      too, so a stale bookmark or shoulder-surfed URL doesn't work twice).
- *   2. Manual token paste — the normal path after the bootstrap token (or
- *      a `cairn token create` token) has been copied down.
- *
- * `?return=/some/path` is preserved through both paths so central 401
- * handling (client.ts) can send you back where you were.
- */
+import { qk } from "../api/query-keys";
+import { createFragmentLogin } from "../lib/fragment-login";
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const otp = params.get("otp");
-  const returnTo = params.get("return") || "/";
-
+  const queryClient = useQueryClient();
+  const fragmentLogin = useRef(createFragmentLogin());
   const [token, setToken] = useState("");
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [otpState, setOtpState] = useState<"pending" | "failed" | null>(otp ? "pending" : null);
-
   useEffect(() => {
-    if (!otp) return;
-    let cancelled = false;
-    // Strip the otp from the URL bar immediately — it's single-use and must
-    // never linger in browser history even if the exchange is still async.
-    window.history.replaceState(null, "", "/login");
-    api
-      .loginWithOtp(otp)
-      .then(() => {
-        if (!cancelled) navigate(returnTo, { replace: true });
-      })
-      .catch(() => {
-        if (!cancelled) setOtpState("failed");
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [otp]);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!token.trim() || busy) return;
-    setBusy(true);
-    setError(null);
+    let active = true;
+    const pending = fragmentLogin.current(window.location, window.history, api.login);
+    if (pending) {
+      setBusy(true);
+      setError("");
+      void pending.then(() => {
+        if (!active) return;
+        void queryClient.invalidateQueries({ queryKey: qk.session() });
+        navigate("/", { replace: true });
+      }, () => {
+        if (active) setError("Could not sign in with this link. Check the server token and connection, or paste the token below.");
+      }).finally(() => { if (active) setBusy(false); });
+    }
+    return () => { active = false; };
+  }, [navigate, queryClient]);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setError("");
     try {
       await api.login(token.trim());
-      navigate(returnTo, { replace: true });
-    } catch {
-      setError("Invalid or expired token.");
-    } finally {
-      setBusy(false);
+      setToken("");
+      void queryClient.invalidateQueries({ queryKey: qk.session() });
+      navigate("/", { replace: true });
     }
+    catch { setError("Could not sign in. Check the server token and connection."); }
+    finally { setBusy(false); }
   }
-
-  if (otpState === "pending") {
-    return (
-      <LoginShell>
-        <p className="text-sm text-fg-muted">Signing you in…</p>
-      </LoginShell>
-    );
-  }
-
-  return (
-    <LoginShell>
-      {otpState === "failed" && (
-        <p className="mb-4 rounded border border-status-failed/40 bg-status-failed/10 px-3 py-2 text-sm text-status-failed">
-          That login link is invalid or has expired (it's single-use and lasts 15
-          minutes). Paste a token below instead.
-        </p>
-      )}
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <label className="text-sm text-fg-muted" htmlFor="cairn-token">
-          Auth token
-        </label>
-        <input
-          id="cairn-token"
-          className="input"
-          type="password"
-          autoFocus
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="paste your token here"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-        />
-        {error && <p className="text-sm text-status-failed">{error}</p>}
-        <button type="submit" className="btn justify-center" disabled={busy || !token.trim()}>
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
-      <p className="mt-4 text-xs text-fg-subtle">
-        No token? Run <code className="kbd">cairn token create --name you --role write</code>{" "}
-        on the server host, or <code className="kbd">cairn login --ssh</code> from the CLI.
-      </p>
-    </LoginShell>
-  );
+  return <LoginShell><h1 className="text-2xl mb-3">Open your workspace</h1>
+    <form onSubmit={submit} className="flex flex-col gap-3">
+      <label htmlFor="token">Server token</label>
+      <input id="token" type="password" className="input" autoFocus autoComplete="off"
+             value={token} onChange={e => setToken(e.target.value)} />
+      {error && <p role="alert">{error}</p>}
+      <button className="btn justify-center" disabled={busy || !token.trim()}>{busy ? "Signing in…" : "Sign in"}</button>
+    </form><p className="text-sm text-fg-muted mt-4">Use the token supplied by your server's owner.</p>
+  </LoginShell>;
 }
 
 function LoginShell({ children }: { children: React.ReactNode }) {
@@ -127,7 +66,7 @@ function LoginShell({ children }: { children: React.ReactNode }) {
 function Logo() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect width="24" height="24" rx="5" fill="#539bf5" />
+      <rect width="24" height="24" rx="5" fill="var(--accent)" />
       <path
         d="M6 17h12M7.5 13h9M9 9h6M10.5 5.5h3"
         stroke="#ffffff"

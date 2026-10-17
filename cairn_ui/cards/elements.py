@@ -167,7 +167,7 @@ class ServedElement(Element):
     def _advertised_candidates(repo_path: str) -> list[str]:
         """Live server URLs advertised for ``repo_path``, newest first."""
         try:
-            from cairn.server.storage.datadir import read_live_servers
+            from cairn.backend.storage.datadir import read_live_servers
 
             entries = read_live_servers(Path(repo_path))
         except Exception:  # noqa: BLE001 - discovery must never raise

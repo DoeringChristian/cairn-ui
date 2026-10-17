@@ -69,6 +69,15 @@ export default function FigureSettingsPanel({
         </SettingsSection>
       )}
       <LayoutSection ctl={ctl} modes ctx={ctx} mode={mode} paneKeys={ctx?.paneKeys} />
+      <FigureAppearanceSettings ctl={ctl} />
+    </>
+  );
+  return <SettingsTabs tabs={{ values: data, display }} />;
+}
+
+/** Shared by live figures and immutable published report figures. */
+export function FigureAppearanceSettings({ctl}: {ctl: SettingsController<FigureSettings>}) {
+  return (
       <SettingsSection name="Appearance">
         <Switch {...bind(ctl, "displayModeBar")} label="Show modebar" description="Plotly's zoom/pan/camera/save toolbar" />
         <Switch {...bind(ctl, "scrollZoom")} label="Scroll to zoom" />
@@ -82,7 +91,5 @@ export default function FigureSettingsPanel({
           description="Draw scatter traces with WebGL (scattergl): Auto from 1000 points per figure. Traces scattergl can't draw (spline lines, stacking, fill patterns) stay as they are; 3D always uses WebGL."
         />
       </SettingsSection>
-    </>
   );
-  return <SettingsTabs tabs={{ values: data, display }} />;
 }

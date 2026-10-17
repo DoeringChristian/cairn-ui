@@ -13,6 +13,7 @@ import { parseFilter, type GroupNode } from "./run-filter.ts";
 export const RUN_TABS = [
   { id: ".", key: "workspace", label: "Workspace" },
   { id: "overview", key: "overview", label: "Overview" },
+  { id: "records", key: "records", label: "Records" },
   { id: "system", key: "system", label: "System" },
   { id: "logs", key: "logs", label: "Logs" },
   { id: "files", key: "files", label: "Files" },

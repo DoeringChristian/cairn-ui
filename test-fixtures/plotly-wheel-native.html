@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Trusted wheel regression</title>
+  <style>
+    body { font: 14px system-ui; margin: 24px; color: #17251d; background: #fafaf7; }
+    h1 { margin-bottom: 8px; }
+    #plot { width: 680px; height: 360px; }
+    #status { font-weight: 650; }
+    #result { min-height: 140px; }
+    #trace { max-height: 260px; overflow: auto; font-size: 11px; }
+    [data-result="pass"] { color: #15683f; }
+    [data-result="fail"] { color: #a52020; }
+  </style>
+</head>
+<body>
+  <h1>Trusted wheel regression</h1>
+  <p>Scroll over the plot center using a mouse or trackpad, then pause. Use at least three wheel events.<br>
+    Real browser events exercise the microtask checkpoint between capture and Plotly's target listener.</p>
+  <button id="reset">Reset</button>
+  <label><input id="logarithmic" type="checkbox"> Logarithmic Y axis</label>
+  <p id="status">Loading…</p>
+  <div id="plot"></div>
+  <pre id="result">Waiting for trusted wheel input.</pre>
+  <details><summary>Event trace</summary><pre id="trace"></pre></details>
+  <script type="module" src="./plotly-wheel-native.ts"></script>
+</body>
+</html>

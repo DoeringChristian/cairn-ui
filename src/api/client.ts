@@ -174,6 +174,9 @@ const runBatcher = new RunBatcher({
 });
 
 export const api = {
+  runRecords: (runId: string, cursor = 0, where?: Record<string, unknown>) => get<{items: {event_id: number; timestamp: string; values: Record<string, unknown>}[]; next_cursor: number | null; scanned: number}>(`/api/runs/${encodeURIComponent(runId)}/records?${new URLSearchParams({cursor: String(cursor), limit: "100", ...(where ? {where: JSON.stringify(where)} : {})})}`),
+  runRecordFields: (runId: string) => get<{fields: {path: string; types: string[]; count: number}[]; sampled: number; truncated: boolean}>(`/api/runs/${encodeURIComponent(runId)}/record-fields`),
+  runRecordSeries: (runId: string, key: string, x: string, where?: Record<string, unknown>) => get<{points: {x: number; y: number; event_id: number}[]; truncated: boolean; downsampled: boolean}>(`/api/runs/${encodeURIComponent(runId)}/record-series?${new URLSearchParams({key, x, ...(where ? {where: JSON.stringify(where)} : {})})}`),
   health: () => get<import("./types").Health>("/api/health"),
   projects: () =>
     get<{ projects: import("./types").Project[] }>("/api/projects"),
@@ -301,8 +304,6 @@ export const api = {
     ),
   login: (token: string) =>
     post<{ name: string; role: string }>("/api/auth/login", { token }),
-  loginWithOtp: (otp: string) =>
-    post<{ name: string; role: string }>("/api/auth/otp", { otp }),
   logout: () => post<{ ok: boolean }>("/api/auth/logout", {}),
 
   // Reports (server-persisted)
@@ -312,14 +313,14 @@ export const api = {
     if (params.offset != null) q.set("offset", String(params.offset));
     const qs = q.toString();
     return get<{
-      reports: Array<{ id: string; name: string; updated_at: string; block_count: number }>;
+      reports: Array<{ id: string; name: string; updated_at: string; version_id?: string; version?: number; block_count: number }>;
       total: number;
       limit: number;
       offset: number;
     }>(`/api/projects/${projectId}/reports${qs ? `?${qs}` : ""}`);
   },
   report: (projectId: string, id: string) =>
-    get<{ id: string; project_id: string; name: string; created_at: string; updated_at: string; payload: Record<string, unknown> }>(
+    get<{ id: string; project_id: string; version_id?: string; name: string; created_at: string; updated_at: string; payload: Record<string, unknown> }>(
       `/api/projects/${projectId}/reports/${id}`,
     ),
   createReport: (projectId: string, name: string, payload: Record<string, unknown>) =>
@@ -332,8 +333,8 @@ export const api = {
       `/api/projects/${projectId}/reports/${id}`,
       body,
     ),
-  deleteReport: (projectId: string, id: string) =>
-    del_<{ deleted: string }>(`/api/projects/${projectId}/reports/${id}`),
+  deleteReport: (_projectId: string, id: string, expectedVersion: string) =>
+    del_<{ deleted: string }>(`/api/reports/${encodeURIComponent(id)}?expected_version=${encodeURIComponent(expectedVersion)}`),
 
   // --- reports editing (wave 3, agent H) ---
   /** PUT a report only if it is still at `expectedUpdatedAt`; a stale write returns the server copy. */
@@ -412,7 +413,7 @@ export const api = {
       `/api/projects/${projectId}/report-templates`,
     ),
   reportTemplate: (projectId: string, id: string) =>
-    get<{ id: string; project_id: string; name: string; created_at: string; updated_at: string; payload: Record<string, unknown> }>(
+    get<{ id: string; project_id: string; version_id?: string; name: string; created_at: string; updated_at: string; payload: Record<string, unknown> }>(
       `/api/projects/${projectId}/report-templates/${id}`,
     ),
   createServerReportTemplate: (projectId: string, name: string, payload: Record<string, unknown>) =>

@@ -1,0 +1,7 @@
+/* One geometry and palette for ordinary cards and report cards. */
+.cairn-card-actions{position:relative;display:flex;align-items:center;gap:5px;flex-shrink:0}
+.cairn-card-action-button{padding:4px;color:var(--muted);border:0;background:transparent;border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;line-height:1}
+.cairn-card-action-button:hover:not(:disabled){background:var(--accent-soft);color:var(--ink)}
+.cairn-card-action-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cairn-card-action-button:disabled{opacity:.4;cursor:default}
+@media(pointer:coarse){.cairn-card-action-button{min-width:40px;min-height:40px}}

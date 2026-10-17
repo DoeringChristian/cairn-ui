@@ -99,7 +99,7 @@ export default function App() {
 function Logo() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect width="24" height="24" rx="5" fill="#539bf5" />
+      <rect width="24" height="24" rx="5" fill="var(--accent)" />
       <path
         d="M6 17h12M7.5 13h9M9 9h6M10.5 5.5h3"
         stroke="#ffffff"

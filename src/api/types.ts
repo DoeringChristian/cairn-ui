@@ -18,6 +18,9 @@ export interface Project {
   run_count: number;
   active_run_count: number;
   last_run_at: string | null;
+  report_count?: number;
+  artifact_count?: number;
+  last_activity_at?: string | null;
 }
 
 /**

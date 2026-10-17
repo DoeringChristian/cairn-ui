@@ -2,8 +2,7 @@ import { useState, useCallback, useContext, useRef, useEffect, type ReactNode } 
 import { useDraggableCard } from "./DraggableCard";
 import { CardMutationContext } from "../lib/card-settings";
 import { useCoarsePointer, useCompactLayout } from "../lib/use-media-query";
-import { ICON_BTN } from "./card-header/icon-btn";
-import CardHeaderActions, { OverflowMenu, type CardActionHandlers, type MenuItem } from "./card-header/CardHeaderActions";
+import CardHeaderActions, { type CardActionHandlers, type MenuItem } from "./card-header/CardHeaderActions";
 import { CardCommentsContext } from "./reports/comments-context";
 
 interface Props {
@@ -23,12 +22,14 @@ interface Props {
   onToggleCollapse?: () => void;
   /**
    * The shared actions right of the bar (components/card-header/CardHeaderActions):
-   * the same seven, in the same order, on every card; read-only cards get four.
+   * Screenshot and Settings stay visible; all other actions live in the overflow.
    */
   actions: CardActionHandlers;
+  /** Surface-specific actions, e.g. a captured card's source reference. */
+  extraMenu?: MenuItem[];
   /**
    * Touch devices: the tap-to-interact toggle (see lib/use-interact). Renders
-   * a hand button; while `on`, the card's content captures gestures.
+   * an overflow action; while `on`, the card's content captures gestures.
    */
   interact?: { on: boolean; onToggle: () => void };
 }
@@ -44,6 +45,7 @@ export default function CardHeader({
   collapsed,
   onToggleCollapse,
   actions: actionsProp,
+  extraMenu = [],
   interact,
 }: Props) {
   // Read-only cards (report viewers, embeds) can't be renamed, removed,
@@ -59,8 +61,7 @@ export default function CardHeader({
     : { onScreenshot: actionsProp.onScreenshot, onDownload: actionsProp.onDownload, onResetView: actionsProp.onResetView, onSettings: actionsProp.onSettings };
   const dragCtx = useDraggableCard();
   const drag = mutable ? dragCtx : null;
-  // Below `md` the standard actions fold into a "⋯" menu so the title keeps
-  // its room; touch screens (no HTML5 drag) get move up / down there too.
+  // Touch screens (no HTML5 drag) get move up / down in the overflow.
   const compact = useCompactLayout();
   const coarse = useCoarsePointer();
   const [editing, setEditing] = useState(false);
@@ -101,24 +102,16 @@ export default function CardHeader({
     [commitEdit, cancelEdit],
   );
 
-  const moveMenu: MenuItem[] = [];
+  const moveMenu: MenuItem[] = [...extraMenu];
   if (compact || coarse) {
     if (drag?.onMoveUp) moveMenu.push({ icon: "fa-arrow-up-long", label: "Move up", onClick: drag.onMoveUp });
     if (drag?.onMoveDown) moveMenu.push({ icon: "fa-arrow-down-long", label: "Move down", onClick: drag.onMoveDown });
   }
 
-  const interactButton = interact && (
-    <button
-      type="button"
-      onClick={interact.onToggle}
-      className={`${ICON_BTN}${interact.on ? " bg-accent/15 !text-accent" : ""}`}
-      aria-pressed={interact.on}
-      aria-label={interact.on ? "Stop interacting (scroll the page)" : "Interact with the content"}
-      title={interact.on ? "Stop interacting" : "Interact"}
-    >
-      <i className="fa-solid fa-hand-pointer" aria-hidden="true" />
-    </button>
-  );
+  if (onToggleCollapse) moveMenu.push({icon: "fa-chevron-down", label: collapsed ? "Expand card" : "Collapse card", onClick: onToggleCollapse});
+  if (onTitleChange) moveMenu.push({icon: "fa-pencil", label: "Edit title", onClick: startEditing});
+  if (interact) moveMenu.push({icon: "fa-hand-pointer", label: interact.on ? "Stop interacting" : "Interact with content", onClick: interact.onToggle});
+  if (comments) moveMenu.push({icon: "fa-comment", label: "Comments", onClick: () => comments.open(document.activeElement as HTMLElement)});
 
   return (
     <div data-cairn-card-header className="group mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
@@ -127,18 +120,6 @@ export default function CardHeader({
           On a phone the card can be narrower than title + addon (min-width
           beats max-width), so there the addon wraps under the title instead. */}
       <div className={`flex flex-1 basis-32 items-baseline gap-1.5 ${titleAddon ? "min-w-0 max-w-full flex-wrap sm:min-w-fit sm:flex-nowrap" : "min-w-0"}`}>
-        {onToggleCollapse && (
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="h-[22px] min-w-[22px] touch:h-10 touch:min-w-[40px] inline-flex items-center justify-center select-none text-fg-subtle hover:text-fg text-xs leading-none transition-transform"
-            style={{ transform: collapsed ? "rotate(-90deg)" : undefined }}
-            aria-label={collapsed ? "Expand card" : "Collapse card"}
-            title={collapsed ? "Expand card" : "Collapse card"}
-          >
-            <i className="fa-solid fa-chevron-down" aria-hidden="true" />
-          </button>
-        )}
         <span
           aria-hidden="true"
           draggable={!!drag}
@@ -173,17 +154,7 @@ export default function CardHeader({
             >
               {title}
             </h3>
-            {onTitleChange && (
-              <button
-                type="button"
-                onClick={startEditing}
-                className="h-[22px] min-w-[22px] touch:h-10 touch:min-w-[40px] shrink-0 inline-flex items-center justify-center text-fg-subtle transition-opacity can-hover:opacity-0 can-hover:group-hover:opacity-100"
-                title="Edit title"
-                aria-label="Edit title"
-              >
-                <i className="fa-solid fa-pencil" aria-hidden="true" />
-              </button>
-            )}
+
           </>
         )}
         {titleAddon && <span className="shrink-0">{titleAddon}</span>}
@@ -195,25 +166,7 @@ export default function CardHeader({
       {/* Right section: card-specific controls | bar | the shared actions.
           Wraps under the title when both don't fit on one line. */}
       <div className="ml-auto flex items-center gap-1 text-xs text-fg-subtle shrink-0">
-        {cardActions}
-        {interactButton}
-        {comments && (
-          <button
-            type="button"
-            data-comment-card={comments.cardId}
-            onClick={(e) => comments.open(e.currentTarget)}
-            className={comments.count > 0 ? `${ICON_BTN.replace("text-fg-muted", "text-accent")} gap-0.5 px-1` : ICON_BTN}
-            aria-label={comments.count > 0 ? `${comments.count} open comment threads` : "Comment on this card"}
-            title={comments.count > 0 ? `${comments.count} open comment thread${comments.count === 1 ? "" : "s"}` : "Comment"}
-          >
-            <i className={`${comments.count > 0 ? "fa-solid" : "fa-regular"} fa-comment`} aria-hidden="true" />
-            {comments.count > 0 && <span className="text-[10px] leading-none">{comments.count}</span>}
-          </button>
-        )}
-        {!compact && moveMenu.length > 0 && <OverflowMenu items={moveMenu} />}
-        <div className="border-l border-border pl-1.5">
-          <CardHeaderActions actions={actions} compact={compact} extraMenu={compact ? moveMenu : []} />
-        </div>
+        <CardHeaderActions actions={actions} compact={compact} extraMenu={moveMenu} extraContent={cardActions} />
       </div>
     </div>
   );

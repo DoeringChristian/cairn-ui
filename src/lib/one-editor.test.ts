@@ -86,7 +86,7 @@ test("adding and editing render the same CardEditor; no separate add modal or pa
   assert.match(editor.text, /type EditorMode = "new" \| "pending" \| "edit"/);
   // The workspace card's gear opens it (CardShell portals into its slots); nothing else opens a detail modal for a workspace card.
   assert.deepEqual(users(/<CardEditorSlots\b/), ["components/CardShell.tsx"]);
-  assert.deepEqual(users(/<CardDetailModal\b/), ["components/CardShell.tsx", "components/workspace/CardEditor.tsx"]);
+  assert.deepEqual(users(/<CardDetailModal\b/).filter(r => !r.startsWith("components/reports/native/")), ["components/CardShell.tsx", "components/workspace/CardEditor.tsx"]);
   // No hand-over hacks between two modals.
   assert.deepEqual(users(/MutationObserver|flushSync/).filter((r) => r.startsWith("components/workspace/")), []);
   assert.deepEqual(users(/SettingsDataExtraContext|openNextSettingsOn|takePendingSettingsTab/), []);
@@ -128,7 +128,7 @@ test("no second series picker in a workspace card's settings", () => {
   ]);
 });
 
-test("the editor's settings column: one tab row + × in a header that does not scroll; no folds of its own", () => {
+test("the shared editor shell keeps headings outside scrolling settings; no extra folds", () => {
   const all = sources();
   const editor = all.find((s) => s.rel === "components/workspace/CardEditor.tsx")!.text;
   // The tab row is the modal's settings header: Data | Type | the card's other tabs.
@@ -140,12 +140,18 @@ test("the editor's settings column: one tab row + × in a header that does not s
   assert.match(logic, /export type SettingsTabId = "values" \| "grouping" \| "display" \| "expressions";/);
   // No folds, headings or extra buttons of the editor's own.
   assert.doesNotMatch(editor, /aria-expanded|function Fold|<SettingsSection|<h[3-4]\b|Choose a card type|Into <|>Card</);
-  // The header sits outside the scrolling body, with the close button beside the tabs.
+  // Report and workspace settings share one shell; heading and tabs stay outside scroll content.
   const modal = all.find((s) => s.rel === "components/CardDetailModal.tsx")!.text;
-  assert.match(
-    modal,
-    /<div className=\{`h-12 shrink-0[^`]*`\}>\s*<div className="flex min-w-0 flex-1 items-stretch">\s*\{settingsHeader \?\?[\s\S]*?aria-label="Close"[\s\S]*?<\/div>\s*<div className="min-h-0 flex-1 overflow-y-auto p-4">\{settingsContent\}<\/div>/,
-  );
+  assert.match(modal, /className="card-detail-heading"/);
+  assert.match(modal, /className="card-detail-settings-heading">\{settingsHeader\}/);
+  assert.match(modal, /className="card-detail-settings-content">\{settingsContent\}/);
+  assert.ok(!all.some((s) => s.rel === "components/reports/native/ReportCardDialog.tsx"), "reports do not own a separate settings shell");
+  for (const card of ["CapturedCard", "ReportPlot", "ReportTable"]) {
+    const source = all.find((s) => s.rel === `components/reports/native/${card}.tsx`)!.text;
+    assert.match(source, /import CardShell from "\.\.\/\.\.\/CardShell"/);
+    assert.match(source, /<CardShell\b/);
+    assert.doesNotMatch(source, /<CardDetailModal\b|<CardHeaderActions\b/, "the shared card owns both header and settings dialog");
+  }
   // Under the editor a card's settings panel draws no tab row of its own: it reports its tabs.
   const tabs = all.find((s) => s.rel === "components/settings/palette/SettingsTabs.tsx")!.text;
   assert.match(tabs, /host\?\.report\([\s\S]*?if \(host\) return host\.active && visible\.includes\(host\.active\) \? <div>\{tabs\[host\.active\]\}<\/div> : null;/);

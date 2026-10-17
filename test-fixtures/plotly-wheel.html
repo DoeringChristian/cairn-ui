@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Plotly wheel regression</title>
+<style>
+body{font:14px system-ui;margin:28px;color:#263a32;background:#f5f6f2}h1{font-size:24px}button{padding:10px 16px;border:1px solid #176b5b;border-radius:5px;background:#176b5b;color:white;cursor:pointer}button:disabled{opacity:.5}#result{white-space:pre-wrap;background:white;border:1px solid #cad4cc;padding:16px;border-radius:6px;line-height:1.6}.plots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}article{min-width:0;background:white;padding:10px;border:1px solid #cad4cc;border-radius:6px}article h2{font-size:14px;margin:4px}.plot{width:100%;height:360px}details{margin:16px 0}pre{overflow:auto;max-height:400px} @media(max-width:900px){.plots{grid-template-columns:1fr}}
+</style></head>
+<body><h1>Plotly wheel zoom regression</h1><p>Actual Plotly renderer, automatic axis margins, twelve wheel events 30 ms apart. The unguarded control must reproduce the snapback; guarded linear and log axes must preserve every zoom tick.</p><button id="run" type="button">Run regression</button><p id="status" role="status">Ready.</p><output id="result" aria-live="polite">Not run.</output><div id="plots" class="plots"></div><details><summary>Recorded ranges and internal redraws</summary><pre id="trace"></pre></details><script type="module" src="./plotly-wheel.ts"></script></body>
+</html>

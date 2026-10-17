@@ -39,9 +39,10 @@ test("the shared actions: exactly these seven, in this order", () => {
   assert.match(read("components/AddToReportButton.tsx"), /className="fa-solid fa-file-circle-plus"/);
 });
 
-test("every card header renders them right of its bar; read-only cards keep screenshot, download, reset view, settings", () => {
+test("every card header shares screenshot/settings plus overflow; read-only cards retain safe actions", () => {
   const header = read("components/CardHeader.tsx");
-  assert.match(header, /<div className="border-l border-border pl-1\.5">\s*<CardHeaderActions actions=\{actions\}/);
+  assert.match(header, /<CardHeaderActions actions=\{actions\}/);
+  assert.match(read("components/card-header/CardHeaderActions.tsx"), /a\.key !== "onScreenshot" && a\.key !== "onSettings"/);
   assert.match(
     header,
     /: \{ onScreenshot: actionsProp\.onScreenshot, onDownload: actionsProp\.onDownload, onResetView: actionsProp\.onResetView, onSettings: actionsProp\.onSettings \};/,
@@ -74,7 +75,7 @@ test("no card renders its own copies of the shared actions", () => {
     .flatMap(({ rel, text }) =>
       [
         ...text.matchAll(
-          /<AddToReportButton\b|\b(?:onScreenshot|addToReportSlot|viewModified)=\{|aria-label="(?:Screenshot|Download data|Reset view|Duplicate card|Remove card|Add to report)"/g,
+          /<AddToReportButton\b|\b(?:addToReportSlot|viewModified)=\{|aria-label="(?:Screenshot|Download data|Reset view|Duplicate card|Remove card|Add to report)"/g,
         ),
       ].map((m) => `${rel}: ${m[0]}`),
     );
@@ -91,4 +92,22 @@ test("the screenshot is the card as displayed: one faithful clone at the device 
   for (const re of [/o instanceof HTMLCanvasElement\) return replaceWith\(canvasUrl\(o\)\)/, /o instanceof HTMLVideoElement\) return replaceWith\(mediaUrl\(o\)\)/, /getComputedStyle\(o, which\)/, /scrolled\.push/, /embeddedFonts\(families\)/]) {
     assert.match(cap, re);
   }
+});
+
+test("ordinary and report cards share the same header, menu, control icons and geometry", () => {
+  const shared = read("components/card-header/CardActionButton.tsx");
+  assert.match(shared, /<Camera size=\{14\}/);
+  assert.match(shared, /<SlidersHorizontal size=\{13\}/);
+  assert.match(shared, /<MoreHorizontal size=\{16\}/);
+  assert.ok(!sources().some(source => source.rel === "components/reports/native/ReportCardActions.tsx"), "reports do not duplicate card actions");
+  for (const file of ["components/card-header/CardHeaderActions.tsx"]) {
+    const text = read(file);
+    assert.match(text, /import \{ CardActionButton \}/);
+    assert.match(text, /cairn-card-actions/);
+    assert.doesNotMatch(text, /className="fa-solid fa-(camera|gear|ellipsis)"/);
+  }
+  const css = read("components/card-header/card-actions.css");
+  assert.match(css, /gap:5px/);
+  assert.match(css, /padding:4px;color:var\(--muted\)/);
+  assert.match(css, /background:var\(--accent-soft\);color:var\(--ink\)/);
 });

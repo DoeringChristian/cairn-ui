@@ -52,6 +52,7 @@ export type ReportBlock = MarkdownBlock | CardsBlock;
 
 /** What the server stores for a report. */
 export interface ReportPayload {
+  compiled?: { version_id: string; entry: string; slug: string };
   /**
    * The report as markdown: prose plus ```cairn fences carrying each card
    * and its inline settings (see lib/reports/markdown-source.ts). The editor

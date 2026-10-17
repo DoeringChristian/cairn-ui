@@ -1,0 +1,1 @@
+Native document reader and media inspection adapted from prism2/web/src/components. The reader consumes Cairn report publications, with no Prism storage or API dependency. Media geometry retains its upstream license in media/LICENSE.

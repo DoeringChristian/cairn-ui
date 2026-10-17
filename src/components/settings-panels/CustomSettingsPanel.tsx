@@ -11,7 +11,7 @@
  * viewer is picked first, and its settings' defaults are edited.
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { ViewerInfo } from "../../api/types";
 import type { SettingsController } from "../../lib/card-settings";
 import { COLORMAP_OPTIONS, type Colormap } from "../../charts/colormaps";
@@ -57,7 +57,7 @@ export interface CustomPanelCtx extends SteppedMediaPanelCtx {
 const AUTO = "";
 
 /** One manifest setting as a palette control. */
-function ViewerSettingControl({
+export function ViewerSettingControl({
   setting,
   value,
   overridden,
@@ -112,6 +112,43 @@ function ViewerSettingControl({
     case "text":
       return <TextInput {...row} value={value as string} onChange={onChange} placeholder={setting.placeholder} />;
   }
+}
+
+/** A captured viewer uses the same manifest tabs, sections and controls as a live card. */
+export function ViewerSettingsPanel({
+  settings,
+  value,
+  defaults,
+  onChange,
+}: {
+  settings: ViewerSetting[];
+  value: Record<string, string | number | boolean>;
+  defaults: Record<string, string | number | boolean>;
+  onChange: (patch: Record<string, string | number | boolean>) => void;
+}) {
+  const placement = placeSettings({ settings });
+  const [tab, setTab] = useState<SettingsTabId>(() => initialTab(placement));
+  const values = settingValues(settings, value);
+  const baseline = settingValues(settings, defaults);
+  const tabs: Partial<Record<SettingsTabId, ReactNode>> = {};
+  for (const [key, sections] of Object.entries(placement)) {
+    if (!sections.length) continue;
+    tabs[key as SettingsTabId] = sections.map(({ section, keys }) => (
+      <SettingsSection key={section} name={section}>
+        {settings.filter(setting => keys.includes(setting.key)).map(setting => (
+          <ViewerSettingControl
+            key={setting.key}
+            setting={setting}
+            value={values[setting.key]!}
+            overridden={values[setting.key] !== baseline[setting.key]}
+            onChange={next => onChange({ [setting.key]: next })}
+            onReset={() => onChange({ [setting.key]: baseline[setting.key]! })}
+          />
+        ))}
+      </SettingsSection>
+    ));
+  }
+  return <SettingsTabs tabs={tabs} active={tab} onActiveChange={setTab} />;
 }
 
 /** The controls of a viewer's settings in one tab and section (manifest order). */

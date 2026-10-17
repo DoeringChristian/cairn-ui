@@ -15,6 +15,7 @@ import { CardEditorSlots, useCardEditorHost } from "./workspace/card-editor-host
 import AddToReportButton from "./AddToReportButton";
 import { CardReportContext } from "../lib/card-report-context";
 import { downloadCardArtifacts, downloadCardPng, resetPlotlyViews } from "../lib/download";
+import type { MenuItem } from "./card-header/CardHeaderActions";
 
 interface Props {
   cardRef: RefObject<HTMLDivElement>;
@@ -38,6 +39,10 @@ interface Props {
   onResetView?: () => void;
   /** The card's data (a CSV, a patch); default: the artifacts it shows at its step (one file, or a zip). */
   onDownload?: () => void;
+  /** Sandboxed viewers provide their own image through the viewer protocol. */
+  onScreenshot?: () => void;
+  /** Actions supplied by the containing surface, such as source references. */
+  headerMenu?: MenuItem[];
   /** Card-specific controls, left of the header's bar. */
   headerActions?: ReactNode;
   dropHighlight?: boolean;
@@ -69,6 +74,8 @@ export default function CardShell({
   onSettings,
   onResetView,
   onDownload,
+  onScreenshot,
+  headerMenu,
   headerActions,
   dropHighlight,
   dropProps,
@@ -133,7 +140,7 @@ export default function CardShell({
       data-cairn-min-span={minSize.minSpan}
       // Phones re-clamp a fixed height against the viewport (index.css).
       data-cairn-fixed-h={clampedHeight != null ? "" : undefined}
-      className={`card p-4 flex min-w-0 flex-col${dropHighlight ? " outline outline-2 outline-accent -outline-offset-2" : ""}`}
+      className={`card p-4 flex min-w-0 flex-col leading-normal${dropHighlight ? " outline outline-2 outline-accent -outline-offset-2" : ""}`}
       style={{
         height: clampedHeight,
         "--cairn-card-h": clampedHeight != null ? `${clampedHeight}px` : undefined,
@@ -151,9 +158,9 @@ export default function CardShell({
           collapsed={collapsed}
           onToggleCollapse={() => updateSettings({ collapsed: !settings.collapsed })}
           actions={{
-            onScreenshot: () => {
+            onScreenshot: onScreenshot ?? (() => {
               if (cardRef.current) void downloadCardPng(cardRef.current, shownTitle);
-            },
+            }),
             onDownload:
               onDownload ??
               (() => {
@@ -169,6 +176,7 @@ export default function CardShell({
             onRemove,
           }}
           cardActions={headerActions}
+          extraMenu={headerMenu}
           interact={interact.available && !collapsed
             ? { on: interact.on, onToggle: interact.toggle }
             : undefined}

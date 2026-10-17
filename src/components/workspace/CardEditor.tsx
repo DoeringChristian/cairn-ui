@@ -409,7 +409,7 @@ function CardEditor({
       titleNode={mode === "edit" && panel ? <InlineTitle title={title} custom={typeof panel.panel.settings.title === "string" ? panel.panel.settings.title : ""} onChange={(t) => onChange({ title: t })} /> : undefined}
       settingsLabel={adding ? "New card" : "Settings"}
       cardLabel={adding ? "Preview" : "Card"}
-      initialTab={adding ? "settings" : "card"}
+      initialTab="settings"
       onPrev={onPrev}
       onNext={onNext}
       settingsHeader={<SettingsTabBar items={tabs} current={tab} onSelect={onTab} />}

@@ -1,17 +1,8 @@
-/**
- * The shared actions right of a card header's bar, identical on every card
- * type and in this order: screenshot, download, add to report, reset view,
- * settings, duplicate, remove. Every one works on every card (CardShell
- * supplies the generic screenshot, download and reset; lib/card-capture.ts).
- * Read-only cards (report viewers, embeds) get screenshot, download, reset
- * view and settings: the other three edit.
- *
- * Below `md` they fold into "⋯" (add to report, a popover, stays a button).
- */
+/** Three primary controls: Screenshot, Settings, and an overflow list. */
 
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { useClickOutside } from "../../lib/use-click-outside";
-import { ICON_BTN } from "./icon-btn";
+import { CardActionButton } from "./CardActionButton";
 
 export interface CardActionHandlers {
   onScreenshot: () => void;
@@ -45,40 +36,40 @@ export interface MenuItem {
 
 export default function CardHeaderActions({
   actions,
-  compact,
+  compact: _compact,
   extraMenu = [],
+  extraContent,
 }: {
   actions: CardActionHandlers;
   /** Below `md`: the actions fold into "⋯". */
   compact: boolean;
   /** More "⋯" entries while compact (move up / down on touch screens), before remove. */
   extraMenu?: MenuItem[];
+  extraContent?: ReactNode;
 }) {
   const buttons: ReactNode[] = [];
   const menu: MenuItem[] = [];
   for (const a of CARD_ACTIONS) {
     if (a.key === "addToReport") {
-      if (actions.addToReport) buttons.push(<span key={a.key} className="contents">{actions.addToReport}</span>);
+
       continue;
     }
     const run = actions[a.key];
-    if (!run) continue;
-    if (compact) {
+    if (!run && a.key !== "onSettings") continue;
+    if (a.key !== "onScreenshot" && a.key !== "onSettings") {
       if (a.key === "onRemove") menu.push(...extraMenu);
-      menu.push({ icon: a.icon, label: a.label, onClick: run });
+      menu.push({ icon: a.icon, label: a.label, onClick: run! });
     } else {
       buttons.push(
-        <button key={a.key} type="button" onClick={run} className={ICON_BTN} aria-label={a.label} title={a.label} data-card-action={a.key}>
-          <i className={`fa-solid ${a.icon}`} aria-hidden="true" />
-        </button>,
+        <CardActionButton key={a.key} action={a.key === "onScreenshot" ? "screenshot" : "settings"} onClick={run} disabled={!run} aria-label={a.label} title={a.label} data-card-action={a.key} />,
       );
     }
   }
-  if (compact && !actions.onRemove) menu.push(...extraMenu);
+  if (!actions.onRemove) menu.push(...extraMenu);
   return (
-    <div className="flex items-center gap-1" data-card-actions>
+    <div className="cairn-card-actions" data-card-actions>
       {buttons}
-      {menu.length > 0 && <OverflowMenu items={menu} />}
+      <OverflowMenu items={menu}>{actions.addToReport}{extraContent}</OverflowMenu>
     </div>
   );
 }
@@ -87,30 +78,28 @@ export default function CardHeaderActions({
  * "⋯" button with a small action list, right-aligned under it so it opens
  * towards the card's interior (the button sits at the card's right edge).
  */
-export function OverflowMenu({ items }: { items: MenuItem[] }) {
+export function OverflowMenu({ items, children }: { items: MenuItem[]; children?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(wrapRef, close, open);
 
   return (
-    <div ref={wrapRef} className="relative">
-      <button
-        type="button"
+    <div ref={wrapRef} className="relative" onKeyDown={event => {if (event.key === "Escape") {setOpen(false); event.stopPropagation();}}}>
+      <CardActionButton
+        action="menu"
         onClick={() => setOpen((v) => !v)}
-        className={ICON_BTN}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="More actions"
         title="More actions"
-      >
-        <i className="fa-solid fa-ellipsis" aria-hidden="true" />
-      </button>
+      />
       {open && (
         <div
           role="menu"
           className="absolute right-0 top-full z-30 mt-1 min-w-[11rem] max-w-[calc(100vw-2rem)] rounded-md border border-border bg-bg py-1 text-sm text-fg shadow-lg"
         >
+          {children && <div className="border-b border-border-subtle px-3 py-2 flex flex-wrap gap-2">{children}</div>}
           {items.map((item) => (
             <button
               key={item.label}

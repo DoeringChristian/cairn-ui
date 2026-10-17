@@ -1,3 +1,4 @@
+import { Select } from "../../prism/Select";
 import { useMemo, useState } from "react";
 import { diffCellClassName, type CellComparison } from "../../lib/table-diff";
 import { formatNum } from "../../lib/plot-utils/format";
@@ -188,17 +189,8 @@ export default function DataTable({
         {onRowsPerPageChange && (
           <label className="inline-flex items-center gap-1">
             <span>Rows</span>
-            <select
-              aria-label="Rows per page"
-              className="input py-0 text-[11px]"
-              value={rowsPerPage}
-              onChange={(e) => {
-                onRowsPerPageChange(Number(e.target.value));
-                setPage(0);
-              }}
-            >
-              {pageSizeOptions(rowsPerPage).map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+            <Select label="Rows per page" value={String(rowsPerPage)} onChange={value => {onRowsPerPageChange(Number(value));setPage(0);}} options={pageSizeOptions(rowsPerPage).map(n => ({value:String(n),label:String(n)}))}/>
+
           </label>
         )}
         <span className="tabular-nums">{pg.label}</span>

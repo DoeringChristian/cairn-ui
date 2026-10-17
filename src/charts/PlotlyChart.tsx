@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { guardCartesianWheel } from "./plotly-wheel.ts";
 import { readChartTheme, type ChartTheme } from "./theme.ts";
 import { useInteract } from "../lib/use-interact.ts";
 import { onPrintLayout } from "../lib/print-layout.ts";
@@ -406,7 +407,8 @@ export default function PlotlyChart({
       }
       wheelFrame = requestAnimationFrame(wheelTick);
     };
-    const onWheel = () => {
+    const onWheel = (event: WheelEvent) => {
+      guardCartesianWheel(el, event);
       const cams = liveSceneCameras(el);
       if (!cams) return;
       inWheel.current = true;

@@ -1,165 +1,76 @@
-import { useCallback, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { Plus, RefreshCw, Search, Upload, X } from "lucide-react";
 import { useProjects } from "../api/hooks";
 import { api } from "../api/client";
 import { qk } from "../api/query-keys";
-import { formatRelative } from "../lib/format";
 import ImportRunsDialog from "../components/ImportRunsDialog";
+import ProjectCard from "../components/ProjectCard";
+import "./projects.css";
+
+const PAGE_SIZE = 24;
 
 export default function ProjectsPage() {
-  const q = useProjects();
-  const qc = useQueryClient();
+  const query = useProjects();
+  const client = useQueryClient();
   const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [newName, setNewName] = useState("");
+  const [error, setError] = useState("");
+  const projects = query.data?.projects ?? [];
+  const term = search.trim().toLocaleLowerCase();
+  const filtered = projects.filter(project => `${project.name} ${project.id}`.toLocaleLowerCase().includes(term));
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(filtered.length / PAGE_SIZE) - 1));
+  const items = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const find = (value: string) => { setSearch(value); setPage(0); };
 
-  const handleCreate = useCallback(async () => {
-    const name = newName.trim();
-    if (!name) return;
+  async function createProject(event: React.FormEvent) {
+    event.preventDefault();
+    if (!newName.trim() || saving) return;
+    setSaving(true); setError("");
     try {
-      const res = await api.createProject(name);
-      setCreating(false);
-      setNewName("");
-      qc.invalidateQueries({ queryKey: qk.projects() });
-      navigate(`/p/${res.id}`);
-    } catch (err) {
-      alert(String(err));
-    }
-  }, [newName, qc, navigate]);
+      const project = await api.createProject(newName.trim());
+      await client.invalidateQueries({ queryKey: qk.projects() });
+      navigate(`/p/${encodeURIComponent(project.id)}/reports`);
+    } catch (cause) { setError(String(cause)); }
+    finally { setSaving(false); }
+  }
 
-  if (q.isLoading) return <p className="text-fg-muted">Loading…</p>;
-  if (q.isError) return <p className="text-status-failed">Failed to load projects: {String(q.error)}</p>;
-  const projects = q.data?.projects ?? [];
-  return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <h1 className="text-xl font-semibold">Projects</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm text-fg-muted">
-            {projects.length} {projects.length === 1 ? "project" : "projects"}
-          </p>
-          <button
-            type="button"
-            className="btn px-2 py-1 text-xs"
-            onClick={() => setImportOpen(true)}
-          >
-            Import runs
-          </button>
-          {creating ? (
-            <div className="flex items-center gap-1">
-              <input
-                autoFocus
-                className="input py-1 text-xs w-32"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreate();
-                  if (e.key === "Escape") { setCreating(false); setNewName(""); }
-                }}
-                placeholder="project name"
-              />
-              <button type="button" className="btn px-2 py-1 text-xs" onClick={handleCreate} disabled={!newName.trim()}>
-                Create
-              </button>
-              <button type="button" className="btn px-2 py-1 text-xs" onClick={() => { setCreating(false); setNewName(""); }}>
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="btn px-2 py-1 text-xs"
-              onClick={() => setCreating(true)}
-            >
-              New project
-            </button>
-          )}
-        </div>
+  return <section className="projects-page">
+    <header className="projects-heading">
+      <div><h1>Projects</h1><p>Reports, runs and artifacts, organized by project.</p></div>
+      <div className="projects-actions">
+        <button className="btn" onClick={() => void query.refetch()} disabled={query.isFetching} aria-label="Refresh projects"><RefreshCw size={15} />Refresh</button>
+        <button className="btn" onClick={() => setImportOpen(true)}><Upload size={15} />Import runs</button>
+        <button className="btn projects-create" onClick={() => { setCreating(true); setError(""); }}><Plus size={15} />New project</button>
       </div>
-      {projects.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <>
-          <ul className="flex flex-col gap-2 md:hidden">
-            {projects.map((p) => (
-              <li
-                key={p.id}
-                className="rounded-lg border border-border bg-bg-elevated p-3"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <Link
-                    to={`/p/${p.id}`}
-                    className="mono flex min-h-[44px] min-w-0 flex-1 items-center break-all text-accent hover:underline"
-                  >
-                    {p.id}
-                  </Link>
-                  {p.active_run_count > 0 ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs text-status-running">
-                      <span className="inline-block h-1.5 w-1.5 motion-safe:animate-pulse rounded-full bg-status-running" />
-                      {p.active_run_count} active
-                    </span>
-                  ) : null}
-                </div>
-                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
-                  <span>last run: {formatRelative(p.last_run_at)}</span>
-                  <span className="num">total: {p.run_count}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <div className="hidden overflow-hidden rounded-lg border border-border md:block">
-            <table className="w-full text-sm">
-              <thead className="bg-bg-elevated text-left text-xs uppercase tracking-wide text-fg-muted">
-                <tr>
-                  <th className="px-4 py-2">Name</th>
-                  <th className="px-4 py-2">Last run</th>
-                  <th className="px-4 py-2">Total</th>
-                  <th className="px-4 py-2">Active</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map((p) => (
-                  <tr key={p.id} className="border-t border-border-subtle hover:bg-bg-elevated">
-                    <td className="px-4 py-2">
-                      <Link to={`/p/${p.id}`} className="mono text-accent hover:underline">
-                        {p.id}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2 text-fg-muted">{formatRelative(p.last_run_at)}</td>
-                    <td className="px-4 py-2 num">{p.run_count}</td>
-                    <td className="px-4 py-2 num">
-                      {p.active_run_count > 0 ? (
-                        <span className="inline-flex items-center gap-1.5 text-status-running">
-                          <span className="inline-block h-1.5 w-1.5 motion-safe:animate-pulse rounded-full bg-status-running" />
-                          {p.active_run_count}
-                        </span>
-                      ) : (
-                        <span className="text-fg-subtle">0</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-      <ImportRunsDialog open={importOpen} onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: qk.projects() }); }} />
+    </header>
+    {creating && <form className="projects-new" onSubmit={createProject}>
+      <label htmlFor="new-project-name">Project name</label>
+      <input id="new-project-name" autoFocus className="input" value={newName} onChange={event => setNewName(event.target.value)} placeholder="e.g. Vision experiments" onKeyDown={event => { if (event.key === "Escape") setCreating(false); }} />
+      <button className="btn projects-create" disabled={!newName.trim() || saving}>{saving ? "Creating…" : "Create project"}</button>
+      <button type="button" className="btn" disabled={saving} onClick={() => setCreating(false)}>Cancel</button>
+      {error && <p role="alert">{error}</p>}
+    </form>}
+    <div className="projects-toolbar">
+      <label className="projects-search"><Search size={17} aria-hidden="true" /><input aria-label="Find project" placeholder="Find a project…" value={search} onChange={event => find(event.target.value)} />
+        {search && <button aria-label="Clear project search" onClick={() => find("")}><X size={15} /></button>}
+      </label>
+      <span className="projects-page-count" aria-live="polite">{query.isLoading ? "Loading projects…" : `${filtered.length} ${filtered.length === 1 ? "project" : "projects"}${filtered.length > PAGE_SIZE ? ` · page ${currentPage + 1}` : ""}`}</span>
     </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="card p-8 text-center">
-      <p className="text-fg-muted">No runs yet.</p>
-      <pre className="mono mt-4 overflow-auto rounded bg-bg p-3 text-left text-xs text-fg-subtle">
-        {`import cairn
-with cairn.Run(project="demo", repo="./.cairn") as run:
-    run.track(0.5, name="loss", step=0)`}
-      </pre>
-    </div>
-  );
+    {query.isError && <div role="alert" className="card p-5 mb-5">Could not load projects. <button className="btn" onClick={() => void query.refetch()}>Retry</button></div>}
+    {query.isLoading ? <p className="text-fg-muted" role="status">Loading projects…</p> : items.length ? <div className="project-grid">{items.map(project => <ProjectCard key={project.id} project={project} />)}</div> : !query.isError && <div className="projects-empty card">
+      <h2>{term ? "No matching projects" : "Your research starts here"}</h2>
+      <p>{term ? `No projects match “${search.trim()}”.` : "Create a project for your reports and the experiments behind them."}</p>
+      <button className="btn" onClick={() => term ? find("") : setCreating(true)}>{term ? "Clear search" : "Create a project"}</button>
+      {!term && <details><summary>Start from Python</summary><pre>{`import cairn\n\ncairn.init(project="demo", repo="./.cairn")\ncairn.log({"loss": 0.5})\ncairn.finish()`}</pre></details>}
+    </div>}
+    {filtered.length > PAGE_SIZE && <nav className="projects-pagination" aria-label="Project pages"><button className="btn" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</button><span>Page {currentPage + 1} of {Math.ceil(filtered.length / PAGE_SIZE)}</span><button className="btn" disabled={(currentPage + 1) * PAGE_SIZE >= filtered.length} onClick={() => setPage(currentPage + 1)}>Next</button></nav>}
+    <ImportRunsDialog open={importOpen} onClose={() => { setImportOpen(false); void client.invalidateQueries({ queryKey: qk.projects() }); }} />
+  </section>;
 }

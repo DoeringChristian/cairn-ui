@@ -1,0 +1,362 @@
+.prism-lightbox {
+  position: fixed;
+  inset: 0;
+  width: min(1500px, 96vw);
+  height: 94dvh;
+  max-width: 96vw;
+  max-height: 94dvh;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  box-shadow: 0 20px 100px #0007;
+  overflow: hidden;
+}
+.prism-lightbox[open] {
+  display: flex;
+  flex-direction: column;
+}
+.prism-lightbox::backdrop {
+  background: rgb(var(--color-fg-rgb) / .8);
+  backdrop-filter: blur(4px);
+}
+.prism-lightbox-header,
+.prism-lightbox-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.prism-lightbox-header {
+  border-bottom: 1px solid var(--color-border);
+}
+.prism-lightbox-header > div,
+.prism-lightbox-footer > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.prism-lightbox-header span,
+.prism-lightbox-footer small {
+  color: var(--color-fg-muted);
+  font-size: 12px;
+}
+.prism-lightbox-stage {
+  position: relative;
+  flex: 1;
+  min-height: 120px;
+  overflow: hidden;
+  touch-action: none;
+  background-color: var(--color-checkerboard-b);
+  background-image:
+    linear-gradient(45deg, var(--color-checkerboard-a) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--color-checkerboard-a) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--color-checkerboard-a) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--color-checkerboard-a) 75%);
+  background-size: 24px 24px;
+  background-position:
+    0 0,
+    0 12px,
+    12px -12px,
+    -12px 0;
+  cursor: grab;
+}
+.prism-lightbox-stage:active {
+  cursor: grabbing;
+}
+.prism-lightbox-stage.select-region {
+  cursor: crosshair;
+}
+.prism-lightbox-transform {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.prism-lightbox-transform img {
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
+  user-select: none;
+}
+.prism-lightbox-transform video {
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  background: #111;
+  cursor: auto;
+}
+.prism-video-pan-layer {
+  position: absolute;
+  cursor: grab;
+  touch-action: none;
+}
+.prism-region-layer {
+  position: absolute;
+  touch-action: none;
+  cursor: crosshair;
+}
+.prism-region-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--color-accent);
+  background: var(--color-selection-band);
+  pointer-events: none;
+}
+.prism-lightbox-footer {
+  border-top: 1px solid var(--color-border);
+}
+.prism-lightbox-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--color-bg);
+}
+.prism-video-transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  flex-wrap: wrap;
+  background: var(--color-bg-elevated);
+}
+.prism-video-transport > input[type="range"] {
+  flex: 1;
+  min-width: 160px;
+  accent-color: var(--color-accent);
+}
+.prism-video-transport label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+}
+.prism-video-transport input[type="number"] {
+  width: 60px;
+}
+.prism-video-transport span {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.prism-lightbox button,
+.prism-lightbox a {
+  font-size: 13px;
+}
+.prism-lightbox button:focus-visible,
+.prism-lightbox a:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+.prism-lightbox-surface {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+.prism-lightbox-surface:fullscreen {
+  width: 100vw;
+  height: 100dvh;
+}
+.prism-lightbox-transform video {
+  pointer-events: none;
+  user-select: none;
+}
+.prism-lightbox-stage:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -3px;
+}
+.prism-zoom-toolbar {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgb(var(--color-bg-elevated-rgb) / .94);
+  box-shadow: 0 2px 12px #173b241a;
+  cursor: auto;
+}
+.prism-zoom-toolbar output {
+  min-width: 46px;
+  text-align: center;
+  font:
+    12px ui-monospace,
+    monospace;
+}
+.prism-zoom-toolbar button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  padding: 6px 9px;
+  cursor: pointer;
+}
+.prism-zoom-toolbar button:hover {
+  background: var(--color-bg-hover);
+}
+.prism-gesture-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  background: rgb(var(--color-fg-rgb) / .8);
+  color: var(--color-bg-elevated);
+  padding: 5px 9px;
+  border-radius: 5px;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.prism-video-transport {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex-shrink: 0;
+  gap: 8px;
+  border-top: 1px solid var(--color-border);
+}
+.prism-video-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.prism-video-main > input[type="range"] {
+  min-width: 80px;
+  flex: 1;
+  accent-color: var(--color-accent);
+}
+.prism-video-main > span {
+  min-width: 138px;
+  text-align: right;
+}
+.prism-video-options {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.prism-video-options > input[aria-label="Video volume"] {
+  width: 80px;
+  accent-color: var(--color-accent);
+}
+.prism-video-options select {
+  font: inherit;
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+}
+.prism-media-notice {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--warn);
+}
+.prism-media-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 6px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-elevated);
+  color: var(--color-fg);
+  font: 500 12px system-ui;
+  cursor: pointer;
+}
+.prism-media-open:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-accent);
+}
+.prism-media-open:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.prism-media-open svg {
+  width: 15px;
+  height: 15px;
+}
+@media (max-width: 640px) {
+  .prism-lightbox {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  .prism-lightbox-header,
+  .prism-lightbox-footer {
+    padding: 8px;
+    gap: 6px;
+  }
+  .prism-lightbox-header strong {
+    max-width: 45vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .prism-lightbox-header > div,
+  .prism-lightbox-footer > div {
+    gap: 6px;
+  }
+  .prism-video-transport {
+    padding: 8px;
+    gap: 6px;
+  }
+  .prism-video-main {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .prism-video-main > span {
+    min-width: 110px;
+    font-size: 11px;
+  }
+  .prism-video-options {
+    gap: 5px;
+  }
+  .prism-video-options button {
+    font-size: 11px;
+    padding: 4px;
+  }
+  .prism-video-options input[type="number"] {
+    width: 48px;
+  }
+  .prism-video-options > input[aria-label="Video volume"] {
+    width: 60px;
+  }
+  .prism-zoom-toolbar {
+    top: 8px;
+    right: 8px;
+    gap: 2px;
+  }
+  .prism-zoom-toolbar button {
+    padding: 5px 7px;
+    font-size: 11px;
+  }
+  .prism-gesture-hint {
+    font-size: 10px;
+    bottom: 8px;
+    padding: 4px 6px;
+  }
+  .prism-lightbox-stage {
+    min-height: 100px;
+  }
+}

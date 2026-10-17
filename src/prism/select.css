@@ -1,0 +1,12 @@
+.custom-select{display:inline-flex;align-items:center;justify-content:space-between;gap:18px;font-size:12px;padding:8px 11px;min-width:100px;text-align:left;white-space:nowrap;max-width:260px}
+.custom-select>span:first-child{overflow:hidden;text-overflow:ellipsis}
+.custom-select[aria-expanded=true]{border-color:var(--accent);box-shadow:0 0 0 2px #176b5b15}
+.select-popover{position:fixed;z-index:90;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;overflow:auto;box-shadow:0 8px 30px #27372c25;outline:none}
+.select-option{padding:9px 10px;border-radius:6px;display:flex;justify-content:space-between;gap:16px;cursor:pointer;font-size:12px;min-height:36px}
+.select-option.focused{background:#eeeee5}
+.select-option[aria-selected=true]{color:var(--accent);background:var(--accent-soft)}
+.select-option[aria-disabled=true]{opacity:.4;pointer-events:none}
+.select-option small{display:block;color:var(--muted);font-size:10px;margin-top:4px}
+.custom-select{border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
+.custom-select:disabled{opacity:.5;cursor:default}
+[data-table-pager] .custom-select{min-width:60px;padding:3px 7px;font-size:11px;gap:8px}

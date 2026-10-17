@@ -67,6 +67,7 @@ const router = createBrowserRouter([
       { path: "overview", element: <RunOverviewTab /> },
       { path: "system", element: <RunSystemTab /> },
       { path: "logs", element: <RunLogsTab /> },
+      { path: "records", lazy: () => import("./pages/RunRecordsTab").then((m) => ({ Component: m.default })) },
       { path: "files", element: <RunFilesTab /> },
       { path: "artifacts", lazy: () => import("./pages/RunArtifactsTab").then((m) => ({ Component: m.default })) },
     ],
@@ -85,7 +86,8 @@ const router = createBrowserRouter([
         path: "p/:projectId",
         element: <ProjectLayout />,
         children: [
-          { index: true, element: <RunsTablePage /> },
+          { index: true, element: <ReportsListPage /> },
+          { path: "runs", element: <RunsTablePage /> },
           { path: "workspace", element: <WorkspacePage /> },
           // The artifact explorer and the lineage viewer are code-split
           // (React Flow loads only when a graph is shown).
@@ -101,6 +103,7 @@ const router = createBrowserRouter([
           },
           { path: "lineage", lazy: () => import("./pages/LineagePage").then((m) => ({ Component: m.default })) },
           { path: "reports", element: <ReportsListPage /> },
+          { path: "reports/new", lazy: () => import("./pages/NewReportPage").then((m) => ({ Component: m.default })) },
           { path: "reports/:reportId", element: <ReportEditorPage /> },
           { path: "sweeps", element: <SweepsListPage /> },
           { path: "sweeps/:sweepId", element: <SweepDetailPage /> },
@@ -113,6 +116,7 @@ const router = createBrowserRouter([
               { path: "overview", element: <RunOverviewTab /> },
               { path: "system", element: <RunSystemTab /> },
               { path: "logs", element: <RunLogsTab /> },
+      { path: "records", lazy: () => import("./pages/RunRecordsTab").then((m) => ({ Component: m.default })) },
               { path: "files", element: <RunFilesTab /> },
               { path: "artifacts", lazy: () => import("./pages/RunArtifactsTab").then((m) => ({ Component: m.default })) },
             ],
