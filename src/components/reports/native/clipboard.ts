@@ -20,8 +20,8 @@ export async function copyText(text:string):Promise<void> {
   if(!copied)throw new Error("Your browser blocked clipboard access. Select and copy the reference below.");
 }
 
-type Source={file:string;project_file?:string;line:number;end_line?:number;hash?:string};
-type ReferenceBlock={id:string;label?:string;source?:Source;markdown?:string;code?:string};
+export type SourceLocation={file:string;project_file?:string;line:number;end_line?:number;hash?:string};
+export type ReferenceBlock={id:string;label?:string;source?:SourceLocation;markdown?:string;code?:string;text?:string};
 type Passage={exact:string;prefix?:string;suffix?:string};
 type MarkdownNode={type:string;value?:string;children?:MarkdownNode[];position?:{start:{offset?:number};end:{offset?:number}}};
 export function reportReference(reportId:string,versionId:string,url:string,sourceRef?:string){
@@ -77,8 +77,8 @@ function passageExcerpt(markdown:string,passage:Passage):{start:number;end:numbe
 export function blockReference(_publication:Pick<ReturnType<typeof reportReference>,"url">,block:ReferenceBlock,passage?:Passage) {
   const source=block.source;
   if(!source?.file || !Number.isInteger(source.line) || source.line<1)throw new Error('This block has no source location.');
-  const content=block.markdown ?? block.code ?? '';
-  let excerpt=passage ? passageExcerpt(content,passage) : undefined;
+  const content=block.text ?? block.markdown ?? block.code ?? '';
+  let excerpt=passage ? block.text !== undefined ? plainPassageExcerpt(content,passage) : passageExcerpt(content,passage) : undefined;
   if(passage && !excerpt)throw new Error("This selection cannot be located uniquely in the source. Use the block’s Copy source reference action.");
   if(!excerpt){
     // A block action identifies its first nonempty paragraph, never an entire
@@ -87,11 +87,23 @@ export function blockReference(_publication:Pick<ReturnType<typeof reportReferen
     if(start>=0){const stop=content.slice(start).search(/\n\s*\n/u);excerpt={start,end:stop<0 ? content.length : start+stop};}
   }
   const start=excerpt?.start ?? 0;
-  const line=source.line+(content.slice(0,start).match(/\n/g)?.length ?? 0);
+  // Frontmatter display text may fold several YAML lines. Its key's captured
+  // location remains authoritative; rendered newlines cannot shift that source.
+  const line=source.line+(block.text === undefined ? content.slice(0,start).match(/\n/g)?.length ?? 0 : 0);
   const quote=excerpt ? content.slice(start,excerpt.end).trim().replace(/\s+/gu,' ') : '';
   // Keep pasted references concise without JSON escaping LaTeX backslashes.
   const bounded=quote.length>300 ? `${quote.slice(0,297).trimEnd()}…` : quote;
   return `${source.project_file || source.file}:${line}${bounded ? ` "${bounded}"` : ''}`;
+}
+
+function plainPassageExcerpt(text:string, passage:Passage):{start:number;end:number}|undefined {
+  if(!passage.exact)return;
+  const candidates:number[]=[];
+  for(let index=text.indexOf(passage.exact);index>=0;index=text.indexOf(passage.exact,index+1)) {
+    if((!passage.prefix || text.slice(0,index).endsWith(passage.prefix)) && (!passage.suffix || text.slice(index+passage.exact.length).startsWith(passage.suffix))) candidates.push(index);
+  }
+  if(candidates.length!==1)return;
+  return {start:candidates[0],end:candidates[0]+passage.exact.length};
 }
 /** Captured HTTP media URLs already pin the publication build. Never copy data URLs. */
 export function mediaReference(item:{url:string;source?:{url?:string;block_id?:string}},position:{time?:number;clip?:{start:number;end:number};region?:{x:number;y:number;width:number;height:number}}):string {

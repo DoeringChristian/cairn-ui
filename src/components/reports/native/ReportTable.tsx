@@ -11,7 +11,7 @@ import { downloadCardPng } from "../../../lib/download";
 import { useSessionSettings } from "./ReportSettings";
 
 export type CapturedSeries = {role: string; name: string; points: {x: number; y: number}[]};
-export function ReportTable({series, scalar, title = "Table", caption, onCopySource, onEditSource}: {series: CapturedSeries[]; scalar: boolean; title?: string; caption?: string; onCopySource: () => void; onEditSource?: () => void}) {
+export function ReportTable({series, scalar, title = "Table", caption, onCopySource, onComment, onEditSource}: {series: CapturedSeries[]; scalar: boolean; title?: string; caption?: string; onCopySource: () => void; onComment?: () => void; onEditSource?: () => void}) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const element = useRef<HTMLDivElement>(null);
@@ -33,7 +33,7 @@ export function ReportTable({series, scalar, title = "Table", caption, onCopySou
         onSettings={() => setOpen(true)}
         onDownload={download}
         onResetView={ctl.resetAll}
-        headerMenu={[{icon: "fa-link", label: "Copy source reference", onClick: onCopySource}, ...(onEditSource ? [{icon: "fa-pen", label: "Edit source", onClick: onEditSource}] : [])]}
+        headerMenu={[{icon: "fa-link", label: "Copy source reference", onClick: onCopySource}, ...(onComment ? [{icon: "fa-comment", label: "Comments", onClick: onComment}] : []), ...(onEditSource ? [{icon: "fa-pen", label: "Edit source", onClick: onEditSource}] : [])]}
         settingsPanel={settings}
         modalOpen={open}
         onModalClose={() => setOpen(false)}

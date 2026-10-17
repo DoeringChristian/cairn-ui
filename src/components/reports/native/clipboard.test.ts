@@ -37,6 +37,11 @@ test("quotes are bounded, and references never contain a publication URL or line
   assert.equal(reference,'report.qmd:2 "'+"x".repeat(297)+'…"');
   assert.doesNotMatch(reference,/https:|:2-8/);
 });
+test("frontmatter title selections preserve literal Markdown punctuation and math",()=>{
+  const title={id:"report-title",source:{file:"report.qmd",project_file:"reports/study/report.qmd",line:4},text:String.raw`Compare [left] with $\sigma_3(W)$`};
+  assert.equal(blockReference({url:"https://example.test"},title,{exact:String.raw`[left] with $\sigma_3(W)$`,prefix:"Compare ",suffix:""}),String.raw`reports/study/report.qmd:4 "[left] with $\sigma_3(W)$"`);
+  assert.throws(()=>blockReference({url:"https://example.test"},title,{exact:""}),/cannot be located uniquely/);
+});
 test("media links retain captured version and compact standard time/region fragments",()=>{
   const item={url:"https://example.test/api/reports/report/builds/version-1/media/movie.mp4"};
   assert.equal(mediaReference(item,{time:1.23456}),item.url+"#t=1.235");

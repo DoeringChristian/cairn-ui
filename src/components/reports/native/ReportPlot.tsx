@@ -13,7 +13,7 @@ export type ReportFigure = {data: Record<string, unknown>[]; layout?: Record<str
 function PlotCanvas({figure, settings, height, revision}: {figure: ReportFigure; settings: FigureSettings; height: number | string; revision: number}) {
   return <InteractiveFigure figure={figure} settings={settings} revision={revision} className="min-w-0" style={{height, minHeight: 300, width: "100%"}} />;
 }
-export function ReportPlot({figure, title = "Figure", caption, height = 360, onCopySource, onEditSource}: {figure: ReportFigure; title?: string; caption?: string; height?: number; onCopySource?: () => void; onEditSource?: () => void}) {
+export function ReportPlot({figure, title = "Figure", caption, height = 360, onCopySource, onComment, onEditSource}: {figure: ReportFigure; title?: string; caption?: string; height?: number; onCopySource?: () => void; onComment?: () => void; onEditSource?: () => void}) {
   const card = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
@@ -37,7 +37,7 @@ export function ReportPlot({figure, title = "Figure", caption, height = 360, onC
         onSettings={() => setOpen(true)}
         onDownload={download}
         onResetView={ctl.resetAll}
-        headerMenu={[...(onCopySource ? [{icon: "fa-link", label: "Copy source reference", onClick: onCopySource}] : []), ...(onEditSource ? [{icon: "fa-pen", label: "Edit source", onClick: onEditSource}] : [])]}
+        headerMenu={[...(onCopySource ? [{icon: "fa-link", label: "Copy source reference", onClick: onCopySource}] : []), ...(onComment ? [{icon: "fa-comment", label: "Comments", onClick: onComment}] : []), ...(onEditSource ? [{icon: "fa-pen", label: "Edit source", onClick: onEditSource}] : [])]}
         settingsPanel={<FigureAppearanceSettings ctl={ctl} />}
         modalOpen={open}
         onModalClose={() => setOpen(false)}

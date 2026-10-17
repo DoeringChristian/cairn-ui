@@ -8,11 +8,13 @@ import {
   useState,
 } from "react";
 import { resolveReferences, repairAnchorTargets } from "./references";
-import { copyText, reportReference, blockReference } from "./clipboard";
+import { copyText, reportReference, blockReference, type ReferenceBlock, type SourceLocation } from "./clipboard";
 import { InlineReportEditor } from "./InlineReportEditor";
 import { ReportComments } from "./ReportComments";
 import { locateTextSelection, type TextSelection } from "./textSelection";
 import { ReportSelectionTools } from "./ReportSelectionTools";
+import { ReportReferenceActions } from "./ReportReferenceActions";
+import { TITLE_TARGET, DESCRIPTION_TARGET, isReportHeading, loadHeadingSources, projectSource, referenceBlock, type HeadingSources } from "./document-sources";
 import { CapturedCard, type CapturedCardSpec } from "./CapturedCard";
 import { createPortal } from "react-dom";
 import { ReportPlot, type ReportFigure } from "./ReportPlot";
@@ -38,7 +40,6 @@ import "./document.css";
 import { MediaLightbox, type MediaItem } from "./MediaLightbox";
 
 
-type Source = { file: string; project_file?: string; line: number; end_line?: number; hash?: string };
 export type Output = {
   type: string;
   name?: string;
@@ -52,7 +53,7 @@ export type Block = {
   id: string;
   label?: string;
   type: string;
-  source?: Source;
+  source?: SourceLocation;
   markdown?: string;
   code?: string;
   language?: string;
@@ -67,7 +68,7 @@ type Reference = {
   year?: string | number;
   url?: string;
 };
-export type DocumentDefinition = {
+export type DocumentDefinition = HeadingSources & {
   schema: string;
   publication?: ReturnType<typeof reportReference>;
   baseUrl?: string;
@@ -336,7 +337,7 @@ export function SafeHtml({ html }: { html: string }) {
     </>
   );
 }
-export function OutputView({ output }: { output: Output }) {
+export function OutputView({ output, onCopySource, onComment, onEditSource }: { output: Output; onCopySource?: () => void; onComment?: () => void; onEditSource?: () => void }) {
   if (output.type === "stream")
     return (
       <pre
@@ -356,7 +357,7 @@ export function OutputView({ output }: { output: Output }) {
     Array.isArray(data[mime])
       ? (data[mime] as string[]).join("")
       : String(data[mime] || "");
-  if (data["application/vnd.plotly.v1+json"]) return <ReportPlot figure={data["application/vnd.plotly.v1+json"] as ReportFigure} />;
+  if (data["application/vnd.plotly.v1+json"]) return <ReportPlot figure={data["application/vnd.plotly.v1+json"] as ReportFigure} onCopySource={onCopySource} onComment={onComment} onEditSource={onEditSource} />;
   if (data["image/png"] || data["image/jpeg"]) {
     const mime = data["image/png"] ? "image/png" : "image/jpeg";
     return (
@@ -404,7 +405,7 @@ export function DocumentRenderer({url, reportSlug, projectId, reportId, versionI
   const [definition, setDefinition] = useState<DocumentDefinition | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState("");
-  const [comment, setComment] = useState<{blockId: string; selection?: TextSelection} | null>(null);
+  const [comment, setComment] = useState<{blockId: string | null; selection?: TextSelection} | null>(null);
   const [selected, setSelected] = useState<Block | null>(null);
   const article = useRef<HTMLElement>(null);
   const [error, setError] = useState("");
@@ -421,16 +422,20 @@ export function DocumentRenderer({url, reportSlug, projectId, reportId, versionI
       if (text.length > 30 * 1024 * 1024) throw new Error("Document exceeds the interactive size limit.");
       const parsed = JSON.parse(text) as DocumentDefinition;
       if (parsed.schema !== "cairn.document/v1" || !Array.isArray(parsed.blocks)) throw new Error("Unsupported report document schema.");
+      const headingSources = await loadHeadingSources(parsed, new URL(url, window.location.href).href, controller.signal);
       if (controller.signal.aborted) return;
       const link=new URL(window.location.href);link.search="";link.searchParams.set("version",versionId);link.hash="";
       // Source bundles are relative to their report directory; client projects and
       // server workspaces both place that directory at reports/<slug>. Keep the
       // bundle path for source inspection and the project path for copied refs.
-      const blocks=parsed.blocks.map(block=>block.source ? {...block,source:{...block.source,project_file:`reports/${reportSlug}/${block.source.file}`}} : block);
-      setDefinition({...parsed, blocks, publication:reportReference(reportId,versionId,link.href,parsed.source_ref), rendered_ref: `${reportId}@${versionId}`, baseUrl: new URL(".", new URL(url, window.location.href)).href});
+      const blocks=parsed.blocks.map(block=>({...block,source:projectSource(block.source,reportSlug)}));
+      setDefinition({...parsed, blocks,
+        title_source:projectSource(parsed.title_source || headingSources.title_source,reportSlug),
+        description_source:projectSource(parsed.description_source || headingSources.description_source,reportSlug),
+        publication:reportReference(reportId,versionId,link.href,parsed.source_ref), rendered_ref: `${reportId}@${versionId}`, baseUrl: new URL(".", new URL(url, window.location.href)).href});
     }).catch(error => {if (!controller.signal.aborted) setError(error.message);});
     return () => controller.abort();
-  }, [url, reportSlug]);
+  }, [url, reportSlug, reportId, versionId]);
   useEffect(() => {
     if(!definition)return;
     const scroll=()=>{let id:string;try{id=decodeURIComponent(window.location.hash.slice(1));}catch{return;}if(id)document.getElementById(id)?.scrollIntoView({block:"start"});};
@@ -438,7 +443,7 @@ export function DocumentRenderer({url, reportSlug, projectId, reportId, versionI
     window.addEventListener("hashchange",scroll);
     return ()=>{cancelAnimationFrame(frame);window.removeEventListener("hashchange",scroll);};
   },[definition]);
-  const copy = async (block: Block) => {
+  const copy = async (block: ReferenceBlock) => {
     let reference="";
     try {
       if(!definition?.publication)throw new Error("Publication reference is unavailable");
@@ -467,28 +472,35 @@ export function DocumentRenderer({url, reportSlug, projectId, reportId, versionI
   };
   if (error) return <p role="alert">{error}</p>;
   if (!definition) return <p>Loading report…</p>;
+  const tools = (block: ReferenceBlock, onEdit?: () => void) => <div className="report-block-tools" data-selection-ignore role="toolbar" aria-label="Report block actions">
+    <ReportReferenceActions copied={copied === block.id} canCopy={!!block.source} onCopy={() => void copy(block)} onComment={() => setComment({blockId:isReportHeading(block.id) ? null : block.id})} onEdit={onEdit} />
+  </div>;
   return <DocumentContext.Provider value={definition}><ReportMediaContext.Provider value={openMedia}>
     <div className="native-document-shell">
     {selectionError && <p role="status">{selectionError}</p>}
     {copied && <div className="report-copy-status" role="status">Report reference copied.</div>}
     {copyFailure && <div className="report-copy-fallback" role="status"><p>{copyFailure.message}</p><textarea readOnly aria-label="Reference to copy" value={copyFailure.text} onFocus={event=>event.currentTarget.select()}/><button onClick={()=>setCopyFailure(null)}>Close</button></div>}
     <article ref={article} className={`native-document ${showSource ? "with-source" : ""}`}>
-      <header className="document-heading"><h1>{definition.title}</h1>{definition.description && <p>{definition.description}</p>}</header>
+      <header className="document-heading">
+        <div className="report-reference-target" data-report-text={TITLE_TARGET}>{tools(referenceBlock(definition,TITLE_TARGET)!)}<h1>{definition.title}</h1></div>
+        {definition.description && <div className="report-reference-target" data-report-text={DESCRIPTION_TARGET}>{tools(referenceBlock(definition,DESCRIPTION_TARGET)!)}<p>{definition.description}</p></div>}
+        {comment?.blockId === null && <ReportComments key={`${versionId}:report`} projectId={projectId} reportId={reportId} versionId={versionId} blockId={null} onLocate={locate} onClose={() => setComment(null)} />}
+      </header>
       {definition.blocks.filter(block => block.type === "card" || !!block.markdown?.replace(/<!--[\s\S]*?-->/g, "").trim() || (block.code !== undefined && (block.echo !== false || showSource)) || !!block.outputs?.length).map(block => <BlockContext.Provider value={block} key={block.id}><section className="document-block" id={block.label || block.id} data-report-text={block.id}>{block.label && block.label !== block.id && <span id={block.id} aria-hidden="true"/>}
         {showSource && <button className="document-source-label" onClick={() => setSelected(block)}>{block.source ? `${block.source.file}:${block.source.line}` : block.id}</button>}
-        {block.type !== "card" && <details className="report-block-tools"><summary aria-label="Block actions" title="Block actions">•••</summary><div className="report-block-menu"><button onClick={() => void copy(block)}>{copied === block.id ? "Copied" : "Copy source reference"}</button><button onClick={() => setComment({blockId: block.id})}>Comments</button>{block.source && <button onClick={() => setEditing(block.id)}>Edit block</button>}{block.source && <small>{block.source.file}:{block.source.line}</small>}</div></details>}
+        {block.type !== "card" && tools(block,block.source ? () => setEditing(block.id) : undefined)}
         {editing === block.id && <InlineReportEditor key={`${versionId}:${block.id}`} reportId={reportId} versionId={versionId} blockId={block.id} onClose={() => setEditing(null)} />}
-        {block.type === "card" && block.spec && <CapturedCard spec={block.spec} onEditSource={block.source ? () => setEditing(block.id) : undefined} onCopySource={() => void copy(block)} />}
+        {block.type === "card" && block.spec && <CapturedCard spec={block.spec} onEditSource={block.source ? () => setEditing(block.id) : undefined} onCopySource={() => void copy(block)} onComment={() => setComment({blockId:block.id})} />}
         {block.markdown !== undefined && <Markdown text={block.markdown} />}
         {block.code !== undefined && (block.echo !== false || showSource) && <details open={block.echo !== false} className="document-code"><summary>{block.language || "Code"}{block.source && ` · ${block.source.file}:${block.source.line}`}</summary><pre><code>{block.code}</code></pre></details>}
-        {block.outputs?.map((output, i) => <OutputView key={i} output={output} />)}
+        {block.outputs?.map((output, i) => <OutputView key={i} output={output} onCopySource={() => void copy(block)} onComment={() => setComment({blockId:block.id})} onEditSource={block.source ? () => setEditing(block.id) : undefined} />)}
         {comment?.blockId === block.id && <ReportComments projectId={projectId} reportId={reportId} versionId={versionId} blockId={block.id} selection={comment.selection} onLocate={locate} onClose={() => setComment(null)} />}
         {block.caption && <p className="document-caption">{block.caption}</p>}
       </section></BlockContext.Provider>)}
       {!!Object.keys(definition.references || {}).length && <section className="document-bibliography"><h2>References</h2><ol>{(definition.citations || Object.keys(definition.references || {})).filter(key => definition.references?.[key]).map(key => {const reference = definition.references![key]!; return <li key={key} id={`ref-${key}`}>{reference.author} {reference.year && `(${reference.year}). `}{reference.url ? <a href={defaultUrlTransform(reference.url)} rel="noreferrer">{reference.title}</a> : reference.title}</li>;})}</ol></section>}
     </article>
-    <ReportSelectionTools root={article} definition={definition} renderedRef={`${reportId}@${versionId}`} onComment={selection => setComment({blockId: selection.start.block_id, selection})} />
-    {selected && <aside className="document-source-inspector"><header><strong>{selected.source?.file || "Source"}:{selected.source?.line || 1}</strong><button onClick={() => setSelected(null)} aria-label="Close source">×</button></header><pre><code>{selected.markdown ?? selected.code ?? JSON.stringify(selected.spec, null, 2)}</code></pre><button onClick={() => void copy(selected)}>Copy source reference</button></aside>}</div>
+    <ReportSelectionTools root={article} definition={definition} renderedRef={`${reportId}@${versionId}`} onComment={selection => setComment(isReportHeading(selection.start.block_id) ? {blockId:null} : {blockId: selection.start.block_id, selection})} />
+    {selected && <aside className="document-source-inspector"><header><strong>{selected.source?.file || "Source"}:{selected.source?.line || 1}</strong><button onClick={() => setSelected(null)} aria-label="Close source">×</button></header><pre><code>{selected.markdown ?? selected.code ?? JSON.stringify(selected.spec, null, 2)}</code></pre><div role="toolbar" aria-label="Source actions"><ReportReferenceActions copied={copied === selected.id} canCopy={!!selected.source} onCopy={() => void copy(selected)} onComment={() => {setComment({blockId:selected.id}); setSelected(null);}} /></div></aside>}</div>
     {media && <MediaLightbox items={media.items} initialIndex={media.index} onClose={() => setMedia(null)} />}
   </ReportMediaContext.Provider></DocumentContext.Provider>;
 }

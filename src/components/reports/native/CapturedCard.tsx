@@ -9,18 +9,18 @@ import { useSessionSettings } from "./ReportSettings";
 import { ViewerSettingsPanel } from "../../settings-panels/CustomSettingsPanel";
 
 export type CapturedCardSpec = {type: string; title?: string; caption?: string; html: string; data?: CapturedSeries[]; height?: number; figure?: ReportFigure; legend?: boolean; custom?: {manifest: {settings: ViewerSetting[]}; settings: Record<string, string | number | boolean>}};
-export function CapturedCard({spec, onCopySource, onEditSource}: {spec: CapturedCardSpec; onCopySource: () => void; onEditSource?: () => void}) {
-  if ((spec.type === "table" || spec.type === "scalar") && spec.data) return <ReportTable series={spec.data} scalar={spec.type === "scalar"} title={spec.title} caption={spec.caption} onCopySource={onCopySource} onEditSource={onEditSource} />;
-  if (spec.figure) return <ReportPlot figure={spec.figure} title={spec.title} caption={spec.caption} height={spec.height} onCopySource={onCopySource} onEditSource={onEditSource} />;
+export function CapturedCard({spec, onCopySource, onComment, onEditSource}: {spec: CapturedCardSpec; onCopySource: () => void; onComment?: () => void; onEditSource?: () => void}) {
+  if ((spec.type === "table" || spec.type === "scalar") && spec.data) return <ReportTable series={spec.data} scalar={spec.type === "scalar"} title={spec.title} caption={spec.caption} onCopySource={onCopySource} onComment={onComment} onEditSource={onEditSource} />;
+  if (spec.figure) return <ReportPlot figure={spec.figure} title={spec.title} caption={spec.caption} height={spec.height} onCopySource={onCopySource} onComment={onComment} onEditSource={onEditSource} />;
   if (spec.data && ["line", "bar", "scatter", "histogram"].includes(spec.type)) {
     const figure: ReportFigure = {data: spec.data.map(series => spec.type === "histogram"
       ? {type: "histogram", x: series.points.map(point => point.y), name: series.name}
       : {type: spec.type === "bar" ? "bar" : "scatter", mode: spec.type === "scatter" ? "markers" : "lines", x: series.points.map(point => point.x), y: series.points.map(point => point.y), name: series.name}), layout: {showlegend: spec.legend ?? true, margin: {l: 50, r: 20, t: 25, b: 45}}};
-    return <ReportPlot figure={figure} title={spec.title} caption={spec.caption} height={spec.height} onCopySource={onCopySource} onEditSource={onEditSource}/>;
+    return <ReportPlot figure={figure} title={spec.title} caption={spec.caption} height={spec.height} onCopySource={onCopySource} onComment={onComment} onEditSource={onEditSource}/>;
   }
-  return <CapturedFrame spec={spec} onCopySource={onCopySource} onEditSource={onEditSource} />;
+  return <CapturedFrame spec={spec} onCopySource={onCopySource} onComment={onComment} onEditSource={onEditSource} />;
 }
-function CapturedFrame({spec, onCopySource, onEditSource}: {spec: CapturedCardSpec; onCopySource: () => void; onEditSource?: () => void}) {
+function CapturedFrame({spec, onCopySource, onComment, onEditSource}: {spec: CapturedCardSpec; onCopySource: () => void; onComment?: () => void; onEditSource?: () => void}) {
   const card = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const [settings, setSettings] = useState(false);
@@ -62,7 +62,7 @@ function CapturedFrame({spec, onCopySource, onEditSource}: {spec: CapturedCardSp
         onSettings={hasSettings ? () => setSettings(true) : undefined}
         onDownload={() => {const url = URL.createObjectURL(new Blob([spec.html], {type: "text/html"})); download(url, `${spec.title || "card"}.html`); setTimeout(() => URL.revokeObjectURL(url), 1000);}}
         onResetView={() => {ctl.resetAll(); setViewerSettings(spec.custom?.settings || {}); frame.current?.contentWindow?.postMessage({type: "cairn:card-reset"}, "*");}}
-        headerMenu={[{icon: "fa-link", label: "Copy source reference", onClick: onCopySource}, ...(onEditSource ? [{icon: "fa-pen", label: "Edit source", onClick: onEditSource}] : [])]}
+        headerMenu={[{icon: "fa-link", label: "Copy source reference", onClick: onCopySource}, ...(onComment ? [{icon: "fa-comment", label: "Comments", onClick: onComment}] : []), ...(onEditSource ? [{icon: "fa-pen", label: "Edit source", onClick: onEditSource}] : [])]}
         settingsPanel={spec.custom && hasSettings ? <ViewerSettingsPanel settings={spec.custom.manifest.settings} value={viewerSettings} defaults={spec.custom.settings} onChange={patch => setViewerSettings(previous => ({...previous, ...patch}))} /> : undefined}
         modalOpen={settings}
         onModalClose={() => setSettings(false)}
